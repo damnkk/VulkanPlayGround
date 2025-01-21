@@ -1,0 +1,3 @@
+[submodule "External/Walnut"]
+	path = External/Walnut
+	url = https://github.com/damnkk/Walnut.git
