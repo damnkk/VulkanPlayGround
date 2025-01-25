@@ -1,3 +1,9 @@
 [submodule "External/Walnut"]
 	path = External/Walnut
 	url = https://github.com/damnkk/Walnut.git
+[submodule "External/nvpro_core"]
+	path = External/nvpro_core
+	url = https://github.com/nvpro-samples/nvpro_core.git
+[submodule "External/assimp"]
+	path = External/assimp
+	url = https://github.com/assimp/assimp.git
