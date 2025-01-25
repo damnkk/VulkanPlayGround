@@ -2,6 +2,9 @@
 #include "PlayApp.h"
 #include "nvvk/context_vk.hpp"
 
+#define VMA_IMPLEMENTATION
+#include "vk_mem_alloc.h"
+
 #include "backends/imgui_impl_glfw.h"
 
 int main()

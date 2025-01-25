@@ -16,7 +16,7 @@ struct Scene
 {
     SceneNode* _root;
 
-    std::vector<Material>
-}
+    // std::vector<Material>
+};
 
 #endif // SCNENE_NODE_H

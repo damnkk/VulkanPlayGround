@@ -15,7 +15,11 @@ namespace Play
 
 void PlayApp::OnInit()
 {
-    // _modelLoader.loadModel("F:/repository/ModelResource/Bistro_v5_2/BistroInterior.fbx");
+    _modelLoader.init(this);
+    _modelLoader.loadModel("F:/repository/ModelResource/Bistro_v5_2/BistroInterior.fbx");
+    _alloc.init(m_instance, m_device, m_physicalDevice);
+    _texturePool.init(2048, &_alloc);
+    _bufferPool.init(4096, &_alloc);
 }
 void PlayApp::OnPreRender() {}
 
