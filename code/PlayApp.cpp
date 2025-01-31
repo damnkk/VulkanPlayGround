@@ -4,37 +4,292 @@
 #include "backends/imgui_impl_vulkan.h"
 #include "imgui.h"
 #include "imgui/imgui_helper.h"
-
 #include "nvh/nvprint.hpp"
-
+#include "nvvk/debug_util_vk.hpp"
+#include "nvvk/buffers_vk.hpp"
+#include "nvvk/images_vk.hpp"
 #include "imgui/imgui_camera_widget.h"
 #include "nvp/perproject_globals.hpp"
-
+#include "SceneNode.h"
+#include "queue"
 namespace Play
 {
+
+void PlayApp::buildTlas()
+{
+    std::vector<VkAccelerationStructureInstanceKHR> instances;
+    auto                                            meshes = this->_modelLoader.getSceneMeshes();
+    std::queue<SceneNode*>                          nodes;
+    nodes.push(this->_scene._root.get());
+    while (!nodes.empty())
+    {
+        auto node = nodes.front();
+        nodes.pop();
+
+        if (!node->_meshIdx.empty())
+        {
+            for (int i = 0; i < node->_meshIdx.size(); ++i)
+            {
+                VkAccelerationStructureInstanceKHR instance{};
+                glm::mat4                          Ttransform = glm::transpose(node->_transform);
+                memcpy(instance.transform.matrix, &Ttransform[0][0], 12 * sizeof(float));
+                instance.mask                = 0xFF;
+                instance.instanceCustomIndex = node->_meshIdx[i];
+                instance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+                instance.instanceShaderBindingTableRecordOffset = 0;
+                instance.accelerationStructureReference =
+                    this->_blasAccels[node->_meshIdx[i]].address;
+                instances.push_back(instance);
+            }
+        }
+        for (auto& child : node->_children)
+        {
+            nodes.push(child.get());
+        }
+    }
+    assert(instances.size());
+    _rtBuilder.buildTlas(instances);
+    _tlasAccels = _rtBuilder.getAccelerationStructure();
+}
+
+void PlayApp::buildBlas()
+{
+    nvvk::BlasBuilder                                 builder(&_alloc, this->m_device);
+    auto                                              meshes = this->_modelLoader.getSceneMeshes();
+    std::vector<nvvk::AccelerationStructureBuildData> blasBuildDatas;
+    std::vector<VkDeviceAddress>                      scratchAddresses;
+    uint64_t                                          maxScrashSize = 0;
+    for (int b = 0; b < this->_modelLoader.getSceneMeshes().size(); ++b)
+    {
+        nvvk::AccelerationStructureBuildData blasBuildData;
+        VkAccelerationStructureGeometryKHR   geometry{
+            VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
+        geometry.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+        geometry.flags        = VK_GEOMETRY_OPAQUE_BIT_KHR;
+        geometry.geometry.triangles.sType =
+            VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+        geometry.geometry.triangles.vertexFormat             = VK_FORMAT_R32G32B32_SFLOAT;
+        geometry.geometry.triangles.vertexData.deviceAddress = meshes[b]._vertexAddress;
+        geometry.geometry.triangles.vertexStride             = sizeof(Vertex);
+        geometry.geometry.triangles.maxVertex                = meshes[b]._vertCnt - 1;
+        geometry.geometry.triangles.indexData.deviceAddress  = meshes[b]._indexAddress;
+        geometry.geometry.triangles.indexType                = VK_INDEX_TYPE_UINT32;
+        // geometry.geometry.triangles.transformData.deviceAddress = {}
+        VkAccelerationStructureBuildRangeInfoKHR rangeInfo{.primitiveCount  = meshes[b]._faceCnt,
+                                                           .primitiveOffset = 0,
+                                                           .firstVertex     = 0,
+                                                           .transformOffset = 0};
+        blasBuildData.addGeometry(geometry, rangeInfo);
+        blasBuildData.asType = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+        VkAccelerationStructureBuildSizesInfoKHR sizeInfo = blasBuildData.finalizeGeometry(
+            this->m_device, VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR |
+                                VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR |
+                                VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
+        VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeatures{
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR};
+        blasBuildDatas.push_back(blasBuildData);
+        maxScrashSize = std::max(maxScrashSize, sizeInfo.buildScratchSize);
+    };
+    scratchAddresses.reserve(blasBuildDatas.size());
+    std::vector<nvvk::Buffer> scratchBuffers;
+    for (int s = 0; s < blasBuildDatas.size(); ++s)
+    {
+        scratchBuffers.push_back(_alloc.createBuffer(
+            maxScrashSize,
+            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
+        scratchAddresses.push_back(scratchBuffers.back().address);
+    }
+    VkCommandBuffer cmdbuf = createTempCmdBuffer();
+    _blasAccels.resize(blasBuildDatas.size());
+    bool res =
+        builder.cmdCreateParallelBlas(cmdbuf, blasBuildDatas, this->_blasAccels, scratchAddresses);
+    submitTempCmdBuffer(cmdbuf);
+    assert(res);
+    for (auto& scratchBuffer : scratchBuffers)
+    {
+        _alloc.destroy(scratchBuffer);
+    }
+    builder.destroy();
+}
+void PlayApp::createDescritorSet()
+{
+    VkDescriptorPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+    VkDescriptorPoolSize       poolSize[] = {
+        {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1024},
+        {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1024},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1024},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1024},
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1024},
+    };
+    poolInfo.poolSizeCount = 5;
+    poolInfo.pPoolSizes    = poolSize;
+    poolInfo.maxSets       = 4096;
+    poolInfo.flags         = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+    vkCreateDescriptorPool(this->m_device, &poolInfo, nullptr, &_descriptorPool);
+    NAME_VK(_descriptorPool);
+    // tlas desc binding
+    VkDescriptorSetLayoutBinding tlasLayoutBinding;
+    tlasLayoutBinding.binding         = 0;
+    tlasLayoutBinding.descriptorType  = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+    tlasLayoutBinding.descriptorCount = 1;
+    tlasLayoutBinding.stageFlags =
+        VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR |
+        VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR;
+    // raytracing RT desc binding
+    VkDescriptorSetLayoutBinding rayTraceRTLayoutBinding;
+    rayTraceRTLayoutBinding.binding         = 1;
+    rayTraceRTLayoutBinding.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    rayTraceRTLayoutBinding.descriptorCount = 1;
+    rayTraceRTLayoutBinding.stageFlags =
+        VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT;
+    // material buffer desc binding
+    VkDescriptorSetLayoutBinding materialBufferLayoutBinding;
+    materialBufferLayoutBinding.binding         = 2;
+    materialBufferLayoutBinding.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    materialBufferLayoutBinding.descriptorCount = 1;
+    materialBufferLayoutBinding.stageFlags =
+        VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
+        VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT;
+    // render uniform buffer desc binding
+    VkDescriptorSetLayoutBinding renderUniformBufferLayoutBinding;
+    renderUniformBufferLayoutBinding.binding         = 3;
+    renderUniformBufferLayoutBinding.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    renderUniformBufferLayoutBinding.descriptorCount = 1;
+    renderUniformBufferLayoutBinding.stageFlags =
+        VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
+        VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT;
+    // light mesh idx buffer desc binding
+    VkDescriptorSetLayoutBinding lightMeshIdxLayoutBinding;
+    lightMeshIdxLayoutBinding.binding         = 4;
+    lightMeshIdxLayoutBinding.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    lightMeshIdxLayoutBinding.descriptorCount = 1;
+    lightMeshIdxLayoutBinding.stageFlags      = VK_SHADER_STAGE_RAYGEN_BIT_KHR |
+                                           VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
+                                           VK_SHADER_STAGE_MISS_BIT_KHR;
+    // instance buffer desc binding
+    VkDescriptorSetLayoutBinding instanceBufferLayoutBinding;
+    instanceBufferLayoutBinding.binding         = 5;
+    instanceBufferLayoutBinding.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    instanceBufferLayoutBinding.descriptorCount = 1;
+    instanceBufferLayoutBinding.stageFlags      = VK_SHADER_STAGE_RAYGEN_BIT_KHR |
+                                             VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
+                                             VK_SHADER_STAGE_MISS_BIT_KHR;
+    // primitive buffer desc binding
+    VkDescriptorSetLayoutBinding primitiveLayoutBinding;
+    primitiveLayoutBinding.binding         = 6;
+    primitiveLayoutBinding.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    primitiveLayoutBinding.descriptorCount = this->_modelLoader.getSceneVBuffers().size();
+    primitiveLayoutBinding.stageFlags      = VK_SHADER_STAGE_RAYGEN_BIT_KHR |
+                                        VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
+                                        VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    // scene texture desc binding
+    // VkDescriptorSetLayoutBinding SceneTextureLayoutBinding;
+    // SceneTextureLayoutBinding.binding         = 7;
+    // SceneTextureLayoutBinding.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    // SceneTextureLayoutBinding.descriptorCount = this->_modelLoader.getSceneTextures().size();
+    // SceneTextureLayoutBinding.stageFlags =
+    //     VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
+    //     VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    std::vector<VkDescriptorSetLayoutBinding> bindings = {
+        tlasLayoutBinding,           rayTraceRTLayoutBinding,
+        materialBufferLayoutBinding, renderUniformBufferLayoutBinding,
+        lightMeshIdxLayoutBinding,   instanceBufferLayoutBinding,
+        primitiveLayoutBinding};
+    VkDescriptorSetLayoutCreateInfo descSetLayoutInfo{
+        VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    // descSetLayoutInfo.
+    descSetLayoutInfo.bindingCount = bindings.size();
+    descSetLayoutInfo.pBindings    = bindings.data();
+    descSetLayoutInfo.flags        = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+    vkCreateDescriptorSetLayout(this->m_device, &descSetLayoutInfo, nullptr, &_descriptorSetLayout);
+    NAME_VK(_descriptorSetLayout);
+    VkDescriptorSetAllocateInfo descSetAllocInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+    descSetAllocInfo.descriptorPool     = _descriptorPool;
+    descSetAllocInfo.descriptorSetCount = 1;
+    descSetAllocInfo.pSetLayouts        = &_descriptorSetLayout;
+    vkAllocateDescriptorSets(this->m_device, &descSetAllocInfo, &_descriptorSet);
+    NAME_VK(_descriptorSet);
+    VkWriteDescriptorSetAccelerationStructureKHR DescSetWrite{
+        VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR};
+    DescSetWrite.accelerationStructureCount = 1;
+    // DescSetWrite.pAccelerationStructures    = &this;
+}
+
+void PlayApp::rayTraceRTCreate()
+{
+    Texture rayTraceRT;
+    auto    textureCreateinfo = nvvk::makeImage2DCreateInfo(
+        VkExtent2D{this->getSize().width, this->getSize().height}, VK_FORMAT_R32G32B32A32_SFLOAT,
+        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, false);
+    rayTraceRT             = _texturePool.alloc();
+    auto samplerCreateInfo = nvvk::makeSamplerCreateInfo(
+        VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT);
+    auto          cmd         = this->createTempCmdBuffer();
+    nvvk::Texture nvvkTexture = _alloc.createTexture(cmd, 0, nullptr, textureCreateinfo,
+                                                     samplerCreateInfo, VK_IMAGE_LAYOUT_GENERAL);
+    this->submitTempCmdBuffer(cmd);
+    rayTraceRT.image        = nvvkTexture.image;
+    rayTraceRT.memHandle    = nvvkTexture.memHandle;
+    rayTraceRT.descriptor   = nvvkTexture.descriptor;
+    rayTraceRT._format      = VK_FORMAT_R32G32B32A32_SFLOAT;
+    rayTraceRT._mipmapLevel = textureCreateinfo.mipLevels;
+    _rayTraceRT             = rayTraceRT;
+    NAME_VK(_rayTraceRT.image);
+}
+
+void PlayApp::createRenderBuffer()
+{
+    // Render Uniform Buffer
+    _renderUniformBuffer = _bufferPool.alloc();
+    VkBufferCreateInfo bufferInfo =
+        nvvk::makeBufferCreateInfo(sizeof(RenderUniform), VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT_KHR);
+    auto nvvkBuffer = _alloc.createBuffer(
+        bufferInfo, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    _renderUniformBuffer.buffer    = nvvkBuffer.buffer;
+    _renderUniformBuffer.address   = nvvkBuffer.address;
+    _renderUniformBuffer.memHandle = nvvkBuffer.memHandle;
+    NAME_VK(_renderUniformBuffer.buffer);
+}
 
 void PlayApp::OnInit()
 {
     _modelLoader.init(this);
-    _modelLoader.loadModel("F:/repository/ModelResource/Bistro_v5_2/BistroInterior.fbx");
+    CameraManip.setMode(nvh::CameraManipulator::Modes::Fly);
+    m_debug.setup(m_device);
+    _rtBuilder.setup(m_device, &_alloc, m_graphicsQueueIndex);
     _alloc.init(m_instance, m_device, m_physicalDevice);
     _texturePool.init(2048, &_alloc);
-    _bufferPool.init(4096, &_alloc);
+    _bufferPool.init(40960, &_alloc);
+    rayTraceRTCreate();
+    // _modelLoader.loadModel("C:/repo/Bistro_V5_gltf/Interior/interior.gltf");
+    _modelLoader.loadModel("C:/repo/Vulkan_learn/models/Camera_01_2k/Camera_01_2k.gltf");
+    createRenderBuffer();
+    buildBlas();
+    buildTlas();
+    createDescritorSet();
 }
 void PlayApp::OnPreRender() {}
 
-void PlayApp::RenderFrame() {}
-
-void PlayApp::OnPostRender()
+void PlayApp::RenderFrame()
 {
-    ImGui_ImplVulkan_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
-    // ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
     auto cmd = this->getCommandBuffers()[this->m_swapChain.getActiveImageIndex()];
     VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkBeginCommandBuffer(cmd, &beginInfo);
+}
+
+void PlayApp::OnPostRender()
+{
+    auto cmd = this->getCommandBuffers()[this->m_swapChain.getActiveImageIndex()];
+    ImGui_ImplVulkan_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+    // ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+
     VkClearValue clearValue[2];
     clearValue[0].color        = {{0.0f, 1.0f, 0.0f, 1.0f}};
     clearValue[1].depthStencil = {1.0f, 0};
@@ -49,7 +304,7 @@ void PlayApp::OnPostRender()
     ImGui::BeginMainMenuBar();
     ImGui::MenuItem("File");
     ImGui::EndMainMenuBar();
-    // ImGui::ShowDemoWindow();
+    ImGui::ShowDemoWindow();
     ImGui::Render();
     if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
     {
@@ -63,19 +318,13 @@ void PlayApp::OnPostRender()
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
     vkCmdEndRenderPass(cmd);
     vkEndCommandBuffer(cmd);
+    ++_frameCount;
 }
 
 void PlayApp::onResize(int width, int height)
 {
-    // vkDeviceWaitIdle(this->m_device);
-    // this->m_size = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
-    // vkDestroySwapchainKHR(this->m_device, this->m_swapChain.getSwapchain(), nullptr);
-    // this->createSwapchain(this->m_surface, width, height);
-    // for (auto& framebuffer : this->m_framebuffers)
-    // {
-    //     vkDestroyFramebuffer(this->m_device, framebuffer, nullptr);
-    // }
-    // this->createFrameBuffers();
+    _texturePool.free(_rayTraceRT);
+    rayTraceRTCreate();
 }
 void PlayApp::Run()
 {

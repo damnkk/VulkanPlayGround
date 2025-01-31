@@ -3,20 +3,28 @@
 #include "glm/glm.hpp"
 #include "vector"
 #include "string"
+#include "assimp/scene.h"
+#include "memory"
+#include "nvh/gltfscene.hpp"
+namespace Play
+{
 struct SceneNode
 {
+    std::shared_ptr<SceneNode>                                    addChild(aiNode* child);
+    std::shared_ptr<SceneNode>                                    addChild(nvh::GltfNode child);
+    std::shared_ptr<SceneNode>                                    addChild(std::string name);
     glm::mat4               _transform = glm::mat4(1.0);
     SceneNode*              _parent    = nullptr;
-    std::vector<SceneNode*> _children;
+    std::vector<std::shared_ptr<SceneNode>>                       _children;
     std::string             _name;
-    int32_t                 _meshIdx = -1;
+    std::vector<uint32_t>                                         _meshIdx;
 };
 
 struct Scene
 {
-    SceneNode* _root;
-
-    // std::vector<Material>
+    Scene() : _root(std::make_shared<SceneNode>()){};
+    std::shared_ptr<SceneNode> _root;
 };
+} // namespace Play
 
 #endif // SCNENE_NODE_H

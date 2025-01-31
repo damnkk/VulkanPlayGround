@@ -40,13 +40,19 @@ int main()
     }
     ctxCreateInfo.addInstanceLayer("VK_LAYER_KHRONOS_profiles", false);
 
-    ctxCreateInfo.addDeviceExtension("VK_KHR_ray_tracing_pipeline", false);
+    VkPhysicalDeviceRayTracingPipelineFeaturesKHR rtPipelineFeature{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR};
+    ctxCreateInfo.addDeviceExtension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, false,
+                                     &rtPipelineFeature);
     ctxCreateInfo.addDeviceExtension("VK_KHR_portability_subset", false);
-    ctxCreateInfo.addDeviceExtension("VK_KHR_acceleration_structure", false);
+    VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeature{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR};
+    ctxCreateInfo.addDeviceExtension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, false,
+                                     &accelFeature); // To build acceleration structures
     ctxCreateInfo.addDeviceExtension("VK_KHR_deferred_host_operations", false);
     ctxCreateInfo.addDeviceExtension("VK_KHR_spirv_1_4", false);
     ctxCreateInfo.addDeviceExtension("VK_KHR_swapchain", false);
-    ctxCreateInfo.addDeviceExtension("VK_KHR_ray_query", false);
+    ctxCreateInfo.addDeviceExtension("VK_KHR_ray_query", true);
 
     nvvk::Context vkCtx;
     vkCtx.init(ctxCreateInfo);

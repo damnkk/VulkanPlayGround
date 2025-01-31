@@ -3,7 +3,7 @@
 #include "stdint.h"
 #include "vector"
 #include "nvvk/memallocator_vma_vk.hpp"
-
+#include "host_device.h"
 struct Texture : public nvvk::Texture
 {
     VkFormat    _format      = VK_FORMAT_UNDEFINED;
@@ -20,16 +20,19 @@ struct Buffer : public nvvk::Buffer
 
 struct Mesh
 {
-    uint32_t _vertexOffset  = 0;
-    uint32_t _vertexCount   = 0;
-    uint32_t _indexOffset   = 0;
-    uint32_t _indexCount    = 0;
-    int      _materialIndex = -1;
+    VkDeviceAddress _vertexAddress = 0;
+    VkDeviceAddress _indexAddress  = 0;
+    int             _materialIndex = -1;
+    uint32_t        _faceCnt       = 0;
+    uint32_t        _vertCnt       = 0;
 };
 
-struct Material
+struct Vertex
 {
-    std::vector<Texture> _textures;
+    glm::vec3 _position;
+    glm::vec3 _normal;
+    glm::vec3 _tangent;
+    glm::vec2 _texCoord;
 };
 
 template <typename T>
@@ -39,8 +42,7 @@ class BasePool
     void init(uint32_t poolSize, nvvk::ResourceAllocatorVma* allocator)
     {
         _allocator = allocator;
-        _objs.reserve(poolSize);
-        _freeIndices.reserve(poolSize);
+        _objs.resize(poolSize);
         _freeIndices.resize(poolSize);
         for (uint32_t i = 0; i < poolSize; ++i)
         {
@@ -73,7 +75,7 @@ class TexturePool : public BasePool<Texture>
     };
 };
 
-class BufferPool : public BasePool<nvvk::Buffer>
+class BufferPool : public BasePool<Buffer>
 {
    public:
     void free(Buffer& obj)

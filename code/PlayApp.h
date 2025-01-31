@@ -3,7 +3,10 @@
 #include "nvvkhl/appbase_vk.hpp"
 #include "ModelLoader.h" // Ensure ModelLoader class is defined in this header
 #include "nvvk/memallocator_vma_vk.hpp"
+#include "nvvk/acceleration_structures.hpp"
 #include "Resource.h"
+#include "SceneNode.h"
+#include "nvvk/raytraceKHR_vk.hpp"
 namespace Play
 {
 
@@ -16,13 +19,38 @@ class PlayApp : public nvvkhl::AppBaseVk
     void RenderFrame();
     void OnPreRender();
     void OnPostRender();
+    Scene& getScene()
+    {
+        return _scene;
+    };
+
+   protected:
+    void buildTlas();
+    void buildBlas();
+    void createDescritorSet();
+    void rayTraceRTCreate();
+    void createRenderBuffer();
 
    private:
     friend class ModelLoader;
     ModelLoader _modelLoader;
     nvvk::ResourceAllocatorVma _alloc;
+    nvvk::RaytracingBuilderKHR _rtBuilder;
+    nvvk::DebugUtil            m_debug;
     TexturePool                _texturePool;
     BufferPool                 _bufferPool;
+    VkDescriptorPool              _descriptorPool;
+
+    VkDescriptorSetLayout       _descriptorSetLayout;
+    VkDescriptorSet             _descriptorSet;
+    Scene                       _scene;
+    Texture                     _rayTraceRT;
+    RenderUniform               _renderUniformData;
+    Buffer                      _renderUniformBuffer;
+    Buffer                      _materialBuffer;
+    uint32_t                    _frameCount = 0;
+    std::vector<nvvk::AccelKHR> _blasAccels;
+    VkAccelerationStructureKHR  _tlasAccels;
 };
 
 } //    namespace Play
