@@ -8,6 +8,8 @@
 #include "nvvk/debug_util_vk.hpp"
 #include "nvvk/buffers_vk.hpp"
 #include "nvvk/images_vk.hpp"
+#include "nvvk/pipeline_vk.hpp"
+#include "nvh/fileoperations.hpp"
 #include "imgui/imgui_camera_widget.h"
 #include "nvp/perproject_globals.hpp"
 #include "SceneNode.h"
@@ -130,7 +132,7 @@ void PlayApp::createDescritorSet()
     NAME_VK(_descriptorPool);
     // tlas desc binding
     VkDescriptorSetLayoutBinding tlasLayoutBinding;
-    tlasLayoutBinding.binding         = 0;
+    tlasLayoutBinding.binding         = ObjBinding::eTlas;
     tlasLayoutBinding.descriptorType  = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
     tlasLayoutBinding.descriptorCount = 1;
     tlasLayoutBinding.stageFlags =
@@ -138,14 +140,14 @@ void PlayApp::createDescritorSet()
         VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR;
     // raytracing RT desc binding
     VkDescriptorSetLayoutBinding rayTraceRTLayoutBinding;
-    rayTraceRTLayoutBinding.binding         = 1;
+    rayTraceRTLayoutBinding.binding         = ObjBinding::eRayTraceRT;
     rayTraceRTLayoutBinding.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     rayTraceRTLayoutBinding.descriptorCount = 1;
     rayTraceRTLayoutBinding.stageFlags =
         VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT;
     // material buffer desc binding
     VkDescriptorSetLayoutBinding materialBufferLayoutBinding;
-    materialBufferLayoutBinding.binding         = 2;
+    materialBufferLayoutBinding.binding         = ObjBinding::eMaterialBuffer;
     materialBufferLayoutBinding.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     materialBufferLayoutBinding.descriptorCount = 1;
     materialBufferLayoutBinding.stageFlags =
@@ -153,7 +155,7 @@ void PlayApp::createDescritorSet()
         VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT;
     // render uniform buffer desc binding
     VkDescriptorSetLayoutBinding renderUniformBufferLayoutBinding;
-    renderUniformBufferLayoutBinding.binding         = 3;
+    renderUniformBufferLayoutBinding.binding         = ObjBinding::eRenderUniform;
     renderUniformBufferLayoutBinding.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     renderUniformBufferLayoutBinding.descriptorCount = 1;
     renderUniformBufferLayoutBinding.stageFlags =
@@ -161,7 +163,7 @@ void PlayApp::createDescritorSet()
         VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT;
     // light mesh idx buffer desc binding
     VkDescriptorSetLayoutBinding lightMeshIdxLayoutBinding;
-    lightMeshIdxLayoutBinding.binding         = 4;
+    lightMeshIdxLayoutBinding.binding         = ObjBinding::eLightMeshIdx;
     lightMeshIdxLayoutBinding.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     lightMeshIdxLayoutBinding.descriptorCount = 1;
     lightMeshIdxLayoutBinding.stageFlags      = VK_SHADER_STAGE_RAYGEN_BIT_KHR |
@@ -169,35 +171,37 @@ void PlayApp::createDescritorSet()
                                            VK_SHADER_STAGE_MISS_BIT_KHR;
     // instance buffer desc binding
     VkDescriptorSetLayoutBinding instanceBufferLayoutBinding;
-    instanceBufferLayoutBinding.binding         = 5;
+    instanceBufferLayoutBinding.binding         = ObjBinding::eInstanceBuffer;
     instanceBufferLayoutBinding.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     instanceBufferLayoutBinding.descriptorCount = 1;
     instanceBufferLayoutBinding.stageFlags      = VK_SHADER_STAGE_RAYGEN_BIT_KHR |
                                              VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
                                              VK_SHADER_STAGE_MISS_BIT_KHR;
-    // primitive buffer desc binding
-    VkDescriptorSetLayoutBinding primitiveLayoutBinding;
-    primitiveLayoutBinding.binding         = 6;
-    primitiveLayoutBinding.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    primitiveLayoutBinding.descriptorCount = this->_modelLoader.getSceneVBuffers().size();
-    primitiveLayoutBinding.stageFlags      = VK_SHADER_STAGE_RAYGEN_BIT_KHR |
-                                        VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
-                                        VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT;
+    // // primitive buffer desc binding
+    // VkDescriptorSetLayoutBinding primitiveLayoutBinding;
+    // primitiveLayoutBinding.binding         = 6;
+    // primitiveLayoutBinding.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    // primitiveLayoutBinding.descriptorCount = this->_modelLoader.getSceneVBuffers().size();
+    // primitiveLayoutBinding.stageFlags      = VK_SHADER_STAGE_RAYGEN_BIT_KHR |
+    //                                     VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
+    //                                     VK_SHADER_STAGE_MISS_BIT_KHR |
+    //                                     VK_SHADER_STAGE_FRAGMENT_BIT;
 
     // scene texture desc binding
-    // VkDescriptorSetLayoutBinding SceneTextureLayoutBinding;
-    // SceneTextureLayoutBinding.binding         = 7;
-    // SceneTextureLayoutBinding.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    // SceneTextureLayoutBinding.descriptorCount = this->_modelLoader.getSceneTextures().size();
-    // SceneTextureLayoutBinding.stageFlags =
-    //     VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
-    //     VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT;
+    VkDescriptorSetLayoutBinding SceneTextureLayoutBinding;
+    SceneTextureLayoutBinding.binding         = ObjBinding::eSceneTexture;
+    SceneTextureLayoutBinding.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    SceneTextureLayoutBinding.descriptorCount = this->_modelLoader.getSceneTextures().size();
+    SceneTextureLayoutBinding.stageFlags =
+        VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
+        VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT;
+    SceneTextureLayoutBinding.pImmutableSamplers = nullptr;
 
     std::vector<VkDescriptorSetLayoutBinding> bindings = {
         tlasLayoutBinding,           rayTraceRTLayoutBinding,
         materialBufferLayoutBinding, renderUniformBufferLayoutBinding,
         lightMeshIdxLayoutBinding,   instanceBufferLayoutBinding,
-        primitiveLayoutBinding};
+        SceneTextureLayoutBinding};
     VkDescriptorSetLayoutCreateInfo descSetLayoutInfo{
         VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     // descSetLayoutInfo.
@@ -212,10 +216,113 @@ void PlayApp::createDescritorSet()
     descSetAllocInfo.pSetLayouts        = &_descriptorSetLayout;
     vkAllocateDescriptorSets(this->m_device, &descSetAllocInfo, &_descriptorSet);
     NAME_VK(_descriptorSet);
-    VkWriteDescriptorSetAccelerationStructureKHR DescSetWrite{
+
+    VkWriteDescriptorSetAccelerationStructureKHR accWrite{
         VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR};
-    DescSetWrite.accelerationStructureCount = 1;
-    // DescSetWrite.pAccelerationStructures    = &this;
+    accWrite.accelerationStructureCount = 1;
+    accWrite.pAccelerationStructures    = &this->_tlasAccels;
+    std::vector<VkWriteDescriptorSet> descSetWrites(ObjBinding::eCount,
+                                                    {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET});
+    descSetWrites[ObjBinding::eTlas].descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+    descSetWrites[ObjBinding::eTlas].dstBinding     = ObjBinding::eTlas;
+    descSetWrites[ObjBinding::eTlas].dstSet         = _descriptorSet;
+    descSetWrites[ObjBinding::eTlas].descriptorCount = 1;
+    descSetWrites[ObjBinding::eTlas].pNext           = &accWrite;
+
+    descSetWrites[ObjBinding::eRayTraceRT].descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    descSetWrites[ObjBinding::eRayTraceRT].dstBinding      = ObjBinding::eRayTraceRT;
+    descSetWrites[ObjBinding::eRayTraceRT].dstSet          = _descriptorSet;
+    descSetWrites[ObjBinding::eRayTraceRT].descriptorCount = 1;
+    descSetWrites[ObjBinding::eRayTraceRT].pImageInfo      = &_rayTraceRT.descriptor;
+
+    descSetWrites[ObjBinding::eMaterialBuffer].descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descSetWrites[ObjBinding::eMaterialBuffer].dstBinding      = ObjBinding::eMaterialBuffer;
+    descSetWrites[ObjBinding::eMaterialBuffer].dstSet          = _descriptorSet;
+    descSetWrites[ObjBinding::eMaterialBuffer].descriptorCount = 1;
+    descSetWrites[ObjBinding::eMaterialBuffer].pBufferInfo =
+        &this->_modelLoader.getMaterialBuffer().descriptor;
+
+    descSetWrites[ObjBinding::eRenderUniform].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    descSetWrites[ObjBinding::eRenderUniform].dstBinding      = ObjBinding::eRenderUniform;
+    descSetWrites[ObjBinding::eRenderUniform].dstSet          = _descriptorSet;
+    descSetWrites[ObjBinding::eRenderUniform].descriptorCount = 1;
+    descSetWrites[ObjBinding::eRenderUniform].pBufferInfo     = &_renderUniformBuffer.descriptor;
+
+    descSetWrites[ObjBinding::eLightMeshIdx].descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descSetWrites[ObjBinding::eLightMeshIdx].dstBinding      = ObjBinding::eLightMeshIdx;
+    descSetWrites[ObjBinding::eLightMeshIdx].dstSet          = _descriptorSet;
+    descSetWrites[ObjBinding::eLightMeshIdx].descriptorCount = 1;
+    descSetWrites[ObjBinding::eLightMeshIdx].pBufferInfo =
+        &(this->_modelLoader.getLightMeshIdxBuffer().descriptor);
+
+    descSetWrites[ObjBinding::eInstanceBuffer].descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descSetWrites[ObjBinding::eInstanceBuffer].dstBinding      = ObjBinding::eInstanceBuffer;
+    descSetWrites[ObjBinding::eInstanceBuffer].dstSet          = _descriptorSet;
+    descSetWrites[ObjBinding::eInstanceBuffer].descriptorCount = 1;
+    descSetWrites[ObjBinding::eInstanceBuffer].pBufferInfo =
+        &(this->_modelLoader.getInstanceBuffer().descriptor);
+
+    descSetWrites[ObjBinding::eSceneTexture].descriptorType =
+        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descSetWrites[ObjBinding::eSceneTexture].dstBinding = ObjBinding::eSceneTexture;
+    descSetWrites[ObjBinding::eSceneTexture].dstSet     = _descriptorSet;
+    descSetWrites[ObjBinding::eSceneTexture].descriptorCount =
+        this->_modelLoader.getSceneTextures().size();
+    std::vector<VkDescriptorImageInfo> imageInfos;
+    for (auto& texture : this->_modelLoader.getSceneTextures())
+    {
+        imageInfos.push_back(texture.descriptor);
+    }
+    descSetWrites[ObjBinding::eSceneTexture].pImageInfo = imageInfos.data();
+    vkUpdateDescriptorSets(this->m_device, descSetWrites.size(), descSetWrites.data(), 0, nullptr);
+}
+
+void PlayApp::createGraphicsPipeline()
+{
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts    = &_descriptorSetLayout;
+    vkCreatePipelineLayout(this->m_device, &pipelineLayoutInfo, nullptr, &_graphicsPipelineLayout);
+    NAME_VK(_graphicsPipelineLayout);
+
+    nvvk::GraphicsPipelineGeneratorCombined gpipelineState(this->m_device, _graphicsPipelineLayout,
+                                                           this->getRenderPass());
+    gpipelineState.inputAssemblyState.topology        = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    gpipelineState.rasterizationState.cullMode        = VK_CULL_MODE_BACK_BIT;
+    gpipelineState.depthStencilState.depthTestEnable  = VK_TRUE;
+    gpipelineState.depthStencilState.depthWriteEnable = VK_TRUE;
+    VkViewport viewport{0.0f, 0.0f, (float) this->getSize().width, (float) this->getSize().height,
+                        0.0f, 1.0f};
+    VkRect2D   scissor{{0, 0}, this->getSize()};
+    gpipelineState.viewportState.viewportCount = 1;
+    gpipelineState.viewportState.pViewports    = &viewport;
+    gpipelineState.viewportState.scissorCount  = 1;
+    gpipelineState.viewportState.pScissors     = &scissor;
+    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                      VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE,
+                                      VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE};
+    gpipelineState.dynamicState.dynamicStateCount                         = 4;
+    gpipelineState.dynamicState.pDynamicStates                            = dynamicStates;
+    VkVertexInputAttributeDescription vertexInputAttributeDescriptions[4] = {
+        {0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0},
+        {1, 0, VK_FORMAT_R32G32B32_SFLOAT, 12},
+        {2, 0, VK_FORMAT_R32G32B32_SFLOAT, 24},
+        {3, 0, VK_FORMAT_R32G32_SFLOAT, 36},
+
+    };
+    gpipelineState.vertexInputState.vertexAttributeDescriptionCount = 4;
+    gpipelineState.vertexInputState.pVertexAttributeDescriptions = vertexInputAttributeDescriptions;
+    VkVertexInputBindingDescription vertexInputBindingDescription = {0, sizeof(Vertex),
+                                                                     VK_VERTEX_INPUT_RATE_VERTEX};
+    gpipelineState.vertexInputState.vertexBindingDescriptionCount = 1;
+    gpipelineState.vertexInputState.pVertexBindingDescriptions    = &vertexInputBindingDescription;
+    gpipelineState.addShader(nvh::loadFile("spv/graphic.vert.spv", true),
+                             VK_SHADER_STAGE_VERTEX_BIT, "main");
+    gpipelineState.addShader(nvh::loadFile("spv/graphic.frag.spv", true),
+                             VK_SHADER_STAGE_FRAGMENT_BIT, "main");
+
+    _graphicsPipeline = gpipelineState.createPipeline();
+    int test;
 }
 
 void PlayApp::rayTraceRTCreate()
@@ -252,6 +359,9 @@ void PlayApp::createRenderBuffer()
     _renderUniformBuffer.buffer    = nvvkBuffer.buffer;
     _renderUniformBuffer.address   = nvvkBuffer.address;
     _renderUniformBuffer.memHandle = nvvkBuffer.memHandle;
+    _renderUniformBuffer.descriptor.buffer = nvvkBuffer.buffer;
+    _renderUniformBuffer.descriptor.offset = 0;
+    _renderUniformBuffer.descriptor.range  = sizeof(RenderUniform);
     NAME_VK(_renderUniformBuffer.buffer);
 }
 
@@ -271,6 +381,7 @@ void PlayApp::OnInit()
     buildBlas();
     buildTlas();
     createDescritorSet();
+    createGraphicsPipeline();
 }
 void PlayApp::OnPreRender() {}
 
@@ -325,6 +436,13 @@ void PlayApp::onResize(int width, int height)
 {
     _texturePool.free(_rayTraceRT);
     rayTraceRTCreate();
+    VkWriteDescriptorSet raytracingRTWrite{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    raytracingRTWrite.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    raytracingRTWrite.dstBinding      = ObjBinding::eRayTraceRT;
+    raytracingRTWrite.dstSet          = _descriptorSet;
+    raytracingRTWrite.descriptorCount = 1;
+    raytracingRTWrite.pImageInfo      = &_rayTraceRT.descriptor;
+    vkUpdateDescriptorSets(this->m_device, 1, &raytracingRTWrite, 0, nullptr);
 }
 void PlayApp::Run()
 {
@@ -340,6 +458,21 @@ void PlayApp::Run()
         this->RenderFrame();
         this->OnPostRender();
         this->submitFrame();
+    }
+}
+
+void PlayApp::onDestroy()
+{
+    this->_texturePool.deinit();
+    this->_bufferPool.deinit();
+    vkDestroyDescriptorPool(m_device, this->_descriptorPool, nullptr);
+    vkDestroyDescriptorSetLayout(m_device, this->_descriptorSetLayout, nullptr);
+    _rtBuilder.destroy();
+    nvvk::BlasBuilder builder(&_alloc, m_device);
+    for (auto& blas : this->_blasAccels)
+    {
+        vkDestroyAccelerationStructureKHR(m_device, blas.accel, nullptr);
+        _alloc.destroy(blas.buffer);
     }
 }
 } // namespace Play

@@ -30,13 +30,18 @@ class ModelLoader
         return _sceneMaterials;
     }
 
-    Buffer getMaterialBuffer()
+    Buffer& getMaterialBuffer()
     {
         return _materialBuffer;
     }
-    Buffer getInstanceBuffer()
+    Buffer& getInstanceBuffer()
     {
         return _instanceBuffer;
+    }
+
+    Buffer& getLightMeshIdxBuffer()
+    {
+        return _lightMeshIdxBuffer;
     }
 
     std::vector<Texture>& getSceneTextures()

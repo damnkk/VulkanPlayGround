@@ -15,6 +15,7 @@ class PlayApp : public nvvkhl::AppBaseVk
    public:
     void onResize(int width, int height) override;
     void OnInit();
+    void   onDestroy();
     void Run();
     void RenderFrame();
     void OnPreRender();
@@ -30,8 +31,21 @@ class PlayApp : public nvvkhl::AppBaseVk
     void createDescritorSet();
     void rayTraceRTCreate();
     void createRenderBuffer();
+    void createGraphicsPipeline();
 
    private:
+    enum ObjBinding
+    {
+        eTlas,
+        eRayTraceRT,
+        eMaterialBuffer,
+        eRenderUniform,
+        eLightMeshIdx,
+        eInstanceBuffer,
+        // ePrimitiveBuffer,
+        eSceneTexture,
+        eCount
+    };
     friend class ModelLoader;
     ModelLoader _modelLoader;
     nvvk::ResourceAllocatorVma _alloc;
@@ -39,7 +53,10 @@ class PlayApp : public nvvkhl::AppBaseVk
     nvvk::DebugUtil            m_debug;
     TexturePool                _texturePool;
     BufferPool                 _bufferPool;
-    VkDescriptorPool              _descriptorPool;
+    VkDescriptorPool           _descriptorPool;
+    VkPipeline                 _graphicsPipeline;
+    VkPipelineLayout           _graphicsPipelineLayout;
+    VkPipeline                 _rtPipeline;
 
     VkDescriptorSetLayout       _descriptorSetLayout;
     VkDescriptorSet             _descriptorSet;
@@ -47,7 +64,6 @@ class PlayApp : public nvvkhl::AppBaseVk
     Texture                     _rayTraceRT;
     RenderUniform               _renderUniformData;
     Buffer                      _renderUniformBuffer;
-    Buffer                      _materialBuffer;
     uint32_t                    _frameCount = 0;
     std::vector<nvvk::AccelKHR> _blasAccels;
     VkAccelerationStructureKHR  _tlasAccels;

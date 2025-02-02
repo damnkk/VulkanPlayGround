@@ -355,16 +355,18 @@ void ModelLoader::loadModel(std::string path)
     }
 
     auto         cmd            = _app->createTempCmdBuffer();
-    Buffer       materialBuffer = _app->_bufferPool.alloc();
+    _materialBuffer             = _app->_bufferPool.alloc();
     nvvk::Buffer materialBuf    = _app->_alloc.createBuffer(
         cmd, sizeof(Material) * _sceneMaterials.size(), _sceneMaterials.data(),
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_EXT);
     _app->submitTempCmdBuffer(cmd);
-    materialBuffer.buffer    = materialBuf.buffer;
-    materialBuffer.address   = materialBuf.address;
-    materialBuffer.memHandle = materialBuf.memHandle;
-    NAME_VK(materialBuffer.buffer);
-    _materialBuffer = materialBuffer;
+    _materialBuffer.buffer            = materialBuf.buffer;
+    _materialBuffer.address           = materialBuf.address;
+    _materialBuffer.memHandle         = materialBuf.memHandle;
+    _materialBuffer.descriptor.buffer = materialBuf.buffer;
+    _materialBuffer.descriptor.offset = 0;
+    _materialBuffer.descriptor.range  = sizeof(Material) * _sceneMaterials.size();
+    NAME_VK(_materialBuffer.buffer);
 
     for (const auto& texture : model.images)
     {
@@ -409,20 +411,24 @@ void ModelLoader::loadModel(std::string path)
     _instanceBuffer.buffer    = gpuInstanceBuffer.buffer;
     _instanceBuffer.address   = gpuInstanceBuffer.address;
     _instanceBuffer.memHandle = gpuInstanceBuffer.memHandle;
+    _instanceBuffer.descriptor.buffer = gpuInstanceBuffer.buffer;
+    _instanceBuffer.descriptor.offset = 0;
+    _instanceBuffer.descriptor.range  = instanceBufferSize;
     NAME_VK(_instanceBuffer.buffer);
-    if (lightMateiralIdx.size() > 0)
-    {
-        _lightMeshIdxBuffer                = _app->_bufferPool.alloc();
-        tmpCmdBuffer                       = _app->createTempCmdBuffer();
-        nvvk::Buffer gpuLightMeshIdxBuffer = _app->_alloc.createBuffer(
-            tmpCmdBuffer, sizeof(uint32_t) * _emissiveMeshIdx.size(), _emissiveMeshIdx.data(),
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_EXT);
-        _app->submitTempCmdBuffer(tmpCmdBuffer);
-        _lightMeshIdxBuffer.buffer    = gpuLightMeshIdxBuffer.buffer;
-        _lightMeshIdxBuffer.address   = gpuLightMeshIdxBuffer.address;
-        _lightMeshIdxBuffer.memHandle = gpuLightMeshIdxBuffer.memHandle;
-        NAME_VK(_lightMeshIdxBuffer.buffer);
-    }
+    if (_emissiveMeshIdx.empty()) _emissiveMeshIdx.push_back(0);
+    _lightMeshIdxBuffer                = _app->_bufferPool.alloc();
+    tmpCmdBuffer                       = _app->createTempCmdBuffer();
+    nvvk::Buffer gpuLightMeshIdxBuffer = _app->_alloc.createBuffer(
+        tmpCmdBuffer, sizeof(uint32_t) * _emissiveMeshIdx.size(), _emissiveMeshIdx.data(),
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_EXT);
+    _app->submitTempCmdBuffer(tmpCmdBuffer);
+    _lightMeshIdxBuffer.buffer            = gpuLightMeshIdxBuffer.buffer;
+    _lightMeshIdxBuffer.address           = gpuLightMeshIdxBuffer.address;
+    _lightMeshIdxBuffer.memHandle         = gpuLightMeshIdxBuffer.memHandle;
+    _lightMeshIdxBuffer.descriptor.buffer = gpuLightMeshIdxBuffer.buffer;
+    _lightMeshIdxBuffer.descriptor.offset = 0;
+    _lightMeshIdxBuffer.descriptor.range  = sizeof(uint32_t) * _emissiveMeshIdx.size();
+    NAME_VK(_lightMeshIdxBuffer.buffer);
 }
 
 } // namespace Play

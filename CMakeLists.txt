@@ -38,9 +38,15 @@ ${PROJECT_SOURCE_DIR}/code/*.cpp
 )
 
 add_executable(VulkanPlayGround 
- ${COMMON_SOURCE_FILES}
+${COMMON_SOURCE_FILES}
 )
 _add_project_definitions(${PROJNAME})
+compile_glsl_directory(
+	SRC "${CMAKE_CURRENT_SOURCE_DIR}/shaders" 
+	DST "${CMAKE_CURRENT_SOURCE_DIR}/spv" 
+	VULKAN_TARGET "vulkan1.3"
+	DEPENDENCY ${VULKAN_BUILD_DEPENDENCIES}
+	)
 
 # Package shared by all projects
 _add_package_VulkanSDK()
@@ -66,9 +72,13 @@ endforeach(RELEASELIB)
 target_include_directories(VulkanPlayGround PRIVATE 
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/code
+    ${PROJECT_SOURCE_DIR}/shaders
     ${PROJECT_SOURCE_DIR}/External/Walnut/src
     ${CMAKE_SOURCE_DIR}/External/Assimp/include
 )
 
+
 target_copy_to_output_dir()
 _finalize_target( ${PROJNAME} )
+install(FILES ${SPV_OUTPUT} CONFIGURATIONS Release DESTINATION "bin_${ARCH}/${PROJNAME}/spv")
+install(FILES ${SPV_OUTPUT} CONFIGURATIONS Debug DESTINATION "bin_${ARCH}_debug/${PROJNAME}/spv")

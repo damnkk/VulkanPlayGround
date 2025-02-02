@@ -32,7 +32,7 @@ int main()
                                            InstanceExtensions.data());
 
     nvvk::ContextCreateInfo ctxCreateInfo;
-    ctxCreateInfo.setVersion(1, 3);
+    ctxCreateInfo.setVersion(1, 4);
 
     for (uint32_t i = 0; i < glfwNeededInstanceExtensionCount; i++)
     {
@@ -71,5 +71,6 @@ int main()
     app->OnInit();
     app->Run();
     app->destroy();
+    app->onDestroy();
     return 0;
 }

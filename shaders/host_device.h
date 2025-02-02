@@ -69,7 +69,10 @@ struct RenderUniform
 {
     mat4 view;
     mat4 viewInverse;
+    mat4 model;
+    mat4 project;
     vec3 cameraPosition;
+
     uint frameCount;
 };
 

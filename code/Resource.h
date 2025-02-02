@@ -16,6 +16,7 @@ struct Texture : public nvvk::Texture
 struct Buffer : public nvvk::Buffer
 {
     uint32_t _poolId;
+    VkDescriptorBufferInfo descriptor;
 };
 
 struct Mesh
@@ -47,6 +48,15 @@ class BasePool
         for (uint32_t i = 0; i < poolSize; ++i)
         {
             _freeIndices[i] = i;
+        }
+    }
+
+    void deinit()
+    {
+        while (_availableIndex > 0)
+        {
+            uint32_t idx = _freeIndices[--_availableIndex];
+            _allocator->destroy(_objs[idx]);
         }
     }
     T& alloc()
