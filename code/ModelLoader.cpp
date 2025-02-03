@@ -5,9 +5,6 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "tiny_gltf.h"
-#include "assimp/Importer.hpp"
-#include "assimp/scene.h"
-#include "assimp/postprocess.h"
 #include "iostream"
 #include "PlayApp.h"
 #include "queue"
@@ -281,6 +278,10 @@ void ModelLoader::loadModel(std::string path)
     std::unordered_map<std::string, Buffer> m_cacheBuffers;
     for (const auto& primMesh : gltfScene.m_primMeshes)
     {
+        if (primMesh.materialIndex == 70)
+        {
+            int t = 5;
+        }
         std::stringstream o;
         o << primMesh.vertexOffset << "::" << primMesh.vertexCount;
         std::string key  = o.str();
@@ -342,16 +343,19 @@ void ModelLoader::loadModel(std::string path)
         iBuffer.address   = gpuIBuffer.address;
         iBuffer.memHandle = gpuIBuffer.memHandle;
         iBufferref        = &iBuffer;
+
+        _sceneVBuffers.push_back(*vBufferref);
+        _sceneIBuffers.push_back(*iBufferref);
         _sceneMeshes.emplace_back(Mesh{vBufferref->address, iBufferref->address,
                                        primMesh.materialIndex + (int) materialOffset,
-                                       primMesh.indexCount / 3, primMesh.vertexCount});
+                                       primMesh.indexCount / 3, primMesh.vertexCount,
+                                       static_cast<uint32_t>(_sceneVBuffers.size() - 1),
+                                       static_cast<uint32_t>(_sceneIBuffers.size() - 1)});
         if (std::find(lightMateiralIdx.begin(), lightMateiralIdx.end(),
                       primMesh.materialIndex + (int) materialOffset) != lightMateiralIdx.end())
         {
             _emissiveMeshIdx.push_back(_sceneMeshes.size() - 1);
         }
-        _sceneVBuffers.push_back(*vBufferref);
-        _sceneIBuffers.push_back(*iBufferref);
     }
 
     auto         cmd            = _app->createTempCmdBuffer();
@@ -379,6 +383,9 @@ void ModelLoader::loadModel(std::string path)
         nvvk::Image image =
             _app->_alloc.createImage(cmd, texture.image.size(), texture.image.data(), imageInfo,
                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        nvvk::cmdGenerateMipmaps(cmd, image.image, imageInfo.format,
+                                 {imageInfo.extent.width, imageInfo.extent.height},
+                                 nvvk::mipLevels(imageInfo.extent));
         _app->submitTempCmdBuffer(cmd);
 
         VkSamplerCreateInfo samplerInfo = {VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};

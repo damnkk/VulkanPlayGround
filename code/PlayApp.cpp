@@ -9,13 +9,27 @@
 #include "nvvk/buffers_vk.hpp"
 #include "nvvk/images_vk.hpp"
 #include "nvvk/pipeline_vk.hpp"
+#include "nvh/nvprint.hpp"
 #include "nvh/fileoperations.hpp"
 #include "imgui/imgui_camera_widget.h"
 #include "nvp/perproject_globals.hpp"
 #include "SceneNode.h"
 #include "queue"
+#include "iostream"
+#include <chrono>
 namespace Play
 {
+struct ScopeTimer
+{
+    std::chrono::high_resolution_clock::time_point start;
+    ScopeTimer() : start(std::chrono::high_resolution_clock::now()) {}
+    ~ScopeTimer()
+    {
+        auto end     = std::chrono::high_resolution_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+        std::cout << "Scene traversal time: " << elapsed.count() << " ms" << std::endl;
+    }
+};
 
 void PlayApp::buildTlas()
 {
@@ -279,16 +293,24 @@ void PlayApp::createDescritorSet()
 
 void PlayApp::createGraphicsPipeline()
 {
+    VkPushConstantRange pushConstantRange{};
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    pushConstantRange.offset     = 0;
+    pushConstantRange.size       = sizeof(Constants);
+
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
     pipelineLayoutInfo.setLayoutCount = 1;
     pipelineLayoutInfo.pSetLayouts    = &_descriptorSetLayout;
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
+    pipelineLayoutInfo.pPushConstantRanges    = &pushConstantRange;
     vkCreatePipelineLayout(this->m_device, &pipelineLayoutInfo, nullptr, &_graphicsPipelineLayout);
     NAME_VK(_graphicsPipelineLayout);
 
     nvvk::GraphicsPipelineGeneratorCombined gpipelineState(this->m_device, _graphicsPipelineLayout,
                                                            this->getRenderPass());
     gpipelineState.inputAssemblyState.topology        = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    gpipelineState.rasterizationState.cullMode        = VK_CULL_MODE_BACK_BIT;
+    gpipelineState.rasterizationState.cullMode        = VK_CULL_MODE_NONE;
+    gpipelineState.rasterizationState.frontFace       = VK_FRONT_FACE_CLOCKWISE;
     gpipelineState.depthStencilState.depthTestEnable  = VK_TRUE;
     gpipelineState.depthStencilState.depthWriteEnable = VK_TRUE;
     VkViewport viewport{0.0f, 0.0f, (float) this->getSize().width, (float) this->getSize().height,
@@ -298,31 +320,31 @@ void PlayApp::createGraphicsPipeline()
     gpipelineState.viewportState.pViewports    = &viewport;
     gpipelineState.viewportState.scissorCount  = 1;
     gpipelineState.viewportState.pScissors     = &scissor;
-    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
-                                      VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE,
-                                      VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE};
-    gpipelineState.dynamicState.dynamicStateCount                         = 4;
-    gpipelineState.dynamicState.pDynamicStates                            = dynamicStates;
-    VkVertexInputAttributeDescription vertexInputAttributeDescriptions[4] = {
+    std::vector<VkDynamicState> dynamicStates  = {
+        VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE,
+        VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE};
+    gpipelineState.setDynamicStateEnablesCount(dynamicStates.size());
+    for (int i = 0; i < dynamicStates.size(); ++i)
+    {
+        gpipelineState.setDynamicStateEnable(i, dynamicStates[i]);
+    }
+    std::vector<VkVertexInputAttributeDescription> vertexInputAttributeDescriptions = {
         {0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0},
         {1, 0, VK_FORMAT_R32G32B32_SFLOAT, 12},
         {2, 0, VK_FORMAT_R32G32B32_SFLOAT, 24},
         {3, 0, VK_FORMAT_R32G32_SFLOAT, 36},
 
     };
-    gpipelineState.vertexInputState.vertexAttributeDescriptionCount = 4;
-    gpipelineState.vertexInputState.pVertexAttributeDescriptions = vertexInputAttributeDescriptions;
+    gpipelineState.addAttributeDescriptions(vertexInputAttributeDescriptions);
     VkVertexInputBindingDescription vertexInputBindingDescription = {0, sizeof(Vertex),
                                                                      VK_VERTEX_INPUT_RATE_VERTEX};
-    gpipelineState.vertexInputState.vertexBindingDescriptionCount = 1;
-    gpipelineState.vertexInputState.pVertexBindingDescriptions    = &vertexInputBindingDescription;
+    gpipelineState.addBindingDescription(vertexInputBindingDescription);
     gpipelineState.addShader(nvh::loadFile("spv/graphic.vert.spv", true),
                              VK_SHADER_STAGE_VERTEX_BIT, "main");
     gpipelineState.addShader(nvh::loadFile("spv/graphic.frag.spv", true),
                              VK_SHADER_STAGE_FRAGMENT_BIT, "main");
 
     _graphicsPipeline = gpipelineState.createPipeline();
-    int test;
 }
 
 void PlayApp::rayTraceRTCreate()
@@ -368,22 +390,44 @@ void PlayApp::createRenderBuffer()
 void PlayApp::OnInit()
 {
     _modelLoader.init(this);
-    CameraManip.setMode(nvh::CameraManipulator::Modes::Fly);
+    CameraManip.setMode(nvh::CameraManipulator::Modes::Examine);
+    CameraManip.setFov(120.0f);
     m_debug.setup(m_device);
     _rtBuilder.setup(m_device, &_alloc, m_graphicsQueueIndex);
     _alloc.init(m_instance, m_device, m_physicalDevice);
     _texturePool.init(2048, &_alloc);
     _bufferPool.init(40960, &_alloc);
     rayTraceRTCreate();
-    // _modelLoader.loadModel("C:/repo/Bistro_V5_gltf/Interior/interior.gltf");
-    _modelLoader.loadModel("C:/repo/Vulkan_learn/models/Camera_01_2k/Camera_01_2k.gltf");
+    // _modelLoader.loadModel("F:/repository/ModelResource/gltfBistro/exterior/exterior.gltf");
+    _modelLoader.loadModel("F:/repository/ModelResource/gltfBistro/interior/interior.gltf");
+    // _modelLoader.loadModel("D:/repo/DogEngine/models/Camera_01_2k/Camera_01_2k.gltf");
     createRenderBuffer();
     buildBlas();
     buildTlas();
     createDescritorSet();
     createGraphicsPipeline();
 }
-void PlayApp::OnPreRender() {}
+void PlayApp::OnPreRender()
+{
+    RenderUniform* data = static_cast<RenderUniform*>(_alloc.map(_renderUniformBuffer));
+    data->view          = CameraManip.getMatrix();
+    data->viewInverse   = glm::inverse(CameraManip.getMatrix());
+    data->project       = glm::perspectiveFov(CameraManip.getFov(), this->getSize().width * 1.0f,
+                                              this->getSize().height * 1.0f, 0.1f, 10000.0f);
+    data->project[1][1] *= -1;
+    // {
+    //     std::cout << "Projection Matrix:" << std::endl;
+    //     for (int i = 0; i < 4; ++i)
+    //     {
+    //         for (int j = 0; j < 4; ++j) std::cout << data->view[i][j] << ' ';
+    //         std::cout << '\n';
+    //     }
+    //     std::cout << "\r" << std::flush;
+    // }
+    data->cameraPosition = CameraManip.getEye();
+    data->frameCount     = _frameCount++;
+    _alloc.unmap(_renderUniformBuffer);
+}
 
 void PlayApp::RenderFrame()
 {
@@ -391,6 +435,76 @@ void PlayApp::RenderFrame()
     VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkBeginCommandBuffer(cmd, &beginInfo);
+    if (_renderMode == RenderMode::eRayTracing)
+    {
+        // render ray tracing;
+    }
+    if (_renderMode == RenderMode::eRasterization)
+    {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _graphicsPipeline);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _graphicsPipelineLayout, 0, 1,
+                                &_descriptorSet, 0, nullptr);
+        VkClearValue clearValue[2];
+        clearValue[0].color        = {{0.0f, 1.0f, 1.0f, 1.0f}};
+        clearValue[1].depthStencil = {1.0f, 0};
+        VkRenderPassBeginInfo renderPassBeginInfo{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+        renderPassBeginInfo.renderPass = this->getRenderPass();
+        renderPassBeginInfo.framebuffer =
+            this->getFramebuffers()[this->m_swapChain.getActiveImageIndex()];
+        renderPassBeginInfo.renderArea      = VkRect2D({0, 0}, this->getSize());
+        renderPassBeginInfo.clearValueCount = 2;
+        renderPassBeginInfo.pClearValues    = clearValue;
+        vkCmdBeginRenderPass(cmd, &renderPassBeginInfo,
+                             VkSubpassContents::VK_SUBPASS_CONTENTS_INLINE);
+        std::queue<SceneNode*> nodes;
+        nodes.push(this->_scene._root.get());
+        auto       sceneVBuffers = this->_modelLoader.getSceneVBuffers();
+        auto       sceneIBuffers = this->_modelLoader.getSceneIBuffers();
+        auto       meshes        = this->_modelLoader.getSceneMeshes();
+        VkViewport viewport      = {
+            0.0f, 0.0f, (float) this->getSize().width, (float) this->getSize().height, 0.0f, 1.0f};
+        VkRect2D scissor = {{0, 0}, this->getSize()};
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+        vkCmdSetDepthWriteEnable(cmd, true);
+        vkCmdSetDepthTestEnable(cmd, true);
+        {
+            // ScopeTimer timer;
+            while (!nodes.empty())
+            {
+                SceneNode* currnode = nodes.front();
+                nodes.pop();
+                if (!currnode->_meshIdx.empty())
+                {
+                    for (auto& meshIdx : currnode->_meshIdx)
+                    {
+                        Constants constants;
+                        constants.model  = currnode->_transform;
+                        constants.matIdx = meshes[meshIdx]._materialIndex;
+                        // LOGI(std::to_string(constants.matIdx).c_str());
+                        vkCmdPushConstants(
+                            cmd, _graphicsPipelineLayout,
+                            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                            sizeof(Constants), &constants);
+                        VkDeviceSize offset = 0;
+                        vkCmdBindVertexBuffers(cmd, 0, 1,
+                                               &(sceneVBuffers[meshes[meshIdx]._vBufferIdx].buffer),
+                                               &offset);
+                        vkCmdBindIndexBuffer(cmd, sceneIBuffers[meshes[meshIdx]._iBufferIdx].buffer,
+                                             0, VkIndexType::VK_INDEX_TYPE_UINT32);
+                        vkCmdDrawIndexed(cmd,
+                                         this->_modelLoader.getSceneMeshes()[meshIdx]._faceCnt * 3,
+                                         1, 0, 0, 0);
+                    }
+                }
+                for (auto& child : currnode->_children)
+                {
+                    nodes.push(child.get());
+                }
+            }
+        }
+        // vkCmdDraw(cmd, 3, 1, 0, 0);
+    }
 }
 
 void PlayApp::OnPostRender()
@@ -401,17 +515,6 @@ void PlayApp::OnPostRender()
     ImGui::NewFrame();
     // ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
 
-    VkClearValue clearValue[2];
-    clearValue[0].color        = {{0.0f, 1.0f, 0.0f, 1.0f}};
-    clearValue[1].depthStencil = {1.0f, 0};
-    VkRenderPassBeginInfo renderPassBeginInfo{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-    renderPassBeginInfo.renderPass = this->getRenderPass();
-    renderPassBeginInfo.framebuffer =
-        this->getFramebuffers()[this->m_swapChain.getActiveImageIndex()];
-    renderPassBeginInfo.renderArea      = VkRect2D({0, 0}, this->getSize());
-    renderPassBeginInfo.clearValueCount = 2;
-    renderPassBeginInfo.pClearValues    = clearValue;
-    vkCmdBeginRenderPass(cmd, &renderPassBeginInfo, VkSubpassContents::VK_SUBPASS_CONTENTS_INLINE);
     ImGui::BeginMainMenuBar();
     ImGui::MenuItem("File");
     ImGui::EndMainMenuBar();

@@ -46,6 +46,13 @@ class PlayApp : public nvvkhl::AppBaseVk
         eSceneTexture,
         eCount
     };
+
+    enum RenderMode
+    {
+        eRasterization,
+        eRayTracing,
+        eRCount
+    } _renderMode = eRasterization;
     friend class ModelLoader;
     ModelLoader _modelLoader;
     nvvk::ResourceAllocatorVma _alloc;

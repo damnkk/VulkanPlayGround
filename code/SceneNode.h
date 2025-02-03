@@ -3,14 +3,12 @@
 #include "glm/glm.hpp"
 #include "vector"
 #include "string"
-#include "assimp/scene.h"
 #include "memory"
 #include "nvh/gltfscene.hpp"
 namespace Play
 {
 struct SceneNode
 {
-    std::shared_ptr<SceneNode>                                    addChild(aiNode* child);
     std::shared_ptr<SceneNode>                                    addChild(nvh::GltfNode child);
     std::shared_ptr<SceneNode>                                    addChild(std::string name);
     glm::mat4               _transform = glm::mat4(1.0);

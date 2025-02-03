@@ -26,6 +26,8 @@ struct Mesh
     int             _materialIndex = -1;
     uint32_t        _faceCnt       = 0;
     uint32_t        _vertCnt       = 0;
+    uint32_t        _vBufferIdx    = 0;
+    uint32_t        _iBufferIdx    = 0;
 };
 
 struct Vertex
