@@ -59,7 +59,7 @@ class PlayApp : public nvvkhl::AppBaseVk
         eRasterization,
         eRayTracing,
         eRCount
-    } _renderMode = eRasterization;
+    } _renderMode = eRayTracing;
     friend class ModelLoader;
     ModelLoader _modelLoader;
     nvvk::ResourceAllocatorVma _alloc;

@@ -669,12 +669,41 @@ void PlayApp::RenderFrame()
     vkBeginCommandBuffer(cmd, &beginInfo);
     if (_renderMode == RenderMode::eRayTracing)
     {
+        VkImageMemoryBarrier imageMemoryBarrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+        imageMemoryBarrier.oldLayout                   = VK_IMAGE_LAYOUT_UNDEFINED;
+        imageMemoryBarrier.newLayout                   = VK_IMAGE_LAYOUT_GENERAL;
+        imageMemoryBarrier.image                       = _rayTraceRT.image;
+        imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        imageMemoryBarrier.subresourceRange.levelCount = 1;
+        imageMemoryBarrier.subresourceRange.layerCount = 1;
+        imageMemoryBarrier.srcAccessMask               = 0;
+        imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT;
+        imageMemoryBarrier.srcQueueFamilyIndex = this->getQueueFamily();
+        imageMemoryBarrier.dstQueueFamilyIndex = this->getQueueFamily();
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                             VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0, 0, nullptr, 0,
+                             nullptr, 1, &imageMemoryBarrier);
+
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _rtPipeline);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _rtPipelineLayout, 0,
                                 1, &_descriptorSet, 0, nullptr);
         auto regions = _sbtWrapper.getRegions();
         vkCmdTraceRaysKHR(cmd, &regions[0], &regions[1], &regions[2], &regions[3],
                           this->getSize().width, this->getSize().height, 1);
+
+        imageMemoryBarrier.oldLayout                   = VK_IMAGE_LAYOUT_GENERAL;
+        imageMemoryBarrier.newLayout                   = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        imageMemoryBarrier.image                       = _rayTraceRT.image;
+        imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        imageMemoryBarrier.subresourceRange.levelCount = 1;
+        imageMemoryBarrier.subresourceRange.layerCount = 1;
+        imageMemoryBarrier.srcAccessMask               = 0;
+        imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT;
+        imageMemoryBarrier.srcQueueFamilyIndex = this->getQueueFamily();
+        imageMemoryBarrier.dstQueueFamilyIndex = this->getQueueFamily();
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1,
+                             &imageMemoryBarrier);
     }
     if (_renderMode == RenderMode::eRasterization)
     {
