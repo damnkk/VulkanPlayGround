@@ -10,24 +10,13 @@ struct Texture : public nvvk::Texture
     VkImageType _type        = VK_IMAGE_TYPE_2D;
     uint8_t     _mipmapLevel = 1;
     std::string _debugName;
-    uint32_t    _poolId;
+    int         _poolId = -1;
 };
 
 struct Buffer : public nvvk::Buffer
 {
-    uint32_t _poolId;
+    int                    _poolId = -1;
     VkDescriptorBufferInfo descriptor;
-};
-
-struct Mesh
-{
-    VkDeviceAddress _vertexAddress = 0;
-    VkDeviceAddress _indexAddress  = 0;
-    int             _materialIndex = -1;
-    uint32_t        _faceCnt       = 0;
-    uint32_t        _vertCnt       = 0;
-    uint32_t        _vBufferIdx    = 0;
-    uint32_t        _iBufferIdx    = 0;
 };
 
 struct Vertex
@@ -80,7 +69,10 @@ class TexturePool : public BasePool<Texture>
    public:
     void free(Texture& obj)
     {
-        assert(obj._poolId < _objs.size() && obj._poolId >= 0);
+        if (!(obj._poolId < _objs.size() && obj._poolId >= 0))
+        {
+            return;
+        }
         _freeIndices[--_availableIndex] = obj._poolId;
         _allocator->destroy(obj);
         obj._poolId = -1;
@@ -92,7 +84,10 @@ class BufferPool : public BasePool<Buffer>
    public:
     void free(Buffer& obj)
     {
-        assert(obj._poolId < _objs.size() && obj._poolId >= 0);
+        if (!(obj._poolId < _objs.size() && obj._poolId >= 0))
+        {
+            return;
+        }
         _freeIndices[--_availableIndex] = obj._poolId;
         _allocator->destroy(obj);
         obj._poolId = -1;

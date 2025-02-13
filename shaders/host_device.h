@@ -81,4 +81,15 @@ struct Constants
     uint matIdx;
 };
 
+struct Mesh
+{
+    uint64_t _vertexAddress;
+    uint64_t _indexAddress;
+    int      _materialIndex;
+    uint     _faceCnt;
+    uint     _vertCnt;
+    uint     _vBufferIdx;
+    uint     _iBufferIdx;
+};
+
 #endif // HOST_DIVICE_H

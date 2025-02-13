@@ -4,14 +4,16 @@
 #include "backends/imgui_impl_vulkan.h"
 #include "imgui.h"
 #include "imgui/imgui_helper.h"
+#include "imgui/imgui_camera_widget.h"
 #include "nvh/nvprint.hpp"
 #include "nvvk/debug_util_vk.hpp"
 #include "nvvk/buffers_vk.hpp"
 #include "nvvk/images_vk.hpp"
 #include "nvvk/pipeline_vk.hpp"
+#include "nvvk/shaders_vk.hpp"
+#include "nvvk/renderpasses_vk.hpp"
 #include "nvh/nvprint.hpp"
 #include "nvh/fileoperations.hpp"
-#include "imgui/imgui_camera_widget.h"
 #include "nvp/perproject_globals.hpp"
 #include "SceneNode.h"
 #include "queue"
@@ -127,6 +129,81 @@ void PlayApp::buildBlas()
         _alloc.destroy(scratchBuffer);
     }
     builder.destroy();
+}
+
+void PlayApp::createRTPipeline()
+{
+    VkPushConstantRange pushConstantRange{}; // empty
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR |
+                                   VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
+                                   VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR |
+                                   VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
+    pushConstantRange.offset = 0;
+    pushConstantRange.size   = 4;
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    pipelineLayoutInfo.setLayoutCount         = 1;
+    pipelineLayoutInfo.pSetLayouts            = &_descriptorSetLayout;
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
+    pipelineLayoutInfo.pPushConstantRanges    = &pushConstantRange;
+    vkCreatePipelineLayout(this->m_device, &pipelineLayoutInfo, nullptr, &_rtPipelineLayout);
+    NAME_VK(_rtPipelineLayout);
+    std::vector<VkPipelineShaderStageCreateInfo> stages;
+
+    VkPipelineShaderStageCreateInfo rayGenStage{
+        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
+    rayGenStage.module =
+        nvvk::createShaderModule(m_device, nvh::loadFile("spv/raygen.rgen.spv", true));
+    rayGenStage.stage = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+    rayGenStage.pName = "main";
+    stages.push_back(rayGenStage);
+    VkPipelineShaderStageCreateInfo missStage{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
+    missStage.module =
+        nvvk::createShaderModule(m_device, nvh::loadFile("spv/raymiss.rmiss.spv", true));
+    missStage.stage = VK_SHADER_STAGE_MISS_BIT_KHR;
+    missStage.pName = "main";
+    stages.push_back(missStage);
+    VkPipelineShaderStageCreateInfo hitStage{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
+    hitStage.module =
+        nvvk::createShaderModule(m_device, nvh::loadFile("spv/rayhit.rchit.spv", true));
+    hitStage.stage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+    hitStage.pName = "main";
+    stages.push_back(hitStage);
+
+    VkRayTracingShaderGroupCreateInfoKHR rayGroup{
+        VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR};
+    rayGroup.closestHitShader   = VK_SHADER_UNUSED_KHR;
+    rayGroup.generalShader      = VK_SHADER_UNUSED_KHR;
+    rayGroup.anyHitShader       = VK_SHADER_UNUSED_KHR;
+    rayGroup.intersectionShader = VK_SHADER_UNUSED_KHR;
+
+    rayGroup.type          = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+    rayGroup.generalShader = 0; // ray gen
+    _rtShaderGroups.push_back(rayGroup);
+    rayGroup.type          = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+    rayGroup.generalShader = 1; // ray miss
+    _rtShaderGroups.push_back(rayGroup);
+    rayGroup.type             = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+    rayGroup.closestHitShader = 2; // ray hit
+    _rtShaderGroups.push_back(rayGroup);
+
+    VkRayTracingPipelineCreateInfoKHR rtPipelineInfo{
+        VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR};
+    rtPipelineInfo.maxPipelineRayRecursionDepth = 4;
+    rtPipelineInfo.pStages                      = stages.data();
+    rtPipelineInfo.stageCount                   = stages.size();
+    rtPipelineInfo.groupCount                   = _rtShaderGroups.size();
+    rtPipelineInfo.pGroups                      = _rtShaderGroups.data();
+    rtPipelineInfo.layout                       = _rtPipelineLayout;
+
+    auto res =
+        vkCreateRayTracingPipelinesKHR(m_device, {}, {}, 1, &rtPipelineInfo, nullptr, &_rtPipeline);
+    assert(res == VK_SUCCESS);
+    NAME_VK(_rtPipeline);
+
+    _sbtWrapper.addIndex(nvvk::SBTWrapper::GroupType::eRaygen, 0);
+    _sbtWrapper.addIndex(nvvk::SBTWrapper::eMiss, 1);
+    _sbtWrapper.addIndex(nvvk::SBTWrapper::eHit, 2);
+    _sbtWrapper.create(_rtPipeline, rtPipelineInfo);
 }
 void PlayApp::createDescritorSet()
 {
@@ -307,7 +384,7 @@ void PlayApp::createGraphicsPipeline()
     NAME_VK(_graphicsPipelineLayout);
 
     nvvk::GraphicsPipelineGeneratorCombined gpipelineState(this->m_device, _graphicsPipelineLayout,
-                                                           this->getRenderPass());
+                                                           _rasterizationRenderPass);
     gpipelineState.inputAssemblyState.topology        = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     gpipelineState.rasterizationState.cullMode        = VK_CULL_MODE_NONE;
     gpipelineState.rasterizationState.frontFace       = VK_FRONT_FACE_CLOCKWISE;
@@ -352,7 +429,9 @@ void PlayApp::rayTraceRTCreate()
     Texture rayTraceRT;
     auto    textureCreateinfo = nvvk::makeImage2DCreateInfo(
         VkExtent2D{this->getSize().width, this->getSize().height}, VK_FORMAT_R32G32B32A32_SFLOAT,
-        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, false);
+        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        false);
     rayTraceRT             = _texturePool.alloc();
     auto samplerCreateInfo = nvvk::makeSamplerCreateInfo(
         VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT,
@@ -387,6 +466,145 @@ void PlayApp::createRenderBuffer()
     NAME_VK(_renderUniformBuffer.buffer);
 }
 
+void PlayApp::createRazterizationRenderPass()
+{
+    _rasterizationRenderPass = nvvk::createRenderPass(
+        this->m_device, {VK_FORMAT_R32G32B32A32_SFLOAT}, this->m_depthFormat, 1, true, true,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+}
+
+void PlayApp::createRazterizationFBO()
+{
+    if (_rasterizationDepthImage.image != VK_NULL_HANDLE)
+    {
+        vkDestroyImage(m_device, _rasterizationDepthImage.image, nullptr);
+    }
+    if (_rasterizationDepthImage.memory != VK_NULL_HANDLE)
+    {
+        vkFreeMemory(m_device, _rasterizationDepthImage.memory, nullptr);
+    }
+    if (_rasterizationDepthImage.view != VK_NULL_HANDLE)
+    {
+        vkDestroyImageView(m_device, _rasterizationDepthImage.view, nullptr);
+    }
+    VkImageCreateInfo depthImageCreateInfo = nvvk::makeImage2DCreateInfo(
+        VkExtent2D{this->getSize().width, this->getSize().height}, this->m_depthFormat,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, false);
+    vkCreateImage(m_device, &depthImageCreateInfo, nullptr, &_rasterizationDepthImage.image);
+    // Allocate the memory
+    VkMemoryRequirements memReqs;
+    vkGetImageMemoryRequirements(m_device, _rasterizationDepthImage.image, &memReqs);
+    VkMemoryAllocateInfo memAllocInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    memAllocInfo.allocationSize = memReqs.size;
+    memAllocInfo.memoryTypeIndex =
+        getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    vkAllocateMemory(m_device, &memAllocInfo, nullptr, &_rasterizationDepthImage.memory);
+    // Bind image and memory
+    vkBindImageMemory(m_device, _rasterizationDepthImage.image, _rasterizationDepthImage.memory, 0);
+    auto cmd = this->createTempCmdBuffer();
+
+    VkImageSubresourceRange subresourceRange{};
+    subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+    subresourceRange.levelCount = 1;
+    subresourceRange.layerCount = 1;
+
+    VkImageMemoryBarrier imageMemoryBarrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+    imageMemoryBarrier.oldLayout             = VK_IMAGE_LAYOUT_UNDEFINED;
+    imageMemoryBarrier.newLayout             = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    imageMemoryBarrier.image                 = _rasterizationDepthImage.image;
+    imageMemoryBarrier.subresourceRange      = subresourceRange;
+    imageMemoryBarrier.srcAccessMask         = VkAccessFlags();
+    imageMemoryBarrier.dstAccessMask         = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    const VkPipelineStageFlags srcStageMask  = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    const VkPipelineStageFlags destStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    vkCmdPipelineBarrier(cmd, srcStageMask, destStageMask, VK_FALSE, 0, nullptr, 0, nullptr, 1,
+                         &imageMemoryBarrier);
+
+    this->submitTempCmdBuffer(cmd);
+    VkImageViewCreateInfo depthViewCreateInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    depthViewCreateInfo.image            = _rasterizationDepthImage.image;
+    depthViewCreateInfo.viewType         = VK_IMAGE_VIEW_TYPE_2D;
+    depthViewCreateInfo.format           = this->m_depthFormat;
+    depthViewCreateInfo.subresourceRange = subresourceRange;
+    _rasterizationDepthImage.layout      = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    vkCreateImageView(m_device, &depthViewCreateInfo, nullptr, &_rasterizationDepthImage.view);
+
+    std::vector<VkImageView> attachments = {_rayTraceRT.descriptor.imageView,
+                                            _rasterizationDepthImage.view};
+    VkFramebufferCreateInfo  framebufferInfo{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+    framebufferInfo.renderPass      = _rasterizationRenderPass;
+    framebufferInfo.attachmentCount = 2;
+    framebufferInfo.pAttachments    = attachments.data();
+    framebufferInfo.width           = this->getSize().width;
+    framebufferInfo.height          = this->getSize().height;
+    framebufferInfo.layers          = 1;
+    VkResult res =
+        vkCreateFramebuffer(this->m_device, &framebufferInfo, nullptr, &_rasterizationFBO);
+    assert(res == VK_SUCCESS);
+}
+
+void PlayApp::createPostDescriptorSet()
+{
+    std::vector<VkDescriptorSetLayoutBinding> bindings = {
+        {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+    };
+    VkDescriptorSetLayoutCreateInfo descSetLayoutInfo{
+        VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    descSetLayoutInfo.bindingCount = bindings.size();
+    descSetLayoutInfo.pBindings    = bindings.data();
+    vkCreateDescriptorSetLayout(m_device, &descSetLayoutInfo, nullptr, &_postDescriptorSetLayout);
+    NAME_VK(_postDescriptorSetLayout);
+    VkDescriptorSetAllocateInfo descSetAllocInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+    descSetAllocInfo.descriptorPool     = _descriptorPool;
+    descSetAllocInfo.descriptorSetCount = 1;
+    descSetAllocInfo.pSetLayouts        = &_postDescriptorSetLayout;
+    vkAllocateDescriptorSets(m_device, &descSetAllocInfo, &_postDescriptorSet);
+    NAME_VK(_postDescriptorSet);
+    VkDescriptorImageInfo imageInfo;
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    imageInfo.imageView   = _rayTraceRT.descriptor.imageView;
+    imageInfo.sampler     = _rayTraceRT.descriptor.sampler;
+
+    VkWriteDescriptorSet descSetWrite{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    descSetWrite.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descSetWrite.dstBinding      = 0;
+    descSetWrite.dstSet          = _postDescriptorSet;
+    descSetWrite.descriptorCount = 1;
+    descSetWrite.pImageInfo      = &imageInfo;
+    vkUpdateDescriptorSets(m_device, 1, &descSetWrite, 0, nullptr);
+}
+
+void PlayApp::createPostPipeline()
+{
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts    = &_postDescriptorSetLayout;
+    vkCreatePipelineLayout(m_device, &pipelineLayoutInfo, nullptr, &_postPipelineLayout);
+    nvvk::GraphicsPipelineGeneratorCombined gpipelineState(this->m_device, _postPipelineLayout,
+                                                           m_renderPass);
+    gpipelineState.inputAssemblyState.topology        = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    gpipelineState.rasterizationState.cullMode        = VK_CULL_MODE_NONE;
+    gpipelineState.depthStencilState.depthTestEnable  = VK_TRUE;
+    gpipelineState.depthStencilState.depthWriteEnable = VK_TRUE;
+    VkViewport viewport{0.0f, 0.0f, (float) this->getSize().width, (float) this->getSize().height,
+                        0.0f, 1.0f};
+    std::vector<VkDynamicState> dynamicStates = {
+        VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE,
+        VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE};
+    gpipelineState.setDynamicStateEnablesCount(dynamicStates.size());
+    for (int i = 0; i < dynamicStates.size(); ++i)
+    {
+        gpipelineState.setDynamicStateEnable(i, dynamicStates[i]);
+    }
+
+    gpipelineState.addShader(nvh::loadFile("spv/post.vert.spv", true), VK_SHADER_STAGE_VERTEX_BIT,
+                             "main");
+    gpipelineState.addShader(nvh::loadFile("spv/post.frag.spv", true), VK_SHADER_STAGE_FRAGMENT_BIT,
+                             "main");
+
+    _postPipeline = gpipelineState.createPipeline();
+}
 void PlayApp::OnInit()
 {
     _modelLoader.init(this);
@@ -394,18 +612,32 @@ void PlayApp::OnInit()
     CameraManip.setFov(120.0f);
     m_debug.setup(m_device);
     _rtBuilder.setup(m_device, &_alloc, m_graphicsQueueIndex);
+    VkPhysicalDeviceRayTracingPipelinePropertiesKHR rtProperties{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR};
+    VkPhysicalDeviceProperties2 properties2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+    properties2.pNext = &rtProperties;
+    vkGetPhysicalDeviceProperties2(m_physicalDevice, &properties2);
+    _shaderModuleManager.init(m_device, 1, 3);
+
+    _sbtWrapper.setup(m_device, this->getQueueFamily(), &_alloc, rtProperties);
     _alloc.init(m_instance, m_device, m_physicalDevice);
     _texturePool.init(2048, &_alloc);
     _bufferPool.init(40960, &_alloc);
     rayTraceRTCreate();
+
     // _modelLoader.loadModel("F:/repository/ModelResource/gltfBistro/exterior/exterior.gltf");
-    _modelLoader.loadModel("F:/repository/ModelResource/gltfBistro/interior/interior.gltf");
-    // _modelLoader.loadModel("D:/repo/DogEngine/models/Camera_01_2k/Camera_01_2k.gltf");
+    // _modelLoader.loadModel("F:/repository/ModelResource/gltfBistro/interior/interior.gltf");
+    _modelLoader.loadModel("D:/repo/DogEngine/models/Camera_01_2k/Camera_01_2k.gltf");
     createRenderBuffer();
     buildBlas();
     buildTlas();
     createDescritorSet();
+    createRazterizationRenderPass();
+    createRazterizationFBO();
     createGraphicsPipeline();
+    createRTPipeline();
+    createPostDescriptorSet();
+    createPostPipeline();
 }
 void PlayApp::OnPreRender()
 {
@@ -437,7 +669,12 @@ void PlayApp::RenderFrame()
     vkBeginCommandBuffer(cmd, &beginInfo);
     if (_renderMode == RenderMode::eRayTracing)
     {
-        // render ray tracing;
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _rtPipeline);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _rtPipelineLayout, 0,
+                                1, &_descriptorSet, 0, nullptr);
+        auto regions = _sbtWrapper.getRegions();
+        vkCmdTraceRaysKHR(cmd, &regions[0], &regions[1], &regions[2], &regions[3],
+                          this->getSize().width, this->getSize().height, 1);
     }
     if (_renderMode == RenderMode::eRasterization)
     {
@@ -448,9 +685,8 @@ void PlayApp::RenderFrame()
         clearValue[0].color        = {{0.0f, 1.0f, 1.0f, 1.0f}};
         clearValue[1].depthStencil = {1.0f, 0};
         VkRenderPassBeginInfo renderPassBeginInfo{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-        renderPassBeginInfo.renderPass = this->getRenderPass();
-        renderPassBeginInfo.framebuffer =
-            this->getFramebuffers()[this->m_swapChain.getActiveImageIndex()];
+        renderPassBeginInfo.renderPass      = _rasterizationRenderPass;
+        renderPassBeginInfo.framebuffer     = _rasterizationFBO;
         renderPassBeginInfo.renderArea      = VkRect2D({0, 0}, this->getSize());
         renderPassBeginInfo.clearValueCount = 2;
         renderPassBeginInfo.pClearValues    = clearValue;
@@ -503,13 +739,35 @@ void PlayApp::RenderFrame()
                 }
             }
         }
-        // vkCmdDraw(cmd, 3, 1, 0, 0);
+        vkCmdEndRenderPass(cmd);
     }
 }
 
 void PlayApp::OnPostRender()
 {
     auto cmd = this->getCommandBuffers()[this->m_swapChain.getActiveImageIndex()];
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _postPipeline);
+    VkClearValue clearValue[2];
+    clearValue[0].color        = {{0.0f, 1.0f, 1.0f, 1.0f}};
+    clearValue[1].depthStencil = {1.0f, 0};
+    VkRenderPassBeginInfo renderPassBeginInfo{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+    renderPassBeginInfo.renderPass = this->getRenderPass();
+    renderPassBeginInfo.framebuffer =
+        this->getFramebuffers()[this->m_swapChain.getActiveImageIndex()];
+    renderPassBeginInfo.renderArea      = VkRect2D({0, 0}, this->getSize());
+    renderPassBeginInfo.clearValueCount = 2;
+    renderPassBeginInfo.pClearValues    = clearValue;
+    vkCmdBeginRenderPass(cmd, &renderPassBeginInfo, VkSubpassContents::VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdSetDepthTestEnable(cmd, true);
+    vkCmdSetDepthWriteEnable(cmd, true);
+    VkViewport viewport = {
+        0.0f, 0.0f, (float) this->getSize().width, (float) this->getSize().height, 0.0f, 1.0f};
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+    VkRect2D scissor = {{0, 0}, this->getSize()};
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _postPipelineLayout, 0, 1,
+                            &_postDescriptorSet, 0, nullptr);
+    vkCmdDraw(cmd, 3, 1, 0, 0);
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
@@ -538,7 +796,13 @@ void PlayApp::OnPostRender()
 void PlayApp::onResize(int width, int height)
 {
     _texturePool.free(_rayTraceRT);
+    vkDestroyFramebuffer(m_device, _rasterizationFBO, nullptr);
+    vkDestroyRenderPass(m_device, _rasterizationRenderPass, nullptr);
     rayTraceRTCreate();
+    createRazterizationRenderPass();
+    createRazterizationFBO();
+
+    // update raytracing rt
     VkWriteDescriptorSet raytracingRTWrite{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
     raytracingRTWrite.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     raytracingRTWrite.dstBinding      = ObjBinding::eRayTraceRT;
@@ -546,6 +810,19 @@ void PlayApp::onResize(int width, int height)
     raytracingRTWrite.descriptorCount = 1;
     raytracingRTWrite.pImageInfo      = &_rayTraceRT.descriptor;
     vkUpdateDescriptorSets(this->m_device, 1, &raytracingRTWrite, 0, nullptr);
+
+    // update post descriptor
+    VkDescriptorImageInfo imageInfo;
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    imageInfo.imageView   = _rayTraceRT.descriptor.imageView;
+    imageInfo.sampler     = _rayTraceRT.descriptor.sampler;
+    VkWriteDescriptorSet postDescriptorWrite{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    postDescriptorWrite.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    postDescriptorWrite.dstBinding      = 0;
+    postDescriptorWrite.dstSet          = _postDescriptorSet;
+    postDescriptorWrite.descriptorCount = 1;
+    postDescriptorWrite.pImageInfo      = &imageInfo;
+    vkUpdateDescriptorSets(this->m_device, 1, &postDescriptorWrite, 0, nullptr);
 }
 void PlayApp::Run()
 {
@@ -566,8 +843,10 @@ void PlayApp::Run()
 
 void PlayApp::onDestroy()
 {
+    this->_sbtWrapper.destroy();
     this->_texturePool.deinit();
     this->_bufferPool.deinit();
+    this->_shaderModuleManager.deinit();
     vkDestroyDescriptorPool(m_device, this->_descriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(m_device, this->_descriptorSetLayout, nullptr);
     _rtBuilder.destroy();

@@ -298,10 +298,14 @@ VK_KHR_portability_subset (v. 1)
 ________________________
 Used Device Extensions :
 VK_KHR_ray_tracing_pipeline
+VK_KHR_shader_clock
 VK_KHR_portability_subset
 VK_KHR_acceleration_structure
 VK_KHR_deferred_host_operations
+VK_KHR_shader_non_semantic_info
+VK_NV_shader_sm_builtins
 VK_KHR_spirv_1_4
 VK_KHR_swapchain
 VK_KHR_ray_query
 
+Model loaded successfully: D:/repo/DogEngine/models/Camera_01_2k/Camera_01_2k.gltf
