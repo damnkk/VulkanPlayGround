@@ -19,14 +19,6 @@ struct Buffer : public nvvk::Buffer
     VkDescriptorBufferInfo descriptor;
 };
 
-struct Vertex
-{
-    glm::vec3 _position;
-    glm::vec3 _normal;
-    glm::vec3 _tangent;
-    glm::vec2 _texCoord;
-};
-
 template <typename T>
 class BasePool
 {

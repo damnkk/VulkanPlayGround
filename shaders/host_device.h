@@ -65,6 +65,14 @@ struct Material
     int  _pad1;
 };
 
+struct Vertex
+{
+    vec3 _position;
+    vec3 _normal;
+    vec3 _tangent;
+    vec2 _texCoord;
+};
+
 struct RenderUniform
 {
     mat4 view;

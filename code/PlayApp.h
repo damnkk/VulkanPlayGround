@@ -27,6 +27,8 @@ class PlayApp : public nvvkhl::AppBaseVk
         return _scene;
     };
 
+    virtual void onKeyboard(int key, int scancode, int action, int mods) override;
+
    protected:
     void buildTlas();
     void buildBlas();
@@ -103,6 +105,7 @@ class PlayApp : public nvvkhl::AppBaseVk
     uint32_t                    _frameCount = 0;
     std::vector<nvvk::AccelKHR> _blasAccels;
     VkAccelerationStructureKHR  _tlasAccels;
+    nvh::CameraManipulator::Camera _dirtyCamera;
 };
 
 } //    namespace Play

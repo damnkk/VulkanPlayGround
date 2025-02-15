@@ -3,6 +3,8 @@ precision mediump float;
 #extension GL_GOOGLE_include_directive : enable // To be able to use #include
 #extension GL_EXT_nonuniform_qualifier : enable
 #extension GL_EXT_scalar_block_layout : enable
+#extension GL_ARB_gpu_shader_int64 : enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 #include "host_device.h"
 layout(binding = 3, set = 0) uniform RenderUniformBlock
 {

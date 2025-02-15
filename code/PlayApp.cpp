@@ -15,6 +15,7 @@
 #include "nvh/nvprint.hpp"
 #include "nvh/fileoperations.hpp"
 #include "nvp/perproject_globals.hpp"
+#include "nvh/cameramanipulator.hpp"
 #include "SceneNode.h"
 #include "queue"
 #include "iostream"
@@ -49,14 +50,13 @@ void PlayApp::buildTlas()
             for (int i = 0; i < node->_meshIdx.size(); ++i)
             {
                 VkAccelerationStructureInstanceKHR instance{};
-                glm::mat4                          Ttransform = glm::transpose(node->_transform);
-                memcpy(instance.transform.matrix, &Ttransform[0][0], 12 * sizeof(float));
-                instance.mask                = 0xFF;
+                instance.transform           = nvvk::toTransformMatrixKHR(node->_transform);
                 instance.instanceCustomIndex = node->_meshIdx[i];
-                instance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
-                instance.instanceShaderBindingTableRecordOffset = 0;
                 instance.accelerationStructureReference =
-                    this->_blasAccels[node->_meshIdx[i]].address;
+                    _rtBuilder.getBlasDeviceAddress(node->_meshIdx[i]);
+                instance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+                instance.mask  = 0xFF;
+                instance.instanceShaderBindingTableRecordOffset = 0;
                 instances.push_back(instance);
             }
         }
@@ -72,63 +72,47 @@ void PlayApp::buildTlas()
 
 void PlayApp::buildBlas()
 {
-    nvvk::BlasBuilder                                 builder(&_alloc, this->m_device);
-    auto                                              meshes = this->_modelLoader.getSceneMeshes();
-    std::vector<nvvk::AccelerationStructureBuildData> blasBuildDatas;
-    std::vector<VkDeviceAddress>                      scratchAddresses;
-    uint64_t                                          maxScrashSize = 0;
-    for (int b = 0; b < this->_modelLoader.getSceneMeshes().size(); ++b)
+    std::vector<nvvk::RaytracingBuilderKHR::BlasInput> allBlas;
+    allBlas.reserve(_modelLoader.getSceneMeshes().size());
+    std::vector<Mesh>& meshes = _modelLoader.getSceneMeshes();
+    for (int b = 0; b < meshes.size(); ++b)
     {
-        nvvk::AccelerationStructureBuildData blasBuildData;
-        VkAccelerationStructureGeometryKHR   geometry{
+        Mesh& mesh = meshes[b];
+
+        VkDeviceAddress                                 vertexAddress     = mesh._vertexAddress;
+        VkDeviceAddress                                 indexAddress      = mesh._indexAddress;
+        uint32_t                                        maxPrimitiveCount = mesh._faceCnt;
+        VkAccelerationStructureGeometryTrianglesDataKHR triangles{
+            VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR};
+        triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT; // vec3 vertex position data.
+        triangles.vertexData.deviceAddress = vertexAddress;
+        triangles.vertexStride             = sizeof(Vertex);
+        // Describe index data (32-bit unsigned int)
+        triangles.indexType               = VK_INDEX_TYPE_UINT32;
+        triangles.indexData.deviceAddress = indexAddress;
+        // Indicate identity transform by setting transformData to null device pointer.
+        // triangles.transformData = {};
+        triangles.maxVertex = mesh._vertCnt - 1;
+
+        // Identify the above data as containing opaque triangles.
+        VkAccelerationStructureGeometryKHR asGeom{
             VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
-        geometry.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
-        geometry.flags        = VK_GEOMETRY_OPAQUE_BIT_KHR;
-        geometry.geometry.triangles.sType =
-            VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
-        geometry.geometry.triangles.vertexFormat             = VK_FORMAT_R32G32B32_SFLOAT;
-        geometry.geometry.triangles.vertexData.deviceAddress = meshes[b]._vertexAddress;
-        geometry.geometry.triangles.vertexStride             = sizeof(Vertex);
-        geometry.geometry.triangles.maxVertex                = meshes[b]._vertCnt - 1;
-        geometry.geometry.triangles.indexData.deviceAddress  = meshes[b]._indexAddress;
-        geometry.geometry.triangles.indexType                = VK_INDEX_TYPE_UINT32;
-        // geometry.geometry.triangles.transformData.deviceAddress = {}
-        VkAccelerationStructureBuildRangeInfoKHR rangeInfo{.primitiveCount  = meshes[b]._faceCnt,
-                                                           .primitiveOffset = 0,
-                                                           .firstVertex     = 0,
-                                                           .transformOffset = 0};
-        blasBuildData.addGeometry(geometry, rangeInfo);
-        blasBuildData.asType = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-        VkAccelerationStructureBuildSizesInfoKHR sizeInfo = blasBuildData.finalizeGeometry(
-            this->m_device, VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR |
-                                VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR |
-                                VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
-        VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeatures{
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR};
-        blasBuildDatas.push_back(blasBuildData);
-        maxScrashSize = std::max(maxScrashSize, sizeInfo.buildScratchSize);
+        asGeom.geometryType       = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+        asGeom.flags              = VK_GEOMETRY_OPAQUE_BIT_KHR;
+        asGeom.geometry.triangles = triangles;
+
+        VkAccelerationStructureBuildRangeInfoKHR offset;
+        offset.firstVertex     = 0;
+        offset.primitiveCount  = maxPrimitiveCount;
+        offset.primitiveOffset = 0;
+        offset.transformOffset = 0;
+
+        nvvk::RaytracingBuilderKHR::BlasInput input;
+        input.asGeometry.emplace_back(asGeom);
+        input.asBuildOffsetInfo.emplace_back(offset);
+        allBlas.push_back(input);
     };
-    scratchAddresses.reserve(blasBuildDatas.size());
-    std::vector<nvvk::Buffer> scratchBuffers;
-    for (int s = 0; s < blasBuildDatas.size(); ++s)
-    {
-        scratchBuffers.push_back(_alloc.createBuffer(
-            maxScrashSize,
-            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
-        scratchAddresses.push_back(scratchBuffers.back().address);
-    }
-    VkCommandBuffer cmdbuf = createTempCmdBuffer();
-    _blasAccels.resize(blasBuildDatas.size());
-    bool res =
-        builder.cmdCreateParallelBlas(cmdbuf, blasBuildDatas, this->_blasAccels, scratchAddresses);
-    submitTempCmdBuffer(cmdbuf);
-    assert(res);
-    for (auto& scratchBuffer : scratchBuffers)
-    {
-        _alloc.destroy(scratchBuffer);
-    }
-    builder.destroy();
+    _rtBuilder.buildBlas(allBlas, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
 }
 
 void PlayApp::createRTPipeline()
@@ -183,6 +167,7 @@ void PlayApp::createRTPipeline()
     rayGroup.generalShader = 1; // ray miss
     _rtShaderGroups.push_back(rayGroup);
     rayGroup.type             = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+    rayGroup.generalShader    = VK_SHADER_UNUSED_KHR;
     rayGroup.closestHitShader = 2; // ray hit
     _rtShaderGroups.push_back(rayGroup);
 
@@ -605,11 +590,26 @@ void PlayApp::createPostPipeline()
 
     _postPipeline = gpipelineState.createPipeline();
 }
+
+void PlayApp::onKeyboard(int key, int scancode, int action, int mods)
+{
+    static float silming     = 0.1f;
+    const bool   pressed     = action != GLFW_RELEASE;
+    auto         cameraPos   = CameraManip.getEye();
+    auto         cameraUp    = CameraManip.getUp();
+    auto         cameraFront = CameraManip.getCenter();
+    // if (pressed && key == GLFW_KEY_W)
+    // {
+    //     CameraManip.getd
+    // }
+}
+
 void PlayApp::OnInit()
 {
     _modelLoader.init(this);
     CameraManip.setMode(nvh::CameraManipulator::Modes::Examine);
     CameraManip.setFov(120.0f);
+    CameraManip.setSpeed(10.0f);
     m_debug.setup(m_device);
     _rtBuilder.setup(m_device, &_alloc, m_graphicsQueueIndex);
     VkPhysicalDeviceRayTracingPipelinePropertiesKHR rtProperties{
@@ -647,18 +647,14 @@ void PlayApp::OnPreRender()
     data->project       = glm::perspectiveFov(CameraManip.getFov(), this->getSize().width * 1.0f,
                                               this->getSize().height * 1.0f, 0.1f, 10000.0f);
     data->project[1][1] *= -1;
-    // {
-    //     std::cout << "Projection Matrix:" << std::endl;
-    //     for (int i = 0; i < 4; ++i)
-    //     {
-    //         for (int j = 0; j < 4; ++j) std::cout << data->view[i][j] << ' ';
-    //         std::cout << '\n';
-    //     }
-    //     std::cout << "\r" << std::flush;
-    // }
     data->cameraPosition = CameraManip.getEye();
     data->frameCount     = _frameCount++;
     _alloc.unmap(_renderUniformBuffer);
+    if (_dirtyCamera != CameraManip.getCamera())
+    {
+        _frameCount = 0;
+    }
+    _dirtyCamera = CameraManip.getCamera();
 }
 
 void PlayApp::RenderFrame()
@@ -683,7 +679,7 @@ void PlayApp::RenderFrame()
         vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                              VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0, 0, nullptr, 0,
                              nullptr, 1, &imageMemoryBarrier);
-
+        _renderUniformData.frameCount = _frameCount++;
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _rtPipeline);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _rtPipelineLayout, 0,
                                 1, &_descriptorSet, 0, nullptr);
@@ -805,7 +801,7 @@ void PlayApp::OnPostRender()
     ImGui::BeginMainMenuBar();
     ImGui::MenuItem("File");
     ImGui::EndMainMenuBar();
-    ImGui::ShowDemoWindow();
+
     ImGui::Render();
     if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
     {

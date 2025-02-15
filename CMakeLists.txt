@@ -46,6 +46,7 @@ compile_glsl_directory(
 	DST "${CMAKE_CURRENT_SOURCE_DIR}/spv" 
 	VULKAN_TARGET "vulkan1.3"
 	DEPENDENCY ${VULKAN_BUILD_DEPENDENCIES}
+  FLAGS "-I${CMAKE_CURRENT_SOURCE_DIR}/External/nvpro_core/nvvkhl/shaders"
 	)
 
 # Package shared by all projects
