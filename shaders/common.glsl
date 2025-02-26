@@ -22,16 +22,18 @@ struct Ray{
     vec3 direction;
 };
 
+struct MaterialInfo
+{
+    vec3 color;
+    vec3 emissive;
+};
 struct GeomInfo{
     vec3 normal;
     vec3 tangent;
     vec3 bitangent;
     vec3 position;
     vec2 uv;
-};
-
-struct MaterialInfo{
-vec3 color;
+    int  materialIdx;
 };
 
 #define INFINITY 1e32

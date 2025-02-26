@@ -4,5 +4,5 @@
 #include "common.glsl"
 layout(location = 0) rayPayloadInEXT PlayLoad rtPload;
 void main(){
-    rtPload.hitT = -1;
+    rtPload.hitT = INFINITY;
 }

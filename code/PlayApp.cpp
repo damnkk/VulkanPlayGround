@@ -16,10 +16,11 @@
 #include "nvh/fileoperations.hpp"
 #include "nvp/perproject_globals.hpp"
 #include "nvh/cameramanipulator.hpp"
+#include "stb_image.h"
 #include "SceneNode.h"
 #include "queue"
 #include "iostream"
-#include <chrono>
+#include "chrono"
 namespace Play
 {
 struct ScopeTimer
@@ -253,15 +254,6 @@ void PlayApp::createDescritorSet()
     instanceBufferLayoutBinding.stageFlags      = VK_SHADER_STAGE_RAYGEN_BIT_KHR |
                                              VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
                                              VK_SHADER_STAGE_MISS_BIT_KHR;
-    // // primitive buffer desc binding
-    // VkDescriptorSetLayoutBinding primitiveLayoutBinding;
-    // primitiveLayoutBinding.binding         = 6;
-    // primitiveLayoutBinding.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    // primitiveLayoutBinding.descriptorCount = this->_modelLoader.getSceneVBuffers().size();
-    // primitiveLayoutBinding.stageFlags      = VK_SHADER_STAGE_RAYGEN_BIT_KHR |
-    //                                     VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
-    //                                     VK_SHADER_STAGE_MISS_BIT_KHR |
-    //                                     VK_SHADER_STAGE_FRAGMENT_BIT;
 
     // scene texture desc binding
     VkDescriptorSetLayoutBinding SceneTextureLayoutBinding;
@@ -272,12 +264,19 @@ void PlayApp::createDescritorSet()
         VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
         VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT;
     SceneTextureLayoutBinding.pImmutableSamplers = nullptr;
+    // env texture desc binding
+    VkDescriptorSetLayoutBinding envTextureLayoutBinding;
+    envTextureLayoutBinding.binding            = ObjBinding::eEnvTexture;
+    envTextureLayoutBinding.descriptorType     = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    envTextureLayoutBinding.descriptorCount    = 1;
+    envTextureLayoutBinding.stageFlags         = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+    envTextureLayoutBinding.pImmutableSamplers = nullptr;
 
     std::vector<VkDescriptorSetLayoutBinding> bindings = {
         tlasLayoutBinding,           rayTraceRTLayoutBinding,
         materialBufferLayoutBinding, renderUniformBufferLayoutBinding,
         lightMeshIdxLayoutBinding,   instanceBufferLayoutBinding,
-        SceneTextureLayoutBinding};
+        SceneTextureLayoutBinding,   envTextureLayoutBinding};
     VkDescriptorSetLayoutCreateInfo descSetLayoutInfo{
         VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     // descSetLayoutInfo.
@@ -350,6 +349,13 @@ void PlayApp::createDescritorSet()
         imageInfos.push_back(texture.descriptor);
     }
     descSetWrites[ObjBinding::eSceneTexture].pImageInfo = imageInfos.data();
+
+    descSetWrites[ObjBinding::eEnvTexture].descriptorType =
+        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descSetWrites[ObjBinding::eEnvTexture].dstBinding      = ObjBinding::eEnvTexture;
+    descSetWrites[ObjBinding::eEnvTexture].dstSet          = _descriptorSet;
+    descSetWrites[ObjBinding::eEnvTexture].descriptorCount = 1;
+    descSetWrites[ObjBinding::eEnvTexture].pImageInfo      = &_envTexture.descriptor;
     vkUpdateDescriptorSets(this->m_device, descSetWrites.size(), descSetWrites.data(), 0, nullptr);
 }
 
@@ -610,6 +616,7 @@ void PlayApp::OnInit()
     CameraManip.setMode(nvh::CameraManipulator::Modes::Examine);
     CameraManip.setFov(120.0f);
     CameraManip.setSpeed(10.0f);
+    // CameraManip
     m_debug.setup(m_device);
     _rtBuilder.setup(m_device, &_alloc, m_graphicsQueueIndex);
     VkPhysicalDeviceRayTracingPipelinePropertiesKHR rtProperties{
@@ -628,6 +635,8 @@ void PlayApp::OnInit()
     // _modelLoader.loadModel("F:/repository/ModelResource/gltfBistro/exterior/exterior.gltf");
     // _modelLoader.loadModel("F:/repository/ModelResource/gltfBistro/interior/interior.gltf");
     _modelLoader.loadModel("D:/repo/DogEngine/models/Camera_01_2k/Camera_01_2k.gltf");
+    // _modelLoader.loadModel("D:\\repo\\DogEngine\\models\\DamagedHelmet/DamagedHelmet.gltf");
+    loadEnvTexture();
     createRenderBuffer();
     buildBlas();
     buildTlas();
@@ -655,6 +664,38 @@ void PlayApp::OnPreRender()
         _frameCount = 0;
     }
     _dirtyCamera = CameraManip.getCamera();
+}
+
+void PlayApp::loadEnvTexture()
+{
+    // std::string path = "D:\\repo\\DogEngine\\models\\skybox\\graveyard_pathways_2k.hdr";
+    std::string path = "D:\\repo\\DogEngine\\models\\skybox\\small_empty_room_1_2k.hdr";
+    int         width, height, channels;
+    float*      data = stbi_loadf(path.c_str(), &width, &height, &channels, 4);
+    if (!data)
+    {
+        throw std::runtime_error("load env texture failed");
+    }
+    VkExtent2D        size{static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
+    VkImageCreateInfo imageCreateInfo = nvvk::makeImage2DCreateInfo(
+        size, VK_FORMAT_R32G32B32A32_SFLOAT,
+        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, false);
+    VkSamplerCreateInfo samplerCreateInfo = nvvk::makeSamplerCreateInfo(
+        VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_FALSE,
+        1.0f, VK_SAMPLER_MIPMAP_MODE_LINEAR);
+    _envTexture       = _texturePool.alloc();
+    auto          cmd = this->createTempCmdBuffer();
+    nvvk::Texture nvvkTexture =
+        _alloc.createTexture(cmd, width * height * 4 * sizeof(float), data, imageCreateInfo,
+                             samplerCreateInfo, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    this->submitTempCmdBuffer(cmd);
+
+    _envTexture.image        = nvvkTexture.image;
+    _envTexture.memHandle    = nvvkTexture.memHandle;
+    _envTexture.descriptor   = nvvkTexture.descriptor;
+    _envTexture._format      = imageCreateInfo.format;
+    _envTexture._mipmapLevel = 1;
 }
 
 void PlayApp::RenderFrame()

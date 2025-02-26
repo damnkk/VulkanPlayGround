@@ -15,13 +15,13 @@ namespace Play
 class PlayApp : public nvvkhl::AppBaseVk
 {
    public:
-    void onResize(int width, int height) override;
-    void OnInit();
+    void   onResize(int width, int height) override;
     void   onDestroy();
-    void Run();
-    void RenderFrame();
-    void OnPreRender();
-    void OnPostRender();
+    void   OnInit();
+    void   Run();
+    void   RenderFrame();
+    void   OnPreRender();
+    void   OnPostRender();
     Scene& getScene()
     {
         return _scene;
@@ -30,6 +30,7 @@ class PlayApp : public nvvkhl::AppBaseVk
     virtual void onKeyboard(int key, int scancode, int action, int mods) override;
 
    protected:
+    void loadEnvTexture();
     void buildTlas();
     void buildBlas();
     void createDescritorSet();
@@ -53,6 +54,7 @@ class PlayApp : public nvvkhl::AppBaseVk
         eInstanceBuffer,
         // ePrimitiveBuffer,
         eSceneTexture,
+        eEnvTexture,
         eCount
     };
 
@@ -91,6 +93,9 @@ class PlayApp : public nvvkhl::AppBaseVk
     VkPipeline                                        _rtPipeline;
     VkPipelineLayout                                  _rtPipelineLayout;
     std::vector<VkRayTracingShaderGroupCreateInfoKHR> _rtShaderGroups;
+
+    // env texture
+    Texture _envTexture;
 
     // for post processing
     VkPipeline            _postPipeline;
