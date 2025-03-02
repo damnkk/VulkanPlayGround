@@ -83,6 +83,14 @@ struct RenderUniform
     uint frameCount;
 };
 
+struct EnvAccel
+{
+    uint  alias;
+    float q;
+    float pdf;
+    float aliasPdf;
+};
+
 struct Constants
 {
     mat4 model;

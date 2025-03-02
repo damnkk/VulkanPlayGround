@@ -42,6 +42,7 @@ class PlayApp : public nvvkhl::AppBaseVk
     void createRazterizationFBO();
     void createPostPipeline();
     void createPostDescriptorSet();
+    float buildAliasmap(const std::vector<float>& data, std::vector<EnvAccel>& accel);
 
    private:
     enum ObjBinding
@@ -55,6 +56,7 @@ class PlayApp : public nvvkhl::AppBaseVk
         // ePrimitiveBuffer,
         eSceneTexture,
         eEnvTexture,
+        eEnvAccelBuffer,
         eCount
     };
 
@@ -111,6 +113,8 @@ class PlayApp : public nvvkhl::AppBaseVk
     std::vector<nvvk::AccelKHR> _blasAccels;
     VkAccelerationStructureKHR  _tlasAccels;
     nvh::CameraManipulator::Camera _dirtyCamera;
+    std::vector<EnvAccel>          _envAccels;
+    Buffer                         _envAccelBuffer;
 };
 
 } //    namespace Play

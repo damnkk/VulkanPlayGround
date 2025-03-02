@@ -20,7 +20,7 @@
 #include "host_device.h"
 #include "random.h"
 #include "bsdf_functions.h"
-layout(set = 0,binding = 0) uniform accelerationStructureEXT topLevelAS;
+layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout(set = 0,binding = 1, rgba32f) uniform image2D RayTraceRT;
 layout(set = 0,binding = 2,scalar)  buffer MaterialBuffer{
 Material materials[];
@@ -38,6 +38,10 @@ layout(set = 0,binding = 5,scalar) buffer InstanceBuffer{
 };
 layout(set = 0,binding = 6) uniform sampler2D[] sceneTextures;
 layout(set = 0, binding = 7) uniform sampler2D envTextures;
+layout(set = 0, binding = 8, scalar) buffer EnvAccelBuffer
+{
+    EnvAccel envAccels[];
+};
 
 layout(buffer_reference, scalar) buffer Vertices
 {
@@ -49,8 +53,8 @@ layout(buffer_reference, scalar) buffer Indices
 };
 #include "common.glsl"
 layout(location = 0) rayPayloadEXT PlayLoad rtPload;
-#include "pathtrace.glsl"
 layout(location = 1) rayPayloadEXT ShadowPlayLoad shadowPload;
+#include "pathtrace.glsl"
 void main()
 {
     ivec2 pixel       = ivec2(gl_LaunchIDEXT.x, gl_LaunchIDEXT.y);
@@ -74,7 +78,7 @@ void main()
     else
     {
         vec3 old_color = imageLoad(RayTraceRT, pixel).xyz;
-        vec3 new_color = mix(old_color, res, 1.0 / (float(renderUniform.frameCount) + 1.0));
+        vec3 new_color = mix(old_color, res, 1.0 / (float(renderUniform.frameCount)));
         imageStore(RayTraceRT, pixel, vec4(new_color, 1.0));
         return;
     }

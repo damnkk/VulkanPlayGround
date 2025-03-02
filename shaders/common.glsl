@@ -26,6 +26,7 @@ struct MaterialInfo
 {
     vec3 color;
     vec3 emissive;
+    vec3 normal;
 };
 struct GeomInfo{
     vec3 normal;
@@ -34,6 +35,14 @@ struct GeomInfo{
     vec3 position;
     vec2 uv;
     int  materialIdx;
+};
+
+struct VisibilityContribution
+{
+    vec3  radiance;  // Radiance at the point if light is visible
+    vec3  lightDir;  // Direction to the light, to shoot shadow ray
+    float lightDist; // Distance to the light (1e32 for infinite or sky)
+    bool  visible;   // true if in front of the face and should shoot shadow ray
 };
 
 #define INFINITY 1e32

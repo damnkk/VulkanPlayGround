@@ -16,11 +16,13 @@
 #include "nvh/fileoperations.hpp"
 #include "nvp/perproject_globals.hpp"
 #include "nvh/cameramanipulator.hpp"
+#include "nvvkhl/shaders/constants.h"
 #include "stb_image.h"
 #include "SceneNode.h"
 #include "queue"
 #include "iostream"
 #include "chrono"
+#include "numeric"
 namespace Play
 {
 struct ScopeTimer
@@ -147,6 +149,14 @@ void PlayApp::createRTPipeline()
     missStage.stage = VK_SHADER_STAGE_MISS_BIT_KHR;
     missStage.pName = "main";
     stages.push_back(missStage);
+
+    VkPipelineShaderStageCreateInfo shadowMissStage{
+        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
+    shadowMissStage.module =
+        nvvk::createShaderModule(m_device, nvh::loadFile("spv/shadowmiss.rmiss.spv", true));
+    shadowMissStage.stage = VK_SHADER_STAGE_MISS_BIT_KHR;
+    shadowMissStage.pName = "main";
+    stages.push_back(shadowMissStage);
     VkPipelineShaderStageCreateInfo hitStage{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
     hitStage.module =
         nvvk::createShaderModule(m_device, nvh::loadFile("spv/rayhit.rchit.spv", true));
@@ -167,9 +177,11 @@ void PlayApp::createRTPipeline()
     rayGroup.type          = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
     rayGroup.generalShader = 1; // ray miss
     _rtShaderGroups.push_back(rayGroup);
+    rayGroup.generalShader = 2; // shadow miss
+    _rtShaderGroups.push_back(rayGroup);
     rayGroup.type             = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
     rayGroup.generalShader    = VK_SHADER_UNUSED_KHR;
-    rayGroup.closestHitShader = 2; // ray hit
+    rayGroup.closestHitShader = 3; // ray hit
     _rtShaderGroups.push_back(rayGroup);
 
     VkRayTracingPipelineCreateInfoKHR rtPipelineInfo{
@@ -272,11 +284,20 @@ void PlayApp::createDescritorSet()
     envTextureLayoutBinding.stageFlags         = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
     envTextureLayoutBinding.pImmutableSamplers = nullptr;
 
+    // env accel buffer desc binding
+    VkDescriptorSetLayoutBinding envAccelBufferLayoutBinding;
+    envAccelBufferLayoutBinding.binding            = ObjBinding::eEnvAccelBuffer;
+    envAccelBufferLayoutBinding.descriptorType     = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    envAccelBufferLayoutBinding.descriptorCount    = 1;
+    envAccelBufferLayoutBinding.stageFlags         = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+    envAccelBufferLayoutBinding.pImmutableSamplers = nullptr;
+
     std::vector<VkDescriptorSetLayoutBinding> bindings = {
         tlasLayoutBinding,           rayTraceRTLayoutBinding,
         materialBufferLayoutBinding, renderUniformBufferLayoutBinding,
         lightMeshIdxLayoutBinding,   instanceBufferLayoutBinding,
-        SceneTextureLayoutBinding,   envTextureLayoutBinding};
+        SceneTextureLayoutBinding,   envTextureLayoutBinding,
+        envAccelBufferLayoutBinding};
     VkDescriptorSetLayoutCreateInfo descSetLayoutInfo{
         VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     // descSetLayoutInfo.
@@ -356,6 +377,12 @@ void PlayApp::createDescritorSet()
     descSetWrites[ObjBinding::eEnvTexture].dstSet          = _descriptorSet;
     descSetWrites[ObjBinding::eEnvTexture].descriptorCount = 1;
     descSetWrites[ObjBinding::eEnvTexture].pImageInfo      = &_envTexture.descriptor;
+
+    descSetWrites[ObjBinding::eEnvAccelBuffer].descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descSetWrites[ObjBinding::eEnvAccelBuffer].dstBinding      = ObjBinding::eEnvAccelBuffer;
+    descSetWrites[ObjBinding::eEnvAccelBuffer].dstSet          = _descriptorSet;
+    descSetWrites[ObjBinding::eEnvAccelBuffer].descriptorCount = 1;
+    descSetWrites[ObjBinding::eEnvAccelBuffer].pBufferInfo     = &_envAccelBuffer.descriptor;
     vkUpdateDescriptorSets(this->m_device, descSetWrites.size(), descSetWrites.data(), 0, nullptr);
 }
 
@@ -613,8 +640,10 @@ void PlayApp::onKeyboard(int key, int scancode, int action, int mods)
 void PlayApp::OnInit()
 {
     _modelLoader.init(this);
+    // CameraManip.setWindowSize(this->getSize().width, this->getSize().height);
     CameraManip.setMode(nvh::CameraManipulator::Modes::Examine);
     CameraManip.setFov(120.0f);
+    CameraManip.setLookat({10.0, 10.0, 10.0}, {0.0, 0.0, 0.0}, {0.000, 0.000, 1.000});
     CameraManip.setSpeed(10.0f);
     // CameraManip
     m_debug.setup(m_device);
@@ -635,6 +664,7 @@ void PlayApp::OnInit()
     // _modelLoader.loadModel("F:/repository/ModelResource/gltfBistro/exterior/exterior.gltf");
     // _modelLoader.loadModel("F:/repository/ModelResource/gltfBistro/interior/interior.gltf");
     _modelLoader.loadModel("D:/repo/DogEngine/models/Camera_01_2k/Camera_01_2k.gltf");
+    // _modelLoader.loadModel("D:/repo/DogEngine/models/MetalRoughSpheres/MetalRoughSpheres.gltf");
     // _modelLoader.loadModel("D:\\repo\\DogEngine\\models\\DamagedHelmet/DamagedHelmet.gltf");
     loadEnvTexture();
     createRenderBuffer();
@@ -661,15 +691,61 @@ void PlayApp::OnPreRender()
     _alloc.unmap(_renderUniformBuffer);
     if (_dirtyCamera != CameraManip.getCamera())
     {
-        _frameCount = 0;
+        _frameCount  = -1;
+        _dirtyCamera = CameraManip.getCamera();
     }
-    _dirtyCamera = CameraManip.getCamera();
+}
+
+inline float luminance(const float* color)
+{
+    return color[0] * 0.2126f + color[1] * 0.7152f + color[2] * 0.0722f;
+}
+
+float PlayApp::buildAliasmap(const std::vector<float>& data, std::vector<EnvAccel>& accel)
+{
+    auto  size           = static_cast<uint32_t>(data.size());
+    float sum            = std::accumulate(data.begin(), data.end(), 0.f);
+    auto  fSize          = static_cast<float>(size);
+    float inverseAverage = fSize / sum;
+    for (uint32_t i = 0; i < size; ++i)
+    {
+        accel[i].q     = data[i] * inverseAverage;
+        accel[i].alias = i;
+    }
+
+    std::vector<uint32_t> partitionTable(size);
+    uint32_t              s     = 0u;
+    uint32_t              large = size;
+    for (uint32_t i = 0; i < size; ++i)
+    {
+        if (accel[i].q < 1.0f)
+        {
+            partitionTable[s++] = i;
+        }
+        else
+        {
+            partitionTable[--large] = i;
+        }
+    }
+    for (s = 0; s < large && large < size; ++s)
+    {
+        const uint32_t smallEnergyIndex   = partitionTable[s];
+        const uint32_t largeEnergyIndex   = partitionTable[large];
+        accel[smallEnergyIndex].alias     = largeEnergyIndex;
+        const float differenceWithAverage = 1.0f - accel[smallEnergyIndex].q;
+        accel[largeEnergyIndex].q -= differenceWithAverage;
+        if (accel[largeEnergyIndex].q < 1.0f)
+        {
+            large++;
+        }
+    }
+    return sum;
 }
 
 void PlayApp::loadEnvTexture()
 {
-    // std::string path = "D:\\repo\\DogEngine\\models\\skybox\\graveyard_pathways_2k.hdr";
-    std::string path = "D:\\repo\\DogEngine\\models\\skybox\\small_empty_room_1_2k.hdr";
+    std::string path = "D:\\repo\\DogEngine\\models\\skybox\\graveyard_pathways_2k.hdr";
+    // std::string path = "D:\\repo\\DogEngine\\models\\skybox\\small_empty_room_1_2k.hdr";
     int         width, height, channels;
     float*      data = stbi_loadf(path.c_str(), &width, &height, &channels, 4);
     if (!data)
@@ -696,6 +772,60 @@ void PlayApp::loadEnvTexture()
     _envTexture.descriptor   = nvvkTexture.descriptor;
     _envTexture._format      = imageCreateInfo.format;
     _envTexture._mipmapLevel = 1;
+
+    // build accel
+    const uint32_t rx = width;
+    const uint32_t ry = height;
+
+    _envAccels.resize(rx * ry);
+    std::vector<float> importanceData(rx * ry);
+    float              cosTheta0 = 1.0f;
+    // 360 degree average split
+    const float stepPhi = float(2.0 * M_PI) / float(rx);
+    // 180 degree average split
+    const float stepTheta = float(M_PI) / float(ry);
+    double      total     = 0;
+    for (uint32_t y = 0; y < ry; ++y)
+    {
+        const float theta1    = float(y + 1) * stepTheta;
+        const float cosTheta1 = std::cos(theta1);
+        const float area      = (cosTheta0 - cosTheta1) * stepPhi;
+        cosTheta0             = cosTheta1;
+        for (uint32_t x = 0; x < rx; ++x)
+        {
+            const uint32_t idx          = y * rx + x;
+            const uint32_t idx4         = idx * 4;
+            float          cieLuminance = luminance(&data[idx4]);
+            importanceData[idx] =
+                area * std::max(data[idx4], std::max(data[idx4 + 1], data[idx4 + 2]));
+            total += cieLuminance;
+        }
+    }
+    float       intergral      = buildAliasmap(importanceData, _envAccels);
+    const float invEnvIntegral = 1.0 / intergral;
+    for (uint32_t i = 0; i < rx * ry; ++i)
+    {
+        const uint32_t idx4 = i * 4;
+        _envAccels[i].pdf =
+            std::max(data[idx4], std::max(data[idx4 + 1], data[idx4 + 2])) * invEnvIntegral;
+    }
+
+    for (uint32_t i = 0; i < rx * ry; ++i)
+    {
+        const uint32_t aliasIdx = _envAccels[i].alias;
+        _envAccels[i].aliasPdf  = _envAccels[aliasIdx].pdf;
+    }
+    _envAccelBuffer = _bufferPool.alloc();
+    cmd             = createTempCmdBuffer();
+    nvvk::Buffer envAccelBuffer =
+        _alloc.createBuffer(cmd, _envAccels, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    submitTempCmdBuffer(cmd);
+    _envAccelBuffer.buffer            = envAccelBuffer.buffer;
+    _envAccelBuffer.memHandle         = envAccelBuffer.memHandle;
+    _envAccelBuffer.descriptor.buffer = envAccelBuffer.buffer;
+    _envAccelBuffer.descriptor.offset = 0;
+    _envAccelBuffer.descriptor.range  = _envAccels.size() * sizeof(EnvAccel);
+    stbi_image_free(data);
 }
 
 void PlayApp::RenderFrame()

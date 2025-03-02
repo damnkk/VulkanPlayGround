@@ -95,5 +95,15 @@
         "xtr1common": "cpp",
         "xtree": "cpp",
         "xutility": "cpp"
-    }
+    },
+    "glsllint.glslangValidatorPath": "C:\\VulkanSDK\\1.4.304.1\\Bin\\glslangValidator.exe",
+    "glsllint.fallBackStage": "comp",
+    "glsllint.glslangValidatorArgs": [
+        "--target-env",
+        "vulkan1.3",
+        "-V",
+        "-ID:\\repo\\VulkanPlayGround\\External\\nvpro_core\\nvvkhl\\shaders",
+        "-ID:\\repo\\VulkanPlayGround\\shaders"
+    ],
+    "glsllint.linkShader": true
 }

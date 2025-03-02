@@ -26,11 +26,14 @@ GeomInfo getGeomInfo(PlayLoad pl)
     return geomInfo;
 }
 
-MaterialInfo getMaterialInfo(int materialIdx)
+MaterialInfo getMaterialInfo(int materialIdx, GeomInfo geomInfo)
 {
+    Material mat = materials[materialIdx];
+
     MaterialInfo materialInfo;
-    materialInfo.color    = vec3(1.0);
+    materialInfo.color    = vec3(0.6, 0.2, 0.8);
     materialInfo.emissive = vec3(0.0);
+    materialInfo.normal   = geomInfo.normal;
     return materialInfo;
 }
 
@@ -43,17 +46,31 @@ vec2 directionToSphericalEnvMap(vec3 dir)
     uv.y = 1.0 - uv.y;
     return uv;
 }
+vec2 directionToSphericalEnvMap2(vec3 v)
+{
+    float gamma = asin(-v.z);
+    float theta = atan(v.y, v.x);
 
-// inline vec3 cosineSampleHemisphere(float r1, float r2)
-// {
-//     float r   = sqrt(r1);
-//     float phi = M_TWO_PI * r2;
-//     vec3  dir;
-//     dir.x = r * cos(phi);
-//     dir.y = r * sin(phi);
-//     dir.z = sqrt(1.F - r1);
-//     return dir;
-// }
+    vec2 uv = vec2(theta * M_1_OVER_PI * 0.5, gamma * M_1_OVER_PI) + 0.5;
+    return uv;
+}
+
+vec3 OffsetRay(in vec3 p, in vec3 n)
+{
+    const float intScale   = 256.0f;
+    const float floatScale = 1.0f / 65536.0f;
+    const float origin     = 1.0f / 32.0f;
+
+    ivec3 of_i = ivec3(intScale * n.x, intScale * n.y, intScale * n.z);
+
+    vec3 p_i = vec3(intBitsToFloat(floatBitsToInt(p.x) + ((p.x < 0) ? -of_i.x : of_i.x)),
+                    intBitsToFloat(floatBitsToInt(p.y) + ((p.y < 0) ? -of_i.y : of_i.y)),
+                    intBitsToFloat(floatBitsToInt(p.z) + ((p.z < 0) ? -of_i.z : of_i.z)));
+
+    return vec3(abs(p.x) < origin ? p.x + floatScale * n.x : p_i.x, //
+                abs(p.y) < origin ? p.y + floatScale * n.y : p_i.y, //
+                abs(p.z) < origin ? p.z + floatScale * n.z : p_i.z);
+}
 
 void buildCoordSystem(vec3 normal, inout vec3 tangent, inout vec3 bitangent)
 {
@@ -64,6 +81,77 @@ void buildCoordSystem(vec3 normal, inout vec3 tangent, inout vec3 bitangent)
     }
     tangent   = normalize(cross(normal, helperVec));
     bitangent = normalize(cross(normal, tangent));
+}
+
+vec3 Environment_sample(sampler2D lat_long_tex, in vec3 randVal, out vec3 to_light, out float pdf)
+{
+    // Uniformly pick a texel index idx in the environment map
+    vec3  xi     = randVal;
+    uvec2 tsize  = textureSize(lat_long_tex, 0);
+    uint  width  = tsize.x;
+    uint  height = tsize.y;
+
+    const uint size = width * height;
+    const uint idx  = min(uint(xi.x * float(size)), size - 1);
+
+    // Fetch the sampling data for that texel, containing the ratio q between its
+    // emitted radiance and the average of the environment map, the texel alias,
+    // the probability distribution function (PDF) values for that texel and its
+    // alias
+    EnvAccel sample_data = envAccels[idx];
+
+    uint env_idx;
+
+    if (xi.y < sample_data.q)
+    {
+        // If the random variable is lower than the intensity ratio q, we directly pick
+        // this texel, and renormalize the random variable for later use. The PDF is the
+        // one of the texel itself
+        env_idx = idx;
+        xi.y /= sample_data.q;
+        pdf = sample_data.pdf;
+    }
+    else
+    {
+        // Otherwise we pick the alias of the texel, renormalize the random variable and use
+        // the PDF of the alias
+        env_idx = sample_data.alias;
+        xi.y    = (xi.y - sample_data.q) / (1.0f - sample_data.q);
+        pdf     = sample_data.aliasPdf;
+    }
+
+    // Compute the 2D integer coordinates of the texel
+    const uint px = env_idx % width;
+    uint       py = env_idx / width;
+
+    // Uniformly sample the solid angle subtended by the pixel.
+    // Generate both the UV for texture lookup and a direction in spherical coordinates
+    const float u       = float(px + xi.y) / float(width);
+    const float phi     = u * (2.0f * M_PI) - M_PI;
+    float       sin_phi = sin(phi);
+    float       cos_phi = cos(phi);
+
+    const float step_theta = M_PI / float(height);
+    const float theta0     = float(py) * step_theta;
+    const float cos_theta  = cos(theta0) * (1.0f - xi.z) + cos(theta0 + step_theta) * xi.z;
+    const float theta      = acos(cos_theta);
+    const float sin_theta  = sin(theta);
+    const float v          = theta * M_1_OVER_PI;
+
+    // Convert to a light direction vector in Cartesian coordinates
+    to_light = vec3(cos_phi * sin_theta, cos_theta, sin_phi * sin_theta);
+
+    // Lookup the environment value using bilinear filtering
+    return texture(lat_long_tex, vec2(u, v)).xyz;
+}
+
+vec4 EnvSample(inout vec3 radiance)
+{
+    vec3  lightDir;
+    float pdf;
+    vec3  randVal = vec3(rand(rtPload.seed), rand(rtPload.seed), rand(rtPload.seed));
+    radiance      = Environment_sample(envTextures, randVal, lightDir, pdf);
+    return vec4(lightDir, pdf);
 }
 
 #endif // _utility_H_
