@@ -66,7 +66,6 @@ vec3 toneMapUncharted(vec3 color)
 }
 void main(){
     fragColor = texture(inputTexture,outUV);
-    vec4  avg     = textureLod(inputTexture, vec2(0.5), 20); // Get the average value of the image
-    float avgLum2 = luminance(avg.rgb);
-    fragColor.xyz = toneMapUncharted(fragColor.xyz);
+    // vec4  avg     = textureLod(inputTexture, vec2(0.5), 20); // Get the average value of the
+    // image float avgLum2 = luminance(avg.rgb); fragColor.xyz = toneMapUncharted(fragColor.xyz);
 }

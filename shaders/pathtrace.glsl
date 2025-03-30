@@ -33,63 +33,21 @@ void shadowTrace(Ray ray)
 }
 
 // get a sample direction from bsdf
-vec3 sampleBSDF(vec3 normal, vec3 viewDir, MaterialInfo materialInfo, inout PlayLoad rtPload)
+vec3 sampleBSDF(GeomInfo geomInfo, vec3 dir_in, MaterialInfo materialInfo, inout PlayLoad rtPload,
+                vec3 randomVec)
 {
-    vec3 tangentRes = cosineSampleHemisphere(rand(rtPload.seed), rand(rtPload.seed));
-    vec3 tangent;
-    vec3 bitTangent;
-    buildCoordSystem(normal, tangent, bitTangent);
-    return normalize(tangentRes.x * tangent + tangentRes.y * bitTangent + tangentRes.z * normal);
+    return vec3(1.0, 0.0, 0.0);
 }
 
 // return bsdf/pdf
-vec3 evaluateBSDF(vec3 normal, vec3 viewDir, vec3 sampleDir, MaterialInfo materialInfo,
-                  inout float pdf)
+vec3 evaluateBSDF(GeomInfo geomInfo, vec3 dir_in, vec3 dir_out, MaterialInfo materialInfo)
 {
-    if (dot(normal, sampleDir) < 0.0)
-    {
-        return vec3(0.0);
-    }
-    vec3  H            = normalize(viewDir + sampleDir);
-    float diffuseRatio = 0.5;
-    pdf                = max(0.001, dot(normal, sampleDir) * (1.0 / M_PI));
-    float FL           = SchlickFresnel(dot(normal, sampleDir));
-    float FV           = SchlickFresnel(dot(normal, viewDir));
-    float Fd90         = 0.5 + 2.0 * dot(sampleDir, H) * dot(sampleDir, H) * 1.0;
-    float Fd           = mix(1.0, Fd90, FL) * mix(1.0, Fd90, FV);
-    return ((1.0 / M_PI) * Fd * materialInfo.color) / pdf;
+    return vec3(0.0);
 }
 
-VisibilityContribution DirectLight(in Ray r, in MaterialInfo info)
+float evaluatepdf(GeomInfo geomInfo, vec3 dir_in, vec3 dir_out, MaterialInfo materialInfo)
 {
-    vec3                   Li = vec3(0.0);
-    float                  lightPdf;
-    vec3                   lightContrib;
-    vec3                   lightDir;
-    float                  lightDist = 1e32;
-    bool                   isLight   = false;
-    VisibilityContribution res;
-    res.radiance = vec3(0.0);
-    res.visible  = false;
-    // Environment light
-    {
-        vec4 dirPdf = EnvSample(lightContrib);
-        lightDir    = dirPdf.xyz;
-        lightPdf    = dirPdf.w;
-    }
-    {
-        float pdf;
-        vec3  bsdfValue = evaluateBSDF(info.normal, -r.direction, lightDir, info, pdf);
-        float misWeight = max(0.0, powerHeuristic(lightPdf, pdf));
-        Li += misWeight * bsdfValue * abs(dot(lightDir, info.normal)) * lightContrib / lightPdf;
-    }
-    res.visible   = true;
-    res.lightDir  = lightDir;
-    res.lightDist = lightDist;
-    res.radiance  = Li;
-
-    return res;
-    // 实现 DirectLight 函数的实际代码
+    return 1.0;
 }
 
 vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
@@ -100,60 +58,113 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
                       .xyz;
     vec4 origin = (renderUniform.viewInverse * vec4(0, 0, 0, 1));
 
-    vec3 res     = vec3(0.0);
+    vec3 radiance = vec3(0.0);
     vec3 history = vec3(1.0);
+
+    ivec2           rtResolution = ivec2(gl_LaunchSizeEXT.x, gl_LaunchSizeEXT.y);
+    RayDifferential rayDiff;
+    rayDiff.radius = 0.0;
+    rayDiff.spread = 0.25 / max(rtResolution.x, rtResolution.y);
 
     Ray ray;
     ray.origin = origin.xyz;
     ray.direction = normalize(direct.xyz);
+    closestTrace(ray);
+    if (rtPload.hitT == INFINITY)
+    {
+        vec3 viewDir = (ray.direction);
+        vec2 uv;
+        // uv.x        = atan(viewDir.x, viewDir.z) * (1.0 / M_TWO_PI);
+        // uv.y        = acos(clamp(viewDir.y, -1.0, 1.0)) * (1.0 / M_PI);
+        // uv.x        = uv.x < 0.0 ? uv.x + 1.0 : uv.x;
+        uv          = directionToSphericalEnvMap(viewDir);
+        float dudwx = -viewDir.z / (viewDir.x * viewDir.x + viewDir.z * viewDir.z);
+        float dudwz = viewDir.x / (viewDir.x * viewDir.x + viewDir.z * viewDir.z);
+        float dvdwy = -1.0 / sqrt(max(1 - viewDir.y * viewDir.y, 0.0));
+        // We only want to know the length of dudw & dvdw
+        // The local coordinate transformation is length preserving,
+        // so we don't need to differentiate through it.
+        float footprint = min(sqrt(dudwx * dudwx + dudwz * dudwz), dvdwy);
+        return textureLod(envTexture, uv, footprint).xyz;
+    }
+    // initialized E kernel in render equation
+    vec3  throughput = vec3(1.0);
+    float eta_scale  = 1.0;
+
+    GeomInfo     geomInfo = getGeomInfo(rtPload);
+    MaterialInfo matInfo  = getMaterialInfo(geomInfo);
+    if (matInfo.emissiveTextureIdx != -1)
+    {
+        radiance += texture(sceneTextures[matInfo.emissiveTextureIdx], geomInfo.uv).xyz *
+                    matInfo.emissiveFactor;
+    }
+
     for (int i = 0; i < maxBounce; ++i)
     {
-        closestTrace(ray);
-        // if not intersected with any object, it's all about direct lighting
-        if (rtPload.hitT == INFINITY)
+        // In a complete raytracing renderer, we will choise a light source(mesh light & env light)
+        // using random number But right now, we temporarily use env light as the only light
+        // source,so we just generate a random uv here
+        // step1: calculate direct light
+        vec2  lightUV        = vec2(rand(rtPload.seed), rand(rtPload.seed));
+        vec4  cacheSampleRes = texture(envLookupTexture, lightUV);
+        vec2  importanceUV   = cacheSampleRes.xy;
+        vec3  lightDir       = sphericalEnvMapToDirection(importanceUV);
+        vec3  c1             = vec3(0.0);
+        float w1             = 0.0;
+
+        float G = 0.0;
+        vec3  dir_light;
+        if (false)
         {
-            vec2 uv = directionToSphericalEnvMap2(ray.direction);
-            return res + history * texture(envTextures, uv).xyz;
-        }
-        // if intersected,base infomation prepare
-        GeomInfo     geomInfo     = getGeomInfo(rtPload);
-        MaterialInfo materialInfo = getMaterialInfo(geomInfo.materialIdx, geomInfo);
-        // if it's a light, return light color
-        res += history * materialInfo.emissive;
-        // // step1: sample bsdf, prepare for next bounce
-        vec3 sampleDir = sampleBSDF(geomInfo.normal, -ray.direction, materialInfo, rtPload);
-        float pdf;
-        // // step2: evaluate bsdf
-        vec3 bsdfDivPdf =
-            evaluateBSDF(geomInfo.normal, -ray.direction, sampleDir, materialInfo, pdf);
-        // // step3: update history
-        if (pdf > 0.0)
-        {
-            history *= abs(dot(sampleDir, geomInfo.normal)) * bsdfDivPdf;
+            // this branch is for mesh light, I'll implement it later,
         }
         else
         {
-            break;
+            Ray shadowRay;
+            shadowRay.origin = offsetRay(geomInfo.position, geomInfo.normal);
+            // geomInfo.position + 0.0001;
+            shadowRay.direction = lightDir;
+            shadowTrace(shadowRay);
+            if (!shadowPload.isInShadow)
+            {
+                G = 1.0;
+            }
+            else
+            {
+                return vec3(0.0, 1.0, 1.0);
+            }
         }
 
-        // // step4: get direct light
-        VisibilityContribution visContribution = DirectLight(ray, materialInfo);
-        visContribution.radiance *= history;
-        ray.origin    = OffsetRay(geomInfo.position, geomInfo.normal);
-        ray.direction = sampleDir;
-        // // step5: shoot shadow ray
-        Ray shadowray;
-        shadowray.origin    = ray.origin;
-        shadowray.direction = visContribution.lightDir;
-        shadowTrace(shadowray);
-        if (!shadowPload.isInShadow)
+        // 1.0 here is a placeholder, in future ,we will have many light source(include mesh light
+        // and env map light),and we gonna choose one of them randomly,and we will get a pdf here
+        float p1 = 1.0 * cacheSampleRes.z;
+        if (G > 0.0 && p1 > 0.0)
         {
-            res += visContribution.radiance;
-            // res += vec3(1.0, 0.0, 0.0);
+            vec3 dir_in   = normalize(-ray.direction);
+            vec3 bsdf     = evaluateBSDF(geomInfo, dir_in, lightDir, matInfo);
+            vec3 envLight = textureLod(envTexture, importanceUV, 0).xyz;
+            c1            = G * bsdf * envLight;
+            float p2      = evaluatepdf(geomInfo, dir_in, lightDir, matInfo) * G;
+            w1            = pow(p1, 2.0) / (pow(p1, 2.0) + pow(p2, 2.0));
+            c1 /= p1;
         }
+        radiance += throughput * c1 * w1;
+        float rd1     = rand(rtPload.seed);
+        float rd2     = rand(rtPload.seed);
+        float rd3     = rand(rtPload.seed);
+        vec3  dir_out = sampleBSDF(geomInfo, ray.direction, matInfo, rtPload, vec3(rd1, rd2, rd3));
+        {
+            // ray spread shit, implement later
+        }
+        Ray bsdfRay;
+        bsdfRay.origin    = geomInfo.position;
+        bsdfRay.direction = dir_out;
+        closestTrace(bsdfRay);
+
+        return vec3(1.0);
     }
 
-    return res;
+    return radiance;
 }
 
 #endif // __pathtrace_H__

@@ -23,6 +23,7 @@
 #include "iostream"
 #include "chrono"
 #include "numeric"
+#include "numbers"
 namespace Play
 {
 struct ScopeTimer
@@ -286,8 +287,8 @@ void PlayApp::createDescritorSet()
 
     // env accel buffer desc binding
     VkDescriptorSetLayoutBinding envAccelBufferLayoutBinding;
-    envAccelBufferLayoutBinding.binding            = ObjBinding::eEnvAccelBuffer;
-    envAccelBufferLayoutBinding.descriptorType     = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    envAccelBufferLayoutBinding.binding            = ObjBinding::eEnvLoopupTexture;
+    envAccelBufferLayoutBinding.descriptorType     = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     envAccelBufferLayoutBinding.descriptorCount    = 1;
     envAccelBufferLayoutBinding.stageFlags         = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
     envAccelBufferLayoutBinding.pImmutableSamplers = nullptr;
@@ -378,11 +379,12 @@ void PlayApp::createDescritorSet()
     descSetWrites[ObjBinding::eEnvTexture].descriptorCount = 1;
     descSetWrites[ObjBinding::eEnvTexture].pImageInfo      = &_envTexture.descriptor;
 
-    descSetWrites[ObjBinding::eEnvAccelBuffer].descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descSetWrites[ObjBinding::eEnvAccelBuffer].dstBinding      = ObjBinding::eEnvAccelBuffer;
-    descSetWrites[ObjBinding::eEnvAccelBuffer].dstSet          = _descriptorSet;
-    descSetWrites[ObjBinding::eEnvAccelBuffer].descriptorCount = 1;
-    descSetWrites[ObjBinding::eEnvAccelBuffer].pBufferInfo     = &_envAccelBuffer.descriptor;
+    descSetWrites[ObjBinding::eEnvLoopupTexture].descriptorType =
+        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descSetWrites[ObjBinding::eEnvLoopupTexture].dstBinding      = ObjBinding::eEnvLoopupTexture;
+    descSetWrites[ObjBinding::eEnvLoopupTexture].dstSet          = _descriptorSet;
+    descSetWrites[ObjBinding::eEnvLoopupTexture].descriptorCount = 1;
+    descSetWrites[ObjBinding::eEnvLoopupTexture].pImageInfo      = &_envLookupTexture.descriptor;
     vkUpdateDescriptorSets(this->m_device, descSetWrites.size(), descSetWrites.data(), 0, nullptr);
 }
 
@@ -640,10 +642,10 @@ void PlayApp::onKeyboard(int key, int scancode, int action, int mods)
 void PlayApp::OnInit()
 {
     _modelLoader.init(this);
-    // CameraManip.setWindowSize(this->getSize().width, this->getSize().height);
-    CameraManip.setMode(nvh::CameraManipulator::Modes::Examine);
+    CameraManip.setWindowSize(this->getSize().width, this->getSize().height);
+    // CameraManip.setMode(nvh::CameraManipulator::Modes::Examine);
     CameraManip.setFov(120.0f);
-    CameraManip.setLookat({10.0, 10.0, 10.0}, {0.0, 0.0, 0.0}, {0.000, 0.000, 1.000});
+    CameraManip.setLookat({10.0, 10.0, 10.0}, {0.0, 0.0, 0.0}, {0.000, 1.000, 0.000});
     CameraManip.setSpeed(10.0f);
     // CameraManip
     m_debug.setup(m_device);
@@ -701,51 +703,10 @@ inline float luminance(const float* color)
     return color[0] * 0.2126f + color[1] * 0.7152f + color[2] * 0.0722f;
 }
 
-float PlayApp::buildAliasmap(const std::vector<float>& data, std::vector<EnvAccel>& accel)
-{
-    auto  size           = static_cast<uint32_t>(data.size());
-    float sum            = std::accumulate(data.begin(), data.end(), 0.f);
-    auto  fSize          = static_cast<float>(size);
-    float inverseAverage = fSize / sum;
-    for (uint32_t i = 0; i < size; ++i)
-    {
-        accel[i].q     = data[i] * inverseAverage;
-        accel[i].alias = i;
-    }
-
-    std::vector<uint32_t> partitionTable(size);
-    uint32_t              s     = 0u;
-    uint32_t              large = size;
-    for (uint32_t i = 0; i < size; ++i)
-    {
-        if (accel[i].q < 1.0f)
-        {
-            partitionTable[s++] = i;
-        }
-        else
-        {
-            partitionTable[--large] = i;
-        }
-    }
-    for (s = 0; s < large && large < size; ++s)
-    {
-        const uint32_t smallEnergyIndex   = partitionTable[s];
-        const uint32_t largeEnergyIndex   = partitionTable[large];
-        accel[smallEnergyIndex].alias     = largeEnergyIndex;
-        const float differenceWithAverage = 1.0f - accel[smallEnergyIndex].q;
-        accel[largeEnergyIndex].q -= differenceWithAverage;
-        if (accel[largeEnergyIndex].q < 1.0f)
-        {
-            large++;
-        }
-    }
-    return sum;
-}
-
 void PlayApp::loadEnvTexture()
 {
     std::string path = "D:\\repo\\DogEngine\\models\\skybox\\graveyard_pathways_2k.hdr";
-    // std::string path = "D:\\repo\\DogEngine\\models\\skybox\\small_empty_room_1_2k.hdr";
+    // path             = "D:\\repo\\DogEngine\\models\\skybox\\test.hdr";
     int         width, height, channels;
     float*      data = stbi_loadf(path.c_str(), &width, &height, &channels, 4);
     if (!data)
@@ -755,7 +716,7 @@ void PlayApp::loadEnvTexture()
     VkExtent2D        size{static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
     VkImageCreateInfo imageCreateInfo = nvvk::makeImage2DCreateInfo(
         size, VK_FORMAT_R32G32B32A32_SFLOAT,
-        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, false);
+        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, true);
     VkSamplerCreateInfo samplerCreateInfo = nvvk::makeSamplerCreateInfo(
         VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
         VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_FALSE,
@@ -765,6 +726,9 @@ void PlayApp::loadEnvTexture()
     nvvk::Texture nvvkTexture =
         _alloc.createTexture(cmd, width * height * 4 * sizeof(float), data, imageCreateInfo,
                              samplerCreateInfo, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    nvvk::cmdGenerateMipmaps(cmd, nvvkTexture.image, imageCreateInfo.format,
+                             {imageCreateInfo.extent.width, imageCreateInfo.extent.height},
+                             imageCreateInfo.mipLevels);
     this->submitTempCmdBuffer(cmd);
 
     _envTexture.image        = nvvkTexture.image;
@@ -774,57 +738,101 @@ void PlayApp::loadEnvTexture()
     _envTexture._mipmapLevel = 1;
 
     // build accel
-    const uint32_t rx = width;
-    const uint32_t ry = height;
+    float lumSum = 0.0;
 
-    _envAccels.resize(rx * ry);
-    std::vector<float> importanceData(rx * ry);
-    float              cosTheta0 = 1.0f;
-    // 360 degree average split
-    const float stepPhi = float(2.0 * M_PI) / float(rx);
-    // 180 degree average split
-    const float stepTheta = float(M_PI) / float(ry);
-    double      total     = 0;
-    for (uint32_t y = 0; y < ry; ++y)
+    // 初始化 h 行 w 列的概率密度 pdf 并 统计总亮度
+    std::vector<std::vector<float>> pdf(height);
+    for (auto& line : pdf) line.resize(width);
+    for (int i = 0; i < height; i++)
     {
-        const float theta1    = float(y + 1) * stepTheta;
-        const float cosTheta1 = std::cos(theta1);
-        const float area      = (cosTheta0 - cosTheta1) * stepPhi;
-        cosTheta0             = cosTheta1;
-        for (uint32_t x = 0; x < rx; ++x)
+        for (int j = 0; j < width; j++)
         {
-            const uint32_t idx          = y * rx + x;
-            const uint32_t idx4         = idx * 4;
-            float          cieLuminance = luminance(&data[idx4]);
-            importanceData[idx] =
-                area * std::max(data[idx4], std::max(data[idx4 + 1], data[idx4 + 2]));
-            total += cieLuminance;
+            float R   = data[4 * (i * width + j)];
+            float G   = data[4 * (i * width + j) + 1];
+            float B   = data[4 * (i * width + j) + 2];
+            float lum = 0.2f * R + 0.7f * G + 0.1f * B;
+            pdf[i][j] = lum;
+            lumSum += lum;
         }
     }
-    float       intergral      = buildAliasmap(importanceData, _envAccels);
-    const float invEnvIntegral = 1.0 / intergral;
-    for (uint32_t i = 0; i < rx * ry; ++i)
+    for (int i = 0; i < height; i++)
+        for (int j = 0; j < width; j++) pdf[i][j] /= lumSum;
+    std::vector<float> pdf_x_margin;
+    pdf_x_margin.resize(width);
+    for (int j = 0; j < width; j++)
+        for (int i = 0; i < height; i++) pdf_x_margin[j] += pdf[i][j];
+    std::vector<float> cdf_x_margin = pdf_x_margin;
+    for (int i = 1; i < width; i++) cdf_x_margin[i] += cdf_x_margin[i - 1];
+
+    std::vector<std::vector<float>> pdf_y_condiciton = pdf;
+    for (int j = 0; j < width; j++)
+        for (int i = 0; i < height; i++) pdf_y_condiciton[i][j] /= pdf_x_margin[j];
+
+    std::vector<std::vector<float>> cdf_y_condiciton = pdf_y_condiciton;
+    for (int j = 0; j < width; j++)
+        for (int i = 1; i < height; i++) cdf_y_condiciton[i][j] += cdf_y_condiciton[i - 1][j];
+
+    std::vector<std::vector<float>> temp = cdf_y_condiciton;
+    cdf_y_condiciton                     = std::vector<std::vector<float>>(width);
+    for (auto& line : cdf_y_condiciton) line.resize(height);
+    for (int j = 0; j < width; j++)
+        for (int i = 0; i < height; i++) cdf_y_condiciton[j][i] = temp[i][j];
+    std::vector<std::vector<float>> sample_x(height);
+    for (auto& line : sample_x) line.resize(width);
+    std::vector<std::vector<float>> sample_y(height);
+    for (auto& line : sample_y) line.resize(width);
+    std::vector<std::vector<float>> sample_p(height);
+    for (auto& line : sample_p) line.resize(width);
+    for (int j = 0; j < width; j++)
     {
-        const uint32_t idx4 = i * 4;
-        _envAccels[i].pdf =
-            std::max(data[idx4], std::max(data[idx4 + 1], data[idx4 + 2])) * invEnvIntegral;
+        for (int i = 0; i < height; i++)
+        {
+            float xi_1 = float(i) / height;
+            float xi_2 = float(j) / width;
+            int   x    = std::lower_bound(cdf_x_margin.begin(), cdf_x_margin.end(), xi_1) -
+                    cdf_x_margin.begin();
+            int y = std::lower_bound(cdf_y_condiciton[x].begin(), cdf_y_condiciton[x].end(), xi_2) -
+                    cdf_y_condiciton[x].begin();
+            sample_x[i][j] = float(x) / width;
+            sample_y[i][j] = float(y) / height;
+            sample_p[i][j] = pdf[i][j];
+        }
     }
 
-    for (uint32_t i = 0; i < rx * ry; ++i)
+    std::vector<float> cache(width * height * 4);
+    // for (int i = 0; i < width * height * 3; i++) cache[i] = 0.0;
+
+    for (int i = 0; i < height; i++)
     {
-        const uint32_t aliasIdx = _envAccels[i].alias;
-        _envAccels[i].aliasPdf  = _envAccels[aliasIdx].pdf;
+        for (int j = 0; j < width; j++)
+        {
+            cache[4 * (i * width + j)]     = sample_x[i][j]; // R
+            cache[4 * (i * width + j) + 1] = sample_y[i][j]; // G
+            cache[4 * (i * width + j) + 2] = sample_p[i][j]; // B
+            cache[4 * (i * width + j) + 3] = 1.0;            // A
+        }
     }
-    _envAccelBuffer = _bufferPool.alloc();
-    cmd             = createTempCmdBuffer();
-    nvvk::Buffer envAccelBuffer =
-        _alloc.createBuffer(cmd, _envAccels, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-    submitTempCmdBuffer(cmd);
-    _envAccelBuffer.buffer            = envAccelBuffer.buffer;
-    _envAccelBuffer.memHandle         = envAccelBuffer.memHandle;
-    _envAccelBuffer.descriptor.buffer = envAccelBuffer.buffer;
-    _envAccelBuffer.descriptor.offset = 0;
-    _envAccelBuffer.descriptor.range  = _envAccels.size() * sizeof(EnvAccel);
+
+    VkExtent2D        size2{static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
+    VkImageCreateInfo imageCreateInfo2 = nvvk::makeImage2DCreateInfo(
+        size2, VK_FORMAT_R32G32B32A32_SFLOAT,
+        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, false);
+    VkSamplerCreateInfo samplerCreateInfo2 = nvvk::makeSamplerCreateInfo(
+        VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_FALSE,
+        1.0f, VK_SAMPLER_MIPMAP_MODE_LINEAR);
+    _envLookupTexture          = _texturePool.alloc();
+    auto          cmd2         = this->createTempCmdBuffer();
+    nvvk::Texture nvvkTexture2 = _alloc.createTexture(
+        cmd2, width * height * 4 * sizeof(float), cache.data(), imageCreateInfo2,
+        samplerCreateInfo2, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    _envLookupTexture.image        = nvvkTexture2.image;
+    _envLookupTexture.memHandle    = nvvkTexture2.memHandle;
+    _envLookupTexture.descriptor   = nvvkTexture2.descriptor;
+    _envLookupTexture._format      = imageCreateInfo2.format;
+    _envLookupTexture._mipmapLevel = imageCreateInfo2.mipLevels;
+    NAME_VK(_envLookupTexture.image);
+    this->submitTempCmdBuffer(cmd2);
     stbi_image_free(data);
 }
 

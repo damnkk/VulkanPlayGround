@@ -37,11 +37,11 @@ layout(set = 0,binding = 5,scalar) buffer InstanceBuffer{
     Mesh meshes[];
 };
 layout(set = 0,binding = 6) uniform sampler2D[] sceneTextures;
-layout(set = 0, binding = 7) uniform sampler2D envTextures;
-layout(set = 0, binding = 8, scalar) buffer EnvAccelBuffer
-{
-    EnvAccel envAccels[];
-};
+layout(set = 0, binding = 7) uniform sampler2D envTexture;
+layout(set = 0, binding = 8) uniform sampler2D envLookupTexture;
+// {
+//     EnvAccel envAccels[];
+// };
 
 layout(buffer_reference, scalar) buffer Vertices
 {
@@ -52,6 +52,7 @@ layout(buffer_reference, scalar) buffer Indices
     uvec3 i[];
 };
 #include "common.glsl"
+#include "ray_util.h"
 layout(location = 0) rayPayloadEXT PlayLoad rtPload;
 layout(location = 1) rayPayloadEXT ShadowPlayLoad shadowPload;
 #include "pathtrace.glsl"
@@ -60,8 +61,9 @@ void main()
     ivec2 pixel       = ivec2(gl_LaunchIDEXT.x, gl_LaunchIDEXT.y);
     vec2  resolution  = vec2(gl_LaunchSizeEXT.x, gl_LaunchSizeEXT.y);
     uint  seed        = xxhash32(uvec3(gl_LaunchIDEXT.xy, renderUniform.frameCount));
-    vec2  pixelOffset = vec2(rand(seed) - 0.5, rand(seed) - 0.5);
-    vec2  uv          = (pixel + vec2(0.5) + pixelOffset) / resolution;
+    float r            = 0.5 * sqrt(-2.0 * log(max(rand(seed), 1e-8)));
+    vec2  offset       = vec2(r * cos(2.0 * M_PI * rand(seed)), r * sin(2.0 * M_PI * rand(seed)));
+    vec2  uv           = (pixel + 0.5 + offset) / resolution;
     vec3  res         = vec3(0.0);
     int   maxSampleNum = 1;
     rtPload.seed       = seed;
@@ -79,6 +81,8 @@ void main()
     {
         vec3 old_color = imageLoad(RayTraceRT, pixel).xyz;
         vec3 new_color = mix(old_color, res, 1.0 / (float(renderUniform.frameCount)));
+        // new_color      = texture(envTexture, texture(envLookupTexture, uv).xy).xyz;
+        // new_color = res;
         imageStore(RayTraceRT, pixel, vec4(new_color, 1.0));
         return;
     }

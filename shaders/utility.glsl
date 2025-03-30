@@ -26,13 +26,13 @@ GeomInfo getGeomInfo(PlayLoad pl)
     return geomInfo;
 }
 
-MaterialInfo getMaterialInfo(int materialIdx, GeomInfo geomInfo)
+MaterialInfo getMaterialInfo(GeomInfo geomInfo)
 {
-    Material mat = materials[materialIdx];
+    Material mat = materials[geomInfo.materialIdx];
 
     MaterialInfo materialInfo;
     materialInfo.color    = vec3(0.6, 0.2, 0.8);
-    materialInfo.emissive = vec3(0.0);
+    materialInfo.emissiveFactor = vec3(0.0);
     materialInfo.normal   = geomInfo.normal;
     return materialInfo;
 }
@@ -40,19 +40,19 @@ MaterialInfo getMaterialInfo(int materialIdx, GeomInfo geomInfo)
 vec2 directionToSphericalEnvMap(vec3 dir)
 {
     dir     = normalize(dir);
-    vec2 uv = vec2(atan(dir.y, dir.x), asin(dir.z));
+    vec2 uv = vec2(atan(dir.z, dir.x), asin(dir.y));
     uv /= vec2(2.0 * M_PI, M_PI);
     uv += 0.5;
     uv.y = 1.0 - uv.y;
     return uv;
 }
-vec2 directionToSphericalEnvMap2(vec3 v)
-{
-    float gamma = asin(-v.z);
-    float theta = atan(v.y, v.x);
 
-    vec2 uv = vec2(theta * M_1_OVER_PI * 0.5, gamma * M_1_OVER_PI) + 0.5;
-    return uv;
+vec3 sphericalEnvMapToDirection(vec2 uv)
+{
+    uv.y        = 1.0 - uv.y;
+    float phi   = 2.0 * M_PI * (uv.x - 0.5);
+    float theta = M_PI * (uv.y - 0.5);
+    return vec3(cos(theta) * cos(phi), sin(theta), cos(theta) * sin(phi));
 }
 
 vec3 OffsetRay(in vec3 p, in vec3 n)
@@ -83,76 +83,77 @@ void buildCoordSystem(vec3 normal, inout vec3 tangent, inout vec3 bitangent)
     bitangent = normalize(cross(normal, tangent));
 }
 
-vec3 Environment_sample(sampler2D lat_long_tex, in vec3 randVal, out vec3 to_light, out float pdf)
-{
-    // Uniformly pick a texel index idx in the environment map
-    vec3  xi     = randVal;
-    uvec2 tsize  = textureSize(lat_long_tex, 0);
-    uint  width  = tsize.x;
-    uint  height = tsize.y;
+// vec3 Environment_sample(sampler2D lat_long_tex, in vec3 randVal, out vec3 to_light, out float
+// pdf)
+// {
+//     // Uniformly pick a texel index idx in the environment map
+//     vec3  xi     = randVal;
+//     uvec2 tsize  = textureSize(lat_long_tex, 0);
+//     uint  width  = tsize.x;
+//     uint  height = tsize.y;
 
-    const uint size = width * height;
-    const uint idx  = min(uint(xi.x * float(size)), size - 1);
+//     const uint size = width * height;
+//     const uint idx  = min(uint(xi.x * float(size)), size - 1);
 
-    // Fetch the sampling data for that texel, containing the ratio q between its
-    // emitted radiance and the average of the environment map, the texel alias,
-    // the probability distribution function (PDF) values for that texel and its
-    // alias
-    EnvAccel sample_data = envAccels[idx];
+//     // Fetch the sampling data for that texel, containing the ratio q between its
+//     // emitted radiance and the average of the environment map, the texel alias,
+//     // the probability distribution function (PDF) values for that texel and its
+//     // alias
+//     EnvAccel sample_data = envAccels[idx];
 
-    uint env_idx;
+//     uint env_idx;
 
-    if (xi.y < sample_data.q)
-    {
-        // If the random variable is lower than the intensity ratio q, we directly pick
-        // this texel, and renormalize the random variable for later use. The PDF is the
-        // one of the texel itself
-        env_idx = idx;
-        xi.y /= sample_data.q;
-        pdf = sample_data.pdf;
-    }
-    else
-    {
-        // Otherwise we pick the alias of the texel, renormalize the random variable and use
-        // the PDF of the alias
-        env_idx = sample_data.alias;
-        xi.y    = (xi.y - sample_data.q) / (1.0f - sample_data.q);
-        pdf     = sample_data.aliasPdf;
-    }
+//     if (xi.y < sample_data.q)
+//     {
+//         // If the random variable is lower than the intensity ratio q, we directly pick
+//         // this texel, and renormalize the random variable for later use. The PDF is the
+//         // one of the texel itself
+//         env_idx = idx;
+//         xi.y /= sample_data.q;
+//         pdf = sample_data.pdf;
+//     }
+//     else
+//     {
+//         // Otherwise we pick the alias of the texel, renormalize the random variable and use
+//         // the PDF of the alias
+//         env_idx = sample_data.alias;
+//         xi.y    = (xi.y - sample_data.q) / (1.0f - sample_data.q);
+//         pdf     = sample_data.aliasPdf;
+//     }
 
-    // Compute the 2D integer coordinates of the texel
-    const uint px = env_idx % width;
-    uint       py = env_idx / width;
+//     // Compute the 2D integer coordinates of the texel
+//     const uint px = env_idx % width;
+//     uint       py = env_idx / width;
 
-    // Uniformly sample the solid angle subtended by the pixel.
-    // Generate both the UV for texture lookup and a direction in spherical coordinates
-    const float u       = float(px + xi.y) / float(width);
-    const float phi     = u * (2.0f * M_PI) - M_PI;
-    float       sin_phi = sin(phi);
-    float       cos_phi = cos(phi);
+//     // Uniformly sample the solid angle subtended by the pixel.
+//     // Generate both the UV for texture lookup and a direction in spherical coordinates
+//     const float u       = float(px + xi.y) / float(width);
+//     const float phi     = u * (2.0f * M_PI) - M_PI;
+//     float       sin_phi = sin(phi);
+//     float       cos_phi = cos(phi);
 
-    const float step_theta = M_PI / float(height);
-    const float theta0     = float(py) * step_theta;
-    const float cos_theta  = cos(theta0) * (1.0f - xi.z) + cos(theta0 + step_theta) * xi.z;
-    const float theta      = acos(cos_theta);
-    const float sin_theta  = sin(theta);
-    const float v          = theta * M_1_OVER_PI;
+//     const float step_theta = M_PI / float(height);
+//     const float theta0     = float(py) * step_theta;
+//     const float cos_theta  = cos(theta0) * (1.0f - xi.z) + cos(theta0 + step_theta) * xi.z;
+//     const float theta      = acos(cos_theta);
+//     const float sin_theta  = sin(theta);
+//     const float v          = theta * M_1_OVER_PI;
 
-    // Convert to a light direction vector in Cartesian coordinates
-    to_light = vec3(cos_phi * sin_theta, cos_theta, sin_phi * sin_theta);
+//     // Convert to a light direction vector in Cartesian coordinates
+//     to_light = vec3(cos_phi * sin_theta, cos_theta, sin_phi * sin_theta);
 
-    // Lookup the environment value using bilinear filtering
-    return texture(lat_long_tex, vec2(u, v)).xyz;
-}
+//     // Lookup the environment value using bilinear filtering
+//     return texture(lat_long_tex, vec2(u, v)).xyz;
+// }
 
-vec4 EnvSample(inout vec3 radiance)
-{
-    vec3  lightDir;
-    float pdf;
-    vec3  randVal = vec3(rand(rtPload.seed), rand(rtPload.seed), rand(rtPload.seed));
-    radiance      = Environment_sample(envTextures, randVal, lightDir, pdf);
-    return vec4(lightDir, pdf);
-}
+// vec4 EnvSample(inout vec3 radiance)
+// {
+//     vec3  lightDir;
+//     float pdf;
+//     vec3  randVal = vec3(rand(rtPload.seed), rand(rtPload.seed), rand(rtPload.seed));
+//     radiance      = Environment_sample(envTexture, randVal, lightDir, pdf);
+//     return vec4(lightDir, pdf);
+// }
 
 #endif // _utility_H_
 
