@@ -705,7 +705,8 @@ inline float luminance(const float* color)
 
 void PlayApp::loadEnvTexture()
 {
-    std::string path = "D:\\repo\\DogEngine\\models\\skybox\\graveyard_pathways_2k.hdr";
+    // std::string path = "D:\\repo\\DogEngine\\models\\skybox\\graveyard_pathways_2k.hdr";
+    std::string path = "D:\\repo\\DogEngine\\models\\skybox\\small_empty_room_1_2k.hdr";
     // path             = "D:\\repo\\DogEngine\\models\\skybox\\test.hdr";
     int         width, height, channels;
     float*      data = stbi_loadf(path.c_str(), &width, &height, &channels, 4);
@@ -791,6 +792,7 @@ void PlayApp::loadEnvTexture()
             float xi_2 = float(j) / width;
             int   x    = std::lower_bound(cdf_x_margin.begin(), cdf_x_margin.end(), xi_1) -
                     cdf_x_margin.begin();
+            x     = fmin(x, width - 1);
             int y = std::lower_bound(cdf_y_condiciton[x].begin(), cdf_y_condiciton[x].end(), xi_2) -
                     cdf_y_condiciton[x].begin();
             sample_x[i][j] = float(x) / width;

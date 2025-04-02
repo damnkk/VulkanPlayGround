@@ -57,12 +57,13 @@ MaterialInfo getMaterialInfo(inout GeomInfo geomInfo)
     Material mat = materials[geomInfo.materialIdx];
 
     MaterialInfo materialInfo;
-    materialInfo.baseColor          = vec3(0.82, 0.4, 0.1);
-    materialInfo.roughness          = 0.0001;
+    materialInfo.baseColor          = vec3(1.0, 1.0, 1.0);
+    materialInfo.roughness          = 0.008;
     materialInfo.subsurface         = 0.0;
     materialInfo.anisotropic        = 0.0;
     materialInfo.emissiveTextureIdx = -1;
     materialInfo.emissiveFactor     = vec3(0.0);
+    materialInfo.eta                = 1.000001;
     if (mat.normalTexture != -1)
     {
         vec3 smaplenormal =
@@ -130,14 +131,6 @@ float Fss(vec3 dir_in, vec3 dir_out, vec3 v, vec3 n, MaterialInfo mat)
     return (1.0 + (Fss90 - 1.0) * pow(1.0 - abs(dot(n, v)), 5));
 }
 
-float GTR(vec3 v, float ax, float ay, vec3 n)
-{
-    vec3  wl = toNormalHemisphere(v, n);
-    float A =
-        (sqrt(1.0 + ((pow(wl.x * ax, 2.0) + pow(wl.y * ay, 2.0)) / pow(wl.z, 2.0))) - 1.0) / 2.0;
-    return 1.0 / (1.0 + A);
-}
-
 float fresnel_dielectric(float n_dot_i, float n_dot_t, float eta)
 {
     float rs = (n_dot_i - eta * n_dot_t) / (n_dot_i + eta * n_dot_t);
@@ -193,8 +186,16 @@ vec3 sampleVisible_normals(vec3 local_dir_in, float alpha, vec2 rnd_param)
     float s     = (1 + hemi_dir_in.z) / 2;
     t2          = (1 - s) * sqrt(1 - t1 * t1) + s * t2;
     vec3 disk_N = vec3(t1, t2, sqrt(max(0.0, 1.0 - pow(t1, 2.0) - pow(t2, 2.0))));
-    vec3 hemi_N = toNormalHemisphere(hemi_dir_in, disk_N);
+    vec3 hemi_N = toNormalHemisphere(disk_N, hemi_dir_in);
     return normalize(vec3(alpha * hemi_N.x, alpha * hemi_N.y, max(0.0, hemi_N.z)));
+}
+
+float GTR(vec3 v, float ax, float ay, GeomInfo geomInfo)
+{
+    vec3  wl = toNormalLocal(v, geomInfo);
+    float A =
+        (sqrt(1.0 + ((pow(wl.x * ax, 2.0) + pow(wl.y * ay, 2.0)) / pow(wl.z, 2.0))) - 1.0) / 2.0;
+    return 1.0 / (1.0 + A);
 }
 
 #endif // _utility_H_

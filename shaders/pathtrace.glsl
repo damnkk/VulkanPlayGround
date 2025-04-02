@@ -36,158 +36,156 @@ void shadowTrace(Ray ray)
 vec3 sampleBSDF(GeomInfo geomInfo, vec3 dir_in, MaterialInfo materialInfo, inout PlayLoad rtPload,
                 vec3 randomVec)
 {
-    //------------------------------diffuse bsdf sample------------------------------
-    float phi = M_TWO_PI * randomVec.x;
-    float tmp = sqrt(clamp(1.0 - randomVec.y, 0.0, 1.0));
+    // //------------------------------diffuse bsdf sample------------------------------
+    // float phi = M_TWO_PI * randomVec.x;
+    // float tmp = sqrt(clamp(1.0 - randomVec.y, 0.0, 1.0));
 
-    return toNormalHemisphere(
-        vec3(cos(phi) * tmp, sin(phi) * tmp, sqrt(clamp(randomVec.y, 0.0, 1.0))), geomInfo.normal);
+    // return toNormalHemisphere(
+    //     vec3(cos(phi) * tmp, sin(phi) * tmp, sqrt(clamp(randomVec.y, 0.0, 1.0))),
+    //     geomInfo.normal);
 
-    // //------------------------------glass bsdf sample------------------------------
-    // float eta   = dot(geomInfo.normal, dir_in) > 0.0 ? materialInfo.eta : 1.0 / materialInfo.eta;
-    // float alpha = pow(materialInfo.roughness, 2.0);
-    // vec3  local_dir_in = toNormalLocal(dir_in, geomInfo);
-    // vec3  local_micro_normal =
-    //     sampleVisible_normals(local_dir_in, alpha, vec2(rand(rtPload.seed), rand(rtPload.seed)));
-    // vec3 half_vector = normalize(toNormalHemisphere(local_micro_normal, geomInfo.normal));
-    // if (dot(half_vector, geomInfo.normal) < 0.0)
-    // {
-    //     half_vector = -half_vector;
-    // }
-    // float h_dot_in = dot(half_vector, dir_in);
-    // float F        = fresnel_dielectric(h_dot_in, eta);
-    // if (rand(rtPload.seed) <= F)
-    // {
-    //     vec3 reflect = normalize(-dir_in + 2.0 * dot(dir_in, half_vector) * half_vector);
-    //     return reflect;
-    // }
-    // else
-    // {
-    //     float h_dot_out_sq = 1.0 - (1.0 - h_dot_in * h_dot_in) / pow(eta, 2.0);
-    //     if (h_dot_out_sq < 0.0)
-    //     {
-    //         return vec3(0.0);
-    //     }
-    //     if (h_dot_in < 0.0)
-    //     {
-    //         half_vector = -half_vector;
-    //     }
-    //     float h_dot_out = sqrt(h_dot_out_sq);
-    //     vec3  refracted = -dir_in / eta + (abs(h_dot_in) / eta - h_dot_out) * half_vector;
-    //     return refracted;
-    // }
+    //------------------------------glass bsdf sample------------------------------
+    float eta   = dot(geomInfo.normal, dir_in) > 0.0 ? materialInfo.eta : 1.0 / materialInfo.eta;
+    float alpha = pow(materialInfo.roughness, 2.0);
+    vec3  local_dir_in = toNormalLocal(dir_in, geomInfo);
+    vec3  local_micro_normal =
+        sampleVisible_normals(local_dir_in, alpha, vec2(rand(rtPload.seed), rand(rtPload.seed)));
+    vec3 half_vector = normalize(toNormalHemisphere(local_micro_normal, geomInfo.normal));
+    if (dot(half_vector, geomInfo.normal) < 0.0)
+    {
+        half_vector = -half_vector;
+    }
+    float h_dot_in = dot(half_vector, dir_in);
+    float F        = fresnel_dielectric(h_dot_in, eta);
+    if (rand(rtPload.seed) <= F)
+    {
+        vec3 reflect = normalize(-dir_in + 2.0 * dot(dir_in, half_vector) * half_vector);
+        return reflect;
+    }
+    else
+    {
+        float h_dot_out_sq = 1.0 - (1.0 - h_dot_in * h_dot_in) / pow(eta, 2.0);
+        if (h_dot_out_sq <= 0.0)
+        {
+            return vec3(0.0);
+        }
+        if (h_dot_in < 0.0)
+        {
+            half_vector = -half_vector;
+        }
+        float h_dot_out = sqrt(h_dot_out_sq);
+        vec3  refracted = -dir_in / eta + (abs(h_dot_in) / eta - h_dot_out) * half_vector;
+        return refracted;
+    }
 }
 
 // return bsdf
 vec3 evaluateBSDF(GeomInfo geomInfo, vec3 dir_in, vec3 dir_out, MaterialInfo materialInfo)
 {
-    //------------------------------diffuse bsdf evaluate------------------------------
-    if (dot(geomInfo.normal, dir_in) <= 0.0 || dot(geomInfo.normal, dir_out) <= 0.0)
-    {
-        return vec3(0.0);
-    }
-    vec3 diffuseBsdf = Fd(dir_in, dir_out, dir_in, geomInfo.normal, materialInfo) *
-                       Fd(dir_in, dir_out, dir_out, geomInfo.normal, materialInfo) *
-                       abs(dot(geomInfo.normal, dir_out)) * materialInfo.baseColor / M_PI;
-    float FssIn                 = Fss(dir_in, dir_out, dir_in, geomInfo.normal, materialInfo);
-    float FssOut                = Fss(dir_in, dir_out, dir_out, geomInfo.normal, materialInfo);
-    float absNdotI              = abs(dot(geomInfo.normal, dir_in));
-    float absNdotO              = abs(dot(geomInfo.normal, dir_out));
-    vec3  diffuseSubsurfaceBsdf = (FssIn * FssOut * (1.0 / (absNdotI + absNdotO) - 0.5) + 0.5) *
-                                 absNdotO * 1.25 * materialInfo.baseColor / M_PI;
-    return mix(diffuseBsdf, diffuseSubsurfaceBsdf, materialInfo.subsurface);
+    // //------------------------------diffuse bsdf evaluate------------------------------
+    // if (dot(geomInfo.normal, dir_in) <= 0.0 || dot(geomInfo.normal, dir_out) <= 0.0)
+    // {
+    //     return vec3(0.0);
+    // }
+    // vec3 diffuseBsdf = Fd(dir_in, dir_out, dir_in, geomInfo.normal, materialInfo) *
+    //                    Fd(dir_in, dir_out, dir_out, geomInfo.normal, materialInfo) *
+    //                    abs(dot(geomInfo.normal, dir_out)) * materialInfo.baseColor / M_PI;
+    // float FssIn                 = Fss(dir_in, dir_out, dir_in, geomInfo.normal, materialInfo);
+    // float FssOut                = Fss(dir_in, dir_out, dir_out, geomInfo.normal, materialInfo);
+    // float absNdotI              = abs(dot(geomInfo.normal, dir_in));
+    // float absNdotO              = abs(dot(geomInfo.normal, dir_out));
+    // vec3  diffuseSubsurfaceBsdf = (FssIn * FssOut * (1.0 / (absNdotI + absNdotO) - 0.5) + 0.5) *
+    //                              absNdotO * 1.25 * materialInfo.baseColor / M_PI;
+    // return mix(diffuseBsdf, diffuseSubsurfaceBsdf, materialInfo.subsurface);
 
     // //---------------------------------glass bsdf evaluate--------------------------------
-    // bool  isReflect = dot(geomInfo.normal, dir_in) * dot(geomInfo.normal, dir_out) > 0.0;
-    // float eta = dot(geomInfo.normal, dir_in) > 0.0 ? materialInfo.eta : 1.0 / materialInfo.eta;
-    // vec3  h;
-    // if (isReflect)
-    // {
-    //     h = normalize(dir_in + dir_out);
-    // }
-    // else
-    // {
-    //     h = normalize(dir_in + dir_out * eta);
-    // }
-    // if (dot(h, geomInfo.normal) < 0.0)
-    // {
-    //     h = -h;
-    // }
-    // float G = GTR(dir_in, materialInfo.roughness, materialInfo.anisotropic, geomInfo.normal) *
-    //           GTR(dir_out, materialInfo.roughness, materialInfo.anisotropic, geomInfo.normal);
-    // float aspect  = sqrt(1.0 - materialInfo.anisotropic * 0.9);
-    // float ax      = max(0.001, materialInfo.roughness * materialInfo.roughness / aspect);
-    // float ay      = max(0.001, materialInfo.roughness * materialInfo.roughness * aspect);
-    // vec3  local_h = toNormalLocal(h, geomInfo);
-    // float hlx     = local_h.x;
-    // float hly     = local_h.y;
-    // float hlz     = local_h.z;
-    // float hlxyz   = ((hlx * hlx) / pow(ax, 2.0) + (hly * hly) / pow(ay, 2.0) + (hlz * hlz)) *
-    //               ((hlx * hlx) / pow(ax, 2.0) + (hly * hly) / pow(ay, 2.0) + (hlz * hlz));
-    // float D  = 1.0 / (M_PI * ax * ay * hlxyz);
-    // float Fg = fresnel_dielectric(dot(h, dir_in), eta);
-    // if (isReflect)
-    // {
-    //     return (materialInfo.baseColor * G * D * Fg) / (4.0 * abs(dot(geomInfo.normal, dir_in)));
-    // }
-    // return (sqrt(materialInfo.baseColor) * (1.0 - Fg) * D * G *
-    //         abs(dot(h, dir_out) * dot(h, dir_in))) /
-    //        (abs(dot(geomInfo.normal, dir_in)) * pow((dot(h, dir_in) + eta * dot(h,
-    //        dir_out)), 2.0));
+    bool  isReflect = dot(geomInfo.normal, dir_in) * dot(geomInfo.normal, dir_out) > 0.0;
+    float eta = dot(geomInfo.normal, dir_in) > 0.0 ? materialInfo.eta : 1.0 / materialInfo.eta;
+    vec3  h;
+    if (isReflect)
+    {
+        h = normalize(dir_in + dir_out);
+    }
+    else
+    {
+        h = normalize(dir_in + dir_out * eta);
+    }
+    if (dot(h, geomInfo.normal) < 0.0)
+    {
+        h = -h;
+    }
+    float G = GTR(dir_in, materialInfo.roughness, materialInfo.anisotropic, geomInfo) *
+              GTR(dir_out, materialInfo.roughness, materialInfo.anisotropic, geomInfo);
+    float aspect  = sqrt(1.0 - materialInfo.anisotropic * 0.9);
+    float ax      = max(0.001, materialInfo.roughness * materialInfo.roughness / aspect);
+    float ay      = max(0.001, materialInfo.roughness * materialInfo.roughness * aspect);
+    vec3  local_h = toNormalLocal(h, geomInfo);
+    float hlx     = local_h.x;
+    float hly     = local_h.y;
+    float hlz     = local_h.z;
+    float hlxyz   = ((hlx * hlx) / pow(ax, 2.0) + (hly * hly) / pow(ay, 2.0) + (hlz * hlz)) *
+                  ((hlx * hlx) / pow(ax, 2.0) + (hly * hly) / pow(ay, 2.0) + (hlz * hlz));
+    float D  = 1.0 / (M_PI * ax * ay * hlxyz);
+    float Fg = fresnel_dielectric(dot(h, dir_in), eta);
+    if (isReflect)
+    {
+        return (materialInfo.baseColor * G * D * Fg) / (4.0 * abs(dot(geomInfo.normal, dir_in)));
+    }
+    return (sqrt(materialInfo.baseColor) * (1.0 - Fg) * D * G *
+            abs(dot(h, dir_out) * dot(h, dir_in))) /
+           (abs(dot(geomInfo.normal, dir_in)) * pow((dot(h, dir_in) + eta * dot(h, dir_out)), 2.0));
 }
 
 float evaluatepdf(GeomInfo geomInfo, vec3 dir_in, vec3 dir_out, MaterialInfo materialInfo)
 {
-    //------------------------------diffuse pdf evaluate------------------------------
-    if (dot(geomInfo.normal, dir_in) <= 0.0 || dot(geomInfo.normal, dir_out) <= 0.0)
+    // //------------------------------diffuse pdf evaluate------------------------------
+    // if (dot(geomInfo.normal, dir_in) <= 0.0 || dot(geomInfo.normal, dir_out) <= 0.0)
+    // {
+    //     return 0.0001;
+    // }
+    // return max(dot(geomInfo.normal, dir_out), 0.00) / M_PI;
+
+    //------------------------------glass pdf evaluate------------------------------
+
+    bool  isReflect = dot(geomInfo.normal, dir_in) * dot(geomInfo.normal, dir_out) > 0.0;
+    float eta = dot(geomInfo.normal, dir_in) > 0.0 ? materialInfo.eta : 1.0 / materialInfo.eta;
+    vec3  h   = vec3(0.0);
+    if (isReflect)
     {
-        return 0.0001;
+        h = normalize(dir_in + dir_out);
     }
-    return max(dot(geomInfo.normal, dir_out), 0.00) / M_PI;
+    else
+    {
+        h = normalize(dir_in + dir_out * eta);
+    }
+    if (dot(h, geomInfo.normal) < 0.0)
+    {
+        h = -h;
+    }
+    float h_dot_in = dot(h, dir_in);
 
-    // //------------------------------glass pdf evaluate------------------------------
+    float Fg = fresnel_dielectric(h_dot_in, eta);
+    float G  = GTR(dir_in, materialInfo.roughness, materialInfo.anisotropic, geomInfo) *
+              GTR(dir_out, materialInfo.roughness, materialInfo.anisotropic, geomInfo);
+    float aspect  = sqrt(1.0 - materialInfo.anisotropic * 0.9);
+    float ax      = max(0.001, materialInfo.roughness * materialInfo.roughness / aspect);
+    float ay      = max(0.001, materialInfo.roughness * materialInfo.roughness * aspect);
+    vec3  local_h = toNormalLocal(h, geomInfo);
+    float hlx     = local_h.x;
+    float hly     = local_h.y;
+    float hlz     = local_h.z;
+    float hlxyz   = ((hlx * hlx) / pow(ax, 2.0) + (hly * hly) / pow(ay, 2.0) + (hlz * hlz)) *
+                  ((hlx * hlx) / pow(ax, 2.0) + (hly * hly) / pow(ay, 2.0) + (hlz * hlz));
+    float D = 1.0 / (M_PI * ax * ay * hlxyz);
 
-    // bool  isReflect = dot(geomInfo.normal, dir_in) * dot(geomInfo.normal, dir_out) > 0.0;
-    // float eta = dot(geomInfo.normal, dir_in) > 0.0 ? materialInfo.eta : 1.0 / materialInfo.eta;
-    // vec3  h   = vec3(0.0);
-    // if (isReflect)
-    // {
-    //     h = normalize(dir_in + dir_out);
-    // }
-    // else
-    // {
-    //     h = normalize(dir_in + dir_out * eta);
-    // }
-    // if (dot(h, geomInfo.normal) < 0.0)
-    // {
-    //     h = -h;
-    // }
-    // float h_dot_in = dot(h, dir_in);
-
-    // float Fg = fresnel_dielectric(h_dot_in, eta);
-    // float G  = GTR(dir_in, materialInfo.roughness, materialInfo.anisotropic, geomInfo.normal) *
-    //           GTR(dir_out, materialInfo.roughness, materialInfo.anisotropic, geomInfo.normal);
-    // float aspect  = sqrt(1.0 - materialInfo.anisotropic * 0.9);
-    // float ax      = max(0.001, materialInfo.roughness * materialInfo.roughness / aspect);
-    // float ay      = max(0.001, materialInfo.roughness * materialInfo.roughness * aspect);
-    // vec3  local_h = toNormalLocal(h, geomInfo);
-    // float hlx     = local_h.x;
-    // float hly     = local_h.y;
-    // float hlz     = local_h.z;
-    // float hlxyz   = ((hlx * hlx) / pow(ax, 2.0) + (hly * hly) / pow(ay, 2.0) + (hlz * hlz)) *
-    //               ((hlx * hlx) / pow(ax, 2.0) + (hly * hly) / pow(ay, 2.0) + (hlz * hlz));
-    // float D = 1.0 / (M_PI * ax * ay * hlxyz);
-
-    // if (isReflect)
-    // {
-    //     return max(dot(geomInfo.normal, dir_out), 0.00) / M_PI;
-    //     return max(0.0001, (Fg * D * G) / (4.0 * abs(dot(geomInfo.normal, dir_in))));
-    // }
-    // float h_dot_out  = dot(h, dir_out);
-    // float sqrt_denom = h_dot_in + eta * h_dot_out;
-    // float dh_dout    = eta * eta * h_dot_out / (sqrt_denom * sqrt_denom);
-    // return max(0.0001, (1.0 - Fg) * D * G * abs(dh_dout * h_dot_in / dot(geomInfo.normal,
-    // dir_in)));
+    if (isReflect)
+    {
+        return (Fg * D * G) / (4.0 * abs(dot(geomInfo.normal, dir_in)));
+    }
+    float h_dot_out  = dot(h, dir_out);
+    float sqrt_denom = h_dot_in + eta * h_dot_out;
+    float dh_dout    = eta * eta * h_dot_out / (sqrt_denom * sqrt_denom);
+    return (1.0 - Fg) * D * G * abs(dh_dout * h_dot_in / dot(geomInfo.normal, dir_in));
 }
 
 vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
@@ -234,8 +232,10 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
                     matInfo.emissiveFactor;
     }
 
-    for (int i = 0; i < 10; ++i)
+    for (int i = 0; i < 15; ++i)
     {
+        vec3 ffnormal =
+            dot(ray.direction, geomInfo.normal) < 0.0 ? -geomInfo.normal : geomInfo.normal;
         geomInfo = getGeomInfo(rtPload);
         matInfo  = getMaterialInfo(geomInfo);
         // In a complete raytracing renderer, we will choise a light source(mesh light & env
@@ -259,7 +259,7 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
         else
         {
             Ray shadowRay;
-            shadowRay.origin = offsetRay(geomInfo.position, geomInfo.normal);
+            shadowRay.origin = offsetRay(geomInfo.position, ffnormal);
             // geomInfo.position + 0.0001;
             shadowRay.direction = lightDir;
             shadowTrace(shadowRay);
@@ -291,8 +291,7 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
         float rd2     = rand(rtPload.seed);
         float rd3     = rand(rtPload.seed);
         vec3  bsdfSample =
-            sampleBSDF(geomInfo, -ray.direction, matInfo, rtPload, vec3(rd1, rd2, rd3));
-        // return bsdfSample * 100.0;
+            sampleBSDF(geomInfo, normalize(-ray.direction), matInfo, rtPload, vec3(rd1, rd2, rd3));
         if (length(bsdfSample) < 0.0001)
         {
             break;
@@ -300,8 +299,9 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
         {
             // ray spread shit, implement later
         }
+
         Ray bsdfRay;
-        bsdfRay.origin    = offsetRay(geomInfo.position, geomInfo.normal);
+        bsdfRay.origin    = offsetRay(geomInfo.position, ffnormal);
         bsdfRay.direction = bsdfSample;
         closestTrace(bsdfRay);
         G = 0.0;
