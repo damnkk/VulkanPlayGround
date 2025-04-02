@@ -665,9 +665,9 @@ void PlayApp::OnInit()
 
     // _modelLoader.loadModel("F:/repository/ModelResource/gltfBistro/exterior/exterior.gltf");
     // _modelLoader.loadModel("F:/repository/ModelResource/gltfBistro/interior/interior.gltf");
-    _modelLoader.loadModel("D:/repo/DogEngine/models/Camera_01_2k/Camera_01_2k.gltf");
+    // _modelLoader.loadModel("D:/repo/DogEngine/models/Camera_01_2k/Camera_01_2k.gltf");
     // _modelLoader.loadModel("D:/repo/DogEngine/models/MetalRoughSpheres/MetalRoughSpheres.gltf");
-    // _modelLoader.loadModel("D:\\repo\\DogEngine\\models\\DamagedHelmet/DamagedHelmet.gltf");
+    _modelLoader.loadModel("D:\\repo\\DogEngine\\models\\DamagedHelmet/DamagedHelmet.gltf");
     loadEnvTexture();
     createRenderBuffer();
     buildBlas();
@@ -684,16 +684,16 @@ void PlayApp::OnPreRender()
 {
     RenderUniform* data = static_cast<RenderUniform*>(_alloc.map(_renderUniformBuffer));
     data->view          = CameraManip.getMatrix();
-    data->viewInverse   = glm::inverse(CameraManip.getMatrix());
+    data->viewInverse   = glm::inverse(data->view);
     data->project       = glm::perspectiveFov(CameraManip.getFov(), this->getSize().width * 1.0f,
                                               this->getSize().height * 1.0f, 0.1f, 10000.0f);
     data->project[1][1] *= -1;
     data->cameraPosition = CameraManip.getEye();
-    data->frameCount     = _frameCount++;
+    data->frameCount     = _frameCount;
     _alloc.unmap(_renderUniformBuffer);
     if (_dirtyCamera != CameraManip.getCamera())
     {
-        _frameCount  = -1;
+        _frameCount  = 0;
         _dirtyCamera = CameraManip.getCamera();
     }
 }
@@ -858,7 +858,6 @@ void PlayApp::RenderFrame()
         vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                              VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0, 0, nullptr, 0,
                              nullptr, 1, &imageMemoryBarrier);
-        _renderUniformData.frameCount = _frameCount++;
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _rtPipeline);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _rtPipelineLayout, 0,
                                 1, &_descriptorSet, 0, nullptr);
@@ -879,6 +878,7 @@ void PlayApp::RenderFrame()
         vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
                              VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1,
                              &imageMemoryBarrier);
+        ++_frameCount;
     }
     if (_renderMode == RenderMode::eRasterization)
     {
@@ -994,7 +994,6 @@ void PlayApp::OnPostRender()
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
     vkCmdEndRenderPass(cmd);
     vkEndCommandBuffer(cmd);
-    ++_frameCount;
 }
 
 void PlayApp::onResize(int width, int height)

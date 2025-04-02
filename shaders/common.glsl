@@ -24,10 +24,14 @@ struct Ray{
 
 struct MaterialInfo
 {
-    vec3 color;
-    vec3 emissiveFactor;
-    vec3 normal;
+    vec3  baseColor;
+    float roughness;
+    float subsurface;
+    float anisotropic;
+    float eta;
+    // -----------------------------unused-----------------------------
     int  emissiveTextureIdx;
+    vec3 emissiveFactor;
 };
 struct GeomInfo{
     vec3 normal;

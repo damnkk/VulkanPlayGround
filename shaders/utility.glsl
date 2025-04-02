@@ -3,6 +3,26 @@
 #include "common.glsl"
 #include "host_device.h"
 #include "constants.h"
+
+void buildCoordSystem(vec3 normal, inout vec3 tangent, inout vec3 bitangent)
+{
+    vec3 helperVec = normalize(vec3(1.0, 0.0, 0.0));
+    if (abs(dot(helperVec, normal)) > 0.9999)
+    {
+        helperVec = normalize(vec3(0.0, 0.0, 1.0));
+    }
+    tangent   = normalize(cross(normal, helperVec));
+    bitangent = normalize(cross(normal, tangent));
+}
+
+vec3 toNormalHemisphere(vec3 v, vec3 N)
+{
+    vec3 helper = vec3(1, 0, 0);
+    if (abs(N.x) > 0.999999) helper = vec3(0, 0, 1);
+    vec3 tangent   = normalize(cross(N, helper));
+    vec3 bitangent = normalize(cross(N, tangent));
+    return v.x * tangent + v.y * bitangent + v.z * N;
+}
 GeomInfo getGeomInfo(PlayLoad pl)
 {
     GeomInfo geomInfo;
@@ -19,21 +39,36 @@ GeomInfo getGeomInfo(PlayLoad pl)
     geomInfo.position = vec3(pl.objectToWorld * vec4(geomInfo.position, 1.0));
     geomInfo.normal = pl.baryCoord.x * v2._normal + pl.baryCoord.y * v3._normal + weight3 * v1._normal;
     geomInfo.normal   = normalize(vec3(pl.objectToWorld * vec4(geomInfo.normal, 0.0)));
-    geomInfo.tangent = pl.baryCoord.x * v2._tangent + pl.baryCoord.y * v3._tangent + weight3 * v1._tangent;
-    // geomInfo.bitangent = pl.baryCoord.x * v2.bitangent + pl.baryCoord.y * v3.bitangent + weight3 * v1.bitangent;
+    vec3 helperVec    = normalize(vec3(1.0, 0.0, 0.0));
+    if (abs(dot(helperVec, geomInfo.normal)) > 0.9999)
+    {
+        helperVec = normalize(vec3(0.0, 0.0, 1.0));
+    }
+    geomInfo.tangent   = normalize(cross(geomInfo.normal, helperVec));
+    geomInfo.bitangent = normalize(cross(geomInfo.normal, geomInfo.tangent));
+
     geomInfo.uv = pl.baryCoord.x * v2._texCoord + pl.baryCoord.y * v3._texCoord + weight3 * v1._texCoord;
     geomInfo.materialIdx = mesh._materialIndex;
     return geomInfo;
 }
 
-MaterialInfo getMaterialInfo(GeomInfo geomInfo)
+MaterialInfo getMaterialInfo(inout GeomInfo geomInfo)
 {
     Material mat = materials[geomInfo.materialIdx];
 
     MaterialInfo materialInfo;
-    materialInfo.color    = vec3(0.6, 0.2, 0.8);
-    materialInfo.emissiveFactor = vec3(0.0);
-    materialInfo.normal   = geomInfo.normal;
+    materialInfo.baseColor          = vec3(0.82, 0.4, 0.1);
+    materialInfo.roughness          = 0.0001;
+    materialInfo.subsurface         = 0.0;
+    materialInfo.anisotropic        = 0.0;
+    materialInfo.emissiveTextureIdx = -1;
+    materialInfo.emissiveFactor     = vec3(0.0);
+    if (mat.normalTexture != -1)
+    {
+        vec3 smaplenormal =
+            texture(sceneTextures[nonuniformEXT(mat.normalTexture)], geomInfo.uv).xyz * 2.0 - 1.0;
+        geomInfo.normal = normalize(toNormalHemisphere(smaplenormal, geomInfo.normal));
+    }
     return materialInfo;
 }
 
@@ -72,88 +107,95 @@ vec3 OffsetRay(in vec3 p, in vec3 n)
                 abs(p.z) < origin ? p.z + floatScale * n.z : p_i.z);
 }
 
-void buildCoordSystem(vec3 normal, inout vec3 tangent, inout vec3 bitangent)
+float getEnvSamplePDF(float envWidth, float envHeight, vec2 importanceUV)
 {
-    vec3 helperVec = normalize(vec3(1.0, 0.0, 0.0));
-    if (abs(dot(helperVec, normal)) > 0.9999)
-    {
-        helperVec = normalize(vec3(0.0, 0.0, 1.0));
-    }
-    tangent   = normalize(cross(normal, helperVec));
-    bitangent = normalize(cross(normal, tangent));
+    float pdf       = texture(envLookupTexture, importanceUV).z;
+    float theta     = M_PI * (0.5 - importanceUV.y);
+    float sin_theta = max(sin(theta), 1e-10);
+    float p_convert = float(envWidth * envHeight) / (2.0 * M_PI * M_PI * sin_theta);
+    return pdf * p_convert;
 }
 
-// vec3 Environment_sample(sampler2D lat_long_tex, in vec3 randVal, out vec3 to_light, out float
-// pdf)
-// {
-//     // Uniformly pick a texel index idx in the environment map
-//     vec3  xi     = randVal;
-//     uvec2 tsize  = textureSize(lat_long_tex, 0);
-//     uint  width  = tsize.x;
-//     uint  height = tsize.y;
+float Fd(vec3 dir_in, vec3 dir_out, vec3 v, vec3 n, MaterialInfo mat)
+{
+    vec3  h    = normalize(dir_in + dir_out);
+    float Fd90 = 0.5 + 2.0 * mat.roughness * abs(dot(h, dir_out) * dot(h, dir_out));
+    return (1.0 + (Fd90 - 1.0) * pow(1.0 - abs(dot(n, v)), 5));
+}
 
-//     const uint size = width * height;
-//     const uint idx  = min(uint(xi.x * float(size)), size - 1);
+float Fss(vec3 dir_in, vec3 dir_out, vec3 v, vec3 n, MaterialInfo mat)
+{
+    vec3  h     = normalize(dir_in + dir_out);
+    float Fss90 = mat.roughness * abs(dot(h, dir_out)) * abs(dot(h, dir_out));
+    return (1.0 + (Fss90 - 1.0) * pow(1.0 - abs(dot(n, v)), 5));
+}
 
-//     // Fetch the sampling data for that texel, containing the ratio q between its
-//     // emitted radiance and the average of the environment map, the texel alias,
-//     // the probability distribution function (PDF) values for that texel and its
-//     // alias
-//     EnvAccel sample_data = envAccels[idx];
+float GTR(vec3 v, float ax, float ay, vec3 n)
+{
+    vec3  wl = toNormalHemisphere(v, n);
+    float A =
+        (sqrt(1.0 + ((pow(wl.x * ax, 2.0) + pow(wl.y * ay, 2.0)) / pow(wl.z, 2.0))) - 1.0) / 2.0;
+    return 1.0 / (1.0 + A);
+}
 
-//     uint env_idx;
+float fresnel_dielectric(float n_dot_i, float n_dot_t, float eta)
+{
+    float rs = (n_dot_i - eta * n_dot_t) / (n_dot_i + eta * n_dot_t);
+    float rp = (eta * n_dot_i - n_dot_t) / (eta * n_dot_i + n_dot_t);
+    float F  = (rs * rs + rp * rp) / 2.0;
+    return F;
+}
 
-//     if (xi.y < sample_data.q)
-//     {
-//         // If the random variable is lower than the intensity ratio q, we directly pick
-//         // this texel, and renormalize the random variable for later use. The PDF is the
-//         // one of the texel itself
-//         env_idx = idx;
-//         xi.y /= sample_data.q;
-//         pdf = sample_data.pdf;
-//     }
-//     else
-//     {
-//         // Otherwise we pick the alias of the texel, renormalize the random variable and use
-//         // the PDF of the alias
-//         env_idx = sample_data.alias;
-//         xi.y    = (xi.y - sample_data.q) / (1.0f - sample_data.q);
-//         pdf     = sample_data.aliasPdf;
-//     }
+float fresnel_dielectric(float n_dot_i, float eta)
+{
+    float n_dot_t_sq = 1.0 - (1.0 - n_dot_i * n_dot_i) / (eta * eta);
+    if (n_dot_t_sq < 0.0)
+    {
+        // total internal reflection
+        return 1.0;
+    }
+    float n_dot_t = sqrt(n_dot_t_sq);
+    return fresnel_dielectric(abs(n_dot_i), n_dot_t, eta);
+}
 
-//     // Compute the 2D integer coordinates of the texel
-//     const uint px = env_idx % width;
-//     uint       py = env_idx / width;
+vec3 toNormalLocal(vec3 v, GeomInfo geomInfo)
+{
+    return vec3(dot(v, geomInfo.tangent), dot(v, geomInfo.bitangent), dot(v, geomInfo.normal));
+}
 
-//     // Uniformly sample the solid angle subtended by the pixel.
-//     // Generate both the UV for texture lookup and a direction in spherical coordinates
-//     const float u       = float(px + xi.y) / float(width);
-//     const float phi     = u * (2.0f * M_PI) - M_PI;
-//     float       sin_phi = sin(phi);
-//     float       cos_phi = cos(phi);
+vec3 desampleVisible_normals(vec3 local_dir_in, float alpha, vec2 rnd_param)
+{
+    vec3 hemi_dir_in =
+        normalize(vec3(alpha * local_dir_in.x, alpha * local_dir_in.y, local_dir_in.z));
+    float r     = sqrt(rnd_param.x);
+    float phi   = 2 * M_PI * rnd_param.y;
+    float t1    = r * cos(phi);
+    float t2    = r * sin(phi);
+    float s     = (1 + hemi_dir_in.z) / 2;
+    t2          = (1 - s) * sqrt(1 - t1 * t1) + s * t2;
+    vec3 disk_N = vec3(t1, t2, sqrt(max(0.0, 1.0 - pow(t1, 2.0) - pow(t2, 2.0))));
+    vec3 hemi_N = toNormalHemisphere(hemi_dir_in, disk_N);
+    return normalize(vec3(alpha * hemi_N.x, alpha * hemi_N.y, max(0.0, hemi_N.z)));
+}
 
-//     const float step_theta = M_PI / float(height);
-//     const float theta0     = float(py) * step_theta;
-//     const float cos_theta  = cos(theta0) * (1.0f - xi.z) + cos(theta0 + step_theta) * xi.z;
-//     const float theta      = acos(cos_theta);
-//     const float sin_theta  = sin(theta);
-//     const float v          = theta * M_1_OVER_PI;
-
-//     // Convert to a light direction vector in Cartesian coordinates
-//     to_light = vec3(cos_phi * sin_theta, cos_theta, sin_phi * sin_theta);
-
-//     // Lookup the environment value using bilinear filtering
-//     return texture(lat_long_tex, vec2(u, v)).xyz;
-// }
-
-// vec4 EnvSample(inout vec3 radiance)
-// {
-//     vec3  lightDir;
-//     float pdf;
-//     vec3  randVal = vec3(rand(rtPload.seed), rand(rtPload.seed), rand(rtPload.seed));
-//     radiance      = Environment_sample(envTexture, randVal, lightDir, pdf);
-//     return vec4(lightDir, pdf);
-// }
+vec3 sampleVisible_normals(vec3 local_dir_in, float alpha, vec2 rnd_param)
+{
+    if (local_dir_in.z < 0)
+    {
+        return -desampleVisible_normals(-local_dir_in, alpha, rnd_param);
+    }
+    vec3 hemi_dir_in =
+        normalize(vec3(alpha * local_dir_in.x, alpha * local_dir_in.y, local_dir_in.z));
+    float r     = sqrt(rnd_param.x);
+    float phi   = 2 * M_PI * rnd_param.y;
+    float t1    = r * cos(phi);
+    float t2    = r * sin(phi);
+    float s     = (1 + hemi_dir_in.z) / 2;
+    t2          = (1 - s) * sqrt(1 - t1 * t1) + s * t2;
+    vec3 disk_N = vec3(t1, t2, sqrt(max(0.0, 1.0 - pow(t1, 2.0) - pow(t2, 2.0))));
+    vec3 hemi_N = toNormalHemisphere(hemi_dir_in, disk_N);
+    return normalize(vec3(alpha * hemi_N.x, alpha * hemi_N.y, max(0.0, hemi_N.z)));
+}
 
 #endif // _utility_H_
 

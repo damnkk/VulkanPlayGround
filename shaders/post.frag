@@ -64,8 +64,17 @@ vec3 toneMapUncharted(vec3 color)
     vec3 whiteScale = 1.0 / toneMapUncharted2Impl(vec3(W));
     return linearTosRGB(color * whiteScale);
 }
+vec3 toneMapACES(vec3 color)
+{
+    const float A = 2.51;
+    const float B = 0.03;
+    const float C = 2.43;
+    const float D = 0.59;
+    const float E = 0.14;
+    return linearTosRGB(clamp((color * (A * color + B)) / (color * (C * color + D) + E), 0.0, 1.0));
+}
 void main(){
     fragColor = texture(inputTexture,outUV);
-    // vec4  avg     = textureLod(inputTexture, vec2(0.5), 20); // Get the average value of the
-    // image float avgLum2 = luminance(avg.rgb); fragColor.xyz = toneMapUncharted(fragColor.xyz);
+    // fragColor.xyz = toneMapACES(fragColor.xyz);
+    fragColor.xyz = linearTosRGB(fragColor.xyz);
 }

@@ -394,9 +394,9 @@ void ModelLoader::loadModel(std::string path)
         samplerInfo.mipmapMode          = VK_SAMPLER_MIPMAP_MODE_LINEAR;
         samplerInfo.minLod              = 0;
         samplerInfo.maxLod              = (float) imageInfo.mipLevels;
-        samplerInfo.addressModeU        = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-        samplerInfo.addressModeV        = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-        samplerInfo.addressModeW        = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+        samplerInfo.addressModeU        = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeV        = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeW        = VK_SAMPLER_ADDRESS_MODE_REPEAT;
         VkImageViewCreateInfo viewInfo  = nvvk::makeImageViewCreateInfo(image.image, imageInfo);
         auto nvvkTexture                = _app->_alloc.createTexture(image, viewInfo, samplerInfo);
         tex.image                       = nvvkTexture.image;
