@@ -58,12 +58,12 @@ MaterialInfo getMaterialInfo(inout GeomInfo geomInfo)
 
     MaterialInfo materialInfo;
     materialInfo.baseColor          = vec3(1.0, 1.0, 1.0);
-    materialInfo.roughness          = 0.008;
+    materialInfo.roughness          = 0.8;
     materialInfo.subsurface         = 0.0;
     materialInfo.anisotropic        = 0.0;
     materialInfo.emissiveTextureIdx = -1;
     materialInfo.emissiveFactor     = vec3(0.0);
-    materialInfo.eta                = 1.000001;
+    materialInfo.eta                = 1.3;
     if (mat.normalTexture != -1)
     {
         vec3 smaplenormal =
@@ -108,12 +108,12 @@ vec3 OffsetRay(in vec3 p, in vec3 n)
                 abs(p.z) < origin ? p.z + floatScale * n.z : p_i.z);
 }
 
-float getEnvSamplePDF(float envWidth, float envHeight, vec2 importanceUV)
+float getEnvSamplePDF(float envWidth, vec2 importanceUV)
 {
     float pdf       = texture(envLookupTexture, importanceUV).z;
-    float theta     = M_PI * (0.5 - importanceUV.y);
+    float theta     = M_PI * importanceUV.y;
     float sin_theta = max(sin(theta), 1e-10);
-    float p_convert = float(envWidth * envHeight) / (2.0 * M_PI * M_PI * sin_theta);
+    float p_convert = float(envWidth * envWidth) / (2.0 * M_PI * M_PI * sin_theta);
     return pdf * p_convert;
 }
 

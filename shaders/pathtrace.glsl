@@ -232,7 +232,7 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
                     matInfo.emissiveFactor;
     }
 
-    for (int i = 0; i < 15; ++i)
+    for (int i = 0; i < 2; ++i)
     {
         vec3 ffnormal =
             dot(ray.direction, geomInfo.normal) < 0.0 ? -geomInfo.normal : geomInfo.normal;
@@ -275,7 +275,7 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
         // light
         // and env map light),and we gonna choose one of them randomly,and we will get a pdf
         // here
-        float p1 = 1.0 * getEnvSamplePDF(2048, 1024, importanceUV);
+        float p1 = 1.0 * getEnvSamplePDF(2048, importanceUV);
         if (G > 0.0 && p1 > 0.0)
         {
             vec3 dir_in   = normalize(-ray.direction);
@@ -292,6 +292,7 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
         float rd3     = rand(rtPload.seed);
         vec3  bsdfSample =
             sampleBSDF(geomInfo, normalize(-ray.direction), matInfo, rtPload, vec3(rd1, rd2, rd3));
+        // return bsdfSample;
         if (length(bsdfSample) < 0.0001)
         {
             break;
@@ -302,6 +303,8 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
 
         Ray bsdfRay;
         bsdfRay.origin    = offsetRay(geomInfo.position, ffnormal);
+        // bsdfRay.origin    = geomInfo.position;
+
         bsdfRay.direction = bsdfSample;
         closestTrace(bsdfRay);
         G = 0.0;
@@ -318,6 +321,7 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
         vec3  dir_in    = normalize(-ray.direction);
         vec3  bsdfValue = evaluateBSDF(geomInfo, dir_in, bsdfSample, matInfo);
         float bsdfPdf   = evaluatepdf(geomInfo, dir_in, bsdfSample, matInfo);
+        // return vec3(bsdfValue);
         if (bsdfPdf <= 0.0)
         {
             break;
@@ -336,7 +340,7 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
             // 1.0 is same as before,it will be a specific value ,when we have more than one
             // light
             // source in scene, and currently ,we only have envmap
-            float p1 = 1.0 * getEnvSamplePDF(2048, 1024, envUV);
+            float p1 = 1.0 * getEnvSamplePDF(2048, envUV);
             float w2 = pow(bsdfPdf, 2.0) / (pow(p1, 2.0) + pow(bsdfPdf, 2.0));
             C2 /= bsdfPdf;
             radiance += throughput * C2 * w2;
