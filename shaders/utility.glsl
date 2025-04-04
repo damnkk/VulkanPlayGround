@@ -63,7 +63,7 @@ MaterialInfo getMaterialInfo(inout GeomInfo geomInfo)
     materialInfo.anisotropic        = 0.0;
     materialInfo.emissiveTextureIdx = -1;
     materialInfo.emissiveFactor     = vec3(0.0);
-    materialInfo.eta                = 1.3;
+    materialInfo.eta                = 1.32;
     if (mat.normalTexture != -1)
     {
         vec3 smaplenormal =
@@ -196,6 +196,23 @@ float GTR(vec3 v, float ax, float ay, GeomInfo geomInfo)
     float A =
         (sqrt(1.0 + ((pow(wl.x * ax, 2.0) + pow(wl.y * ay, 2.0)) / pow(wl.z, 2.0))) - 1.0) / 2.0;
     return 1.0 / (1.0 + A);
+}
+
+vec3 OffsetHitPos(in vec3 p, in vec3 n)
+{
+    const float intScale   = 256.0f;
+    const float floatScale = 1.0f / 65536.0f;
+    const float origin     = 1.0f / 32.0f;
+
+    ivec3 of_i = ivec3(intScale * n.x, intScale * n.y, intScale * n.z);
+
+    vec3 p_i = vec3(intBitsToFloat(floatBitsToInt(p.x) + ((p.x < 0) ? -of_i.x : of_i.x)),
+                    intBitsToFloat(floatBitsToInt(p.y) + ((p.y < 0) ? -of_i.y : of_i.y)),
+                    intBitsToFloat(floatBitsToInt(p.z) + ((p.z < 0) ? -of_i.z : of_i.z)));
+
+    return vec3(abs(p.x) < origin ? p.x + floatScale * n.x : p_i.x, //
+                abs(p.y) < origin ? p.y + floatScale * n.y : p_i.y, //
+                abs(p.z) < origin ? p.z + floatScale * n.z : p_i.z);
 }
 
 #endif // _utility_H_

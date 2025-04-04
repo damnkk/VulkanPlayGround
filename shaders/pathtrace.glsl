@@ -180,12 +180,12 @@ float evaluatepdf(GeomInfo geomInfo, vec3 dir_in, vec3 dir_out, MaterialInfo mat
 
     if (isReflect)
     {
-        return (Fg * D * G) / (4.0 * abs(dot(geomInfo.normal, dir_in)));
+        return max(0.01, (Fg * D * G) / (4.0 * abs(dot(geomInfo.normal, dir_in))));
     }
     float h_dot_out  = dot(h, dir_out);
     float sqrt_denom = h_dot_in + eta * h_dot_out;
     float dh_dout    = eta * eta * h_dot_out / (sqrt_denom * sqrt_denom);
-    return (1.0 - Fg) * D * G * abs(dh_dout * h_dot_in / dot(geomInfo.normal, dir_in));
+    return max(0.01, (1.0 - Fg) * D * G * abs(dh_dout * h_dot_in / dot(geomInfo.normal, dir_in)));
 }
 
 vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
@@ -232,7 +232,7 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
                     matInfo.emissiveFactor;
     }
 
-    for (int i = 0; i < 20; ++i)
+    for (int i = 0; i < 30; ++i)
     {
         vec3 ffnormal =
             dot(ray.direction, geomInfo.normal) <= 0.0 ? geomInfo.normal : -geomInfo.normal;
@@ -267,7 +267,7 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
             if (!shadowPload.isInShadow)
             {
                 // ！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！
-                //  这里的G= 1.0可能有问题，因为你的微表面不一定正对这lightDir
+                //   这里的G= 1.0可能有问题，因为你的微表面不一定正对这lightDir
                 G = abs(dot(lightDir, geomInfo.normal));
             }
         }
@@ -311,8 +311,7 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
         if (rtPload.hitT < INFINITY)
         {
             GeomInfo hitGeomInfo = getGeomInfo(rtPload);
-            G                    = abs(dot(bsdfSample, hitGeomInfo.normal)) /
-                dot(hitGeomInfo.position - bsdfRay.origin, hitGeomInfo.position - bsdfRay.origin);
+            G                    = abs(dot(bsdfSample, hitGeomInfo.normal));
         }
         else
         {
@@ -374,7 +373,7 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
 //     Ray ray;
 //     ray.origin = origin.xyz;
 //     ray.direction = normalize(direct.xyz);
-//     for (int bounceIdx = 0; bounceIdx < 1.0; ++bounceIdx)
+//     for (int bounceIdx = 0; bounceIdx < 30; ++bounceIdx)
 //     {
 //         closestTrace(ray);
 //         if (rtPload.hitT == INFINITY)
@@ -385,7 +384,8 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
 //         }
 //         GeomInfo     geomInfo = getGeomInfo(rtPload);
 //         MaterialInfo matInfo  = getMaterialInfo(geomInfo);
-
+//         vec3         ffnormal =
+//             dot(ray.direction, geomInfo.normal) <= 0.0 ? geomInfo.normal : -geomInfo.normal;
 //         if (matInfo.emissiveTextureIdx != -1)
 //         {
 //             radiance +=
@@ -395,11 +395,11 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
 //         }
 //         // directLight
 
-//         vec2  randomUV       = vec2(rand(rtPload.seed), rand(rtPload.seed));
-//         vec4  cacheSampleRes = texture(envLookupTexture, randomUV);
+//         vec2      randomUV       = vec2(rand(rtPload.seed), rand(rtPload.seed));
+//         vec4      cacheSampleRes = texture(envLookupTexture, randomUV);
 //         vec2  importanceUV   = cacheSampleRes.xy;
-//         vec3      lightDir       = normalize(sphericalEnvMapToDirection(importanceUV));
-//         float     p1             = getEnvSamplePDF(2048, 1024, importanceUV);
+//         vec3  lightDir       = normalize(sphericalEnvMapToDirection(importanceUV));
+//         float p1             = getEnvSamplePDF(2048, importanceUV);
 
 //         vec3  envLight = textureLod(envTexture, importanceUV, 0).xyz;
 //         vec3  bsdf     = evaluateBSDF(geomInfo, -ray.direction, lightDir, matInfo);
@@ -418,8 +418,26 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
 //         radiance +=
 //             G * w1 * throughput * envLight * max(0.0, dot(geomInfo.normal, lightDir)) * bsdf /
 //             p1;
-//     }
 
+//         vec3 bsdfDirection =
+//             sampleBSDF(geomInfo, -ray.direction, matInfo, rtPload,
+//                        vec3(rand(rtPload.seed), rand(rtPload.seed), rand(rtPload.seed)));
+//         vec3  bsdfValue = evaluateBSDF(geomInfo, -ray.direction, bsdfDirection, matInfo);
+//         float bsdfPdf   = evaluatepdf(geomInfo, -ray.direction, bsdfDirection, matInfo);
+//         float lightPdf  = getEnvSamplePDF(2048, directionToSphericalEnvMap(bsdfDirection));
+//         float w2        = pow(bsdfPdf, 2.0) / (pow(lightPdf, 2.0) + pow(bsdfPdf, 2.0));
+//         if (bsdfPdf > 0.0)
+//         {
+//             throughput *= w2 * bsdfValue * abs(dot(ffnormal, bsdfDirection)) / bsdfPdf;
+//         }
+//         else
+//         {
+//             break;
+//         }
+//         ray.direction = bsdfDirection;
+//         ray.origin    = OffsetHitPos(geomInfo.position,
+//                                   dot(ffnormal, ray.direction) > 0.0 ? ffnormal : -ffnormal);
+//     }
 //     return radiance;
 // }
 
