@@ -6,7 +6,7 @@
 
 void buildCoordSystem(vec3 normal, inout vec3 tangent, inout vec3 bitangent)
 {
-    vec3 helperVec = normalize(vec3(1.0, 0.0, 0.0));
+    vec3 helperVec = vec3(1.0, 0.0, 0.0);
     if (abs(dot(helperVec, normal)) > 0.9999)
     {
         helperVec = normalize(vec3(0.0, 0.0, 1.0));
@@ -58,7 +58,7 @@ MaterialInfo getMaterialInfo(inout GeomInfo geomInfo)
 
     MaterialInfo materialInfo;
     materialInfo.baseColor          = vec3(1.0, 1.0, 1.0);
-    materialInfo.roughness          = 0.8;
+    materialInfo.roughness          = 0.00008;
     materialInfo.subsurface         = 0.0;
     materialInfo.anisotropic        = 0.0;
     materialInfo.emissiveTextureIdx = -1;

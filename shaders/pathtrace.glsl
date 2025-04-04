@@ -232,10 +232,10 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
                     matInfo.emissiveFactor;
     }
 
-    for (int i = 0; i < 2; ++i)
+    for (int i = 0; i < 20; ++i)
     {
         vec3 ffnormal =
-            dot(ray.direction, geomInfo.normal) < 0.0 ? -geomInfo.normal : geomInfo.normal;
+            dot(ray.direction, geomInfo.normal) <= 0.0 ? geomInfo.normal : -geomInfo.normal;
         geomInfo = getGeomInfo(rtPload);
         matInfo  = getMaterialInfo(geomInfo);
         // In a complete raytracing renderer, we will choise a light source(mesh light & env
@@ -258,8 +258,9 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
         }
         else
         {
+            vec3 ffnormal1 = dot(lightDir, ffnormal) > 0.0 ? ffnormal : -ffnormal;
             Ray shadowRay;
-            shadowRay.origin = offsetRay(geomInfo.position, ffnormal);
+            shadowRay.origin = offsetRay(geomInfo.position, ffnormal1);
             // geomInfo.position + 0.0001;
             shadowRay.direction = lightDir;
             shadowTrace(shadowRay);
@@ -300,10 +301,9 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
         {
             // ray spread shit, implement later
         }
-
+        vec3 ffnormal2 = dot(bsdfSample, ffnormal) > 0.0 ? ffnormal : -ffnormal;
         Ray bsdfRay;
-        bsdfRay.origin    = offsetRay(geomInfo.position, ffnormal);
-        // bsdfRay.origin    = geomInfo.position;
+        bsdfRay.origin = offsetRay(geomInfo.position, ffnormal2);
 
         bsdfRay.direction = bsdfSample;
         closestTrace(bsdfRay);
@@ -321,12 +321,11 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
         vec3  dir_in    = normalize(-ray.direction);
         vec3  bsdfValue = evaluateBSDF(geomInfo, dir_in, bsdfSample, matInfo);
         float bsdfPdf   = evaluatepdf(geomInfo, dir_in, bsdfSample, matInfo);
-        // return vec3(bsdfValue);
+
         if (bsdfPdf <= 0.0)
         {
             break;
         }
-
         bsdfPdf *= G;
         if (rtPload.hitT < INFINITY && false)
         {
@@ -352,9 +351,7 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
         }
         ray        = bsdfRay;
         throughput = G * bsdfValue / (bsdfPdf);
-        // return vec3(1.0);
     }
-
     return radiance;
 }
 
