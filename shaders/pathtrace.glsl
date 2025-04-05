@@ -225,19 +225,23 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
     float eta_scale  = 1.0;
 
     GeomInfo     geomInfo = getGeomInfo(rtPload);
-    MaterialInfo matInfo  = getMaterialInfo(geomInfo);
-    if (matInfo.emissiveTextureIdx != -1)
+    PbrMaterial  matInfo  = getMaterialInfo(geomInfo);
+    if (length(matInfo.emissive) > 0.0)
     {
-        radiance += texture(sceneTextures[matInfo.emissiveTextureIdx], geomInfo.uv).xyz *
-                    matInfo.emissiveFactor;
+        radiance += matInfo.emissive;
     }
 
     for (int i = 0; i < 30; ++i)
     {
-        vec3 ffnormal =
-            dot(ray.direction, geomInfo.normal) <= 0.0 ? geomInfo.normal : -geomInfo.normal;
         geomInfo = getGeomInfo(rtPload);
+        if (dot(-ray.direction, geomInfo.normal) < 0.0)
+        {
+            geomInfo.normal    = -geomInfo.normal;
+            geomInfo.tangent   = -geomInfo.tangent;
+            geomInfo.bitangent = -geomInfo.bitangent;
+        }
         matInfo  = getMaterialInfo(geomInfo);
+
         // In a complete raytracing renderer, we will choise a light source(mesh light & env
         // light)
         // using random number But right now, we temporarily use env light as the only light
@@ -258,7 +262,8 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
         }
         else
         {
-            vec3 ffnormal1 = dot(lightDir, ffnormal) > 0.0 ? ffnormal : -ffnormal;
+            vec3 ffnormal1 =
+                dot(lightDir, geomInfo.normal) > 0.0 ? geomInfo.normal : -geomInfo.normal;
             Ray shadowRay;
             shadowRay.origin = offsetRay(geomInfo.position, ffnormal1);
             // geomInfo.position + 0.0001;
@@ -276,71 +281,92 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
         // light
         // and env map light),and we gonna choose one of them randomly,and we will get a pdf
         // here
-        float p1 = 1.0 * getEnvSamplePDF(2048, importanceUV);
+        float p1 = 1.0 * getEnvSamplePDF(2048, 1024, importanceUV);
         if (G > 0.0 && p1 > 0.0)
         {
             vec3 dir_in   = normalize(-ray.direction);
-            vec3 bsdf     = evaluateBSDF(geomInfo, dir_in, lightDir, matInfo);
+            BsdfEvaluateData bsdfEvaluateData;
+            bsdfEvaluateData.k1 = dir_in;
+            bsdfEvaluateData.k2 = lightDir;
+            bsdfEvaluateData.xi = vec3(rand(rtPload.seed), rand(rtPload.seed), rand(rtPload.seed));
+            bsdfEvaluate(bsdfEvaluateData, matInfo);
+            vec3 bsdf     = bsdfEvaluateData.bsdf_diffuse + bsdfEvaluateData.bsdf_glossy;
             vec3 envLight = textureLod(envTexture, importanceUV, 0).xyz;
             c1            = G * bsdf * envLight;
-            float p2      = evaluatepdf(geomInfo, dir_in, lightDir, matInfo) * G;
+            float p2      = bsdfEvaluateData.pdf * G;
             w1            = pow(p1, 2.0) / (pow(p1, 2.0) + pow(p2, 2.0));
             c1 /= p1;
         }
+
         radiance += throughput * c1 * w1;
+
         float rd1     = rand(rtPload.seed);
         float rd2     = rand(rtPload.seed);
         float rd3     = rand(rtPload.seed);
-        vec3  bsdfSample =
-            sampleBSDF(geomInfo, normalize(-ray.direction), matInfo, rtPload, vec3(rd1, rd2, rd3));
-        // return bsdfSample;
-        if (length(bsdfSample) < 0.0001)
+        BsdfSampleData bsdfSampleData;
+        bsdfSampleData.k1 = -ray.direction;
+        bsdfSampleData.xi = vec3(rd1, rd2, rd3);
+        float materialEta = 1.8;
+        float ior1        = 1.0;
+        float ior2        = materialEta;
+        if (dot(ray.direction, geomInfo.normal) > 0.0)
+        {
+            ior1 = materialEta;
+            ior2 = 1.0;
+        }
+        matInfo.ior1 = ior1;
+        matInfo.ior2 = ior2;
+
+        bsdfSample(bsdfSampleData, matInfo);
+
+        if (length(bsdfSampleData.k2) < 0.0001)
         {
             break;
         }
         {
             // ray spread shit, implement later
         }
-        vec3 ffnormal2 = dot(bsdfSample, ffnormal) > 0.0 ? ffnormal : -ffnormal;
+        vec3 ffnormal2 =
+            dot(bsdfSampleData.k2, geomInfo.normal) > 0.0 ? geomInfo.normal : -geomInfo.normal;
         Ray bsdfRay;
         bsdfRay.origin = offsetRay(geomInfo.position, ffnormal2);
 
-        bsdfRay.direction = bsdfSample;
+        bsdfRay.direction = bsdfSampleData.k2;
         closestTrace(bsdfRay);
         G = 0.0;
+
         if (rtPload.hitT < INFINITY)
         {
             GeomInfo hitGeomInfo = getGeomInfo(rtPload);
-            G                    = abs(dot(bsdfSample, hitGeomInfo.normal));
+            G                    = abs(dot(bsdfSampleData.k2, hitGeomInfo.normal));
         }
         else
         {
             G = 1.0;
         }
-        vec3  dir_in    = normalize(-ray.direction);
-        vec3  bsdfValue = evaluateBSDF(geomInfo, dir_in, bsdfSample, matInfo);
-        float bsdfPdf   = evaluatepdf(geomInfo, dir_in, bsdfSample, matInfo);
 
-        if (bsdfPdf <= 0.0)
+        if (bsdfSampleData.pdf <= 0.0)
         {
             break;
         }
-        bsdfPdf *= G;
+        bsdfSampleData.pdf *= G;
+
         if (rtPload.hitT < INFINITY && false)
         {
             // this is mesh light shit,implement later
         }
         else if (rtPload.hitT == INFINITY)
         {
-            vec2 envUV    = directionToSphericalEnvMap(bsdfSample);
+            vec2 envUV    = directionToSphericalEnvMap(bsdfSampleData.k2);
             vec3 envLight = textureLod(envTexture, envUV, 0).xyz;
-            vec3 C2       = G * bsdfValue * envLight;
+            vec3 C2       = G * bsdfSampleData.bsdf_over_pdf * envLight;
             // 1.0 is same as before,it will be a specific value ,when we have more than one
             // light
             // source in scene, and currently ,we only have envmap
-            float p1 = 1.0 * getEnvSamplePDF(2048, envUV);
-            float w2 = pow(bsdfPdf, 2.0) / (pow(p1, 2.0) + pow(bsdfPdf, 2.0));
-            C2 /= bsdfPdf;
+            float p1 = 1.0 * getEnvSamplePDF(2048, 1024, envUV);
+
+            float w2 = pow(bsdfSampleData.pdf, 2.0) / (pow(p1, 2.0) + pow(bsdfSampleData.pdf, 2.0));
+
             radiance += throughput * C2 * w2;
             break;
         }
@@ -348,97 +374,12 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
         // Russian roulette heuristics
         {
         }
+
         ray        = bsdfRay;
-        throughput = G * bsdfValue / (bsdfPdf);
+        throughput = G * bsdfSampleData.bsdf_over_pdf;
     }
+
     return radiance;
 }
-
-// vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
-// {
-//     vec3 camSpaceUvPos = vec3(uv * 2.0 - 1.0,1.0);
-//     vec3 direct        = (renderUniform.viewInverse *
-//                    normalize(inverse(renderUniform.project) * vec4(camSpaceUvPos.xyz, 1.0)))
-//                       .xyz;
-//     vec4 origin = (renderUniform.viewInverse * vec4(0, 0, 0, 1));
-
-//     ivec2           rtResolution = ivec2(gl_LaunchSizeEXT.x, gl_LaunchSizeEXT.y);
-//     RayDifferential rayDiff;
-//     rayDiff.radius = 0.0;
-//     rayDiff.spread = 0.25 / max(rtResolution.x, rtResolution.y);
-
-//     vec3 radiance   = vec3(0.0);
-//     vec3 throughput = vec3(1.0);
-
-//     Ray ray;
-//     ray.origin = origin.xyz;
-//     ray.direction = normalize(direct.xyz);
-//     for (int bounceIdx = 0; bounceIdx < 30; ++bounceIdx)
-//     {
-//         closestTrace(ray);
-//         if (rtPload.hitT == INFINITY)
-//         {
-//             vec2 envMapUV    = directionToSphericalEnvMap(ray.direction);
-//             vec3 envMapColor = textureLod(envTexture, envMapUV, 0).xyz;
-//             return radiance + envMapColor * throughput;
-//         }
-//         GeomInfo     geomInfo = getGeomInfo(rtPload);
-//         MaterialInfo matInfo  = getMaterialInfo(geomInfo);
-//         vec3         ffnormal =
-//             dot(ray.direction, geomInfo.normal) <= 0.0 ? geomInfo.normal : -geomInfo.normal;
-//         if (matInfo.emissiveTextureIdx != -1)
-//         {
-//             radiance +=
-//                 throughput *
-//                 texture(sceneTextures[nonuniformEXT(matInfo.emissiveTextureIdx)],
-//                 geomInfo.uv).xyz;
-//         }
-//         // directLight
-
-//         vec2      randomUV       = vec2(rand(rtPload.seed), rand(rtPload.seed));
-//         vec4      cacheSampleRes = texture(envLookupTexture, randomUV);
-//         vec2  importanceUV   = cacheSampleRes.xy;
-//         vec3  lightDir       = normalize(sphericalEnvMapToDirection(importanceUV));
-//         float p1             = getEnvSamplePDF(2048, importanceUV);
-
-//         vec3  envLight = textureLod(envTexture, importanceUV, 0).xyz;
-//         vec3  bsdf     = evaluateBSDF(geomInfo, -ray.direction, lightDir, matInfo);
-//         float p2       = evaluatepdf(geomInfo, -ray.direction, lightDir, matInfo);
-//         float w1       = pow(p1, 2.0) / (pow(p1, 2.0) + pow(p2, 2.0));
-
-//         Ray shadowRay;
-//         shadowRay.origin    = offsetRay(geomInfo.position, geomInfo.normal);
-//         shadowRay.direction = lightDir;
-//         shadowTrace(shadowRay);
-//         float G = 1.0;
-//         if (shadowPload.isInShadow)
-//         {
-//             G = 0.0;
-//         }
-//         radiance +=
-//             G * w1 * throughput * envLight * max(0.0, dot(geomInfo.normal, lightDir)) * bsdf /
-//             p1;
-
-//         vec3 bsdfDirection =
-//             sampleBSDF(geomInfo, -ray.direction, matInfo, rtPload,
-//                        vec3(rand(rtPload.seed), rand(rtPload.seed), rand(rtPload.seed)));
-//         vec3  bsdfValue = evaluateBSDF(geomInfo, -ray.direction, bsdfDirection, matInfo);
-//         float bsdfPdf   = evaluatepdf(geomInfo, -ray.direction, bsdfDirection, matInfo);
-//         float lightPdf  = getEnvSamplePDF(2048, directionToSphericalEnvMap(bsdfDirection));
-//         float w2        = pow(bsdfPdf, 2.0) / (pow(lightPdf, 2.0) + pow(bsdfPdf, 2.0));
-//         if (bsdfPdf > 0.0)
-//         {
-//             throughput *= w2 * bsdfValue * abs(dot(ffnormal, bsdfDirection)) / bsdfPdf;
-//         }
-//         else
-//         {
-//             break;
-//         }
-//         ray.direction = bsdfDirection;
-//         ray.origin    = OffsetHitPos(geomInfo.position,
-//                                   dot(ffnormal, ray.direction) > 0.0 ? ffnormal : -ffnormal);
-//     }
-//     return radiance;
-// }
 
 #endif // __pathtrace_H__

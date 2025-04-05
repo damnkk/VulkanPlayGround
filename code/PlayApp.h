@@ -12,6 +12,7 @@
 namespace Play
 {
 
+struct RTRenderer;
 class PlayApp : public nvvkhl::AppBaseVk
 {
    public:
@@ -28,6 +29,10 @@ class PlayApp : public nvvkhl::AppBaseVk
     };
 
     virtual void onKeyboard(int key, int scancode, int action, int mods) override;
+    static inline Texture& AllocTexture();
+    static inline void     FreeTexture(Texture& texture);
+    static inline Buffer&  AllocBuffer();
+    static inline void     FreeBuffer(Buffer& buffer);
 
    protected:
     void loadEnvTexture();
@@ -42,8 +47,10 @@ class PlayApp : public nvvkhl::AppBaseVk
     void createRazterizationFBO();
     void createPostPipeline();
     void createPostDescriptorSet();
+    virtual void updateInputs() override;
 
    private:
+    friend class RTRenderer;
     enum ObjBinding
     {
         eTlas,
@@ -72,8 +79,8 @@ class PlayApp : public nvvkhl::AppBaseVk
     nvvk::SBTWrapper           _sbtWrapper;
     nvvk::ShaderModuleManager  _shaderModuleManager;
     nvvk::DebugUtil            m_debug;
-    TexturePool                _texturePool;
-    BufferPool                 _bufferPool;
+    static TexturePool         _texturePool;
+    static BufferPool          _bufferPool;
     VkDescriptorPool           _descriptorPool;
     // for rasterization
     VkPipeline       _graphicsPipeline;
@@ -114,6 +121,23 @@ class PlayApp : public nvvkhl::AppBaseVk
     nvh::CameraManipulator::Camera _dirtyCamera;
     Texture                        _envLookupTexture;
 };
+
+inline Texture& PlayApp::AllocTexture()
+{
+    return _texturePool.alloc();
+}
+inline void PlayApp::FreeTexture(Texture& texture)
+{
+    _texturePool.free(texture);
+}
+inline Buffer& PlayApp::AllocBuffer()
+{
+    return _bufferPool.alloc();
+}
+inline void PlayApp::FreeBuffer(Buffer& buffer)
+{
+    _bufferPool.free(buffer);
+}
 
 } //    namespace Play
 

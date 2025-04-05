@@ -46,29 +46,31 @@ GeomInfo getGeomInfo(PlayLoad pl)
     }
     geomInfo.tangent   = normalize(cross(geomInfo.normal, helperVec));
     geomInfo.bitangent = normalize(cross(geomInfo.normal, geomInfo.tangent));
-
     geomInfo.uv = pl.baryCoord.x * v2._texCoord + pl.baryCoord.y * v3._texCoord + weight3 * v1._texCoord;
     geomInfo.materialIdx = mesh._materialIndex;
     return geomInfo;
 }
 
-MaterialInfo getMaterialInfo(inout GeomInfo geomInfo)
+PbrMaterial getMaterialInfo(inout GeomInfo geomInfo)
 {
     Material mat = materials[geomInfo.materialIdx];
+    PbrMaterial materialInfo;
+    materialInfo                           = defaultPbrMaterial();
+    materialInfo.Ng                        = geomInfo.normal;
+    materialInfo.T                         = geomInfo.tangent;
+    materialInfo.B                         = geomInfo.bitangent;
+    materialInfo.N                         = geomInfo.normal;
+    materialInfo.roughness                 = vec2(0.04, 0.04);
+    materialInfo.metallic                  = 0.0;
+    materialInfo.transmission              = 1.0;
+    materialInfo.isThinWalled              = false;
+    materialInfo.diffuseTransmissionFactor = 1.0;
 
-    MaterialInfo materialInfo;
-    materialInfo.baseColor          = vec3(1.0, 1.0, 1.0);
-    materialInfo.roughness          = 0.00008;
-    materialInfo.subsurface         = 0.0;
-    materialInfo.anisotropic        = 0.0;
-    materialInfo.emissiveTextureIdx = -1;
-    materialInfo.emissiveFactor     = vec3(0.0);
-    materialInfo.eta                = 1.32;
     if (mat.normalTexture != -1)
     {
         vec3 smaplenormal =
             texture(sceneTextures[nonuniformEXT(mat.normalTexture)], geomInfo.uv).xyz * 2.0 - 1.0;
-        geomInfo.normal = normalize(toNormalHemisphere(smaplenormal, geomInfo.normal));
+        materialInfo.N = normalize(toNormalHemisphere(smaplenormal, geomInfo.normal));
     }
     return materialInfo;
 }
@@ -108,7 +110,7 @@ vec3 OffsetRay(in vec3 p, in vec3 n)
                 abs(p.z) < origin ? p.z + floatScale * n.z : p_i.z);
 }
 
-float getEnvSamplePDF(float envWidth, vec2 importanceUV)
+float getEnvSamplePDF(float envWidth, float height, vec2 importanceUV)
 {
     float pdf       = texture(envLookupTexture, importanceUV).z;
     float theta     = M_PI * importanceUV.y;

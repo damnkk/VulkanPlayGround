@@ -643,7 +643,7 @@ void PlayApp::OnInit()
 {
     _modelLoader.init(this);
     CameraManip.setWindowSize(this->getSize().width, this->getSize().height);
-    // CameraManip.setMode(nvh::CameraManipulator::Modes::Examine);
+    // CameraManip.setMode(nvh::CameraManipulator::Modes::Fly);
     CameraManip.setFov(120.0f);
     CameraManip.setLookat({10.0, 10.0, 10.0}, {0.0, 0.0, 0.0}, {0.000, 1.000, 0.000});
     CameraManip.setSpeed(10.0f);
@@ -663,8 +663,7 @@ void PlayApp::OnInit()
     _bufferPool.init(40960, &_alloc);
     rayTraceRTCreate();
 
-    // _modelLoader.loadModel("F:/repository/ModelResource/gltfBistro/exterior/exterior.gltf");
-    // _modelLoader.loadModel("F:/repository/ModelResource/gltfBistro/interior/interior.gltf");
+    // _modelLoader.loadModel("D:/repo/DogEngine/models/BoomBoxWithAxes/BoomBoxWithAxes.gltf");
     // _modelLoader.loadModel("D:/repo/DogEngine/models/Camera_01_2k/Camera_01_2k.gltf");
     // _modelLoader.loadModel("D:/repo/DogEngine/models/MetalRoughSpheres/MetalRoughSpheres.gltf");
     _modelLoader.loadModel("D:\\repo\\DogEngine\\models\\DamagedHelmet/DamagedHelmet.gltf");
@@ -698,6 +697,11 @@ void PlayApp::OnPreRender()
     }
 }
 
+void PlayApp::updateInputs()
+{
+    // _frameCount = 0;
+}
+
 inline float luminance(const float* color)
 {
     return color[0] * 0.2126f + color[1] * 0.7152f + color[2] * 0.0722f;
@@ -705,8 +709,8 @@ inline float luminance(const float* color)
 
 void PlayApp::loadEnvTexture()
 {
-    // std::string path = "D:\\repo\\DogEngine\\models\\skybox\\graveyard_pathways_2k.hdr";
-    std::string path = "D:\\repo\\DogEngine\\models\\skybox\\small_empty_room_1_2k.hdr";
+    std::string path = "D:\\repo\\DogEngine\\models\\skybox\\graveyard_pathways_2k.hdr";
+    // std::string path = "D:\\repo\\DogEngine\\models\\skybox\\small_empty_room_1_2k.hdr";
     // path             = "D:\\repo\\DogEngine\\models\\skybox\\test.hdr";
     int         width, height, channels;
     float*      data = stbi_loadf(path.c_str(), &width, &height, &channels, 4);
