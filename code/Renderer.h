@@ -15,7 +15,9 @@ class Renderer
     virtual void OnPreRender()=0;
     virtual void OnPostRender()=0;
     virtual void RenderFrame()=0;
-    virtual void SetScene(Scene* scene)=0;
+    virtual void SetScene(Scene* scene) = 0;
+    virtual void OnResize(int width, int height)=0 ;
+    virtual void OnDestroy() =0;
     protected:
      Scene* _scene;
      PlayApp* _app;

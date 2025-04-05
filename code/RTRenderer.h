@@ -21,6 +21,8 @@ public:
     void OnPostRender() override;
     void RenderFrame() override;
     void SetScene(Scene* scene) override;
+    void OnResize(int width, int height) override;
+    void OnDestroy() override;
 
    protected:
    void loadEnvTexture();

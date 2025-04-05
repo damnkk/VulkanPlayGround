@@ -50,10 +50,10 @@ class BasePool
         return _objs[index];
     };
 
-    static std::vector<T>              _objs;
-    static std::vector<uint32_t>       _freeIndices;
-    static uint32_t                    _availableIndex;
-    static nvvk::ResourceAllocatorVma* _allocator;
+    std::vector<T>              _objs;
+    std::vector<uint32_t>       _freeIndices;
+    uint32_t                    _availableIndex = 0;
+    nvvk::ResourceAllocatorVma* _allocator;
 };
 
 class TexturePool : public BasePool<Texture>
