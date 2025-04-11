@@ -34,3 +34,5 @@
 
 .cache/
 build/
+cmake-build-debug-visual-studio/
+.idea/

@@ -30,17 +30,18 @@ class PlayApp : public nvvkhl::AppBaseVk
         return _scene;
     };
 
-    static inline Texture& AllocTexture();
-    static inline void     FreeTexture(Texture& texture);
-    static inline Buffer&  AllocBuffer();
-    static inline void     FreeBuffer(Buffer& buffer);
+    static inline Texture* AllocTexture();
+    static inline void     FreeTexture(Texture* texture);
+    static inline Buffer*  AllocBuffer();
+    static inline void     FreeBuffer(Buffer* buffer);
     static inline void*    MapBuffer(Buffer& buffer);
     static inline void     UnmapBuffer(Buffer& buffer);
 
-   protected:
+protected:
+    void createGraphicsDescriptResource();
+    void createGraphicsDescriptorSet();
+    void createGraphicsDescriptorSetLayout();
     void createGraphicsPipeline();
-    void createRazterizationRenderPass();
-    void createRazterizationFBO();
 
    private:
     friend struct RTRenderer;
@@ -71,36 +72,29 @@ class PlayApp : public nvvkhl::AppBaseVk
     nvvk::DebugUtil            m_debug;
     static TexturePool         _texturePool;
     static BufferPool          _bufferPool;
-    VkDescriptorPool           _descriptorPool;
-    // for rasterization
-    struct DepthTexture
-    {
-        VkImage        image;
-        VkDeviceMemory memory;
-        VkImageView    view;
-        VkImageLayout  layout;
-    } _rasterizationDepthImage;
-    VkFramebuffer _rasterizationFBO;
-    VkRenderPass  _rasterizationRenderPass;
+    VkDescriptorPool          _descriptorPool;
+
+    VkDescriptorSet          _graphicDescriptorSet;
+    VkDescriptorSetLayout    _graphicsSetLayout;
     VkPipeline                _graphicsPipeline;
-    VkPipelineLayout          _graphicsPipelineLayout;
+    VkPipelineLayout         _graphicsPipelineLayout;
     std::unique_ptr<Renderer> _renderer;
     Scene                     _scene;
 };
 
-inline Texture& PlayApp::AllocTexture()
+inline Texture* PlayApp::AllocTexture()
 {
     return _texturePool.alloc();
 }
-inline void PlayApp::FreeTexture(Texture& texture)
+inline void PlayApp::FreeTexture(Texture* texture)
 {
     _texturePool.free(texture);
 }
-inline Buffer& PlayApp::AllocBuffer()
+inline Buffer* PlayApp::AllocBuffer()
 {
     return _bufferPool.alloc();
 }
-inline void PlayApp::FreeBuffer(Buffer& buffer)
+inline void PlayApp::FreeBuffer(Buffer* buffer)
 {
     _bufferPool.free(buffer);
 }

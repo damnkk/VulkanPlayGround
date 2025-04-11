@@ -5,6 +5,7 @@ namespace Play
 
 struct Scene;
 struct PlayApp;
+struct Texture;
 class Renderer
 {
    public:
@@ -18,6 +19,7 @@ class Renderer
     virtual void SetScene(Scene* scene) = 0;
     virtual void OnResize(int width, int height)=0 ;
     virtual void OnDestroy() =0;
+    virtual Texture* getOutputTexture()= 0;
     protected:
      Scene* _scene;
      PlayApp* _app;

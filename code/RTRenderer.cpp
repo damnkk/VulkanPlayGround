@@ -27,12 +27,12 @@ RTRenderer::RTRenderer(PlayApp& app)
     createRenderBuffer();
     SetScene(&_app->_scene);
     createRTPipeline();
-    createPostDescriptorSet();
-    createPostPipeline();
+    createPostProcessResource();
+
 }
 void RTRenderer::OnPreRender()
 {
-    RenderUniform* data = static_cast<RenderUniform*>(PlayApp::MapBuffer(_renderUniformBuffer));
+    RenderUniform* data = static_cast<RenderUniform*>(PlayApp::MapBuffer(*_renderUniformBuffer));
     data->view          = CameraManip.getMatrix();
     data->viewInverse   = glm::inverse(data->view);
     data->project       = glm::perspectiveFov(CameraManip.getFov(), _app->getSize().width * 1.0f,
@@ -40,7 +40,7 @@ void RTRenderer::OnPreRender()
     data->project[1][1] *= -1;
     data->cameraPosition = CameraManip.getEye();
     data->frameCount     = _frameCount;
-    PlayApp::UnmapBuffer(_renderUniformBuffer);
+    PlayApp::UnmapBuffer(*_renderUniformBuffer);
     if (_dirtyCamera != CameraManip.getCamera())
     {
         _frameCount  = 0;
@@ -50,18 +50,16 @@ void RTRenderer::OnPreRender()
 void RTRenderer::OnPostRender()
 {
     auto cmd = _app->getCommandBuffers()[_app->m_swapChain.getActiveImageIndex()];
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _postPipeline);
-    VkClearValue clearValue[2];
+    VkClearValue clearValue[1];
     clearValue[0].color        = {{0.0f, 1.0f, 1.0f, 1.0f}};
-    clearValue[1].depthStencil = {1.0f, 0};
     VkRenderPassBeginInfo renderPassBeginInfo{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-    renderPassBeginInfo.renderPass = _app->getRenderPass();
-    renderPassBeginInfo.framebuffer =
-        _app->getFramebuffers()[_app->m_swapChain.getActiveImageIndex()];
+    renderPassBeginInfo.renderPass = _postProcessRenderPass;
+    renderPassBeginInfo.framebuffer = _postProcessFBO;
     renderPassBeginInfo.renderArea      = VkRect2D({0, 0}, _app->getSize());
     renderPassBeginInfo.clearValueCount = 2;
     renderPassBeginInfo.pClearValues    = clearValue;
     vkCmdBeginRenderPass(cmd, &renderPassBeginInfo, VkSubpassContents::VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _postPipeline);
     vkCmdSetDepthTestEnable(cmd, true);
     vkCmdSetDepthWriteEnable(cmd, true);
     VkViewport viewport = {
@@ -80,7 +78,7 @@ void RTRenderer::RenderFrame()
     VkImageMemoryBarrier imageMemoryBarrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
     imageMemoryBarrier.oldLayout                   = VK_IMAGE_LAYOUT_UNDEFINED;
     imageMemoryBarrier.newLayout                   = VK_IMAGE_LAYOUT_GENERAL;
-    imageMemoryBarrier.image                       = _rayTraceRT.image;
+    imageMemoryBarrier.image                       = _rayTraceRT->image;
     imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     imageMemoryBarrier.subresourceRange.levelCount = 1;
     imageMemoryBarrier.subresourceRange.layerCount = 1;
@@ -100,7 +98,7 @@ void RTRenderer::RenderFrame()
 
     imageMemoryBarrier.oldLayout                   = VK_IMAGE_LAYOUT_GENERAL;
     imageMemoryBarrier.newLayout                   = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imageMemoryBarrier.image                       = _rayTraceRT.image;
+    imageMemoryBarrier.image                       = _rayTraceRT->image;
     imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     imageMemoryBarrier.subresourceRange.levelCount = 1;
     imageMemoryBarrier.subresourceRange.layerCount = 1;
@@ -150,11 +148,11 @@ void RTRenderer::loadEnvTexture()
                              imageCreateInfo.mipLevels);
     _app->submitTempCmdBuffer(cmd);
 
-    _envTexture.image        = nvvkTexture.image;
-    _envTexture.memHandle    = nvvkTexture.memHandle;
-    _envTexture.descriptor   = nvvkTexture.descriptor;
-    _envTexture._format      = imageCreateInfo.format;
-    _envTexture._mipmapLevel = 1;
+    _envTexture->image        = nvvkTexture.image;
+    _envTexture->memHandle    = nvvkTexture.memHandle;
+    _envTexture->descriptor   = nvvkTexture.descriptor;
+    _envTexture->_format      = imageCreateInfo.format;
+    _envTexture->_mipmapLevel = 1;
 
     // build accel
     float lumSum = 0.0;
@@ -246,12 +244,12 @@ void RTRenderer::loadEnvTexture()
     nvvk::Texture nvvkTexture2 = _app->_alloc.createTexture(
         cmd2, width * height * 4 * sizeof(float), cache.data(), imageCreateInfo2,
         samplerCreateInfo2, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    _envLookupTexture.image        = nvvkTexture2.image;
-    _envLookupTexture.memHandle    = nvvkTexture2.memHandle;
-    _envLookupTexture.descriptor   = nvvkTexture2.descriptor;
-    _envLookupTexture._format      = imageCreateInfo2.format;
-    _envLookupTexture._mipmapLevel = imageCreateInfo2.mipLevels;
-    CUSTOM_NAME_VK(_app->m_debug, _envLookupTexture.image);
+    _envLookupTexture->image        = nvvkTexture2.image;
+    _envLookupTexture->memHandle    = nvvkTexture2.memHandle;
+    _envLookupTexture->descriptor   = nvvkTexture2.descriptor;
+    _envLookupTexture->_format      = imageCreateInfo2.format;
+    _envLookupTexture->_mipmapLevel = imageCreateInfo2.mipLevels;
+    CUSTOM_NAME_VK(_app->m_debug, _envLookupTexture->image);
     _app->submitTempCmdBuffer(cmd2);
     stbi_image_free(data);
 }
@@ -447,34 +445,34 @@ void RTRenderer::createDescritorSet()
     descSetWrites[ObjBinding::eRayTraceRT].dstBinding      = ObjBinding::eRayTraceRT;
     descSetWrites[ObjBinding::eRayTraceRT].dstSet          = _descriptorSet;
     descSetWrites[ObjBinding::eRayTraceRT].descriptorCount = 1;
-    descSetWrites[ObjBinding::eRayTraceRT].pImageInfo      = &_rayTraceRT.descriptor;
+    descSetWrites[ObjBinding::eRayTraceRT].pImageInfo      = &_rayTraceRT->descriptor;
 
     descSetWrites[ObjBinding::eMaterialBuffer].descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     descSetWrites[ObjBinding::eMaterialBuffer].dstBinding      = ObjBinding::eMaterialBuffer;
     descSetWrites[ObjBinding::eMaterialBuffer].dstSet          = _descriptorSet;
     descSetWrites[ObjBinding::eMaterialBuffer].descriptorCount = 1;
     descSetWrites[ObjBinding::eMaterialBuffer].pBufferInfo =
-        &_app->_modelLoader.getMaterialBuffer().descriptor;
+        &_app->_modelLoader.getMaterialBuffer()->descriptor;
 
     descSetWrites[ObjBinding::eRenderUniform].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     descSetWrites[ObjBinding::eRenderUniform].dstBinding      = ObjBinding::eRenderUniform;
     descSetWrites[ObjBinding::eRenderUniform].dstSet          = _descriptorSet;
     descSetWrites[ObjBinding::eRenderUniform].descriptorCount = 1;
-    descSetWrites[ObjBinding::eRenderUniform].pBufferInfo     = &_renderUniformBuffer.descriptor;
+    descSetWrites[ObjBinding::eRenderUniform].pBufferInfo     = &_renderUniformBuffer->descriptor;
 
     descSetWrites[ObjBinding::eLightMeshIdx].descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     descSetWrites[ObjBinding::eLightMeshIdx].dstBinding      = ObjBinding::eLightMeshIdx;
     descSetWrites[ObjBinding::eLightMeshIdx].dstSet          = _descriptorSet;
     descSetWrites[ObjBinding::eLightMeshIdx].descriptorCount = 1;
     descSetWrites[ObjBinding::eLightMeshIdx].pBufferInfo =
-        &(_app->_modelLoader.getLightMeshIdxBuffer().descriptor);
+        &(_app->_modelLoader.getLightMeshIdxBuffer()->descriptor);
 
     descSetWrites[ObjBinding::eInstanceBuffer].descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     descSetWrites[ObjBinding::eInstanceBuffer].dstBinding      = ObjBinding::eInstanceBuffer;
     descSetWrites[ObjBinding::eInstanceBuffer].dstSet          = _descriptorSet;
     descSetWrites[ObjBinding::eInstanceBuffer].descriptorCount = 1;
     descSetWrites[ObjBinding::eInstanceBuffer].pBufferInfo =
-        &(_app->_modelLoader.getInstanceBuffer().descriptor);
+        &(_app->_modelLoader.getInstanceBuffer()->descriptor);
 
     descSetWrites[ObjBinding::eSceneTexture].descriptorType =
         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -485,7 +483,7 @@ void RTRenderer::createDescritorSet()
     std::vector<VkDescriptorImageInfo> imageInfos;
     for (auto& texture : _app->_modelLoader.getSceneTextures())
     {
-        imageInfos.push_back(texture.descriptor);
+        imageInfos.push_back(texture->descriptor);
     }
     descSetWrites[ObjBinding::eSceneTexture].pImageInfo = imageInfos.data();
 
@@ -494,20 +492,20 @@ void RTRenderer::createDescritorSet()
     descSetWrites[ObjBinding::eEnvTexture].dstBinding      = ObjBinding::eEnvTexture;
     descSetWrites[ObjBinding::eEnvTexture].dstSet          = _descriptorSet;
     descSetWrites[ObjBinding::eEnvTexture].descriptorCount = 1;
-    descSetWrites[ObjBinding::eEnvTexture].pImageInfo      = &_envTexture.descriptor;
+    descSetWrites[ObjBinding::eEnvTexture].pImageInfo      = &_envTexture->descriptor;
 
     descSetWrites[ObjBinding::eEnvLoopupTexture].descriptorType =
         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     descSetWrites[ObjBinding::eEnvLoopupTexture].dstBinding      = ObjBinding::eEnvLoopupTexture;
     descSetWrites[ObjBinding::eEnvLoopupTexture].dstSet          = _descriptorSet;
     descSetWrites[ObjBinding::eEnvLoopupTexture].descriptorCount = 1;
-    descSetWrites[ObjBinding::eEnvLoopupTexture].pImageInfo      = &_envLookupTexture.descriptor;
+    descSetWrites[ObjBinding::eEnvLoopupTexture].pImageInfo      = &_envLookupTexture->descriptor;
     vkUpdateDescriptorSets(_app->m_device, descSetWrites.size(), descSetWrites.data(), 0, nullptr);
 }
 
 void RTRenderer::rayTraceRTCreate()
 {
-    Texture rayTraceRT;
+    Texture* rayTraceRT;
     auto    textureCreateinfo = nvvk::makeImage2DCreateInfo(
         VkExtent2D{_app->getSize().width, _app->getSize().height}, VK_FORMAT_R32G32B32A32_SFLOAT,
         VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
@@ -521,13 +519,13 @@ void RTRenderer::rayTraceRTCreate()
     nvvk::Texture nvvkTexture = _app->_alloc.createTexture(cmd, 0, nullptr, textureCreateinfo,
                                                      samplerCreateInfo, VK_IMAGE_LAYOUT_GENERAL);
     _app->submitTempCmdBuffer(cmd);
-    rayTraceRT.image        = nvvkTexture.image;
-    rayTraceRT.memHandle    = nvvkTexture.memHandle;
-    rayTraceRT.descriptor   = nvvkTexture.descriptor;
-    rayTraceRT._format      = VK_FORMAT_R32G32B32A32_SFLOAT;
-    rayTraceRT._mipmapLevel = textureCreateinfo.mipLevels;
+    rayTraceRT->image        = nvvkTexture.image;
+    rayTraceRT->memHandle    = nvvkTexture.memHandle;
+    rayTraceRT->descriptor   = nvvkTexture.descriptor;
+    rayTraceRT->_format      = VK_FORMAT_R32G32B32A32_SFLOAT;
+    rayTraceRT->_mipmapLevel = textureCreateinfo.mipLevels;
     _rayTraceRT             = rayTraceRT;
-    CUSTOM_NAME_VK(_app->m_debug,_rayTraceRT.image);
+    CUSTOM_NAME_VK(_app->m_debug, _rayTraceRT->image);
 }
 void RTRenderer::createRenderBuffer()
 {
@@ -537,13 +535,13 @@ void RTRenderer::createRenderBuffer()
         nvvk::makeBufferCreateInfo(sizeof(RenderUniform), VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT_KHR);
     auto nvvkBuffer = _app->_alloc.createBuffer(
         bufferInfo, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    _renderUniformBuffer.buffer            = nvvkBuffer.buffer;
-    _renderUniformBuffer.address           = nvvkBuffer.address;
-    _renderUniformBuffer.memHandle         = nvvkBuffer.memHandle;
-    _renderUniformBuffer.descriptor.buffer = nvvkBuffer.buffer;
-    _renderUniformBuffer.descriptor.offset = 0;
-    _renderUniformBuffer.descriptor.range  = sizeof(RenderUniform);
-    CUSTOM_NAME_VK(_app->m_debug, _renderUniformBuffer.buffer);
+    _renderUniformBuffer->buffer            = nvvkBuffer.buffer;
+    _renderUniformBuffer->address           = nvvkBuffer.address;
+    _renderUniformBuffer->memHandle         = nvvkBuffer.memHandle;
+    _renderUniformBuffer->descriptor.buffer = nvvkBuffer.buffer;
+    _renderUniformBuffer->descriptor.offset = 0;
+    _renderUniformBuffer->descriptor.range  = sizeof(RenderUniform);
+    CUSTOM_NAME_VK(_app->m_debug, _renderUniformBuffer->buffer);
 }
 void RTRenderer::createGraphicsPipeline() {}
 
@@ -632,84 +630,45 @@ void RTRenderer::createRTPipeline()
     _sbtWrapper.addIndex(nvvk::SBTWrapper::eHit, 2);
     _sbtWrapper.create(_rtPipeline, rtPipelineInfo);
 }
+void RTRenderer::createPostProcessRT(){
+    VkImageCreateInfo postProcessRTInfo =  nvvk::makeImage2DCreateInfo(this->_app->getSize(),VK_FORMAT_R8G8B8A8_UNORM,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,false);
+    VkSamplerCreateInfo postProcessRTSamplerInfo = nvvk::makeSamplerCreateInfo(VK_FILTER_LINEAR,VK_FILTER_LINEAR,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+    auto cmd = _app->createTempCmdBuffer();
+    _postProcessRT = PlayApp::AllocTexture();
+    nvvk::Texture nvvkTexture = _app->_alloc.createTexture(cmd,0,nullptr,postProcessRTInfo,postProcessRTSamplerInfo,VK_IMAGE_LAYOUT_UNDEFINED);
+    _app->submitTempCmdBuffer(cmd);
+    VkImageViewCreateInfo postProcessRTViewInfo = nvvk::makeImage2DViewCreateInfo(nvvkTexture.image,postProcessRTInfo.format,VK_IMAGE_ASPECT_COLOR_BIT,1,nullptr);
+    vkCreateImageView(_app->getDevice(),&postProcessRTViewInfo,nullptr,&nvvkTexture.descriptor.imageView);
+    _postProcessRT->image        = nvvkTexture.image;
+    _postProcessRT->memHandle    = nvvkTexture.memHandle;
+    _postProcessRT->descriptor   = nvvkTexture.descriptor;
+    _postProcessRT->_format      = postProcessRTInfo.format;
+    CUSTOM_NAME_VK(_app->m_debug, _postProcessRT->image);
+}
 
-void RTRenderer::createRazterizationRenderPass()
+void RTRenderer::createPostProcessRenderPass()
 {
-    _rasterizationRenderPass = nvvk::createRenderPass(
-        _app->m_device, {VK_FORMAT_R32G32B32A32_SFLOAT}, _app->m_depthFormat, 1, true, true,
+    _postProcessRenderPass = nvvk::createRenderPass(
+        _app->m_device, {VK_FORMAT_R8G8B8A8_UNORM},VK_FORMAT_UNDEFINED, 1, true, true,
         VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }
 
-void RTRenderer::createRazterizationFBO()
+void RTRenderer::createPostProcessFBO()
 {
-    if (_rasterizationDepthImage.image != VK_NULL_HANDLE)
-    {
-        vkDestroyImage(_app->m_device, _rasterizationDepthImage.image, nullptr);
-    }
-    if (_rasterizationDepthImage.memory != VK_NULL_HANDLE)
-    {
-        vkFreeMemory(_app->m_device, _rasterizationDepthImage.memory, nullptr);
-    }
-    if (_rasterizationDepthImage.view != VK_NULL_HANDLE)
-    {
-        vkDestroyImageView(_app->m_device, _rasterizationDepthImage.view, nullptr);
-    }
-    VkImageCreateInfo depthImageCreateInfo = nvvk::makeImage2DCreateInfo(
-        VkExtent2D{_app->getSize().width, _app->getSize().height}, _app->m_depthFormat,
-        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, false);
-    vkCreateImage(_app->m_device, &depthImageCreateInfo, nullptr, &_rasterizationDepthImage.image);
-    // Allocate the memory
-    VkMemoryRequirements memReqs;
-    vkGetImageMemoryRequirements(_app->m_device, _rasterizationDepthImage.image, &memReqs);
-    VkMemoryAllocateInfo memAllocInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
-    memAllocInfo.allocationSize = memReqs.size;
-    memAllocInfo.memoryTypeIndex =
-        _app->getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    vkAllocateMemory(_app->m_device, &memAllocInfo, nullptr, &_rasterizationDepthImage.memory);
-    // Bind image and memory
-    vkBindImageMemory(_app->m_device, _rasterizationDepthImage.image,
-                      _rasterizationDepthImage.memory, 0);
-    auto cmd = _app->createTempCmdBuffer();
+    PlayApp::FreeTexture(_postProcessRT);
+    createPostProcessRT();
 
-    VkImageSubresourceRange subresourceRange{};
-    subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-    subresourceRange.levelCount = 1;
-    subresourceRange.layerCount = 1;
-
-    VkImageMemoryBarrier imageMemoryBarrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-    imageMemoryBarrier.oldLayout             = VK_IMAGE_LAYOUT_UNDEFINED;
-    imageMemoryBarrier.newLayout             = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    imageMemoryBarrier.image                 = _rasterizationDepthImage.image;
-    imageMemoryBarrier.subresourceRange      = subresourceRange;
-    imageMemoryBarrier.srcAccessMask         = VkAccessFlags();
-    imageMemoryBarrier.dstAccessMask         = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    const VkPipelineStageFlags srcStageMask  = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-    const VkPipelineStageFlags destStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    vkCmdPipelineBarrier(cmd, srcStageMask, destStageMask, VK_FALSE, 0, nullptr, 0, nullptr, 1,
-                         &imageMemoryBarrier);
-
-    _app->submitTempCmdBuffer(cmd);
-    VkImageViewCreateInfo depthViewCreateInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
-    depthViewCreateInfo.image            = _rasterizationDepthImage.image;
-    depthViewCreateInfo.viewType         = VK_IMAGE_VIEW_TYPE_2D;
-    depthViewCreateInfo.format           = _app->m_depthFormat;
-    depthViewCreateInfo.subresourceRange = subresourceRange;
-    _rasterizationDepthImage.layout      = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-    vkCreateImageView(_app->m_device, &depthViewCreateInfo, nullptr,
-                      &_rasterizationDepthImage.view);
-
-    std::vector<VkImageView> attachments = {_rayTraceRT.descriptor.imageView,
-                                            _rasterizationDepthImage.view};
+    std::vector<VkImageView> attachments = {
+                                            _postProcessRT->descriptor.imageView};
     VkFramebufferCreateInfo  framebufferInfo{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
-    framebufferInfo.renderPass      = _rasterizationRenderPass;
-    framebufferInfo.attachmentCount = 2;
+    framebufferInfo.renderPass      = _postProcessRenderPass;
+    framebufferInfo.attachmentCount = attachments.size();
     framebufferInfo.pAttachments    = attachments.data();
     framebufferInfo.width           = _app->getSize().width;
     framebufferInfo.height          = _app->getSize().height;
     framebufferInfo.layers          = 1;
     VkResult res =
-        vkCreateFramebuffer(_app->m_device, &framebufferInfo, nullptr, &_rasterizationFBO);
+        vkCreateFramebuffer(_app->m_device, &framebufferInfo, nullptr, &_postProcessFBO);
     assert(res == VK_SUCCESS);
 }
 
@@ -720,7 +679,7 @@ void RTRenderer::createPostPipeline()
     pipelineLayoutInfo.pSetLayouts    = &_postDescriptorSetLayout;
     vkCreatePipelineLayout(_app->m_device, &pipelineLayoutInfo, nullptr, &_postPipelineLayout);
     nvvk::GraphicsPipelineGeneratorCombined gpipelineState(_app->m_device, _postPipelineLayout,
-                                                           _app->m_renderPass);
+                                                           _postProcessRenderPass);
     gpipelineState.inputAssemblyState.topology        = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     gpipelineState.rasterizationState.cullMode        = VK_CULL_MODE_NONE;
     gpipelineState.depthStencilState.depthTestEnable  = VK_TRUE;
@@ -764,8 +723,8 @@ void RTRenderer::createPostDescriptorSet()
     CUSTOM_NAME_VK(_app->m_debug, _postDescriptorSet);
     VkDescriptorImageInfo imageInfo;
     imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imageInfo.imageView   = _rayTraceRT.descriptor.imageView;
-    imageInfo.sampler     = _rayTraceRT.descriptor.sampler;
+    imageInfo.imageView   = _rayTraceRT->descriptor.imageView;
+    imageInfo.sampler     = _rayTraceRT->descriptor.sampler;
 
     VkWriteDescriptorSet descSetWrite{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
     descSetWrite.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -779,6 +738,7 @@ void RTRenderer::createPostDescriptorSet()
 void RTRenderer::OnResize(int width, int height)
 {
     _frameCount = 0;
+    createPostProcessFBO();
     PlayApp::FreeTexture(this->_rayTraceRT);
     rayTraceRTCreate();
     // update raytracing rt
@@ -787,14 +747,14 @@ void RTRenderer::OnResize(int width, int height)
     raytracingRTWrite.dstBinding      = ObjBinding::eRayTraceRT;
     raytracingRTWrite.dstSet          = _descriptorSet;
     raytracingRTWrite.descriptorCount = 1;
-    raytracingRTWrite.pImageInfo      = &_rayTraceRT.descriptor;
+    raytracingRTWrite.pImageInfo      = &_rayTraceRT->descriptor;
     vkUpdateDescriptorSets(_app->m_device, 1, &raytracingRTWrite, 0, nullptr);
 
     // update post descriptor
     VkDescriptorImageInfo imageInfo;
     imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imageInfo.imageView   = _rayTraceRT.descriptor.imageView;
-    imageInfo.sampler     = _rayTraceRT.descriptor.sampler;
+    imageInfo.imageView   = _rayTraceRT->descriptor.imageView;
+    imageInfo.sampler     = _rayTraceRT->descriptor.sampler;
     VkWriteDescriptorSet postDescriptorWrite{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
     postDescriptorWrite.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     postDescriptorWrite.dstBinding      = 0;
@@ -802,6 +762,7 @@ void RTRenderer::OnResize(int width, int height)
     postDescriptorWrite.descriptorCount = 1;
     postDescriptorWrite.pImageInfo      = &imageInfo;
     vkUpdateDescriptorSets(_app->m_device, 1, &postDescriptorWrite, 0, nullptr);
+
 }
 void RTRenderer::OnDestroy()
 {
@@ -815,6 +776,12 @@ void RTRenderer::OnDestroy()
         _app->_alloc.destroy(blas.buffer);
     }
     vkDestroyPipeline(_app->m_device, _rtPipeline, nullptr);
+}
+void RTRenderer::createPostProcessResource(){
+    createPostProcessRenderPass();
+    createPostProcessFBO();
+    createPostDescriptorSet();
+    createPostPipeline();
 }
 
 } // namespace Play

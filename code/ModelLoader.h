@@ -30,28 +30,28 @@ class ModelLoader
         return _sceneMaterials;
     }
 
-    Buffer& getMaterialBuffer()
+    Buffer* getMaterialBuffer()
     {
         return _materialBuffer;
     }
-    Buffer& getInstanceBuffer()
+    Buffer* getInstanceBuffer()
     {
         return _instanceBuffer;
     }
 
-    Buffer& getLightMeshIdxBuffer()
+    Buffer* getLightMeshIdxBuffer()
     {
         return _lightMeshIdxBuffer;
     }
 
-    std::vector<Texture>& getSceneTextures()
+    std::vector<Texture*>& getSceneTextures()
     {
         return _sceneTextures;
     }
 
    private:
     PlayApp* _app;
-    std::vector<Texture>  _sceneTextures;
+    std::vector<Texture*> _sceneTextures;
     std::vector<Buffer>   _sceneVBuffers;
     std::vector<Buffer>   _sceneIBuffers;
     std::vector<Mesh>     _sceneMeshes;
@@ -59,9 +59,9 @@ class ModelLoader
     std::vector<int32_t>  _emissiveMeshIdx;
     nvvk::DebugUtil       m_debug;
 
-    Buffer _materialBuffer;
-    Buffer _instanceBuffer;
-    Buffer _lightMeshIdxBuffer;
+    Buffer* _materialBuffer;
+    Buffer* _instanceBuffer;
+    Buffer* _lightMeshIdxBuffer;
 
 }; // namespace Play
 } // namespace Play

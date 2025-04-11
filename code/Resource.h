@@ -4,6 +4,8 @@
 #include "vector"
 #include "nvvk/memallocator_vma_vk.hpp"
 #include "host_device.h"
+namespace Play
+{
 struct Texture : public nvvk::Texture
 {
     VkFormat    _format      = VK_FORMAT_UNDEFINED;
@@ -36,18 +38,22 @@ class BasePool
 
     void deinit()
     {
-        while (_availableIndex > 0)
+        for (auto& obj : _objs)
         {
-            uint32_t idx = _freeIndices[--_availableIndex];
-            _allocator->destroy(_objs[idx]);
+            if (obj._poolId >= 0)
+            {
+                _allocator->destroy(obj);
+                obj._poolId = -1;
+            }
         }
     }
-    T& alloc()
+
+    T* alloc()
     {
         assert(_availableIndex < _objs.size());
         uint32_t index       = _freeIndices[_availableIndex++];
         _objs[index]._poolId = index;
-        return _objs[index];
+        return &_objs[index];
     };
 
     std::vector<T>              _objs;
@@ -59,30 +65,31 @@ class BasePool
 class TexturePool : public BasePool<Texture>
 {
    public:
-    void free(Texture& obj)
+    void free(Texture* obj)
     {
-        if (!(obj._poolId < _objs.size() && obj._poolId >= 0))
+        if (obj == nullptr || !(obj->_poolId < _objs.size() && obj->_poolId >= 0))
         {
             return;
         }
-        _freeIndices[--_availableIndex] = obj._poolId;
-        _allocator->destroy(obj);
-        obj._poolId = -1;
+        _freeIndices[--_availableIndex] = obj->_poolId;
+        _allocator->destroy(*obj);
+        obj->_poolId = -1;
     };
 };
 
 class BufferPool : public BasePool<Buffer>
 {
    public:
-    void free(Buffer& obj)
+    void free(Buffer* obj)
     {
-        if (!(obj._poolId < _objs.size() && obj._poolId >= 0))
+        if (obj == nullptr || !(obj->_poolId < _objs.size() && obj->_poolId >= 0))
         {
             return;
         }
-        _freeIndices[--_availableIndex] = obj._poolId;
-        _allocator->destroy(obj);
-        obj._poolId = -1;
+        _freeIndices[--_availableIndex] = obj->_poolId;
+        _allocator->destroy(*obj);
+        obj->_poolId = -1;
     };
 };
+} // namespace Play
 #endif // RESOURCE_H
