@@ -7,7 +7,6 @@
 #include "tiny_gltf.h"
 #include "iostream"
 #include "PlayApp.h"
-#include "queue"
 #include "nvvk/images_vk.hpp"
 namespace Play
 {

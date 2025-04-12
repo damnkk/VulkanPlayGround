@@ -14,12 +14,8 @@
 #include "nvh/cameramanipulator.hpp"
 #include "stb_image.h"
 #include "SceneNode.h"
-#include "queue"
-#include "iostream"
-#include "chrono"
-#include "numeric"
-#include "numbers"
 #include "RTRenderer.h"
+#include "VolumeRenderer.h"
 #include "Resource.h"
 namespace Play
 {
@@ -68,10 +64,25 @@ void PlayApp::OnInit()
     poolInfo.flags         = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
     vkCreateDescriptorPool(this->m_device, &poolInfo, nullptr, &_descriptorPool);
     NAME_VK(_descriptorPool);
-    if (_renderMode == RenderMode::eRayTracing)
+    switch (_renderMode)
     {
-        _renderer = std::make_unique<RTRenderer>(*this);
+        case eRayTracing:
+        {
+            _renderer = std::make_unique<RTRenderer>(*this);
+            break;
+        }
+        case eVolumeRendering:
+        {
+            _renderer = std::make_unique<VolumeRenderer>(*this);
+            break;
+        }
+        default:
+        {
+            _renderer = std::make_unique<RTRenderer>(*this);
+            break;
+        }
     }
+
     createGraphicsDescriptResource();
     createGraphicsPipeline();
 }

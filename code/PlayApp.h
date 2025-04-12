@@ -9,12 +9,13 @@
 #include "nvvk/raytraceKHR_vk.hpp"
 #include "nvvk/sbtwrapper_vk.hpp"
 #include "nvvk/shadermodulemanager_vk.hpp"
-
+#include "pch.h"
 #include "Renderer.h"
 namespace Play
 {
 struct Renderer;
 struct RTRenderer;
+struct VolumeRenderer;
 class PlayApp : public nvvkhl::AppBaseVk
 {
    public:
@@ -45,6 +46,7 @@ protected:
 
    private:
     friend struct RTRenderer;
+    friend struct VolumeRenderer;
     enum ObjBinding
     {
         eTlas,
@@ -64,6 +66,7 @@ protected:
     {
         eRasterization,
         eRayTracing,
+        eVolumeRendering,
         eRCount
     } _renderMode = eRayTracing;
     friend class ModelLoader;

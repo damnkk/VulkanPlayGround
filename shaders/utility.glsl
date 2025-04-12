@@ -60,7 +60,7 @@ PbrMaterial getMaterialInfo(inout GeomInfo geomInfo)
     materialInfo.T                         = geomInfo.tangent;
     materialInfo.B                         = geomInfo.bitangent;
     materialInfo.N                         = geomInfo.normal;
-    materialInfo.roughness                 = vec2(0.04, 0.04);
+    materialInfo.roughness                 = vec2(0.01, 0.01);
     materialInfo.metallic                  = 0.0;
     materialInfo.transmission              = 1.0;
     materialInfo.isThinWalled              = false;

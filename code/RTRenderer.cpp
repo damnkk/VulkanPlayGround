@@ -7,7 +7,6 @@
 #include "nvvk/shaders_vk.hpp"
 #include "utils.hpp"
 #include "stb_image.h"
-#include "queue"
 namespace Play
 {
 RTRenderer::RTRenderer(PlayApp& app)
