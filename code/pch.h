@@ -14,5 +14,6 @@
 #include "memory"
 #include "cassert"
 #include "functional"
+#include "array"
 
 #endif // PCH_H

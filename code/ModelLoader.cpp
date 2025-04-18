@@ -303,7 +303,7 @@ void ModelLoader::loadModel(std::string path)
                     vert._tangent = glm::vec3(0.0);
                 vertices.push_back(vert);
             }
-            Buffer*         vBuffer      = _app->_bufferPool.alloc();
+            Buffer*         vBuffer      = _app->_bufferPool.alloc<Buffer>();
             VkCommandBuffer tmpCmdBuffer = _app->createTempCmdBuffer();
             VkDeviceSize    vBufferSize  = vertices.size() * sizeof(Vertex);
             nvvk::Buffer    gpuVBuffer   = _app->_alloc.createBuffer(
@@ -330,7 +330,7 @@ void ModelLoader::loadModel(std::string path)
         {
             indices.push_back(gltfScene.m_indices[primMesh.firstIndex + i]);
         }
-        Buffer*         iBuffer      = _app->_bufferPool.alloc();
+        Buffer*         iBuffer      = _app->_bufferPool.alloc<Buffer>();
         VkDeviceSize    iBufferSize  = indices.size() * sizeof(uint32_t);
         VkCommandBuffer tmpCmdBuffer = _app->createTempCmdBuffer();
         nvvk::Buffer    gpuIBuffer   = _app->_alloc.createBuffer(
@@ -358,7 +358,7 @@ void ModelLoader::loadModel(std::string path)
     }
 
     auto         cmd            = _app->createTempCmdBuffer();
-    _materialBuffer             = _app->_bufferPool.alloc();
+    _materialBuffer             = _app->_bufferPool.alloc<Buffer>();
     nvvk::Buffer materialBuf    = _app->_alloc.createBuffer(
         cmd, sizeof(Material) * _sceneMaterials.size(), _sceneMaterials.data(),
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_EXT);
@@ -378,7 +378,7 @@ void ModelLoader::loadModel(std::string path)
             VkExtent2D{(uint32_t) texture.width, (uint32_t) texture.height},
             VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
             true);
-        Texture*    tex = _app->_texturePool.alloc();
+        Texture*    tex = _app->_texturePool.alloc<Texture>();
         nvvk::Image image =
             _app->_alloc.createImage(cmd, texture.image.size(), texture.image.data(), imageInfo,
                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
@@ -407,7 +407,7 @@ void ModelLoader::loadModel(std::string path)
         _sceneTextures.push_back(tex);
     }
 
-    _instanceBuffer                    = _app->_bufferPool.alloc();
+    _instanceBuffer                    = _app->_bufferPool.alloc<Buffer>();
     VkCommandBuffer tmpCmdBuffer       = _app->createTempCmdBuffer();
     VkDeviceSize    instanceBufferSize = sizeof(Mesh) * gltfScene.m_nodes.size();
     nvvk::Buffer    gpuInstanceBuffer  = _app->_alloc.createBuffer(
@@ -422,7 +422,7 @@ void ModelLoader::loadModel(std::string path)
     _instanceBuffer->descriptor.range  = instanceBufferSize;
     NAME_VK(_instanceBuffer->buffer);
     if (_emissiveMeshIdx.empty()) _emissiveMeshIdx.push_back(0);
-    _lightMeshIdxBuffer                = _app->_bufferPool.alloc();
+    _lightMeshIdxBuffer                = _app->_bufferPool.alloc<Buffer>();
     tmpCmdBuffer                       = _app->createTempCmdBuffer();
     nvvk::Buffer gpuLightMeshIdxBuffer = _app->_alloc.createBuffer(
         tmpCmdBuffer, sizeof(uint32_t) * _emissiveMeshIdx.size(), _emissiveMeshIdx.data(),

@@ -137,7 +137,7 @@ void RTRenderer::loadEnvTexture()
         VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
         VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_FALSE,
         1.0f, VK_SAMPLER_MIPMAP_MODE_LINEAR);
-    _envTexture       = PlayApp::AllocTexture();
+    _envTexture       = PlayApp::AllocTexture<Texture>();
     auto          cmd = _app->createTempCmdBuffer();
     nvvk::Texture nvvkTexture =
         _app->_alloc.createTexture(cmd, width * height * 4 * sizeof(float), data, imageCreateInfo,
@@ -238,7 +238,7 @@ void RTRenderer::loadEnvTexture()
         VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
         VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_FALSE,
         1.0f, VK_SAMPLER_MIPMAP_MODE_LINEAR);
-    _envLookupTexture          = PlayApp::AllocTexture();
+    _envLookupTexture          = PlayApp::AllocTexture<Texture>();
     auto          cmd2         = _app->createTempCmdBuffer();
     nvvk::Texture nvvkTexture2 = _app->_alloc.createTexture(
         cmd2, width * height * 4 * sizeof(float), cache.data(), imageCreateInfo2,
@@ -510,7 +510,7 @@ void RTRenderer::rayTraceRTCreate()
         VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
         false);
-    rayTraceRT             = PlayApp::AllocTexture();
+    rayTraceRT             = PlayApp::AllocTexture<Texture>();
     auto samplerCreateInfo = nvvk::makeSamplerCreateInfo(
         VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT,
         VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT);
@@ -529,7 +529,7 @@ void RTRenderer::rayTraceRTCreate()
 void RTRenderer::createRenderBuffer()
 {
     // Render Uniform Buffer
-    _renderUniformBuffer = PlayApp::AllocBuffer();
+    _renderUniformBuffer = PlayApp::AllocBuffer<Buffer>();
     VkBufferCreateInfo bufferInfo =
         nvvk::makeBufferCreateInfo(sizeof(RenderUniform), VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT_KHR);
     auto nvvkBuffer = _app->_alloc.createBuffer(
@@ -633,7 +633,7 @@ void RTRenderer::createPostProcessRT(){
     VkImageCreateInfo postProcessRTInfo =  nvvk::makeImage2DCreateInfo(this->_app->getSize(),VK_FORMAT_R8G8B8A8_UNORM,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,false);
     VkSamplerCreateInfo postProcessRTSamplerInfo = nvvk::makeSamplerCreateInfo(VK_FILTER_LINEAR,VK_FILTER_LINEAR,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
     auto cmd = _app->createTempCmdBuffer();
-    _postProcessRT = PlayApp::AllocTexture();
+    _postProcessRT = PlayApp::AllocTexture<Texture>();
     nvvk::Texture nvvkTexture = _app->_alloc.createTexture(cmd,0,nullptr,postProcessRTInfo,postProcessRTSamplerInfo,VK_IMAGE_LAYOUT_UNDEFINED);
     _app->submitTempCmdBuffer(cmd);
     VkImageViewCreateInfo postProcessRTViewInfo = nvvk::makeImage2DViewCreateInfo(nvvkTexture.image,postProcessRTInfo.format,VK_IMAGE_ASPECT_COLOR_BIT,1,nullptr);

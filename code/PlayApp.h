@@ -30,9 +30,16 @@ class PlayApp : public nvvkhl::AppBaseVk
     {
         return _scene;
     };
-
+    nvvk::ResourceAllocatorVma& getAlloc()
+    {
+        return _alloc;
+    }
+    inline Texture* CreateTexture(VkImageCreateInfo& info, VkCommandBuffer* cmd = nullptr);
+    template <typename T>
     static inline Texture* AllocTexture();
     static inline void     FreeTexture(Texture* texture);
+    inline Buffer* CreateBuffer(VkBufferCreateInfo& info, VkMemoryPropertyFlags memProperties);
+    template <typename T>
     static inline Buffer*  AllocBuffer();
     static inline void     FreeBuffer(Buffer* buffer);
     static inline void*    MapBuffer(Buffer& buffer);
@@ -68,7 +75,7 @@ protected:
         eRayTracing,
         eVolumeRendering,
         eRCount
-    } _renderMode = eRayTracing;
+    } _renderMode = eVolumeRendering;
     friend class ModelLoader;
     ModelLoader _modelLoader;
     static nvvk::ResourceAllocatorVma _alloc;
@@ -85,17 +92,20 @@ protected:
     Scene                     _scene;
 };
 
+template <typename T>
 inline Texture* PlayApp::AllocTexture()
 {
-    return _texturePool.alloc();
+    return _texturePool.alloc<T>();
 }
+
 inline void PlayApp::FreeTexture(Texture* texture)
 {
     _texturePool.free(texture);
 }
+template <typename T>
 inline Buffer* PlayApp::AllocBuffer()
 {
-    return _bufferPool.alloc();
+    return _bufferPool.alloc<T>();
 }
 inline void PlayApp::FreeBuffer(Buffer* buffer)
 {

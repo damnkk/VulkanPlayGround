@@ -8,6 +8,7 @@ namespace Play
 {
 struct Texture : public nvvk::Texture
 {
+    Texture(int poolID) : _poolId(poolID) {};
     VkFormat    _format      = VK_FORMAT_UNDEFINED;
     VkImageType _type        = VK_IMAGE_TYPE_2D;
     uint8_t     _mipmapLevel = 1;
@@ -17,6 +18,7 @@ struct Texture : public nvvk::Texture
 
 struct Buffer : public nvvk::Buffer
 {
+    Buffer(int poolID) : _poolId(poolID) {};
     int                    _poolId = -1;
     VkDescriptorBufferInfo descriptor;
 };
@@ -40,23 +42,25 @@ class BasePool
     {
         for (auto& obj : _objs)
         {
-            if (obj._poolId >= 0)
+            if (obj && obj->_poolId >= 0)
             {
-                _allocator->destroy(obj);
-                obj._poolId = -1;
+                _allocator->destroy(*obj);
+                obj->_poolId = -1;
+                delete (obj);
             }
         }
     }
 
+    template <typename TT>
     T* alloc()
     {
         assert(_availableIndex < _objs.size());
         uint32_t index       = _freeIndices[_availableIndex++];
-        _objs[index]._poolId = index;
-        return &_objs[index];
+        _objs[index]         = static_cast<T*>(new TT(index));
+        return _objs[index];
     };
 
-    std::vector<T>              _objs;
+    std::vector<T*>             _objs;
     std::vector<uint32_t>       _freeIndices;
     uint32_t                    _availableIndex = 0;
     nvvk::ResourceAllocatorVma* _allocator;
