@@ -1,5 +1,5 @@
 #include "RTRenderer.h"
-#include "SceneNode.h"
+#include "resourceManagement/SceneNode.h"
 #include "PlayApp.h"
 #include "nvvk/debug_util_vk.hpp"
 #include "nvvk/buffers_vk.hpp"

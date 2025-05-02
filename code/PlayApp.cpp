@@ -13,10 +13,11 @@
 #include "nvh/fileoperations.hpp"
 #include "nvh/cameramanipulator.hpp"
 #include "stb_image.h"
-#include "SceneNode.h"
-#include "RTRenderer.h"
-#include "VolumeRenderer.h"
-#include "Resource.h"
+#include "resourceManagement/SceneNode.h"
+#include "renderer/RTRenderer.h"
+#include "renderer/VolumeRenderer.h"
+#include "resourceManagement/Resource.h"
+#include "debugger/debugger.h"
 namespace Play
 {
 nvvk::ResourceAllocatorVma PlayApp::_alloc;
@@ -36,6 +37,7 @@ struct ScopeTimer
 
 void PlayApp::OnInit()
 {
+    // NsightDebugger::initInjection();
     _modelLoader.init(this);
     CameraManip.setWindowSize(this->getSize().width, this->getSize().height);
     // CameraManip.setMode(nvh::CameraManipulator::Modes::Fly);
@@ -58,6 +60,7 @@ void PlayApp::OnInit()
         {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1024},
         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1024},
     };
+
     poolInfo.poolSizeCount = 5;
     poolInfo.pPoolSizes    = poolSize;
     poolInfo.maxSets       = 4096;
@@ -215,9 +218,8 @@ void PlayApp::createGraphicsPipeline()
     gpipelineState.depthStencilState.depthTestEnable  = VK_TRUE;
     gpipelineState.depthStencilState.depthWriteEnable = VK_TRUE;
     VkViewport viewport{0.0f, 0.0f, (float) getSize().width, (float) getSize().height, 0.0f, 1.0f};
-    std::vector<VkDynamicState> dynamicStates = {
-        VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE,
-        VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE};
+    std::vector<VkDynamicState> dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT,
+                                                 VK_DYNAMIC_STATE_SCISSOR};
     gpipelineState.setDynamicStateEnablesCount(dynamicStates.size());
     for (int i = 0; i < dynamicStates.size(); ++i)
     {
@@ -248,6 +250,10 @@ void PlayApp::OnPostRender()
     renderPassBeginInfo.pClearValues    = clearValue;
     vkCmdBeginRenderPass(cmd, &renderPassBeginInfo, VkSubpassContents::VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _graphicsPipeline);
+    VkViewport viewport{0.0f, 0.0f, (float) getSize().width, (float) getSize().height, 0.0f, 1.0f};
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+    VkRect2D scissor = {{0, 0}, this->getSize()};
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _graphicsPipelineLayout, 0, 1,
                             &_graphicDescriptorSet, 0, nullptr);
     vkCmdDraw(cmd, 3, 1, 0, 0);

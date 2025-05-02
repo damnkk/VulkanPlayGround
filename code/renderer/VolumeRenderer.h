@@ -3,6 +3,9 @@
 #include "Renderer.h"
 #include "glm/glm.hpp"
 #include "nvvk/pipeline_vk.hpp"
+#include "nvvk/descriptorsets_vk.hpp"
+#include "nvvk/compute_vk.hpp"
+#include "nvh/cameramanipulator.hpp"
 #include <vulkan/vulkan_core.h>
 namespace Play
 {
@@ -130,6 +133,46 @@ class ColorTransferFunction1D
     PiecewiseLinearFunction<> PLF2;
 };
 
+struct VolumePushConstant
+{
+    int test;
+};
+class Buffer;
+struct ComputePass
+{
+private:
+    std::vector<Texture*> outputComponent;
+    nvvk::PushComputeDispatcher<VolumePushConstant> dispatcher;
+    VkDescriptorSet                                 descSet;
+    VkDescriptorSetLayout                           descLayout;
+    std::vector<uint8_t> shaderCode;
+    std::vector<Texture*> inputTextures;
+    std::vector<Buffer*> inputBuffers;
+    struct layoutState
+    {
+        VkImageLayout initlayout;
+        VkImageLayout finallayout;
+        bool needClear;
+    };
+    std::vector<layoutState> layoutStates;
+    std::vector<VkDescriptorType> bufferTypes;
+    PlayApp* app;
+
+   public:
+    ComputePass() = default;
+    ComputePass(PlayApp* _app);
+    ComputePass& addInputTexture(Texture*);
+    ComputePass& addInputBuffer(Buffer* buffer, VkDescriptorType type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    ComputePass&                  addComponent(Texture* texture,VkImageLayout initLayout=VK_IMAGE_LAYOUT_UNDEFINED,VkImageLayout finalLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, bool needClear = true);
+    void setShaderCode(const std::string& filename);
+    void setShaderCode(const std::vector<uint8_t>& code);
+    void                  build(PlayApp* app);
+    void                  beginPass(VkCommandBuffer cmd);
+    void                  endPass(VkCommandBuffer cmd);
+    void dispatch(VkCommandBuffer cmd, uint32_t width, uint32_t height, uint32_t depth);
+    void destroy();
+}; 
+
 struct Scene;
 struct PlayApp;
 struct Texture;
@@ -137,7 +180,25 @@ struct VolumeTexture;
 class VolumeRenderer : public Renderer
 {
     public:
-    VolumeRenderer(PlayApp& app);
+    enum TextureBinding : uint32_t
+    {
+        eVolumeTexture = 0,
+        eGradientTexture,
+        eDiffuseLookUpTexture,
+        eSpecularLookUpTexture,
+        eRoughnessLookUpTexture,
+        eOpacityLookUpTexture,
+        eEnvTexture,
+        eDiffuseRT,
+        eSpecularRT,
+        eRadianceRT,
+        eNormalRT,
+        eAccumulateRT,
+        ePostProcessRT,
+        eDepthRT,
+        eCount
+    };
+    explicit VolumeRenderer(PlayApp& app);
     ~VolumeRenderer() override = default;
     void OnPreRender() override;
     void OnPostRender() override;
@@ -147,55 +208,49 @@ class VolumeRenderer : public Renderer
     void OnDestroy() override;
     Texture* getOutputTexture() override
     {
-        return _postProcessRT;
+        return _textureSlot[ePostProcessRT];
     };
-
+    PlayApp* getApp(){return _app;}
+    std::array<Texture*, static_cast<uint32_t>(TextureBinding::eCount)> getTextureSlot(){return _textureSlot;}
    protected:
     void loadVolumeTexture(const std::string& filename);
     void createRenderResource();
+    bool checkResourceState();
+    void createComputePasses();
     private:
-    struct VolumeRenderConstanBuffer
+    struct VolumeRenderUniformBuffer
     {
         glm::mat4 viewMatrix = glm::mat4(1.0);
         glm::mat4 inverseViewMatrix = glm::mat4(1.0);
         glm::mat4 projMatrix = glm::mat4(1.0);
         glm::mat4 inverseProjMatrix = glm::mat4(1.0);
         glm::vec3 cameraPos = glm::vec3(0.0);
-        uint32_t  FrameCount=0;
-    } _vConstant;
+        uint32_t  frameCount=0;
+    }_vUniform;
+    VolumePushConstant _vConstant;
 
-    VolumeTexture* _volumeTexture          = nullptr;
-    Texture* _gradientTexture    = nullptr;
-    Texture* _diffuseLookUpTexture = nullptr;
-    Texture* _specularLookUpTexture = nullptr;
-    Texture* _roughnessLookUpTexture = nullptr;
-    Texture* _opacityLookUpTexture   = nullptr;
+    std::array<Texture*, static_cast<uint32_t>(TextureBinding::eCount)> _textureSlot;
+  
 
-    Texture* _diffuseRT = nullptr;
-    Texture* _specularRT = nullptr;
-    Texture* _radianceRT = nullptr;
-    Texture* _normalRT   = nullptr;
-    struct DepthTexture
-    {
-        VkImage        image;
-        VkDeviceMemory memory;
-        VkImageLayout  layout;
-        VkImageView    view;
-    } _depthRT;
-
-    Texture* _accumulateRT = nullptr;
-    Texture* _postProcessRT = nullptr;
+    // Texture* _accumulateRT = nullptr;
+    // Texture* _postProcessRT = nullptr;
     PlayApp* _app;
 
-    VkPipeline _generateRaysPipeline;
-    VkPipeline _radiancesPipeline;
-    VkPipeline _accumulatePipeline;
-    VkPipeline _postProcessPipeline;
+    ComputePass* _generateRaysPass;
+    ComputePass* _radiancesPass;
+    ComputePass* _accumulatePass;
+    ComputePass* _postProcessPass;
+    ComputePass* _gradiantPass;
+
+    Buffer* _renderUniformBuffer;
+
 
     ColorTransferFunction1D  _diffuseTransferFunc;
     ColorTransferFunction1D  _specularTransferFunc;
     ScalarTransferFunction1D _roughnessTransferFunc;
     ScalarTransferFunction1D _opacityTransferFunc;
+    uint32_t                 _frameCount;
+    nvh::CameraManipulator::Camera                    _dirtyCamera;
 };
 
 } // namespace Play

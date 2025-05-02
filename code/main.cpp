@@ -6,7 +6,6 @@
 #include "vk_mem_alloc.h"
 
 #include "backends/imgui_impl_glfw.h"
-
 int main()
 {
     if (glfwInit() != GLFW_TRUE)
@@ -75,6 +74,7 @@ int main()
     ctxCreateInfo.addDeviceExtension("VK_KHR_spirv_1_4", false);
     ctxCreateInfo.addDeviceExtension("VK_KHR_swapchain", false);
     ctxCreateInfo.addDeviceExtension("VK_KHR_ray_query", true);
+    ctxCreateInfo.addDeviceExtension(("VK_KHR_push_descriptor"), false);
 
     nvvk::Context vkCtx;
     vkCtx.init(ctxCreateInfo);

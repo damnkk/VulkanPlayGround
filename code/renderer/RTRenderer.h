@@ -2,7 +2,7 @@
 #define RTRENDERER_H
 #include "Renderer.h"
 #include "nvvk/vulkanhppsupport.hpp"
-#include "Resource.h"
+#include "resourceManagement/Resource.h"
 #include "nvh/cameramanipulator.hpp"
 #include "nvvk/sbtwrapper_vk.hpp"
 #include "nvvk/shadermodulemanager_vk.hpp"

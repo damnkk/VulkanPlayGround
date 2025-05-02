@@ -1,0 +1,21 @@
+// write me a base glsl compute shader
+// that generates rays for volume rendering
+#version 450
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+layout(set = 0,binding = 0) uniform sampler3D volumeTexture; // 3D texture for volume data
+layout(set = 0,binding = 1) uniform sampler3D gradientTexture; // 2D texture for depth information
+layout(set = 0,binding = 2) uniform sampler1D diffuseLookupTexture;
+layout(set = 0,binding = 3) uniform sampler1D specularLookupTexture; // 2D texture for specular information
+layout(set = 0,binding = 4) uniform sampler1D roughnessLookupTexture; // 2D texture for roughness information
+layout(set = 0,binding = 5) uniform sampler1D opacityLookupTexture; // 2D texture for normal information
+
+layout(set = 0,binding = 6,rgba16f) uniform image2D diffuseRT; // 2D texture for normal information
+layout(set = 0,binding = 7,rgba16f) uniform image2D specularRT; // 2D texture for normal information
+layout(set = 0,binding = 8,rgba16f) uniform image2D normalRT; // 2D texture for normal information
+layout(set = 0,binding = 9,rgba16f) uniform image2D depthRT; // 2D texture for normal information
+
+void main(){
+    // Get the local work group ID
+    ivec2 localID = ivec2(gl_LocalInvocationID.xy);
+    int a = 1;
+}

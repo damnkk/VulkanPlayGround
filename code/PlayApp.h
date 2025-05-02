@@ -1,16 +1,16 @@
 #ifndef PLAYAPP_H
 #define PLAYAPP_H
 #include "nvvkhl/appbase_vk.hpp"
-#include "ModelLoader.h" // Ensure ModelLoader class is defined in this header
+#include "resourceManagement/ModelLoader.h" // Ensure ModelLoader class is defined in this header
 #include "nvvk/memallocator_vma_vk.hpp"
 #include "nvvk/acceleration_structures.hpp"
-#include "Resource.h"
-#include "SceneNode.h"
+#include "resourceManagement/Resource.h"
+#include "resourceManagement/SceneNode.h"
 #include "nvvk/raytraceKHR_vk.hpp"
 #include "nvvk/sbtwrapper_vk.hpp"
 #include "nvvk/shadermodulemanager_vk.hpp"
 #include "pch.h"
-#include "Renderer.h"
+#include "renderer/Renderer.h"
 namespace Play
 {
 struct Renderer;
@@ -45,7 +45,9 @@ class PlayApp : public nvvkhl::AppBaseVk
     static inline void*    MapBuffer(Buffer& buffer);
     static inline void     UnmapBuffer(Buffer& buffer);
 
-protected:
+    nvvk::DebugUtil m_debug;
+
+   protected:
     void createGraphicsDescriptResource();
     void createGraphicsDescriptorSet();
     void createGraphicsDescriptorSetLayout();
@@ -54,20 +56,6 @@ protected:
    private:
     friend struct RTRenderer;
     friend struct VolumeRenderer;
-    enum ObjBinding
-    {
-        eTlas,
-        eRayTraceRT,
-        eMaterialBuffer,
-        eRenderUniform,
-        eLightMeshIdx,
-        eInstanceBuffer,
-        // ePrimitiveBuffer,
-        eSceneTexture,
-        eEnvTexture,
-        eEnvLoopupTexture,
-        eCount
-    };
 
     enum RenderMode
     {
@@ -79,7 +67,6 @@ protected:
     friend class ModelLoader;
     ModelLoader _modelLoader;
     static nvvk::ResourceAllocatorVma _alloc;
-    nvvk::DebugUtil            m_debug;
     static TexturePool         _texturePool;
     static BufferPool          _bufferPool;
     VkDescriptorPool          _descriptorPool;

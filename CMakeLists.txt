@@ -47,7 +47,14 @@ compile_glsl_directory(
 	VULKAN_TARGET "vulkan1.3"
 	DEPENDENCY ${VULKAN_BUILD_DEPENDENCIES}
   FLAGS "-I${CMAKE_CURRENT_SOURCE_DIR}/External/nvpro_core/nvvkhl/shaders"
-	)
+)
+compile_glsl_directory(
+	SRC "${CMAKE_CURRENT_SOURCE_DIR}/shaders/volumeRender" 
+	DST "${CMAKE_CURRENT_SOURCE_DIR}/spv" 
+	VULKAN_TARGET "vulkan1.3"
+	DEPENDENCY ${VULKAN_BUILD_DEPENDENCIES}
+  FLAGS "-I${CMAKE_CURRENT_SOURCE_DIR}/External/nvpro_core/nvvkhl/shaders"
+)
 
 # Package shared by all projects
 _add_package_VulkanSDK()
@@ -60,6 +67,7 @@ target_sources(${PROJNAME} PUBLIC ${PACKAGE_SOURCE_FILES})
 target_sources(${PROJNAME} PUBLIC ${GLSL_SOURCES})
 target_sources(${PROJNAME} PUBLIC ${GLSL_HEADERS})
 target_link_libraries(${PROJNAME} ${PLATFORM_LIBRARIES} nvpro_core)
+target_link_libraries(${PROJNAME}  "${PROJECT_SOURCE_DIR}/code/debugger/Nsight/graphics/lib/x64/NGFX_Injection.lib")
 
 foreach(DEBUGLIB ${LIBRARIES_DEBUG})
   target_link_libraries(${PROJNAME} debug ${DEBUGLIB})
@@ -77,6 +85,11 @@ target_include_directories(VulkanPlayGround PRIVATE
     ${CMAKE_SOURCE_DIR}/External/Assimp/include
 )
 
+add_custom_command(TARGET ${PROJNAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy
+        "${CMAKE_CURRENT_SOURCE_DIR}/code/debugger/Nsight/graphics/lib/x64/NGFX_Injection.dll"
+        "${CMAKE_CURRENT_SOURCE_DIR}/build/Debug/NGFX_Injection.dll"
+)
 
 target_copy_to_output_dir()
 _finalize_target( ${PROJNAME} )
