@@ -5,8 +5,87 @@
 layout(set =0,binding = 0) uniform sampler3D volumeTexture; // 3D texture for volume data
 layout(set = 0,binding = 1,rgba16f) uniform image3D gradientTexture; // 2D texture for gradient data
 layout(local_size_x = 8, local_size_y = 8,local_size_z = 8) in; // Work group size
+
+float getIntensity(ivec3 location, ivec3 offset)
+{
+    ivec3 dimension = textureSize(volumeTexture, 0);
+    return texture(volumeTexture, vec3(location + offset) / vec3(dimension)).r;
+}
+
+vec3 ComputeGradientCD(ivec3 location)
+{
+    float dx = getIntensity(location, ivec3(1, 0, 0)) - getIntensity(location, ivec3(-1, 0, 0));
+    float dy = getIntensity(location, ivec3(0, 1, 0)) - getIntensity(location, ivec3(0, -1, 0));
+    float dz = getIntensity(location, ivec3(0, 0, 1)) - getIntensity(location, ivec3(0, 0, -1));
+    return vec3(dx, dy, dz);
+}
+
+vec3 ComputeGradientFD(ivec3 location)
+{
+    float p  = getIntensity(location, ivec3(0, 0, 0));
+    float dx = getIntensity(location, ivec3(1, 0, 0)) - p;
+    float dy = getIntensity(location, ivec3(0, 1, 0)) - p;
+    float dz = getIntensity(location, ivec3(0, 0, 1)) - p;
+    return vec3(dx, dy, dz);
+}
+
+vec3 ComputeGradientFiltered(ivec3 location)
+{
+    vec3 G0 = ComputeGradientCD(location + ivec3(0, 0, 0));
+    vec3 G1 = ComputeGradientCD(location + ivec3(0, 0, 1));
+    vec3 G2 = ComputeGradientCD(location + ivec3(0, 1, 0));
+    vec3 G3 = ComputeGradientCD(location + ivec3(0, 1, 1));
+    vec3 G4 = ComputeGradientCD(location + ivec3(1, 0, 0));
+    vec3 G5 = ComputeGradientCD(location + ivec3(1, 0, 1));
+    vec3 G6 = ComputeGradientCD(location + ivec3(1, 1, 0));
+    vec3 G7 = ComputeGradientCD(location + ivec3(1, 1, 1));
+
+    vec3 L0 = mix(mix(G0, G2, 0.5), mix(G4, G6, 0.5), 0.5);
+    vec3 L1 = mix(mix(G1, G3, 0.5), mix(G5, G7, 0.5), 0.5);
+    return mix(G0, mix(L0, L1, 0.5), 0.5);
+}
+
+vec3 ComputeGradientSobel(uvec3 location)
+{
+    int Gx[3][3][3] = {{{-1, -2, -1}, {-2, -4, -2}, {-1, -2, -1}},
+                       {{+0, +0, +0}, {+0, +0, +0}, {+0, +0, +0}},
+                       {{+1, +2, +1}, {+2, +4, +2}, {+1, +2, +1}}};
+
+    int Gy[3][3][3] = {{{-1, -2, -1}, {+0, +0, +0}, {+1, +2, +1}},
+                       {{-2, -4, -2}, {+0, +0, +0}, {+2, +4, +2}},
+                       {{-1, -2, -1}, {+0, +0, +0}, {+1, +2, +1}}};
+
+    int Gz[3][3][3] = {{{-1, +0, +1}, {-2, +0, +2}, {-1, 0, +1}},
+                       {{-2, +0, +2}, {-4, +0, +4}, {-2, 0, +2}},
+                       {{-1, +0, +1}, {-1, +0, +1}, {-1, 0, +1}}};
+
+    float dx = 0.0f;
+    float dy = 0.0f;
+    float dz = 0.0f;
+    for (int x = -1; x <= 1; x++)
+    {
+        for (int y = -1; y <= 1; y++)
+        {
+            for (int z = -1; z <= 1; z++)
+            {
+                float intensity = getIntensity(ivec3(location), ivec3(x, y, z));
+                dx += Gx[x + 1][y + 1][z + 1] * intensity;
+                dy += Gy[x + 1][y + 1][z + 1] * intensity;
+                dz += Gz[x + 1][y + 1][z + 1] * intensity;
+            }
+        }
+    }
+    return vec3(dx, dy, dz) / 16.0;
+}
+
+vec3 Gradient(uvec3 location)
+{
+    return ComputeGradientSobel(location);
+}
+
 void main(){
     // Get the local work group ID
-    ivec2 localID = ivec2(gl_LocalInvocationID.xy);
-    int a = 1;
+    vec3 gradient = Gradient(gl_GlobalInvocationID.xyz);
+    // Store the gradient in the output texture
+    imageStore(gradientTexture, ivec3(gl_GlobalInvocationID.xyz), vec4(gradient, 1.0));
 }

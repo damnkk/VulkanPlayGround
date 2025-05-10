@@ -1,12 +1,30 @@
 // write me a base glsl compute shader
 // that generates rays for volume rendering
 #version 450
+#extension GL_GOOGLE_include_directive : enable
+#extension GL_EXT_scalar_block_layout : enable
+#include "../common.glsl"
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 layout(set = 0,binding = 0) uniform sampler2D radianceRT; // 3D texture for volume data
-layout(set = 0,binding = 1,rgba16f) uniform image2D accumulateRT; // 2D texture for depth information
+layout(set = 0, binding = 1,scalar) uniform vUniform
+{
+    VolumeUniform volumeUniform;
+};
+layout(set = 0, binding = 2,
+       rgba16f) uniform image2D accumulateRT; // 2D texture for depth information
 
 void main(){
     // Get the local work group ID
-    ivec2 localID = ivec2(gl_LocalInvocationID.xy);
-    int a = 1;
+    ivec2 localID = ivec2(gl_GlobalInvocationID.xy);
+    vec2 resolution = vec2(volumeUniform.RTDimensions);
+    vec2 uv = localID/resolution;
+    vec4 color = texture(radianceRT,uv);
+
+    vec4 oldColor = imageLoad(accumulateRT, localID);
+    if(volumeUniform.frameCount > 1){
+        color = mix(oldColor, color, 1.0/float(volumeUniform.frameCount));
+        imageStore(accumulateRT, localID, color);
+    }else{
+     imageStore(accumulateRT, localID, vec4(color.xyz, 1.0));
+    }
 }

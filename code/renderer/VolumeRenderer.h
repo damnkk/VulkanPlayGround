@@ -107,16 +107,16 @@ class ColorTransferFunction1D
                          this->PLF2.evaluate(intensity)};
     }
 
-    std::vector<glm::vec4> getLookUpData(uint32_t sampleNum)
+    std::vector<glm::u8vec4> getLookUpData(uint32_t sampleNum)
     {
-        std::vector<glm::vec4> data(sampleNum);
+        std::vector<glm::u8vec4> data(sampleNum);
         for (size_t index = 0; index < sampleNum; index++)
         {
             glm::vec3  v = this->Evaluate(index / static_cast<float>(sampleNum - 1));
             const auto x = static_cast<uint8_t>(std::round(255.0f * v.x));
             const auto y = static_cast<uint8_t>(std::round(255.0f * v.y));
             const auto z = static_cast<uint8_t>(std::round(255.0f * v.z));
-            data[index]  = glm::vec4(x, y, z, static_cast<uint8_t>(0));
+            data[index]  = glm::u8vec4(x, y, z, static_cast<uint8_t>(0));
         }
         return data;
     }
@@ -133,16 +133,12 @@ class ColorTransferFunction1D
     PiecewiseLinearFunction<> PLF2;
 };
 
-struct VolumePushConstant
-{
-    int test;
-};
 class Buffer;
 struct ComputePass
 {
-private:
+   private:
     std::vector<Texture*> outputComponent;
-    nvvk::PushComputeDispatcher<VolumePushConstant> dispatcher;
+    nvvk::PushComputeDispatcher<void>               dispatcher;
     VkDescriptorSet                                 descSet;
     VkDescriptorSetLayout                           descLayout;
     std::vector<uint8_t> shaderCode;
@@ -215,32 +211,45 @@ class VolumeRenderer : public Renderer
    protected:
     void loadVolumeTexture(const std::string& filename);
     void createRenderResource();
+    void createRenderTarget();
     bool checkResourceState();
     void createComputePasses();
-    private:
-    struct VolumeRenderUniformBuffer
+
+   private:
+    friend struct ComputePass;
+    struct VolumeUniform
     {
-        glm::mat4 viewMatrix = glm::mat4(1.0);
-        glm::mat4 inverseViewMatrix = glm::mat4(1.0);
-        glm::mat4 projMatrix = glm::mat4(1.0);
-        glm::mat4 inverseProjMatrix = glm::mat4(1.0);
-        glm::vec3 cameraPos = glm::vec3(0.0);
-        uint32_t  frameCount=0;
-    }_vUniform;
-    VolumePushConstant _vConstant;
+        glm::mat4 ProjectMatrix;
+        glm::mat4 ViewMatrix;
+        glm::mat4 WorldMatrix;
+        glm::mat4 NormalMatrix;
+
+        glm::mat4 InvProjectMatrix;
+        glm::mat4 InvViewMatrix;
+        glm::mat4 InvWorldMatrix;
+        glm::mat4 InvNormalMatrix;
+
+        uint32_t  frameCount;
+        float     StepSize;
+        glm::vec2 FrameOffset;
+
+        glm::vec2 RTDimensions;
+        float     Density;
+        float     Exposure;
+        glm::vec3 CameraPos;
+        glm::vec3 BBoxMin;
+        glm::vec3 BBoxMax;
+    } _vUniform;
 
     std::array<Texture*, static_cast<uint32_t>(TextureBinding::eCount)> _textureSlot;
   
-
-    // Texture* _accumulateRT = nullptr;
-    // Texture* _postProcessRT = nullptr;
     PlayApp* _app;
 
-    ComputePass* _generateRaysPass;
-    ComputePass* _radiancesPass;
-    ComputePass* _accumulatePass;
-    ComputePass* _postProcessPass;
-    ComputePass* _gradiantPass;
+    ComputePass* _generateRaysPass = nullptr;
+    ComputePass* _radiancesPass= nullptr;
+    ComputePass* _accumulatePass= nullptr;
+    ComputePass* _postProcessPass= nullptr;
+    ComputePass* _gradiantPass= nullptr;
 
     Buffer* _renderUniformBuffer;
 
@@ -250,6 +259,11 @@ class VolumeRenderer : public Renderer
     ScalarTransferFunction1D _roughnessTransferFunc;
     ScalarTransferFunction1D _opacityTransferFunc;
     uint32_t                 _frameCount;
+    float                                             _density   = 100.0f;
+    float                                             _exposure  = 1.0f;
+    uint32_t                                          _stepCount = 180;
+    glm::vec3                                         _BBoxMin   = glm::vec3(-0.5f,-0.5f,-0.65f);
+    glm::vec3                                         _BBoxMax   = glm::vec3(0.5f,0.5f,0.65f);
     nvh::CameraManipulator::Camera                    _dirtyCamera;
 };
 
