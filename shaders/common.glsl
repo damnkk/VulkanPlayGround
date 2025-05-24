@@ -140,6 +140,11 @@ struct ShaderRateUniformStruct
     mat4 InvViewMatrix;
     vec3 CameraPos;
 };
+struct DynamicStruct{
+    mat4 model;
+    int matIdx;
+};
+
 
 
 #endif // __COMMON_H__

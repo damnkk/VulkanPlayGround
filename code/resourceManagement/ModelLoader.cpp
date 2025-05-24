@@ -18,149 +18,6 @@ void ModelLoader::init(PlayApp* app)
 
 void ModelLoader::loadModel(std::string path)
 {
-    // assimp load implementation
-    // auto             scene          = this->_app->getScene();
-    // uint32_t         textureOffset  = _sceneTextures.size();
-    // uint32_t         vboOffset      = _sceneVBuffers.size();
-    // uint32_t         iboOffset      = _sceneIBuffers.size();
-    // uint32_t         meshOffset     = _sceneMeshes.size();
-    // uint32_t         materialOffset = _sceneMaterials.size();
-    // Assimp::Importer importer;
-    // unsigned int     flags = 0 | aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals
-    // |
-    //                      aiProcess_CalcTangentSpace;
-    // const aiScene* res = importer.ReadFile(path, flags);
-    // if (!res)
-    // {
-    //     LOGE_FILELINE("Failed to load model: %s\n", path.c_str());
-    //     return;
-    // }
-    // else
-    // {
-    //     LOGI("Model loaded successfully: %s\n", path.c_str());
-    // }
-    //  auto                   parentNode = scene._root->addChild(res->mRootNode);
-    //  std::queue<aiNode*>    q;
-    //  std::queue<SceneNode*> sq;
-    //  q.push(res->mRootNode);
-    //  sq.push(parentNode.get());
-    //  while (!q.empty())
-    //  {
-    //      aiNode*    node       = q.front();
-    //      SceneNode* parentNode = sq.front();
-    //      q.pop();
-    //      sq.pop();
-    //      for (int i = 0; i < node->mNumChildren; ++i)
-    //      {
-    //          q.push(node->mChildren[i]);
-    //          auto newNode = parentNode->addChild(node->mChildren[i]);
-    //          if (node->mChildren[i]->mNumMeshes > 0)
-    //          {
-    //              for (int mi = 0; mi < node->mChildren[i]->mNumMeshes; ++mi)
-    //              {
-    //                  newNode->_meshIdx.push_back(node->mChildren[i]->mMeshes[mi] + meshOffset);
-    //              }
-    //          }
-    //          sq.push(newNode.get());
-    //      }
-    //  }
-
-    //  for (int m = 0; m < res->mNumMeshes; ++m)
-    //  {
-    //      aiMesh* aimesh = res->mMeshes[m];
-    //      Mesh    mesh;
-    //      mesh._materialIndex = materialOffset + aimesh->mMaterialIndex;
-    //      std::vector<Vertex> vertices;
-    //      vertices.reserve(aimesh->mNumVertices);
-    //      for (int v = 0; v < aimesh->mNumVertices; ++v)
-    //      {
-    //          Vertex vert;
-    //          vert._position =
-    //              glm::vec3(aimesh->mVertices[v].x, aimesh->mVertices[v].y,
-    //              aimesh->mVertices[v].z);
-    //          vert._normal =
-    //              glm::vec3(aimesh->mNormals[v].x, aimesh->mNormals[v].y, aimesh->mNormals[v].z);
-    //          if (aimesh->HasTangentsAndBitangents())
-    //          {
-    //              vert._tangent = glm::vec3(aimesh->mTangents[v].x, aimesh->mTangents[v].y,
-    //                                        aimesh->mTangents[v].z);
-    //          }
-    //          if (aimesh->HasTextureCoords(0))
-    //          {
-    //              vert._texCoord =
-    //                  glm::vec2(aimesh->mTextureCoords[0][v].x, aimesh->mTextureCoords[0][v].y);
-    //          }
-    //          vertices.push_back(vert);
-    //      }
-    //      std::vector<uint32_t> indices;
-    //      indices.reserve(aimesh->mNumFaces * 3);
-    //      for (int f = 0; f < aimesh->mNumFaces; ++f)
-    //      {
-    //          aiFace face = aimesh->mFaces[f];
-    //          for (int i = 0; i < face.mNumIndices; ++i)
-    //          {
-    //              indices.push_back(face.mIndices[i]);
-    //          }
-    //      }
-    //      auto            vBuffer      = _app->_bufferPool.alloc();
-    //      VkCommandBuffer tmpCmdBuffer = _app->createTempCmdBuffer();
-    //      VkDeviceSize    vBufferSize  = vertices.size() * sizeof(Vertex);
-    //      nvvk::Buffer    gpuVBuffer   = _app->_alloc.createBuffer(
-    //          tmpCmdBuffer, vBufferSize, vertices.data(),
-    //          VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_EXT |
-    //              VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
-
-    //      auto         iBuffer     = _app->_bufferPool.alloc();
-    //      VkDeviceSize iBufferSize = indices.size() * sizeof(uint32_t);
-    //      nvvk::Buffer gpuIBuffer  = _app->_alloc.createBuffer(
-    //          tmpCmdBuffer, iBufferSize, indices.data(),
-    //          VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_EXT |
-    //              VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
-    //      _app->submitTempCmdBuffer(tmpCmdBuffer);
-    //      vBuffer.buffer      = gpuVBuffer.buffer;
-    //      vBuffer.address     = gpuVBuffer.address;
-    //      vBuffer.memHandle   = gpuVBuffer.memHandle;
-    //      iBuffer.buffer      = gpuIBuffer.buffer;
-    //      iBuffer.address     = gpuIBuffer.address;
-    //      iBuffer.memHandle   = gpuIBuffer.memHandle;
-    //      mesh._vertexAddress = vBuffer.address;
-    //      mesh._indexAddress  = iBuffer.address;
-    //      this->_sceneMeshes.push_back(mesh);
-    //  }
-    //  std::vector<std::string> texturePaths;
-
-    //  for (uint32_t m = 0; m < res->mNumMaterials; ++m)
-    //  {
-    //      aiMaterial* aimaterial = res->mMaterials[m];
-    //      Material    material;
-    //      for (int ttype = 1; ttype < AI_TEXTURE_TYPE_MAX + 1; ++ttype)
-    //      {
-    //          for (int tindex = 0; tindex < aimaterial->GetTextureCount((aiTextureType) ttype);
-    //               ++tindex)
-    //          {
-    //              aiString path;
-    //              aimaterial->GetTexture((aiTextureType) ttype, tindex, &path);
-    //              Texture texture;
-    //              texturePaths.push_back(path.C_Str());
-    //          }
-    //      }
-    //      std::array<aiMaterialProperty, 64> properties;
-    //      for (int p = 0; p < aimaterial->mNumProperties; ++p)
-    //      {
-    //          properties[p] = (*(aimaterial->mProperties[p]));
-    //      }
-    //      // material.pbrBaseColorFactor = aimaterial->Get(const char *pKey, unsigned int type,
-    //      // unsigned int idx, Type &pOut)
-    //      int t = 5;
-    //  }
-
-    //  std::vector<aiNode*> childs;
-    //  for (int i = 0; i < res->mRootNode->mNumChildren; ++i)
-    //  {
-    //      childs.push_back(res->mRootNode->mChildren[i]);
-    //  }
-    //  std::cout << "test" << std::endl;
-
     // gltf load implementation
     auto     scene          = this->_app->getScene();
     uint32_t textureOffset  = _sceneTextures.size();
@@ -277,10 +134,6 @@ void ModelLoader::loadModel(std::string path)
     std::unordered_map<std::string, Buffer*> m_cacheBuffers;
     for (const auto& primMesh : gltfScene.m_primMeshes)
     {
-        if (primMesh.materialIndex == 70)
-        {
-            int t = 5;
-        }
         std::stringstream o;
         o << primMesh.vertexOffset << "::" << primMesh.vertexCount;
         std::string key  = o.str();
@@ -297,10 +150,11 @@ void ModelLoader::loadModel(std::string path)
                 vert._position = glm::vec3(gltfScene.m_positions[primMesh.vertexOffset + v]);
                 vert._normal   = glm::vec3(gltfScene.m_normals[primMesh.vertexOffset + v]);
                 vert._texCoord = glm::vec2(gltfScene.m_texcoords0[primMesh.vertexOffset + v]);
-                if (gltfScene.m_tangents.size() > 0)
-                    vert._tangent = glm::vec3(gltfScene.m_tangents[primMesh.vertexOffset + v]);
-                else
-                    vert._tangent = glm::vec3(0.0);
+                //TODO:nvpro_core gltfScene loader got some issue with tangent, so tangent is set to 0 tmeporarily
+                // if (gltfScene.m_tangents.size() > 0)
+                //     vert._tangent = glm::vec3(gltfScene.m_tangents[primMesh.vertexOffset + v]);
+                // else
+                vert._tangent = glm::vec3(0.0);
                 vertices.push_back(vert);
             }
             Buffer*         vBuffer      = _app->_bufferPool.alloc<Buffer>();
@@ -350,6 +204,8 @@ void ModelLoader::loadModel(std::string path)
                                        primMesh.indexCount / 3, primMesh.vertexCount,
                                        static_cast<uint32_t>(_sceneVBuffers.size() - 1),
                                        static_cast<uint32_t>(_sceneIBuffers.size() - 1)});
+        _dynamicUniformData.push_back({.model = glm::mat4(1.0f),
+                                 .matIdx = static_cast<uint32_t>(primMesh.materialIndex + (int) materialOffset)});
         if (std::find(lightMateiralIdx.begin(), lightMateiralIdx.end(),
                       primMesh.materialIndex + (int) materialOffset) != lightMateiralIdx.end())
         {
@@ -368,7 +224,7 @@ void ModelLoader::loadModel(std::string path)
     _materialBuffer->memHandle         = materialBuf.memHandle;
     _materialBuffer->descriptor.buffer = materialBuf.buffer;
     _materialBuffer->descriptor.offset = 0;
-    _materialBuffer->descriptor.range  = sizeof(Material) * _sceneMaterials.size();
+    _materialBuffer->descriptor.range  = VK_WHOLE_SIZE;
     NAME_VK(_materialBuffer->buffer);
 
     for (const auto& texture : model.images)
@@ -435,6 +291,25 @@ void ModelLoader::loadModel(std::string path)
     _lightMeshIdxBuffer->descriptor.offset = 0;
     _lightMeshIdxBuffer->descriptor.range  = sizeof(uint32_t) * _emissiveMeshIdx.size();
     NAME_VK(_lightMeshIdxBuffer->buffer);
+
+    _dynamicUniformBuffer = _app->_bufferPool.alloc<Buffer>();
+    VkDeviceSize dynamicUniformBufferSize = sizeof(DynamicStruct) * _dynamicUniformData.size();
+    VkBufferCreateInfo bufferInfo {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    bufferInfo.size = dynamicUniformBufferSize;
+    bufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    nvvk::Buffer nvvkBuffer = _app->_alloc.createBuffer(bufferInfo,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    _dynamicUniformBuffer->buffer            = nvvkBuffer.buffer;
+    _dynamicUniformBuffer->address           = nvvkBuffer.address;
+    _dynamicUniformBuffer->memHandle         = nvvkBuffer.memHandle;
+    _dynamicUniformBuffer->descriptor.buffer = nvvkBuffer.buffer;
+    _dynamicUniformBuffer->descriptor.offset = 0;
+    _dynamicUniformBuffer->descriptor.range  = sizeof(DynamicStruct);
+    void * data = PlayApp::MapBuffer(*_dynamicUniformBuffer);
+    memcpy(data, _dynamicUniformData.data(), dynamicUniformBufferSize);
+    PlayApp::UnmapBuffer(*_dynamicUniformBuffer);
+    NAME_VK(_dynamicUniformBuffer->buffer);
 }
 
 } // namespace Play

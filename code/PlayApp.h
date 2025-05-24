@@ -54,9 +54,9 @@ class PlayApp : public nvvkhl::AppBaseVk
     void createGraphicsPipeline();
 
    private:
-    friend struct RTRenderer;
-    friend struct VolumeRenderer;
-    friend struct ShadingRateRenderer;
+    friend class RTRenderer;
+    friend class VolumeRenderer;
+    friend class ShadingRateRenderer;
 
     enum RenderMode
     {

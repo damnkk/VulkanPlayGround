@@ -47,7 +47,7 @@ class PiecewiseLinearFunction : public PiecewiseFunction<N>
         {
             return this->Value[this->Count - 1];
         }
-        for (int i = 1; i < this->Count; ++i)
+        for (uint32_t i = 1; i < this->Count; ++i)
         {
             auto const p1 = this->Position[i - 1];
             auto const p2 = this->Position[i];

@@ -39,6 +39,12 @@ protected:
     glm::vec3 CameraPos;
     int test = 0;
   }_ShaderRateUniformStruct;
+  struct ComputeUniformStruct{
+    glm::uvec2 FrameSize;
+    glm::uvec2 ShadingRateSize;
+    glm::uvec2 maxRates;
+    uint32_t n_rates;
+  }_ComputeUniformStruct;
   void initPipeline();
   void createRenderResource();
   void createRenderPass();
@@ -55,14 +61,19 @@ protected:
   Texture* _outputTexture = nullptr;
   Texture* _gradientTexture = nullptr;
   Buffer* _renderUniformBuffer = nullptr;
+  Buffer* _computeUniformBuffer = nullptr;
   std::vector<VkWriteDescriptorSet> _writeDescriptorSets;
   VkPipelineLayout _razePipelineLayout = VK_NULL_HANDLE;
   VkPipeline _razePipeline = VK_NULL_HANDLE;
   VkRenderPass _shadingRateRenderPass = VK_NULL_HANDLE;
   VkFramebuffer _shadingRateFramebuffer = VK_NULL_HANDLE;
+  VkDescriptorSet _sceneInstanceSet = VK_NULL_HANDLE;
+  VkDescriptorSetLayout _sceneInstanceSetLayout = VK_NULL_HANDLE;
   VkDescriptorSetLayout _shadingRateSetLayout = VK_NULL_HANDLE;
   VkPhysicalDeviceFragmentShadingRatePropertiesKHR    _physical_device_fragment_shading_rate_properties{};
+  std::vector<VkPhysicalDeviceFragmentShadingRateKHR> fragment_shading_rates{};
   nvh::CameraManipulator::Camera _dirtyCamera;
+  VkExtent2D _shadingRateExtent;
 };
 
 } // namespace Play

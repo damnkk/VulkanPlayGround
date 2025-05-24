@@ -36,7 +36,7 @@ class ModelLoader
     }
     Buffer* getInstanceBuffer()
     {
-        return _instanceBuffer;
+        return _dynamicUniformBuffer;
     }
 
     Buffer* getLightMeshIdxBuffer()
@@ -49,6 +49,16 @@ class ModelLoader
         return _sceneTextures;
     }
 
+    struct alignas(64) DynamicStruct {
+        glm::mat4 model;
+        uint32_t matIdx;
+    };
+
+    std::vector<DynamicStruct> getInstanceData()
+    {
+        return _dynamicUniformData;
+    }
+    
    private:
     PlayApp* _app;
     std::vector<Texture*> _sceneTextures;
@@ -57,11 +67,13 @@ class ModelLoader
     std::vector<Mesh>     _sceneMeshes;
     std::vector<Material> _sceneMaterials;
     std::vector<int32_t>  _emissiveMeshIdx;
+    std::vector<DynamicStruct> _dynamicUniformData;
     nvvk::DebugUtil       m_debug;
 
     Buffer* _materialBuffer;
     Buffer* _instanceBuffer;
     Buffer* _lightMeshIdxBuffer;
+    Buffer* _dynamicUniformBuffer;
 
 }; // namespace Play
 } // namespace Play

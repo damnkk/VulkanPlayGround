@@ -15,7 +15,7 @@ namespace Play
      initPipeline();
  }
 void                 ShadingRateRenderer::OnPreRender()
- {
+{
      ShaderRateUniformStruct* data = static_cast<ShaderRateUniformStruct*>(PlayApp::MapBuffer(*_renderUniformBuffer));
      data->ProjectMatrix = glm::perspectiveFov(CameraManip.getFov(), _app->getSize().width * 1.0f,
                                                _app->getSize().height * 1.0f, 0.1f, 10000.0f);
@@ -33,96 +33,138 @@ void                 ShadingRateRenderer::OnPreRender()
      {
          _dirtyCamera = CameraManip.getCamera();
      }
- }
+}
 void                 ShadingRateRenderer::OnPostRender() {}
 void                 ShadingRateRenderer::RenderFrame()
- {
-     auto cmd = _app->getCommandBuffers()[_app->m_swapChain.getActiveImageIndex()];
-     VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _razePipeline);
+{
+    auto cmd = _app->getCommandBuffers()[_app->m_swapChain.getActiveImageIndex()];
+    auto graphicsRender = [&]( VkExtent2D renderSize, bool enableVSR){
+    VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _razePipeline);
 
-     VkRenderPassBeginInfo renderPassBeginInfo{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-     renderPassBeginInfo.renderPass = _shadingRateRenderPass;
-     renderPassBeginInfo.framebuffer = _shadingRateFramebuffer;
-     renderPassBeginInfo.renderArea = {0,0,_app->getSize().width,_app->getSize().height};
-     VkClearValue clearvalue[4];
-     clearvalue[0].color        = {{0.0f, 1.0f, .0f, 1.0f}};
-     clearvalue[1].depthStencil = {1.0f, 0};
-     clearvalue[2].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
-     clearvalue[3].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
-     renderPassBeginInfo.clearValueCount = 4;
-     renderPassBeginInfo.pClearValues = clearvalue;
-     vkCmdBeginRenderPass(cmd,&renderPassBeginInfo,VkSubpassContents::VK_SUBPASS_CONTENTS_INLINE);
-     std::queue<SceneNode*> nodes;
-     nodes.push(_app->_scene._root.get());
-     auto       sceneVBuffers = _app->_modelLoader.getSceneVBuffers();
-     auto       sceneIBuffers = _app->_modelLoader.getSceneIBuffers();
-     auto       meshes        = _app->_modelLoader.getSceneMeshes();
-     VkViewport viewport      = {
-         0.0f, 0.0f, (float) _app->getSize().width, (float) _app->getSize().height,
-         0.0f, 1.0f};
-     VkRect2D scissor = {{0, 0}, _app->getSize()};
-     vkCmdSetViewport(cmd, 0, 1, &viewport);
-     vkCmdSetScissor(cmd, 0, 1, &scissor);
-     vkCmdPushDescriptorSetKHR(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS, _razePipelineLayout, 0,
-                           _writeDescriptorSets.size(), _writeDescriptorSets.data());
-     VkExtent2D fragmentSize = {1, 1};
-     VkFragmentShadingRateCombinerOpKHR combiner_ops[2];
-     combiner_ops[0] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
-	 combiner_ops[1] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
-     vkCmdSetFragmentShadingRateKHR(cmd, &fragmentSize, combiner_ops);
-                           {
-         // ScopeTimer timer;
-         while (!nodes.empty())
-         {
-             SceneNode* currnode = nodes.front();
-             nodes.pop();
-             if (!currnode->_meshIdx.empty())
-             {
-                 for (auto& meshIdx : currnode->_meshIdx)
-                 {
-                     Constants constants;
-                     constants.model  = currnode->_transform;
-                     constants.matIdx = meshes[meshIdx]._materialIndex;
-                     // LOGI(std::to_string(constants.matIdx).c_str());
-                     // vkCmdPushConstants(
-                     //     cmd, _razePipelineLayout,
-                     //     VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
-                     //     sizeof(Constants), &constants);
-                     VkDeviceSize offset = 0;
-                     vkCmdBindVertexBuffers(cmd, 0, 1,
-                                            &(sceneVBuffers[meshes[meshIdx]._vBufferIdx].buffer),
-                                            &offset);
-                     vkCmdBindIndexBuffer(cmd,
-                     sceneIBuffers[meshes[meshIdx]._iBufferIdx].buffer,
-                                          0, VkIndexType::VK_INDEX_TYPE_UINT32);
-                     vkCmdDrawIndexed(cmd,
-                                      _app->_modelLoader.getSceneMeshes()[meshIdx]._faceCnt
-                                      * 3, 1, 0, 0, 0);
-                 }
-             }
-             for (auto& child : currnode->_children)
-             {
-                 nodes.push(child.get());
-             }
-         }
-     }
+    VkRenderPassBeginInfo renderPassBeginInfo{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+    renderPassBeginInfo.renderPass = _shadingRateRenderPass;
+    renderPassBeginInfo.framebuffer = _shadingRateFramebuffer;
+    renderPassBeginInfo.renderArea = {0,0,_app->getSize().width,_app->getSize().height};
+    VkClearValue clearvalue[4];
+    clearvalue[0].color        = {{0.0f, 1.0f, .0f, 1.0f}};
+    clearvalue[1].depthStencil = {1.0f, 0};
+    clearvalue[2].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+    clearvalue[3].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+    renderPassBeginInfo.clearValueCount = 4;
+    renderPassBeginInfo.pClearValues = clearvalue;
+    vkCmdBeginRenderPass(cmd,&renderPassBeginInfo,VkSubpassContents::VK_SUBPASS_CONTENTS_INLINE);
+    std::queue<SceneNode*> nodes;
+    nodes.push(_app->_scene._root.get());
+    auto       sceneVBuffers = _app->_modelLoader.getSceneVBuffers();
+    auto       sceneIBuffers = _app->_modelLoader.getSceneIBuffers();
+    auto       meshes        = _app->_modelLoader.getSceneMeshes();
+    VkViewport viewport      = {
+        0.0f, 0.0f, float(renderSize.width),float(renderSize.height),
+        0.0f, 1.0f};
+    VkRect2D scissor = {{0, 0}, _app->getSize()};
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+    vkCmdPushDescriptorSetKHR(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS, _razePipelineLayout, 0,
+                        _writeDescriptorSets.size(), _writeDescriptorSets.data());
+    VkExtent2D fragmentSize = {1, 1};
+    VkFragmentShadingRateCombinerOpKHR combiner_ops[2];
+    if(enableVSR)
+    {
+        combiner_ops[0] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
+        combiner_ops[1] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR;
+    }
+    else
+    {
+        combiner_ops[0] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
+        combiner_ops[1] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
+    }
+    vkCmdSetFragmentShadingRateKHR(cmd, &fragmentSize, combiner_ops);
+    {
+    // ScopeTimer timer;
+    while (!nodes.empty())
+    {
+        SceneNode* currnode = nodes.front();
+        nodes.pop();
+        if (!currnode->_meshIdx.empty())
+        {
+            for (auto& meshIdx : currnode->_meshIdx)
+            {
+                Constants constants;
+                constants.model  = currnode->_transform;
+                constants.matIdx = meshes[meshIdx]._materialIndex;
+                // LOGI(std::to_string(constants.matIdx).c_str());
+                // vkCmdPushConstants(
+                //     cmd, _razePipelineLayout,
+                //     VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                //     sizeof(Constants), &constants);
+                VkDeviceSize offset = 0;
+                uint32_t dynamicOffset = meshIdx*sizeof(ModelLoader::DynamicStruct);
+                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _razePipelineLayout, 1, 1, &_sceneInstanceSet, 1, &dynamicOffset);
+                vkCmdBindVertexBuffers(cmd, 0, 1,
+                                    &(sceneVBuffers[meshes[meshIdx]._vBufferIdx].buffer),
+                                    &offset);
+                vkCmdBindIndexBuffer(cmd,
+                sceneIBuffers[meshes[meshIdx]._iBufferIdx].buffer,
+                                    0, VkIndexType::VK_INDEX_TYPE_UINT32);
+                vkCmdDrawIndexed(cmd,
+                                _app->_modelLoader.getSceneMeshes()[meshIdx]._faceCnt
+                                * 3, 1, 0, 0, 0);
+            }
+        }
+        for (auto& child : currnode->_children)
+        {
+            nodes.push(child.get());
+        }
+    }
+    }
      vkCmdEndRenderPass(cmd);
+    };
+    auto computeRender = [&](){
+        _computePass.beginPass(cmd);
+        VkExtent2D dispatchSize = {static_cast<uint32_t>(ceil(_shadingRateExtent.width/8.0f)), static_cast<uint32_t>(ceil(_shadingRateExtent.height/8.0f))};
+        _computePass.dispatch(cmd, dispatchSize.width,  dispatchSize.height, 1);
+        _computePass.endPass(cmd);
+    };
+    graphicsRender({static_cast<uint32_t>(_app->getSize().width*0.25),static_cast<uint32_t>(_app->getSize().height*0.25)}, false);
+    computeRender();
+    graphicsRender({static_cast<uint32_t>(_app->getSize().width),static_cast<uint32_t>(_app->getSize().height)},true);
 }
     
-
 void                 ShadingRateRenderer::SetScene(Scene* scene) {}
 void                 ShadingRateRenderer::OnResize(int width, int height) {}
 void                 ShadingRateRenderer::OnDestroy() {}
 std::vector<VkDescriptorImageInfo> image_infos;
 void                 ShadingRateRenderer::initPipeline()
  {
+    nvvk::DescriptorSetBindings sceneInstanceBindings;
+    sceneInstanceBindings.addBinding({0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1,
+                                      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                                      nullptr});
+    _sceneInstanceSetLayout = sceneInstanceBindings.createLayout(_app->getDevice(), 0, nvvk::DescriptorSupport::INDEXING_EXT);
+    VkDescriptorSetAllocateInfo allocInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+    allocInfo.descriptorPool= _app->_descriptorPool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &_sceneInstanceSetLayout;
+    vkAllocateDescriptorSets(_app->getDevice(), &allocInfo, &_sceneInstanceSet);
+    VkWriteDescriptorSet writeSceneInstanceDescriptorSet{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    writeSceneInstanceDescriptorSet.descriptorCount = 1;
+    writeSceneInstanceDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+    writeSceneInstanceDescriptorSet.dstBinding = 0;
+    writeSceneInstanceDescriptorSet.pBufferInfo = &_app->_modelLoader.getInstanceBuffer()->descriptor;
+    writeSceneInstanceDescriptorSet.pTexelBufferView = nullptr;
+    writeSceneInstanceDescriptorSet.pImageInfo = nullptr;
+    writeSceneInstanceDescriptorSet.dstSet = _sceneInstanceSet;
+    writeSceneInstanceDescriptorSet.dstArrayElement = 0;
+    writeSceneInstanceDescriptorSet.pNext = nullptr;
+    vkUpdateDescriptorSets(_app->getDevice(), 1, &writeSceneInstanceDescriptorSet, 0, nullptr);
+    {
      nvvk::DescriptorSetBindings bindings;
      bindings.addBinding({0,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT|VK_SHADER_STAGE_COMPUTE_BIT,nullptr});
      bindings.addBinding({1,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,1,VK_SHADER_STAGE_FRAGMENT_BIT|VK_SHADER_STAGE_COMPUTE_BIT,nullptr});
-     bindings.addBinding({2,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr});
-     bindings.addBinding({3,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,uint32_t(_app->_modelLoader.getSceneTextures().size()),VK_SHADER_STAGE_FRAGMENT_BIT,nullptr});
+     bindings.addBinding({2,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,uint32_t(_app->_modelLoader.getSceneTextures().size()),VK_SHADER_STAGE_FRAGMENT_BIT,nullptr});
+     bindings.addBinding({3,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr});
      VkWriteDescriptorSet writeDescriptorSet{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
      writeDescriptorSet.descriptorCount = 1;
      writeDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -135,27 +177,32 @@ void                 ShadingRateRenderer::initPipeline()
      writeDescriptorSet.dstBinding = 1;
      writeDescriptorSet.pImageInfo = &_gradientTexture->descriptor;
      _writeDescriptorSets.push_back(writeDescriptorSet);
+     
+     {
+        writeDescriptorSet = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+        writeDescriptorSet.descriptorCount = _app->_modelLoader.getSceneTextures().size();
+        writeDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writeDescriptorSet.dstBinding = 2;
+        image_infos.resize(_app->_modelLoader.getSceneTextures().size());
+        for (int i = 0; i < _app->_modelLoader.getSceneTextures().size(); ++i)
+        {
+        image_infos[i] = _app->_modelLoader.getSceneTextures()[i]->descriptor;
+        }
+        writeDescriptorSet.pImageInfo = image_infos.data();
+        _writeDescriptorSets.push_back(writeDescriptorSet);
+     }
      writeDescriptorSet = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
      writeDescriptorSet.descriptorCount = 1;
      writeDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-     writeDescriptorSet.dstBinding = 2;
+     writeDescriptorSet.dstBinding = 3;
      writeDescriptorSet.pBufferInfo = &_app->_modelLoader.getMaterialBuffer()->descriptor;
      _writeDescriptorSets.push_back(writeDescriptorSet);
-     writeDescriptorSet = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-     writeDescriptorSet.descriptorCount = _app->_modelLoader.getSceneTextures().size();
-     writeDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-     writeDescriptorSet.dstBinding = 3;
-     image_infos.resize(_app->_modelLoader.getSceneTextures().size());
-     for (int i = 0; i < _app->_modelLoader.getSceneTextures().size(); ++i)
-     {
-        image_infos[i] = _app->_modelLoader.getSceneTextures()[i]->descriptor;
-     }
-     writeDescriptorSet.pImageInfo = image_infos.data();
-     _writeDescriptorSets.push_back(writeDescriptorSet);
+
      _shadingRateSetLayout = bindings.createLayout(_app->getDevice(), VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT, nvvk::DescriptorSupport::INDEXING_EXT);
      VkPipelineLayoutCreateInfo pipelineLayoutInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-     pipelineLayoutInfo.setLayoutCount = 1;
-     pipelineLayoutInfo.pSetLayouts    = &_shadingRateSetLayout;
+     std::array<VkDescriptorSetLayout, 2> setLayouts = { _shadingRateSetLayout,_sceneInstanceSetLayout};
+     pipelineLayoutInfo.setLayoutCount = 2;
+     pipelineLayoutInfo.pSetLayouts    = setLayouts.data();
      pipelineLayoutInfo.pushConstantRangeCount = 0;
      pipelineLayoutInfo.pPushConstantRanges    = nullptr;
      vkCreatePipelineLayout(_app->getDevice(), &pipelineLayoutInfo, nullptr, &_razePipelineLayout);
@@ -202,11 +249,12 @@ void                 ShadingRateRenderer::initPipeline()
      }
 
      _razePipeline = gpipelineState.createPipeline();
-
+    }
      _computePass = ComputePass(_app);
-     _computePass.addInputTexture(_gradientTexture);
+     _computePass.addComponent(_gradientTexture,VK_IMAGE_LAYOUT_GENERAL,VK_IMAGE_LAYOUT_GENERAL);
      _computePass.addComponent(_shadingRateTexture,VK_IMAGE_LAYOUT_UNDEFINED,
                                VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR);
+     _computePass.addInputBuffer(_computeUniformBuffer,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
      _computePass.setShaderCode("spv/computeShadingRate.comp.spv");
      _computePass.build(_app);
 }
@@ -224,16 +272,7 @@ void                 ShadingRateRenderer::createRenderResource() {
      _outputTexture->descriptor = texture.descriptor;
      _outputTexture->_format    = image2DCreateinfo.format;
      CUSTOM_NAME_VK(_app->m_debug, _outputTexture->image);
-     image2DCreateinfo.format = VK_FORMAT_R8_UINT;
-     image2DCreateinfo.usage  = VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR | VK_IMAGE_USAGE_STORAGE_BIT;
-     image2DCreateinfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-     texture = _app->getAlloc().createTexture(cmd,0,nullptr,image2DCreateinfo,
-                                                  nvvk::makeSamplerCreateInfo(),VK_IMAGE_LAYOUT_UNDEFINED);
-     _shadingRateTexture->image      = texture.image;
-     _shadingRateTexture->memHandle  = texture.memHandle;
-     _shadingRateTexture->descriptor = texture.descriptor;
-     _shadingRateTexture->_format    = image2DCreateinfo.format;
-     CUSTOM_NAME_VK(_app->m_debug, _shadingRateTexture->image);
+  
      image2DCreateinfo.format = VK_FORMAT_R8G8_UINT;
      image2DCreateinfo.usage  = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
      image2DCreateinfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -244,8 +283,25 @@ void                 ShadingRateRenderer::createRenderResource() {
      _gradientTexture->descriptor = texture.descriptor;
      _gradientTexture->_format    = image2DCreateinfo.format;
      CUSTOM_NAME_VK(_app->m_debug, _gradientTexture->image);
+        
+     image2DCreateinfo.extent.width  = static_cast<uint32_t>(ceil(static_cast<float>(_app->getSize().width) /
+		                                                 static_cast<float>(4)));;
+     image2DCreateinfo.extent.height = static_cast<uint32_t>(ceil(static_cast<float>(_app->getSize().height) /
+		                                                 static_cast<float>(4)));;
+     _shadingRateExtent.width = image2DCreateinfo.extent.width;
+     _shadingRateExtent.height = image2DCreateinfo.extent.height;
+     image2DCreateinfo.format = VK_FORMAT_R8_UINT;
+     image2DCreateinfo.usage  = VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR | VK_IMAGE_USAGE_STORAGE_BIT;
+     image2DCreateinfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+     texture = _app->getAlloc().createTexture(cmd,0,nullptr,image2DCreateinfo,
+                                                  nvvk::makeSamplerCreateInfo(),VK_IMAGE_LAYOUT_UNDEFINED);
+     _shadingRateTexture->image      = texture.image;
+     _shadingRateTexture->memHandle  = texture.memHandle;
+     _shadingRateTexture->descriptor = texture.descriptor;
+     _shadingRateTexture->_format    = image2DCreateinfo.format;
+     CUSTOM_NAME_VK(_app->m_debug, _shadingRateTexture->image);
 
-     {
+    {
          VkImageCreateInfo depthImageCreateInfo = nvvk::makeImage2DCreateInfo(VkExtent2D{_app->getSize().width, _app->getSize().height}, VK_FORMAT_D32_SFLOAT,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, false);
          vkCreateImage(_app->getDevice(), &depthImageCreateInfo, nullptr, &_depthTexture.image);
@@ -278,18 +334,64 @@ void                 ShadingRateRenderer::createRenderResource() {
          VkImageViewCreateInfo imageViewCreateInfo = nvvk::makeImage2DViewCreateInfo(_depthTexture.image, VK_FORMAT_D32_SFLOAT,
                                                                   VK_IMAGE_ASPECT_DEPTH_BIT);
          vkCreateImageView(_app->getDevice(), &imageViewCreateInfo, nullptr, &_depthTexture.descriptor.imageView);
-     }
+    }
+    _app->submitTempCmdBuffer(cmd);
 
-     _app->submitTempCmdBuffer(cmd);
+    _renderUniformBuffer = PlayApp::AllocBuffer<Buffer>();
+    VkBufferCreateInfo bufferInfo = nvvk::makeBufferCreateInfo(sizeof(_ShaderRateUniformStruct), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+    auto nvvkBuffer = _app->_alloc.createBuffer(bufferInfo, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    _renderUniformBuffer->buffer            = nvvkBuffer.buffer;
+    _renderUniformBuffer->address           = nvvkBuffer.address;
+    _renderUniformBuffer->memHandle         = nvvkBuffer.memHandle;
+    _renderUniformBuffer->descriptor = {nvvkBuffer.buffer,0,sizeof(_ShaderRateUniformStruct)};
+    CUSTOM_NAME_VK(_app->m_debug, _renderUniformBuffer->buffer);
 
-     _renderUniformBuffer = PlayApp::AllocBuffer<Buffer>();
-     VkBufferCreateInfo bufferInfo = nvvk::makeBufferCreateInfo(sizeof(_ShaderRateUniformStruct), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-     auto nvvkBuffer = _app->_alloc.createBuffer(bufferInfo, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-     _renderUniformBuffer->buffer            = nvvkBuffer.buffer;
-     _renderUniformBuffer->address           = nvvkBuffer.address;
-     _renderUniformBuffer->memHandle         = nvvkBuffer.memHandle;
-     _renderUniformBuffer->descriptor = {nvvkBuffer.buffer,0,sizeof(_ShaderRateUniformStruct)};
-     CUSTOM_NAME_VK(_app->m_debug, _renderUniformBuffer->buffer);
+    uint32_t fragment_shading_rate_count = 0;
+    vkGetPhysicalDeviceFragmentShadingRatesKHR(_app->getPhysicalDevice(), &fragment_shading_rate_count,
+                                                nullptr);
+    if (fragment_shading_rate_count > 0)
+    {
+        fragment_shading_rates.resize(fragment_shading_rate_count);
+        for (VkPhysicalDeviceFragmentShadingRateKHR &fragment_shading_rate : fragment_shading_rates)
+        {
+            fragment_shading_rate.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_KHR;
+        }
+        vkGetPhysicalDeviceFragmentShadingRatesKHR(_app->getPhysicalDevice(),
+                                                    &fragment_shading_rate_count, fragment_shading_rates.data());
+    }
+
+    uint32_t                max_rate_x = 0, max_rate_y = 0;
+	std::vector<glm::uvec2> shading_rates_u_vec_2;
+	shading_rates_u_vec_2.reserve(fragment_shading_rates.size());
+	for (auto &&rate : fragment_shading_rates)
+	{
+		max_rate_x = std::max(max_rate_x, rate.fragmentSize.width);
+		max_rate_y = std::max(max_rate_y, rate.fragmentSize.height);
+		shading_rates_u_vec_2.emplace_back(glm::uvec2(rate.fragmentSize.width, rate.fragmentSize.height));
+	}
+    _ComputeUniformStruct.maxRates = glm::uvec2(max_rate_x, max_rate_y);
+    _ComputeUniformStruct.n_rates = fragment_shading_rate_count;
+
+    _ComputeUniformStruct.FrameSize = glm::uvec2(_app->getSize().width, _app->getSize().height);
+    _ComputeUniformStruct.ShadingRateSize = glm::uvec2(_shadingRateExtent.width, _shadingRateExtent.height);
+    
+    _computeUniformBuffer= PlayApp::AllocBuffer<Buffer>();
+    VkBufferCreateInfo computeBufferInfo{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    computeBufferInfo.size = sizeof(ComputeUniformStruct)+sizeof(glm::uvec2)*fragment_shading_rate_count;
+    computeBufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    
+    nvvk::Buffer nvvkComputeBuffer = _app->_alloc.createBuffer(computeBufferInfo,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    _computeUniformBuffer->buffer            = nvvkComputeBuffer.buffer;
+    _computeUniformBuffer->address           = nvvkComputeBuffer.address;
+    _computeUniformBuffer->memHandle         = nvvkComputeBuffer.memHandle;
+    _computeUniformBuffer->descriptor = {nvvkComputeBuffer.buffer,0,sizeof(_ComputeUniformStruct)};
+    CUSTOM_NAME_VK(_app->m_debug, _computeUniformBuffer->buffer);
+    
+    const uint32_t buffer_size = static_cast<uint32_t>(sizeof(_ComputeUniformStruct) + shading_rates_u_vec_2.size() * sizeof(shading_rates_u_vec_2[0]));
+    void* data = PlayApp::MapBuffer(*_computeUniformBuffer);
+    memcpy(data, &_ComputeUniformStruct, sizeof(_ComputeUniformStruct));
+    memcpy(static_cast<uint8_t*>(data) + sizeof(_ComputeUniformStruct), shading_rates_u_vec_2.data(), shading_rates_u_vec_2.size() * sizeof(shading_rates_u_vec_2[0]));
+    PlayApp::UnmapBuffer(*_computeUniformBuffer);
 }
 
 void                 ShadingRateRenderer::createRenderPass()
@@ -331,8 +433,8 @@ void                 ShadingRateRenderer::createRenderPass()
 // Frequency Fragment attachment
      attachments[3].samples = VK_SAMPLE_COUNT_1_BIT;
      attachments[3].format = VK_FORMAT_R8G8_UINT;
-     attachments[3].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-     attachments[3].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+     attachments[3].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+     attachments[3].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
      attachments[3].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
      attachments[3].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
      attachments[3].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
