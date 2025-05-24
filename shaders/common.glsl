@@ -129,5 +129,17 @@ Intersection IntersectAABB(VolumeRay ray, AABB aabb)
     return intersect;
 }
 
+struct ShaderRateUniformStruct
+{
+    mat4 ProjectMatrix;
+    mat4 ViewMatrix;
+    mat4 WorldMatrix;
+
+    mat4 InvWorldMatrix;
+    mat4 InvProjectMatrix;
+    mat4 InvViewMatrix;
+    vec3 CameraPos;
+};
+
 
 #endif // __COMMON_H__

@@ -61,6 +61,14 @@ int main()
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SM_BUILTINS_FEATURES_NV};
     ctxCreateInfo.addDeviceExtension(VK_NV_SHADER_SM_BUILTINS_EXTENSION_NAME, false,
                                      &smBuiltinsFeature);
+    VkPhysicalDeviceFragmentShadingRateFeaturesKHR fragmentShadingRateFeature;
+    fragmentShadingRateFeature.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR;
+    fragmentShadingRateFeature.attachmentFragmentShadingRate = true;
+    fragmentShadingRateFeature.pipelineFragmentShadingRate = true;
+    fragmentShadingRateFeature.primitiveFragmentShadingRate = true;
+    ctxCreateInfo.addDeviceExtension(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME, false,
+                                     &fragmentShadingRateFeature);
     VkValidationFeatureEnableEXT validationFeatureToEnable =
         VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT;
     VkValidationFeaturesEXT validationInfo       = {VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT};

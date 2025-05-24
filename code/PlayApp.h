@@ -56,14 +56,16 @@ class PlayApp : public nvvkhl::AppBaseVk
    private:
     friend struct RTRenderer;
     friend struct VolumeRenderer;
+    friend struct ShadingRateRenderer;
 
     enum RenderMode
     {
         eRasterization,
         eRayTracing,
         eVolumeRendering,
+        eShadingRateRendering,
         eRCount
-    } _renderMode = eVolumeRendering;
+    } _renderMode = eShadingRateRendering;
     friend class ModelLoader;
     ModelLoader _modelLoader;
     static nvvk::ResourceAllocatorVma _alloc;

@@ -11,7 +11,9 @@ class Renderer
 {
    public:
     Renderer(){};
-    Renderer(PlayApp& app);
+    Renderer(PlayApp& app): _app(&app)
+    {
+    };
     virtual ~Renderer() = default;
 
     virtual void OnPreRender()=0;

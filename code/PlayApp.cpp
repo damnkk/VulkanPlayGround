@@ -16,6 +16,7 @@
 #include "resourceManagement/SceneNode.h"
 #include "renderer/RTRenderer.h"
 #include "renderer/VolumeRenderer.h"
+#include "renderer/ShadingRateRenderer.h"
 #include "resourceManagement/Resource.h"
 #include "debugger/debugger.h"
 namespace Play
@@ -77,6 +78,11 @@ void PlayApp::OnInit()
         case eVolumeRendering:
         {
             _renderer = std::make_unique<VolumeRenderer>(*this);
+            break;
+        }
+        case eShadingRateRendering:
+        {
+            _renderer = std::make_unique<ShadingRateRenderer>(*this);
             break;
         }
         default:
