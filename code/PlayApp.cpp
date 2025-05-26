@@ -51,9 +51,9 @@ void PlayApp::OnInit()
     _texturePool.init(65535, &_alloc);
     _bufferPool.init(65535, &_alloc);
 
-    // _modelLoader.loadModel("D:\\repo\\DogEngine\\models\\DamagedHelmet/DamagedHelmet.gltf");
-    // _modelLoader.loadModel("D:\\repo\\DogEngine\\models\\Camera_01_2k\\Camera_01_2k.gltf");
-    _modelLoader.loadModel("D:\\repo\\glTF-Sample-Models\\2.0\\ToyCar\\glTF\\ToyCar.gltf");
+    _modelLoader.loadModel(".\\resource\\models\\DamagedHelmet/DamagedHelmet.gltf");
+    // _modelLoader.loadModel("D:\\repo\\DogEngine\\models\\MetalRoughSpheres\\MetalRoughSpheres.gltf");
+    // _modelLoader.loadModel("D:\\repo\\glTF-Sample-Models\\2.0\\ToyCar\\glTF\\ToyCar.gltf");
 
     VkDescriptorPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     VkDescriptorPoolSize       poolSize[] = {

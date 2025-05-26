@@ -36,7 +36,7 @@ class ModelLoader
     }
     Buffer* getInstanceBuffer()
     {
-        return _dynamicUniformBuffer;
+        return _instanceBuffer;
     }
 
     Buffer* getLightMeshIdxBuffer()
@@ -57,6 +57,11 @@ class ModelLoader
     std::vector<DynamicStruct> getInstanceData()
     {
         return _dynamicUniformData;
+    }
+
+    Buffer* getDynamicUniformBuffer()
+    {
+        return _dynamicUniformBuffer;
     }
     
    private:

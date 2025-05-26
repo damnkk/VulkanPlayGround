@@ -152,7 +152,7 @@ void                 ShadingRateRenderer::initPipeline()
     writeSceneInstanceDescriptorSet.descriptorCount = 1;
     writeSceneInstanceDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
     writeSceneInstanceDescriptorSet.dstBinding = 0;
-    writeSceneInstanceDescriptorSet.pBufferInfo = &_app->_modelLoader.getInstanceBuffer()->descriptor;
+    writeSceneInstanceDescriptorSet.pBufferInfo = &_app->_modelLoader.getDynamicUniformBuffer()->descriptor;
     writeSceneInstanceDescriptorSet.pTexelBufferView = nullptr;
     writeSceneInstanceDescriptorSet.pImageInfo = nullptr;
     writeSceneInstanceDescriptorSet.dstSet = _sceneInstanceSet;
@@ -285,9 +285,9 @@ void                 ShadingRateRenderer::createRenderResource() {
      CUSTOM_NAME_VK(_app->m_debug, _gradientTexture->image);
         
      image2DCreateinfo.extent.width  = static_cast<uint32_t>(ceil(static_cast<float>(_app->getSize().width) /
-		                                                 static_cast<float>(4)));;
+		                                                 static_cast<float>(_physical_device_fragment_shading_rate_properties.maxFragmentShadingRateAttachmentTexelSize.width)));;
      image2DCreateinfo.extent.height = static_cast<uint32_t>(ceil(static_cast<float>(_app->getSize().height) /
-		                                                 static_cast<float>(4)));;
+		                                                 static_cast<float>(_physical_device_fragment_shading_rate_properties.maxFragmentShadingRateAttachmentTexelSize.width)));;
      _shadingRateExtent.width = image2DCreateinfo.extent.width;
      _shadingRateExtent.height = image2DCreateinfo.extent.height;
      image2DCreateinfo.format = VK_FORMAT_R8_UINT;

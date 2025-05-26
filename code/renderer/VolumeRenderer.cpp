@@ -515,9 +515,7 @@ void VolumeRenderer::createRenderResource()
   
     cmd = _app->createTempCmdBuffer();
     // load env texture
-    std::string path = "D:\\repo\\DogEngine\\models\\skybox\\small_empty_room_1_2k.hdr";
-    // std::string path = "D:\\repo\\DogEngine\\models\\skybox\\graveyard_pathways_2k.hdr";
-    // std::string path = "D:\\repo\\DogEngine\\models\\skybox\\test.hdr";
+    std::string path = ".\\resource\\skybox\\small_empty_room_1_2k.hdr";
     int    width, height, channels;
     float* data = stbi_loadf(path.c_str(), &width, &height, &channels, 4);
     if (!data)

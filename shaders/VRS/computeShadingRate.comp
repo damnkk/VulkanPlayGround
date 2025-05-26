@@ -40,14 +40,16 @@ void main(){
     vec2 freqs = min(1.25 * sqrt(max_freqs), vec2(1, 1));
     const float minRate = 1.0;
     const float maxRate = max(computeUniform.maxRates.x, computeUniform.maxRates.y);
-    const vec2 optimal_rate = freqs * vec2(minRate, maxRate) + (1 - freqs) * vec2(maxRate, maxRate); 
+    // When freqs is high, prefer smaller rates (higher resolution); when low, prefer larger rates (lower resolution)
+    const vec2 desired_rate = mix(vec2(maxRate, maxRate), vec2(minRate, minRate), freqs);
 
     const uint n_rates = computeUniform.n_rates;
     uint optimal_rate_index = 0;
-    float current_cost = 1+2*maxRate*maxRate;
-    for( uint i = 0;i<n_rates;++i){
+    float current_cost = 1e20;
+    for(uint i = 0; i < n_rates; ++i){
         uvec2 rate = computeUniform.rates[i];
-        float cost = (rate.x-optimal_rate.x)*(rate.x-optimal_rate.x)+(rate.y - optimal_rate.y) * (rate.y - optimal_rate.y);
+        float cost = (float(rate.x) - desired_rate.x) * (float(rate.x) - desired_rate.x) +
+                     (float(rate.y) - desired_rate.y) * (float(rate.y) - desired_rate.y);
         if(cost < current_cost){
             current_cost = cost;
             optimal_rate_index = i;
@@ -59,5 +61,11 @@ void main(){
     uint rateCode = uint(optimal_rate_y>>1)|((optimal_rate_x<<1)&12);
 
     imageStore(shadingRateImage, ivec2(x0,y0), uvec4(rateCode));
+    if (x0>60){
+        optimal_rate_x = computeUniform.rates[6].x;
+        optimal_rate_y = computeUniform.rates[6].y;
+        rateCode = uint(optimal_rate_y>>1)|((optimal_rate_x<<1)&12);
+        imageStore(shadingRateImage, ivec2(x0,y0), uvec4(rateCode));
+    }
     
 }

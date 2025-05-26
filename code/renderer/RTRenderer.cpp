@@ -120,9 +120,7 @@ void RTRenderer::SetScene(Scene* scene)
 
 void RTRenderer::loadEnvTexture()
 {
-    std::string path = "D:\\repo\\DogEngine\\models\\skybox\\graveyard_pathways_2k.hdr";
-    // std::string path = "D:\\repo\\DogEngine\\models\\skybox\\small_empty_room_1_2k.hdr";
-    // path             = "D:\\repo\\DogEngine\\models\\skybox\\test.hdr";
+    std::string path = ".\\resource\\skybox\\graveyard_pathways_2k.hdr";
     int    width, height, channels;
     float* data = stbi_loadf(path.c_str(), &width, &height, &channels, 4);
     if (!data)
