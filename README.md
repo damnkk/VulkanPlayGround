@@ -1,8 +1,12 @@
 # VulkanPlayGround(WIP)
 
 A comprehensive Vulkan-based rendering engine featuring advanced graphics techniques and modern GPU programming paradigms.
+![Preview](/asset/preview.png)
 
 ## Features
+### Imgui Multi-view Editor
+### RenderDoc Debug Injection
+
 
 ### Ray Tracing
 - **Multiple Importance Sampling (MIS)** - Advanced Monte Carlo integration for realistic lighting
