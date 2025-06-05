@@ -67,13 +67,14 @@ compile_glsl_directory(
 _add_package_VulkanSDK()
 _add_package_ImGUI()
 _add_nvpro_core_lib()
+add_subdirectory(External/Assimp)
 add_definitions(-DBUILD_SHARED_LIBS=OFF -DASSIMP_WARNINGS_AS_ERRORS=OFF )
 target_compile_definitions(${PROJNAME} PUBLIC ALLOC_VMA)
 target_sources(${PROJNAME} PUBLIC ${COMMON_SOURCE_FILES})
 target_sources(${PROJNAME} PUBLIC ${PACKAGE_SOURCE_FILES})
 target_sources(${PROJNAME} PUBLIC ${GLSL_SOURCES})
 target_sources(${PROJNAME} PUBLIC ${GLSL_HEADERS})
-target_link_libraries(${PROJNAME} ${PLATFORM_LIBRARIES} nvpro_core)
+target_link_libraries(${PROJNAME} ${PLATFORM_LIBRARIES} nvpro_core assimp)
 target_link_libraries(${PROJNAME}  "${PROJECT_SOURCE_DIR}/code/debugger/Nsight/graphics/lib/x64/NGFX_Injection.lib")
 
 foreach(DEBUGLIB ${LIBRARIES_DEBUG})
@@ -88,7 +89,6 @@ target_include_directories(VulkanPlayGround PRIVATE
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/code
     ${PROJECT_SOURCE_DIR}/shaders
-    ${PROJECT_SOURCE_DIR}/External/Walnut/src
     ${CMAKE_SOURCE_DIR}/External/Assimp/include
 )
 
@@ -97,7 +97,11 @@ add_custom_command(TARGET ${PROJNAME} POST_BUILD
         "${CMAKE_CURRENT_SOURCE_DIR}/code/debugger/Nsight/graphics/lib/x64/NGFX_Injection.dll"
         "${CMAKE_CURRENT_SOURCE_DIR}/build/Debug/NGFX_Injection.dll"
 )
-
+add_custom_command(TARGET ${PROJNAME} POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "$<TARGET_FILE:assimp>"
+    "$<TARGET_FILE_DIR:${PROJNAME}>/"
+)
 target_copy_to_output_dir()
 _finalize_target( ${PROJNAME} )
 install(FILES ${SPV_OUTPUT} CONFIGURATIONS Release DESTINATION "bin_${ARCH}/${PROJNAME}/spv")

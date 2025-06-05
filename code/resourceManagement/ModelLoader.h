@@ -3,10 +3,12 @@
 #include "nvh/fileoperations.hpp"
 #include "Resource.h"
 #include "nvvk/debug_util_vk.hpp"
+#include <assimp/scene.h>
 // #include "PlayApp.h"
 namespace Play
 {
 class PlayApp;
+class SceneNode;
 class ModelLoader
 {
    public:
@@ -79,6 +81,11 @@ class ModelLoader
     Buffer* _instanceBuffer;
     Buffer* _lightMeshIdxBuffer;
     Buffer* _dynamicUniformBuffer;
+
+    // Assimp processing functions
+    void processAssimpNode(aiNode* node, const aiScene* scene, SceneNode* parentNode, uint32_t meshOffset, uint32_t materialOffset);
+    uint32_t processAssimpMesh(aiMesh* mesh, const aiScene* scene, uint32_t meshOffset, uint32_t materialOffset);
+    void loadAssimpTexture(const std::string& texturePath);
 
 }; // namespace Play
 } // namespace Play
