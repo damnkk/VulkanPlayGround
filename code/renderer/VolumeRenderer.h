@@ -139,8 +139,6 @@ struct ComputePass
    private:
     std::vector<Texture*> outputComponent;
     nvvk::PushComputeDispatcher<void>               dispatcher;
-    VkDescriptorSet                                 descSet;
-    VkDescriptorSetLayout                           descLayout;
     std::vector<uint8_t> shaderCode;
     std::vector<Texture*> inputTextures;
     std::vector<Buffer*> inputBuffers;
@@ -162,7 +160,15 @@ struct ComputePass
     ComputePass&                  addComponent(Texture* texture,VkImageLayout initLayout=VK_IMAGE_LAYOUT_UNDEFINED,VkImageLayout finalLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, bool needClear = true);
     void setShaderCode(const std::string& filename);
     void setShaderCode(const std::vector<uint8_t>& code);
-    void                  build(PlayApp* app);
+    void reset(){
+        inputTextures.clear();
+        inputBuffers.clear();
+        outputComponent.clear();
+        layoutStates.clear();
+        bufferTypes.clear();
+        shaderCode.clear();
+    }
+    void                  build(PlayApp* app, bool needCreatePipeline = true);
     void                  beginPass(VkCommandBuffer cmd);
     void                  endPass(VkCommandBuffer cmd);
     void dispatch(VkCommandBuffer cmd, uint32_t width, uint32_t height, uint32_t depth);

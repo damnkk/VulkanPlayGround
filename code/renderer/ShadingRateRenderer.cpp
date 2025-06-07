@@ -9,30 +9,31 @@ namespace Play
 {
  ShadingRateRenderer::ShadingRateRenderer(PlayApp& app) : Renderer(app)
  {
-     createRenderPass();
-     createRenderResource();
-     createFrameBuffer();
-     initPipeline();
+    createRenderPass();
+    createRenderTexture();
+    createUniformBuffer();
+    createFrameBuffer();
+    initPipeline();
  }
 void                 ShadingRateRenderer::OnPreRender()
 {
-     ShaderRateUniformStruct* data = static_cast<ShaderRateUniformStruct*>(PlayApp::MapBuffer(*_renderUniformBuffer));
-     data->ProjectMatrix = glm::perspectiveFov(CameraManip.getFov(), _app->getSize().width * 1.0f,
-                                               _app->getSize().height * 1.0f, 0.1f, 10000.0f);
-     data->ProjectMatrix[1][1] *= -1;
-     data->ViewMatrix     = CameraManip.getMatrix();
-     data->WorldMatrix    = glm::mat4(1.0f);
-     data->InvWorldMatrix = glm::inverse(data->WorldMatrix);
+    ShaderRateUniformStruct* data = static_cast<ShaderRateUniformStruct*>(PlayApp::MapBuffer(*_renderUniformBuffer));
+    data->ProjectMatrix = glm::perspectiveFov(CameraManip.getFov(), _app->getSize().width * 1.0f,
+                                            _app->getSize().height * 1.0f, 0.1f, 10000.0f);
+    data->ProjectMatrix[1][1] *= -1;
+    data->ViewMatrix     = CameraManip.getMatrix();
+    data->WorldMatrix    = glm::mat4(1.0f);
+    data->InvWorldMatrix = glm::inverse(data->WorldMatrix);
 
-     data->InvViewMatrix    = glm::inverse(data->ViewMatrix);
-     data->InvProjectMatrix = glm::inverse(data->ProjectMatrix);
-     data->CameraPos        = CameraManip.getEye();
+    data->InvViewMatrix    = glm::inverse(data->ViewMatrix);
+    data->InvProjectMatrix = glm::inverse(data->ProjectMatrix);
+    data->CameraPos        = CameraManip.getEye();
 
-     PlayApp::UnmapBuffer(*_renderUniformBuffer);
-     if (_dirtyCamera != CameraManip.getCamera())
-     {
-         _dirtyCamera = CameraManip.getCamera();
-     }
+    PlayApp::UnmapBuffer(*_renderUniformBuffer);
+    if (_dirtyCamera != CameraManip.getCamera())
+    {
+        _dirtyCamera = CameraManip.getCamera();
+    }
 }
 void                 ShadingRateRenderer::OnPostRender() {}
 void                 ShadingRateRenderer::RenderFrame()
@@ -122,10 +123,10 @@ void                 ShadingRateRenderer::RenderFrame()
      vkCmdEndRenderPass(cmd);
     };
     auto computeRender = [&](){
-        _computePass.beginPass(cmd);
+        _computePass->beginPass(cmd);
         VkExtent2D dispatchSize = {static_cast<uint32_t>(ceil(_shadingRateExtent.width/8.0f)), static_cast<uint32_t>(ceil(_shadingRateExtent.height/8.0f))};
-        _computePass.dispatch(cmd, dispatchSize.width,  dispatchSize.height, 1);
-        _computePass.endPass(cmd);
+        _computePass->dispatch(cmd, dispatchSize.width,  dispatchSize.height, 1);
+        _computePass->endPass(cmd);
     };
     graphicsRender({static_cast<uint32_t>(_app->getSize().width*0.25),static_cast<uint32_t>(_app->getSize().height*0.25)}, false);
     computeRender();
@@ -133,8 +134,45 @@ void                 ShadingRateRenderer::RenderFrame()
 }
     
 void                 ShadingRateRenderer::SetScene(Scene* scene) {}
-void                 ShadingRateRenderer::OnResize(int width, int height) {}
-void                 ShadingRateRenderer::OnDestroy() {}
+void                 ShadingRateRenderer::OnResize(int width, int height) {
+    vkQueueWaitIdle(_app->getQueue());
+    PlayApp::FreeTexture(_shadingRateTexture);
+    PlayApp::FreeTexture(_outputTexture);
+    PlayApp::FreeTexture(_gradientTexture);
+    _depthTexture.Destroy(_app);
+    createRenderTexture();
+    vkDestroyFramebuffer(_app->getDevice(), _shadingRateFramebuffer, nullptr);
+    createFrameBuffer();
+    VkWriteDescriptorSet writeDescriptorSet[2];
+    writeDescriptorSet[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    writeDescriptorSet[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    writeDescriptorSet[0].dstBinding = 1;
+    writeDescriptorSet[0].pImageInfo = &_gradientTexture->descriptor;
+    writeDescriptorSet[0].dstSet = _sceneInstanceSet;
+    writeDescriptorSet[0].descriptorCount = 1;
+    _writeDescriptorSets[1] = writeDescriptorSet[0];
+
+    _computePass->reset();
+    _computePass->addComponent(_gradientTexture,VK_IMAGE_LAYOUT_GENERAL,VK_IMAGE_LAYOUT_GENERAL);
+    _computePass->addComponent(_shadingRateTexture,VK_IMAGE_LAYOUT_UNDEFINED,
+                            VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR);
+    _computePass->addInputBuffer(_computeUniformBuffer,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    _computePass->build(_app,false);
+    
+}
+void                 ShadingRateRenderer::OnDestroy() {
+    delete _computePass;
+    vkDestroyPipeline(_app->getDevice(), _razePipeline, nullptr);
+    vkDestroyPipelineLayout(_app->getDevice(), _razePipelineLayout, nullptr);
+    vkDestroyRenderPass(_app->getDevice(), _shadingRateRenderPass, nullptr);
+    vkDestroyDescriptorSetLayout(_app->getDevice(), _shadingRateSetLayout, nullptr);
+    vkDestroyDescriptorSetLayout(_app->getDevice(), _sceneInstanceSetLayout, nullptr);
+    PlayApp::FreeBuffer(_renderUniformBuffer);
+    PlayApp::FreeBuffer(_computeUniformBuffer);
+    PlayApp::FreeTexture(_shadingRateTexture);
+    PlayApp::FreeTexture(_outputTexture);
+    _depthTexture.Destroy(_app);
+}
 std::vector<VkDescriptorImageInfo> image_infos;
 void                 ShadingRateRenderer::initPipeline()
  {
@@ -250,15 +288,16 @@ void                 ShadingRateRenderer::initPipeline()
 
      _razePipeline = gpipelineState.createPipeline();
     }
-     _computePass = ComputePass(_app);
-     _computePass.addComponent(_gradientTexture,VK_IMAGE_LAYOUT_GENERAL,VK_IMAGE_LAYOUT_GENERAL);
-     _computePass.addComponent(_shadingRateTexture,VK_IMAGE_LAYOUT_UNDEFINED,
-                               VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR);
-     _computePass.addInputBuffer(_computeUniformBuffer,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-     _computePass.setShaderCode("spv/computeShadingRate.comp.spv");
-     _computePass.build(_app);
+    _computePass =new ComputePass(_app);
+    _computePass->addComponent(_gradientTexture,VK_IMAGE_LAYOUT_GENERAL,VK_IMAGE_LAYOUT_GENERAL);
+    _computePass->addComponent(_shadingRateTexture,VK_IMAGE_LAYOUT_UNDEFINED,
+                            VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR);
+    _computePass->addInputBuffer(_computeUniformBuffer,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    _computePass->setShaderCode("spv/computeShadingRate.comp.spv");
+    _computePass->build(_app);
 }
-void                 ShadingRateRenderer::createRenderResource() {
+
+void                 ShadingRateRenderer::createRenderTexture() {
      _outputTexture = PlayApp::AllocTexture<Texture>();
      _shadingRateTexture = PlayApp::AllocTexture<Texture>();
      _gradientTexture = PlayApp::AllocTexture<Texture>();
@@ -337,6 +376,9 @@ void                 ShadingRateRenderer::createRenderResource() {
     }
     _app->submitTempCmdBuffer(cmd);
 
+}
+
+void ShadingRateRenderer::createUniformBuffer(){
     _renderUniformBuffer = PlayApp::AllocBuffer<Buffer>();
     VkBufferCreateInfo bufferInfo = nvvk::makeBufferCreateInfo(sizeof(_ShaderRateUniformStruct), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
     auto nvvkBuffer = _app->_alloc.createBuffer(bufferInfo, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -387,7 +429,6 @@ void                 ShadingRateRenderer::createRenderResource() {
     _computeUniformBuffer->descriptor = {nvvkComputeBuffer.buffer,0,sizeof(_ComputeUniformStruct)};
     CUSTOM_NAME_VK(_app->m_debug, _computeUniformBuffer->buffer);
     
-    const uint32_t buffer_size = static_cast<uint32_t>(sizeof(_ComputeUniformStruct) + shading_rates_u_vec_2.size() * sizeof(shading_rates_u_vec_2[0]));
     void* data = PlayApp::MapBuffer(*_computeUniformBuffer);
     memcpy(data, &_ComputeUniformStruct, sizeof(_ComputeUniformStruct));
     memcpy(static_cast<uint8_t*>(data) + sizeof(_ComputeUniformStruct), shading_rates_u_vec_2.data(), shading_rates_u_vec_2.size() * sizeof(shading_rates_u_vec_2[0]));
@@ -523,8 +564,13 @@ void                 ShadingRateRenderer::createFrameBuffer() {
      fboInfo.pAttachments = imageViews.data();
      vkCreateFramebuffer(_app->getDevice(),&fboInfo,nullptr,&_shadingRateFramebuffer);
      CUSTOM_NAME_VK(_app->m_debug,_shadingRateFramebuffer);
-
-
-
 }
+
+void ShadingRateRenderer::DepthTexture::Destroy(PlayApp* app)
+{
+    vkDestroyImage(app->getDevice(), image, nullptr);
+    vkFreeMemory(app->getDevice(), memory, nullptr);
+    vkDestroyImageView(app->getDevice(), descriptor.imageView, nullptr);
+}
+
 } // namespace Play

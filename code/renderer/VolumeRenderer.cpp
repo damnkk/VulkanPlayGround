@@ -76,7 +76,7 @@ void ComputePass:: setShaderCode(const std::string& filename)
     dispatcher.setCode(shaderCode.data(), shaderCode.size());
 }
 
-void ComputePass::build(PlayApp* _app)
+void ComputePass::build(PlayApp* _app,bool needCreatePipeline)
 {
     
     for(int i = 0;i<inputTextures.size();++i)
@@ -95,7 +95,7 @@ void ComputePass::build(PlayApp* _app)
         dispatcher.getBindings().addBinding(static_cast<uint32_t>(inputTextures.size()) + static_cast<uint32_t>(inputBuffers.size()) + static_cast<uint32_t>(i),
                                             VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1,VK_SHADER_STAGE_COMPUTE_BIT);
     }
-    dispatcher.finalizePipeline();
+    if(needCreatePipeline)dispatcher.finalizePipeline();
 }
 void ComputePass::beginPass(VkCommandBuffer cmd)
 {

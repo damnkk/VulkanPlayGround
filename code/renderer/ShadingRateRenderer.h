@@ -46,7 +46,8 @@ protected:
     uint32_t n_rates;
   }_ComputeUniformStruct;
   void initPipeline();
-  void createRenderResource();
+  void createRenderTexture();
+  void createUniformBuffer();
   void createRenderPass();
   void createFrameBuffer();
   struct DepthTexture
@@ -54,9 +55,10 @@ protected:
     VkImage image;
     VkDeviceMemory memory;
     VkDescriptorImageInfo descriptor;
+    void Destroy(PlayApp* _app);
   }_depthTexture;
 
-  ComputePass _computePass;
+  ComputePass* _computePass;
   Texture* _shadingRateTexture = nullptr;
   Texture* _outputTexture = nullptr;
   Texture* _gradientTexture = nullptr;

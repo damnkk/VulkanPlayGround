@@ -108,7 +108,7 @@ void ModelLoader::loadModel(std::string path)
         }
         
         // Initialize texture indices to -1 (no texture)
-        mat.pbrBaseColorTexture = -1;
+        mat.pbrBaseColorTexture = 0;
         mat.pbrMetallicRoughnessTexture = -1;
         mat.emissiveTexture = -1;
         mat.normalTexture = -1;

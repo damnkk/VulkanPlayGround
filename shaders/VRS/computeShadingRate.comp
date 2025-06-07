@@ -61,11 +61,11 @@ void main(){
     uint rateCode = uint(optimal_rate_y>>1)|((optimal_rate_x<<1)&12);
 
     imageStore(shadingRateImage, ivec2(x0,y0), uvec4(rateCode));
-    if (x0>60){
-        optimal_rate_x = computeUniform.rates[6].x;
-        optimal_rate_y = computeUniform.rates[6].y;
-        rateCode = uint(optimal_rate_y>>1)|((optimal_rate_x<<1)&12);
-        imageStore(shadingRateImage, ivec2(x0,y0), uvec4(rateCode));
-    }
+    // if (x0>60){
+    //     optimal_rate_x = computeUniform.rates[6].x;
+    //     optimal_rate_y = computeUniform.rates[6].y;
+    //     rateCode = uint(optimal_rate_y>>1)|((optimal_rate_x<<1)&12);
+    //     imageStore(shadingRateImage, ivec2(x0,y0), uvec4(rateCode));
+    // }
     
 }
