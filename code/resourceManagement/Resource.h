@@ -8,6 +8,7 @@ namespace Play
 {
 struct Texture : public nvvk::Texture
 {
+    Texture() = default;
     Texture(int poolID) : _poolId(poolID) {};
     VkFormat    _format      = VK_FORMAT_UNDEFINED;
     VkImageType _type        = VK_IMAGE_TYPE_2D;
@@ -21,6 +22,7 @@ struct Buffer : public nvvk::Buffer
     Buffer(int poolID) : _poolId(poolID) {};
     int                    _poolId = -1;
     VkDescriptorBufferInfo descriptor;
+    std::string _debugName;
 };
 
 template <typename T>

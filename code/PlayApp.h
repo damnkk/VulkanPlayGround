@@ -64,6 +64,7 @@ class PlayApp : public nvvkhl::AppBaseVk
         eRayTracing,
         eVolumeRendering,
         eShadingRateRendering,
+        eDeferRendering,
         eRCount
     } _renderMode = eShadingRateRendering;
     friend class ModelLoader;
