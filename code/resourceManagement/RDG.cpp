@@ -3,9 +3,6 @@
 #include "utils.hpp"
 #include "nvh/nvprint.hpp"
 namespace Play{
-
-
-
 // RDGTextureDescriptionPool implementations
 void RDG::RDGTextureDescriptionPool::init(uint32_t poolSize)
 {
@@ -103,7 +100,6 @@ RDG::RenderDependencyGraph::~RenderDependencyGraph()
 }
 
 void                         RDG::RenderDependencyGraph::execute() {}
-void                         RDG::RenderDependencyGraph::addPass() {}
 void                         RDG::RenderDependencyGraph::compile() {}
 RDG::RDGResourceHandle RDG::RenderDependencyGraph::createTexture(
     std::string name, VkFormat format, VkImageType type, VkExtent3D extent,
@@ -377,7 +373,6 @@ RDG::RDGBufferDescription* RDG::RenderDependencyGraph::getBufferDescription(RDGR
     return _rdgBufferPool[handle];
 }
 
-void RDG::RenderDependencyGraph::createPass(RDGPass* pass) {}
 void RDG::RenderDependencyGraph::createTextureByDescription(
     const RDGTextureDescription& description)
 {

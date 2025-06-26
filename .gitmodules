@@ -7,3 +7,6 @@
 [submodule "External/assimp"]
 	path = External/assimp
 	url = https://github.com/assimp/assimp.git
+[submodule "External/shaderc"]
+	path = External/shaderc
+	url = https://github.com/google/shaderc.git
