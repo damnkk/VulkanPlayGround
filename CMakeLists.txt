@@ -30,12 +30,13 @@ if(NOT GLSLANG_SYNC_RESULT EQUAL "0")
     message(FATAL_ERROR "Can not clone spirv-tools, glslang will not be compile successfully")
 endif()
 # 在add_subdirectory(External/shaderc)之前添加
+add_definitions(-DBUILD_SHARED_LIBS=OFF)
 set(SHADERC_SKIP_TESTS ON)
 set(SHADERC_SKIP_EXAMPLES ON)
 set(SHADERC_SKIP_COPYRIGHT_CHECK ON)
 
 # 强制shaderc使用静态版本的依赖
-set(SPIRV_TOOLS_BUILD_STATIC ON)
+set(SPIRV_TOOLS_BUILD_STATIC ON CACHE BOOL "Build SPIRV-Tools as static library")
 add_subdirectory(External/shaderc)
 
 ## Various functions and macros REQUIRED

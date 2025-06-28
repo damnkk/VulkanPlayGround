@@ -4,7 +4,7 @@
 
 #define VMA_IMPLEMENTATION
 #include "vk_mem_alloc.h"
-
+#include "resourceManagement/shaderManager.h"
 #include "backends/imgui_impl_glfw.h"
 int main()
 {
@@ -57,10 +57,6 @@ int main()
                                      &accelFeature); // To build acceleration structures
     ctxCreateInfo.addDeviceExtension("VK_KHR_deferred_host_operations", false);
     ctxCreateInfo.addDeviceExtension(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME, false);
-    VkPhysicalDeviceShaderSMBuiltinsFeaturesNV smBuiltinsFeature{
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SM_BUILTINS_FEATURES_NV};
-    ctxCreateInfo.addDeviceExtension(VK_NV_SHADER_SM_BUILTINS_EXTENSION_NAME, false,
-                                     &smBuiltinsFeature);
     VkPhysicalDeviceFragmentShadingRateFeaturesKHR fragmentShadingRateFeature;
     fragmentShadingRateFeature.sType =
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR;
@@ -86,6 +82,7 @@ int main()
 
     nvvk::Context vkCtx;
     vkCtx.init(ctxCreateInfo);
+    Play::ShaderManager::initialize();
 
     Play::PlayApp*              app = new Play::PlayApp();
     nvvkhl::AppBaseVkCreateInfo appInfo;

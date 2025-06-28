@@ -108,4 +108,5 @@ struct Mesh
     uint     _iBufferIdx;
 };
 
+
 #endif // HOST_DIVICE_H

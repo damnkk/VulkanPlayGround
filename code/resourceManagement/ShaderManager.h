@@ -1,6 +1,7 @@
 #ifndef SHADER_MANAGER_H
 #define SHADER_MANAGER_H
 #include <string.h>
+#include <unordered_set>
 #include <iostream>
 #include <fstream>
 #include <filesystem>
@@ -10,22 +11,40 @@
 
 namespace Play {
 
+    enum struct ShaderType{
+        sVertex,
+        sFragment,
+        sCompute,
+        sMesh,
+        sRayGen,
+        sAnyHit,
+        sClosestHit,
+        sMiss
+    };
+struct ShaderInfo{
+    ShaderType type;
+    std::string shaderName;
+    std::string codePath;
+    std::string spvPath;
+    std::string entryPoint;
+    std::string spvData;
+};
 class ShaderManager {
 public:
-    ShaderManager();
-    ~ShaderManager();
-
-    bool CompileShader(const std::string& source, shaderc_shader_kind kind, std::string& out_spirv);
-    void SetCompilerOptions(const std::unordered_map<std::string, std::string>& options);
-
+    static void initialize();
+    static bool CompileShader();
+    static void SetCompilerOptions(const std::unordered_map<std::string, std::string>& options);
+    
 private:
-    shaderc_compiler_t compiler_;
-    shaderc_compile_options_t options_;
+    static std::unordered_set<std::string> parseIncludeDependencies(const std::string& shaderPath, bool recursive = true);
+    static bool needsRecompilation(const ShaderInfo& info);
+    static bool CompileShader(const std::string& shaderPath, ShaderType type, std::string& spirvData);
+    static void registerShader();
+    static void registerShader(const std::string& ShaderName, const std::string& ShaderCodePath,const std::string& shaderEntryPoint, ShaderType shaderType);
+    static shaderc_compiler_t compiler_;
+    static shaderc_compile_options_t options_;
+    static std::unordered_map<size_t,ShaderInfo> _shaderMap;
 };
-ShaderManager::ShaderManager() {
-    compiler_ = shaderc_compiler_initialize();
-    options_ = shaderc_compile_options_initialize();
-}
 } // namespace Play
 
 #endif // SHADER_MANAGER_H
