@@ -301,4 +301,14 @@ namespace Play{
         return true;
     }
 
+    const ShaderInfo ShaderManager::GetShaderWithType(std::string ShaderName, ShaderType type){
+        auto seed = SHADER_HASH_SEED;
+        auto hash = hash_combine(seed, ShaderName, type);
+        auto it = _shaderMap.find(hash);
+        if (it != _shaderMap.end()) {
+            return it->second;
+        }
+        return {};
+    }
+
 } // namespace Play
