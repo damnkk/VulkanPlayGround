@@ -12,6 +12,10 @@ struct Texture : public nvvk::Texture
     Texture(int poolID) : _poolId(poolID) {};
     VkFormat    _format      = VK_FORMAT_UNDEFINED;
     VkImageType _type        = VK_IMAGE_TYPE_2D;
+    VkExtent3D _extent;
+    VkImageUsageFlags _usageFlags;
+    VkImageAspectFlags _aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
+    VkSampleCountFlags _sampleCount = VK_SAMPLE_COUNT_1_BIT;
     uint8_t     _mipmapLevel = 1;
     std::string _debugName;
     int         _poolId = -1;
@@ -22,6 +26,9 @@ struct Buffer : public nvvk::Buffer
     Buffer(int poolID) : _poolId(poolID) {};
     int                    _poolId = -1;
     VkDescriptorBufferInfo descriptor;
+    VkBufferUsageFlags _usageFlags;
+    VkDeviceSize _size;
+    VkDeviceSize _range = VK_WHOLE_SIZE;
     std::string _debugName;
 };
 

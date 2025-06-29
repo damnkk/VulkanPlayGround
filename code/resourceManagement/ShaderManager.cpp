@@ -6,6 +6,7 @@
 #include <iostream>
 #include <queue>
 #include <unordered_set>
+#include <nvh/fileoperations.hpp>
 
 const size_t SHADER_HASH_SEED = 0xDEADBEEF;
 const std::string SHADER_SAVE_DIR = "./spv";
@@ -306,7 +307,9 @@ namespace Play{
         auto hash = hash_combine(seed, ShaderName, type);
         auto it = _shaderMap.find(hash);
         if (it != _shaderMap.end()) {
-            return it->second;
+            if(it->second.spvData.empty()){
+                it->second.spvData = nvh::loadFile(it->second.spvData, true);
+            }
         }
         return {};
     }

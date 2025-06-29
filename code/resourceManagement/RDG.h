@@ -13,6 +13,9 @@ use resource handle as resource itself,to confirm the dependency, and specify th
 #include "array"
 #include "list"
 #include "vulkan/vulkan.h"
+#include "nvvk/pipeline_vk.hpp"
+#include "nvvk/renderpasses_vk.hpp"
+#include "ShaderManager.h"
 #include "Resource.h"
 #include "PlayApp.h"
 namespace Play{
@@ -44,6 +47,9 @@ public:
         :_resourceType(resourceType),_handle(handle) {}
     
     ResourceType _resourceType;
+    bool isTexture() const { return _resourceType >= ResourceType::eSRVTexture && _resourceType < ResourceType::eTextureTypeEnd; }
+    bool isBuffer() const { return _resourceType >= ResourceType::eSRVBuffer && _resourceType < ResourceType::eBufferTypeEnd; }
+    bool isArray() const { return _resourceType == ResourceType::eSRVTextureArray || _resourceType == ResourceType::eUAVTextureArray || _resourceType == ResourceType::eUAVBufferArray; }
     bool isValid(){return _handle != -1&&_resourceType!=ResourceType::eUndefeined;}
     void invalidate() { _handle = -1; _resourceType = ResourceType::eUndefeined; }
     int32_t getHandle() const { return _handle; }
@@ -57,26 +63,42 @@ class RDGResourceState{
         eReadOnly, //uniform buffer, sampled texture
         eWriteOnly, //most used for color attachments, depth attachments, msaa attachments, shading rate resolve attachments
         eReadWrite, //storage buffer, storage texture
+        eCount
     };
     AccessType _accessType;
     RDGResourceHandle _resourceHandle;
-
 };
 
-class RDGTexture:public Texture{
+class RDGTexture{
+public:
     friend class RenderDependencyGraph;
-    RDGTexture* _next;
-    RDGPass* _lastProducer;
+    friend class RDGTextureDescriptionPool;
+    RDGTexture() = default;
+    RDGTexture(Texture* texture) : _pData(texture) {}
+    RDGTexture(const RDGTexture&) = delete;
+    RDGTexture& operator=(const RDGTexture&) = delete;
+    ~RDGTexture() = default;
+    std::shared_ptr<RDGTexture> _next;
+private:
+    Texture* _pData;
 };
 
 class TextureStates:public RDGResourceState{
    
 };
 
-class RDGBuffer:public Buffer{
+class RDGBuffer{
+public:
     friend class RenderDependencyGraph;
-    RDGBuffer* _next;
-    RDGPass* _lastProducer;
+    friend class RDGBufferDescriptionPool;
+    RDGBuffer() = default;
+    RDGBuffer(Buffer* buffer) : _pData(buffer) {}
+    RDGBuffer(const RDGBuffer&) = delete;
+    RDGBuffer& operator=(const RDGBuffer&) = delete;
+    ~RDGBuffer() = default;
+    std::shared_ptr<RDGBuffer> _next;
+private:
+    Buffer* _pData;
 };
 
 class BufferStates:public RDGResourceState{
@@ -103,9 +125,10 @@ private:
     VkExtent3D _extent;
     VkImageUsageFlags _usageFlags;
     VkImageAspectFlags _aspectFlags;
+    RDGPass* _lastProducer = nullptr;
     int _sampleCount = 1;
     bool _isExternalResource = false;
-    RDGTexture* _texture = nullptr;
+    std::shared_ptr<RDGTexture> _texture = nullptr;
     int32_t _textureCnt = 1;
     std::string _debugName;
 };
@@ -127,16 +150,37 @@ private:
     VkBufferUsageFlags _usageFlags;
     VkDeviceSize _size;
     VkDeviceSize _range = VK_WHOLE_SIZE;
+    RDGPass* _lastProducer = nullptr;
     BufferLocation _location;
     std::string _debugName;
-    RDGBuffer* _buffer;
+    std::shared_ptr<RDGBuffer> _buffer;
     bool _isExternalResource = false;
     int32_t _bufferCnt;
 };
 
 struct RDGShaderParameters{
     bool addResource(RDGResourceHandle resource, RDGResourceState::AccessType accessType);
-    std::vector<std::vector<RDGResourceHandle>> _resources;
+    std::array<std::vector<RDGResourceHandle>, static_cast<size_t>(RDGResourceState::AccessType::eCount)> _resources;
+};
+
+class RDGGraphicPipelineState:public nvvk::GraphicsPipelineState{
+public:
+    RDGGraphicPipelineState() = default;
+    RDGGraphicPipelineState(const RDGGraphicPipelineState& other)= default;
+    ~RDGGraphicPipelineState() = default;
+    
+    void setShaderInfo(const ShaderInfo& shaderInfo);
+    std::string  _vertexShaderName;
+    std::string  _fragmentShaderName;
+};
+
+class RDGComputePipelineState{
+public: 
+    RDGComputePipelineState() = default;
+    RDGComputePipelineState(const RDGComputePipelineState& other)= default;
+    ~RDGComputePipelineState() = default;
+    void setShaderInfo(const ShaderType& shaderInfo);
+    std::string _computeShaderName;
 };
 
 
@@ -151,14 +195,17 @@ public:
         eRenderPass,
         eComputePass,
     };
-    
+protected:
+    RenderDependencyGraph* _hostGraph = nullptr;
 private:
+    friend class RenderDependencyGraph;
+    bool _isClipped= true;
     PassType _passType;
     std::string _name;
     RDGShaderParameters* _shaderParameters;
     std::vector<TextureStates> _textureStates;
     std::vector<BufferStates> _bufferStates;
-    RenderDependencyGraph* _hostGraph = nullptr;
+    std::vector<RDGPass*> _dependencies;
 };
 
 
@@ -169,8 +216,8 @@ private:
 template<typename FLambdaFunction>
 class RDGRenderPass:public RDGPass{
 public:
-    RDGRenderPass(RDGShaderParameters& shaderParameters, uint8_t passType,std::string name="",FLambdaFunction&& executeFunction = nullptr)
-        :RDGPass(shaderParameters, passType, std::move(name)), _executeFunction(std::forward<FLambdaFunction>(executeFunction)) {
+    RDGRenderPass(RDGShaderParameters& shaderParameters, RDGGraphicPipelineState pipelineState,uint8_t passType,std::string name="",FLambdaFunction&& executeFunction = nullptr)
+        :RDGPass(shaderParameters, passType, std::move(name)), _pipelineState(pipelineState), _executeFunction(std::forward<FLambdaFunction>(executeFunction)) {
     }
     void prepareResource() override;
     void execute() {
@@ -179,8 +226,11 @@ public:
         }
     }
 protected:
-   
+   friend class RenderDependencyGraph;
 private:
+    VkRenderPass _renderPass;
+    VkFramebuffer _frameBuffer;
+    RDGGraphicPipelineState _pipelineState;
     FLambdaFunction _executeFunction;
     std::array<RDGResourceHandle,32> _RTSlots;
 };
@@ -197,10 +247,10 @@ public:
             _executeFunction();
         }
     }
-    
+protected:
+    friend class RenderDependencyGraph;
 private:
     FLambdaFunction _executeFunction;
-    
 };
 
 class RDGTextureDescriptionPool : public BasePool<RDGTextureDescription>
@@ -239,21 +289,18 @@ private:
     using BasePool<RDGBufferDescription>::init;
 };
 
-
-
 class RenderDependencyGraph{
 public:
     RenderDependencyGraph();
     ~RenderDependencyGraph();
-    
-    void execute();
-    template<typename LambdaFunction>
-    void addPass(RDGShaderParameters& shaderParameters, LambdaFunction&& executeFunction, uint8_t passType = 0,std::string name="");
-    template<typename LambdaFunction>
-    void addComputePass(RDGShaderParameters& shaderParameters, LambdaFunction&& executeFunction, std::string name = "");
-    template<typename LambdaFunction>
-    void addRenderPass(RDGShaderParameters& shaderParameters, LambdaFunction&& executeFunction, std::string name = "");
+    template<typename PipelineState,typename LambdaFunction>
+    void addPass(RDGShaderParameters& shaderParameters, PipelineState pipelineState,LambdaFunction&& executeFunction, uint8_t passType = 0,std::string name="");
+    template<typename PipelineState,typename LambdaFunction>
+    void addComputePass(RDGShaderParameters& shaderParameters,PipelineState pipelineState, LambdaFunction&& executeFunction, std::string name = "");
+    template<typename PipelineState,typename LambdaFunction>
+    void addRenderPass(RDGShaderParameters& shaderParameters, PipelineState pipelineState, LambdaFunction&& executeFunction, std::string name = "");
     void compile();
+    void execute();
     RDGResourceHandle createTexture(std::string name,VkFormat format,VkImageType type,VkExtent3D extent,VkImageUsageFlags usageFlags,VkImageAspectFlags aspectFlags,int textureCount,int sampleCount);
     RDGResourceHandle createTexture2D(VkFormat format, uint32_t width, uint32_t height, VkImageUsageFlags usageFlags,int textureCount=1);
     RDGResourceHandle createTexture2D(const std::string& name, VkFormat format, uint32_t width, uint32_t height, VkImageUsageFlags usageFlags,int textureCount);
@@ -307,60 +354,68 @@ protected:
     RDGBufferDescription* getBufferDescription(RDGResourceHandle handle) const;
     RDGResourceHandle::ResourceType inferResourceTypeFromImageUsage(VkImageUsageFlags usage, int textureCount);
     RDGResourceHandle::ResourceType inferResourceTypeFromBufferUsage(RDG::RDGBufferDescription& bufferDesc, int bufferCount);
+    void clipPasses();
+    void prepareResource();
+
 protected:
     RDGTextureDescriptionPool _rdgTexturePool;
-    std::vector<int> _rdgAvaliableTextureIndices;
     RDGBufferDescriptionPool _rdgBufferPool;
+    std::vector<int> _rdgAvaliableTextureIndices;
     std::vector<int> _rdgAvaliableBufferIndices;
     std::vector<RDGPass*> _rdgPasses;
+    std::vector<RDGPass*> _clippedPasses;
+    std::unordered_map<Texture*, RDGResourceHandle> _externalTextures;
+    std::unordered_map<Buffer*, RDGResourceHandle> _externalBuffers;
     PlayApp* _app = nullptr;
 };
 
-template<typename  T>
+template<typename PipelineState,typename LambdaFunction>
 void Play::RDG::RenderDependencyGraph::addPass(
-    RDGShaderParameters& shaderParameters, T&& executeFunction, uint8_t passType, std::string name)
+    RDGShaderParameters& shaderParameters, PipelineState pipelineState, LambdaFunction&& executeFunction, uint8_t passType, std::string name)
 {
     RDGPass* pass = nullptr;
     if (passType == 0) {
-        pass = new RDGRenderPass<T>(shaderParameters, passType, std::move(name), std::forward<T>(executeFunction));
+        pass = new RDGRenderPass(shaderParameters, passType, std::move(name), std::forward<LambdaFunction>(executeFunction));
     } else {
-        pass = new RDGComputePass<T>(shaderParameters, passType, std::move(name), std::forward<T>(executeFunction));
+        pass = new RDGComputePass(shaderParameters, passType, std::move(name), std::forward<LambdaFunction>(executeFunction));
     }
     // createPass(pass);
     _rdgPasses.push_back(pass);
 }
 
-template<typename T>
+
+template<typename PipelineState,typename LambdaFunction>
 void Play::RDG::RenderDependencyGraph::addComputePass(
-    RDGShaderParameters& shaderParameters, T&& executeFunction, std::string name)
+    RDGShaderParameters& shaderParameters, PipelineState pipelineState, LambdaFunction&& executeFunction, std::string name)
 {
-    addPass(shaderParameters, std::forward<T>(executeFunction), 1, std::move(name));
+    addPass(shaderParameters, pipelineState,std::forward<LambdaFunction>(executeFunction), 1, std::move(name));
 }
 
-template<typename T>
+template<typename PipelineState,typename LambdaFunction>
 void Play::RDG::RenderDependencyGraph::addRenderPass(
-    RDGShaderParameters& shaderParameters, T&& executeFunction, std::string name)
+    RDGShaderParameters& shaderParameters, PipelineState pipelineState, LambdaFunction&& executeFunction, std::string name)
 {
-    addPass(shaderParameters, std::forward<T>(executeFunction), 0, std::move(name));
+    addPass(shaderParameters,pipelineState,std::forward<LambdaFunction>(executeFunction), 0, std::move(name));
 }
-
 
 template <typename T>
 Play::RDG::RDGResourceHandle Play::RDG::RenderDependencyGraph::createUniformBuffer(const T& data)
 {
-    
 
 }
+
 template <typename T>
 Play::RDG::RDGResourceHandle Play::RDG::RenderDependencyGraph::createUniformBuffer(
     const std::string& name, const T& data)
 {
 }
+
 template <typename T>
 Play::RDG::RDGResourceHandle Play::RDG::RenderDependencyGraph::createStorageBuffer(
     const std::vector<T>& data)
 {
 }
+
 template <typename T>
 Play::RDG::RDGResourceHandle Play::RDG::RenderDependencyGraph::createStorageBuffer(
     const std::string& name, const std::vector<T>& data)

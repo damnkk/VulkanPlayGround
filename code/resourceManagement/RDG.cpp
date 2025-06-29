@@ -20,7 +20,7 @@ void RDG::RDGTextureDescriptionPool::deinit()
     {
         if (obj && obj->_texture)
         {
-            Play::PlayApp::FreeTexture(obj->_texture);
+            Play::PlayApp::FreeTexture(obj->_texture->_pData);
         }
         delete (obj);
     }
@@ -63,7 +63,7 @@ void RDG::RDGBufferDescriptionPool::deinit()
     {
         if (obj && obj->_buffer)
         {
-            Play::PlayApp::FreeBuffer(obj->_buffer);
+            Play::PlayApp::FreeBuffer(obj->_buffer->_pData);
         }
         delete (obj);
     }
@@ -100,7 +100,48 @@ RDG::RenderDependencyGraph::~RenderDependencyGraph()
 }
 
 void                         RDG::RenderDependencyGraph::execute() {}
-void                         RDG::RenderDependencyGraph::compile() {}
+void                         RDG::RenderDependencyGraph::compile()
+{
+    for(auto& pass :this->_rdgPasses){
+        
+        for(auto& readOnlyResource : pass->_shaderParameters->_resources[static_cast<size_t>(RDGResourceState::AccessType::eReadOnly)]) {
+            if (!readOnlyResource.isValid()) return;
+            if (readOnlyResource.isTexture()) {
+                auto textureDescription = this->getTextureDescription(readOnlyResource);
+                pass->_dependencies.push_back(textureDescription->_lastProducer);
+            } else {
+                auto bufferDescription = this->getBufferDescription(readOnlyResource);
+                pass->_dependencies.push_back(bufferDescription->_lastProducer);
+            }
+        }
+
+        for(auto& writeOnlyResource : pass->_shaderParameters->_resources[static_cast<size_t>(RDGResourceState::AccessType::eWriteOnly)]) {
+            if (!writeOnlyResource.isValid()) return;
+            if (writeOnlyResource.isTexture()) {
+                auto textureDescription = this->getTextureDescription(writeOnlyResource);
+                pass->_dependencies.push_back(textureDescription->_lastProducer);
+            } else {
+                auto bufferDescription = this->getBufferDescription(writeOnlyResource);
+                pass->_dependencies.push_back(bufferDescription->_lastProducer);
+            }
+        }
+
+        for(auto& readWriteResource : pass->_shaderParameters->_resources[static_cast<size_t>(RDGResourceState::AccessType::eReadWrite)]) {
+            if (!readWriteResource.isValid()) return;
+            if (readWriteResource.isTexture()) {
+                auto textureDescription = this->getTextureDescription(readWriteResource);
+                pass->_dependencies.push_back(textureDescription->_lastProducer);
+                textureDescription->_lastProducer = pass; // Set the last producer for the texture
+            } else {
+                auto bufferDescription = this->getBufferDescription(readWriteResource);
+                pass->_dependencies.push_back(bufferDescription->_lastProducer);
+                bufferDescription->_lastProducer = pass; // Set the last producer for the buffer
+            }
+        }
+    }
+    clipPasses();
+    prepareResource();
+}
 RDG::RDGResourceHandle RDG::RenderDependencyGraph::createTexture(
     std::string name, VkFormat format, VkImageType type, VkExtent3D extent,
     VkImageUsageFlags usageFlags, VkImageAspectFlags aspectFlags, int sampleCount,int textureCount)
@@ -238,23 +279,86 @@ RDG::RDGResourceHandle RDG::RenderDependencyGraph::createTextureLike(
         refDesc->_aspectFlags, refDesc->_sampleCount, textureCount);
 }
 
-RDG::RDGResourceHandle RDG::RenderDependencyGraph::createTextureLike(
-    const std::string& name, RDGResourceHandle reference, VkFormat format,
-    VkImageUsageFlags usageFlags, int textureCount)
+RDG::RDGResourceHandle RDG::RenderDependencyGraph::createTextureLike(const std::string& name,
+                                                                     RDGResourceHandle  reference,
+                                                                     VkFormat           format,
+                                                                     VkImageUsageFlags  usageFlags,
+                                                                     int textureCount)
 {
-    if (!reference.isValid()) {
+    if (!reference.isValid())
+    {
         throw std::runtime_error("RDGTextureDescriptionPool: Invalid reference texture handle");
     }
     auto refDesc = this->getTextureDescription(reference);
-    if (!refDesc) {
-        throw std::runtime_error("RDGTextureDescriptionPool: Reference texture description not found");
+    if (!refDesc)
+    {
+        throw std::runtime_error(
+            "RDGTextureDescriptionPool: Reference texture description not found");
     }
 
-    return this->createTexture(
-        name, format, refDesc->_type, refDesc->_extent, usageFlags,
-        refDesc->_aspectFlags, refDesc->_sampleCount, textureCount);
+    return this->createTexture(name, format, refDesc->_type, refDesc->_extent, usageFlags,
+                               refDesc->_aspectFlags, refDesc->_sampleCount, textureCount);
 }
+RDG::RDGResourceHandle RDG::RenderDependencyGraph::registExternalTexture(Texture* texture) {
+    RDGResourceHandle handle = this->_rdgTexturePool.alloc();
+    handle._resourceType = inferResourceTypeFromImageUsage(texture->_usageFlags, 1);
+    auto* textureDescription = this->getTextureDescription(handle);
+    textureDescription->_texture= std::make_shared<RDGTexture>(texture);
+    textureDescription->_format = texture->_format;
+    textureDescription->_type = texture->_type;
+    textureDescription->_extent = texture->_extent;
+    textureDescription->_usageFlags = texture->_usageFlags;
+    textureDescription->_aspectFlags = texture->_aspectFlags;
+    textureDescription->_sampleCount = texture->_sampleCount;
+    textureDescription->_isExternalResource = true;
+    _externalTextures[texture] = handle;
+    return handle;
+}
+RDG::RDGResourceHandle RDG::RenderDependencyGraph::registExternalBuffer(Buffer* buffer) {
+    RDGResourceHandle handle = this->_rdgBufferPool.alloc();
+    auto* bufferDescription = this->getBufferDescription(handle);
+    bufferDescription->_buffer = std::make_shared<RDGBuffer>(buffer);
+    bufferDescription->_size = buffer->_size;
+    bufferDescription->_usageFlags = buffer->_usageFlags;
+    bufferDescription->_location = RDGBufferDescription::BufferLocation::eDeviceOnly;
+    bufferDescription->_debugName = buffer->_debugName;
+    bufferDescription->_isExternalResource = true;
+    handle._resourceType = inferResourceTypeFromBufferUsage(*bufferDescription, 1);
+    _externalBuffers[buffer] = handle;
+    return handle;
+}
+void                   RDG::RenderDependencyGraph::onCreatePass(RDGPass* pass) {}
+void                   RDG::RenderDependencyGraph::clipPasses() {
+    std::queue<RDGPass*> dependencyPassQueue;
+    for(auto& externalTexture : this->_externalTextures) {
+        auto textureDescription = this->getTextureDescription(externalTexture.second);
+        if (textureDescription->_lastProducer) {
+            dependencyPassQueue.push(textureDescription->_lastProducer);
+        }
+        
+    }
+    for(auto& externalBuffer : this->_externalBuffers) {
+        auto bufferDescription = this->getBufferDescription(externalBuffer.second);
+        if (bufferDescription->_lastProducer) {
+            dependencyPassQueue.push(bufferDescription->_lastProducer);
+        }
+    }
+    while(!dependencyPassQueue.empty()){
+        RDGPass* pass = dependencyPassQueue.front();
+        dependencyPassQueue.pop();
+        if (pass->_isClipped) continue; // Skip already clipped passes
+        pass->_isClipped = false;
+        for(auto& dependency : pass->_dependencies){
+            dependencyPassQueue.push(dependency);
+        }
 
+    }
+}
+void                   RDG::RenderDependencyGraph::prepareResource() {
+
+    //textures, buffers, fbo, render pass,
+
+}
 
 void RDG::RenderDependencyGraph::destroyTexture(RDGResourceHandle handle) {
     if (!handle.isValid()||(handle._resourceType>=RDGResourceHandle::ResourceType::eTextureTypeEnd)) {
@@ -271,7 +375,7 @@ void RDG::RenderDependencyGraph::destroyTexture(RDGResourceHandle handle) {
         return;
     }
     while(textureDescription->_texture) {
-        Play::PlayApp::FreeTexture(textureDescription->_texture);
+        Play::PlayApp::FreeTexture(textureDescription->_texture->_pData);
         textureDescription->_texture =  textureDescription->_texture->_next;
     }
     this->_rdgTexturePool.destroy(handle);
@@ -292,7 +396,7 @@ void RDG::RenderDependencyGraph::destroyBuffer(RDGResourceHandle handle) {
         return;
     }
     while (bufferDescription->_buffer) {
-        Play::PlayApp::FreeBuffer(bufferDescription->_buffer);
+        Play::PlayApp::FreeBuffer(bufferDescription->_buffer->_pData);
         bufferDescription->_buffer = bufferDescription->_buffer->_next;
     }
     this->_rdgBufferPool.destroy(handle);

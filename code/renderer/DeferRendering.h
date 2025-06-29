@@ -17,7 +17,7 @@ class DeferRenderer : public Renderer
 {
     public:
         explicit DeferRenderer(PlayApp& app);
-        ~DeferRenderer() override = default;
+        ~DeferRenderer() override;
         void OnPreRender() override;
         void OnPostRender() override;
         void RenderFrame() override;
