@@ -92,15 +92,18 @@ inline void PlayApp::FreeTexture(Texture* texture)
 {
     _texturePool.free(texture);
 }
+
 template <typename T>
 inline Buffer* PlayApp::AllocBuffer()
 {
     return _bufferPool.alloc<T>();
 }
+
 inline void PlayApp::FreeBuffer(Buffer* buffer)
 {
     _bufferPool.free(buffer);
 }
+
 inline void* PlayApp::MapBuffer(Buffer& buffer)
 {
     return _alloc.map(buffer);

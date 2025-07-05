@@ -2,7 +2,18 @@
 #include <stdexcept>
 #include "utils.hpp"
 #include "nvh/nvprint.hpp"
-namespace Play{
+namespace Play
+{
+bool RDG::RDGShaderParameters::addResource(RDGResourceHandle             resource,
+                                           RDGResourceState::AccessType  accessType,
+                                           RDGResourceState::AccessStage accessStage)
+{
+    assert(resource.isValid());
+    if (accessType >= RDGResourceState::AccessType::eCount) {
+        throw std::runtime_error("RDGShaderParameters: Invalid access type");
+    }
+    _resources[static_cast<size_t>(accessType)].push_back({accessType,accessStage, resource});
+}
 // RDGTextureDescriptionPool implementations
 void RDG::RDGTextureDescriptionPool::init(uint32_t poolSize)
 {
@@ -105,39 +116,41 @@ void                         RDG::RenderDependencyGraph::compile()
     for(auto& pass :this->_rdgPasses){
         
         for(auto& readOnlyResource : pass->_shaderParameters->_resources[static_cast<size_t>(RDGResourceState::AccessType::eReadOnly)]) {
-            if (!readOnlyResource.isValid()) return;
-            if (readOnlyResource.isTexture()) {
-                auto textureDescription = this->getTextureDescription(readOnlyResource);
+            if (!readOnlyResource._resourceHandle.isValid()) return;
+            if (readOnlyResource._resourceHandle.isTexture()) {
+                auto textureDescription = this->getTextureDescription(readOnlyResource._resourceHandle);
                 pass->_dependencies.push_back(textureDescription->_lastProducer);
             } else {
-                auto bufferDescription = this->getBufferDescription(readOnlyResource);
+                auto bufferDescription = this->getBufferDescription(readOnlyResource._resourceHandle);
                 pass->_dependencies.push_back(bufferDescription->_lastProducer);
             }
         }
 
         for(auto& writeOnlyResource : pass->_shaderParameters->_resources[static_cast<size_t>(RDGResourceState::AccessType::eWriteOnly)]) {
-            if (!writeOnlyResource.isValid()) return;
-            if (writeOnlyResource.isTexture()) {
-                auto textureDescription = this->getTextureDescription(writeOnlyResource);
+            if (!writeOnlyResource._resourceHandle.isValid()) return;
+            if (writeOnlyResource._resourceHandle.isTexture()) {
+                auto textureDescription = this->getTextureDescription(writeOnlyResource._resourceHandle);
                 pass->_dependencies.push_back(textureDescription->_lastProducer);
             } else {
-                auto bufferDescription = this->getBufferDescription(writeOnlyResource);
+                auto bufferDescription = this->getBufferDescription(writeOnlyResource._resourceHandle);
                 pass->_dependencies.push_back(bufferDescription->_lastProducer);
             }
         }
 
         for(auto& readWriteResource : pass->_shaderParameters->_resources[static_cast<size_t>(RDGResourceState::AccessType::eReadWrite)]) {
-            if (!readWriteResource.isValid()) return;
-            if (readWriteResource.isTexture()) {
-                auto textureDescription = this->getTextureDescription(readWriteResource);
+            if (!readWriteResource._resourceHandle.isValid()) return;
+            if (readWriteResource._resourceHandle.isTexture()) {
+                auto textureDescription = this->getTextureDescription(readWriteResource._resourceHandle);
                 pass->_dependencies.push_back(textureDescription->_lastProducer);
                 textureDescription->_lastProducer = pass; // Set the last producer for the texture
             } else {
-                auto bufferDescription = this->getBufferDescription(readWriteResource);
+                auto bufferDescription = this->getBufferDescription(readWriteResource._resourceHandle);
                 pass->_dependencies.push_back(bufferDescription->_lastProducer);
                 bufferDescription->_lastProducer = pass; // Set the last producer for the buffer
             }
         }
+
+        hasCircle();
     }
     clipPasses();
     prepareResource();
@@ -328,35 +341,75 @@ RDG::RDGResourceHandle RDG::RenderDependencyGraph::registExternalBuffer(Buffer* 
     return handle;
 }
 void                   RDG::RenderDependencyGraph::onCreatePass(RDGPass* pass) {}
-void                   RDG::RenderDependencyGraph::clipPasses() {
+void                   RDG::RenderDependencyGraph::clipPasses()
+{
     std::queue<RDGPass*> dependencyPassQueue;
-    for(auto& externalTexture : this->_externalTextures) {
+    for (auto& externalTexture : this->_externalTextures)
+    {
         auto textureDescription = this->getTextureDescription(externalTexture.second);
-        if (textureDescription->_lastProducer) {
+        if (textureDescription->_lastProducer)
+        {
             dependencyPassQueue.push(textureDescription->_lastProducer);
         }
-        
     }
-    for(auto& externalBuffer : this->_externalBuffers) {
+    for (auto& externalBuffer : this->_externalBuffers)
+    {
         auto bufferDescription = this->getBufferDescription(externalBuffer.second);
-        if (bufferDescription->_lastProducer) {
+        if (bufferDescription->_lastProducer)
+        {
             dependencyPassQueue.push(bufferDescription->_lastProducer);
         }
     }
-    while(!dependencyPassQueue.empty()){
+    while (!dependencyPassQueue.empty())
+    {
         RDGPass* pass = dependencyPassQueue.front();
         dependencyPassQueue.pop();
         if (pass->_isClipped) continue; // Skip already clipped passes
         pass->_isClipped = false;
-        for(auto& dependency : pass->_dependencies){
+        for (auto& dependency : pass->_dependencies)
+        {
             dependencyPassQueue.push(dependency);
         }
-
     }
+}
+bool RDG::RenderDependencyGraph::hasCircle()
+{
+    std::unordered_set<RDGPass*> visited;
+    std::unordered_set<RDGPass*> checked;
+    for (auto& resourceHandle : this->_externalTextures)
+    {
+        auto* textureDescription = this->getTextureDescription(resourceHandle.second);
+        if (!textureDescription->_lastProducer||checked.contains(textureDescription->_lastProducer)) continue;
+
+        if (this->hasCircle(textureDescription->_lastProducer, visited))
+        {
+            LOGE("RDG: RenderDependencyGraph has circle dependency");
+            return true;
+        }
+        checked.insert(textureDescription->_lastProducer);
+    }
+    for (auto & resourceHandle : this->_externalBuffers)
+    {
+        auto* bufferDescription = this->getBufferDescription(resourceHandle.second);
+        if (!bufferDescription->_lastProducer||checked.contains(bufferDescription->_lastProducer)) continue;
+
+        if (this->hasCircle(bufferDescription->_lastProducer, visited))
+        {
+            LOGE("RDG: RenderDependencyGraph has circle dependency");
+            return true;
+        }
+        checked.insert(bufferDescription->_lastProducer);
+    }
+    return false;
 }
 void                   RDG::RenderDependencyGraph::prepareResource() {
 
     //textures, buffers, fbo, render pass,
+    for (auto& pass : this->_rdgPasses) {
+        if (pass->_isClipped) continue; // Skip already clipped passes
+        
+    }
+
 
 }
 
@@ -506,21 +559,46 @@ RDG::RDGResourceHandle::ResourceType RDG::RenderDependencyGraph::inferResourceTy
     }
 }
 
-RDG::RDGResourceHandle::ResourceType RDG::RenderDependencyGraph::inferResourceTypeFromBufferUsage(RDG::RDGBufferDescription& bufferDesc, int bufferCount) {
-
-    if (bufferDesc._usageFlags & (VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT)) {
+RDG::RDGResourceHandle::ResourceType RDG::RenderDependencyGraph::inferResourceTypeFromBufferUsage(
+    RDG::RDGBufferDescription& bufferDesc, int bufferCount)
+{
+    if (bufferDesc._usageFlags &
+        (VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT))
+    {
         assert(bufferCount == 1 && "Buffer count should be 1 for uniform buffers");
         return RDG::RDGResourceHandle::ResourceType::eSRVBuffer;
     }
-    else if (bufferDesc._usageFlags & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) {
-        return bufferCount > 1 ? RDG::RDGResourceHandle::ResourceType::eUAVBufferArray : RDG::RDGResourceHandle::ResourceType::eUAVBuffer;
+    else if (bufferDesc._usageFlags & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)
+    {
+        return bufferCount > 1 ? RDG::RDGResourceHandle::ResourceType::eUAVBufferArray
+                               : RDG::RDGResourceHandle::ResourceType::eUAVBuffer;
     }
-    else if (bufferDesc._usageFlags & VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT) {
+    else if (bufferDesc._usageFlags & VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT)
+    {
         return RDG::RDGResourceHandle::ResourceType::eIndirectBuffer;
     }
-    else {
+    else
+    {
         return RDG::RDGResourceHandle::ResourceType::eUndefeined;
     }
+}
+
+bool RDG::RenderDependencyGraph::hasCircle(RDGPass* pass, std::unordered_set<RDGPass*>& visited)
+{
+    if(!pass) return false;
+    if(visited.find(pass) != visited.end()) {
+        return true; // Found a circle
+    }
+    visited.insert(pass);
+    pass->_isClipped = false;
+    for(auto* consumer : pass->_dependencies) {
+        if(this->hasCircle(consumer, visited)) {
+            return true;
+        }
+    }
+    visited.erase(pass);
+    return false;
+
 }
 
 } // namespace Play

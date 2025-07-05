@@ -42,6 +42,7 @@ public:
         eTLAS,
         eUndefeined
     };
+    RDGResourceHandle() = default;
 
     RDGResourceHandle(int32_t handle, ResourceType resourceType)
         :_resourceType(resourceType),_handle(handle) {}
@@ -65,7 +66,17 @@ class RDGResourceState{
         eReadWrite, //storage buffer, storage texture
         eCount
     };
+    enum class AccessStage{
+        eVertexShader = 1 << 0,
+        eFragmentShader = 1 << 1,
+        eComputeShader = 1 << 2,
+        eRayTracingShader = 1 << 3,
+        eAllGraphics = eVertexShader | eFragmentShader | eComputeShader,
+        eAllCompute = eComputeShader | eRayTracingShader,
+        eAll = eAllGraphics | eAllCompute
+    };
     AccessType _accessType;
+    AccessStage _accessStage;
     RDGResourceHandle _resourceHandle;
 };
 
@@ -159,8 +170,8 @@ private:
 };
 
 struct RDGShaderParameters{
-    bool addResource(RDGResourceHandle resource, RDGResourceState::AccessType accessType);
-    std::array<std::vector<RDGResourceHandle>, static_cast<size_t>(RDGResourceState::AccessType::eCount)> _resources;
+    bool addResource(RDGResourceHandle resource, RDGResourceState::AccessType accessType, RDGResourceState::AccessStage accessStage = RDGResourceState::AccessStage::eAll);
+    std::array<std::vector<RDGResourceState>, static_cast<size_t>(RDGResourceState::AccessType::eCount)> _resources;
 };
 
 class RDGGraphicPipelineState:public nvvk::GraphicsPipelineState{
@@ -355,7 +366,11 @@ protected:
     RDGResourceHandle::ResourceType inferResourceTypeFromImageUsage(VkImageUsageFlags usage, int textureCount);
     RDGResourceHandle::ResourceType inferResourceTypeFromBufferUsage(RDG::RDGBufferDescription& bufferDesc, int bufferCount);
     void clipPasses();
+    bool hasCircle();
     void prepareResource();
+
+private:
+    bool hasCircle(RDGPass* pass, std::unordered_set<RDGPass*>& visited);
 
 protected:
     RDGTextureDescriptionPool _rdgTexturePool;
