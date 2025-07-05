@@ -9,6 +9,7 @@
 #include "nvvk/raytraceKHR_vk.hpp"
 #include "nvvk/sbtwrapper_vk.hpp"
 #include "nvvk/shadermodulemanager_vk.hpp"
+#include "nvp/NvFoundation.h"
 #include "pch.h"
 #include "renderer/Renderer.h"
 namespace Play

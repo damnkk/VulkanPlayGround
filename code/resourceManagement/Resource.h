@@ -63,7 +63,7 @@ class BasePool
     template <typename TT>
     T* alloc()
     {
-        assert(_availableIndex < _objs.size());
+        NV_ASSERT(_availableIndex < _objs.size());
         uint32_t index       = _freeIndices[_availableIndex++];
         _objs[index]         = static_cast<T*>(new TT(index));
         return _objs[index];
