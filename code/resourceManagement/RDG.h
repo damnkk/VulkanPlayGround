@@ -89,7 +89,7 @@ public:
     RDGTexture(const RDGTexture&) = delete;
     RDGTexture& operator=(const RDGTexture&) = delete;
     ~RDGTexture() = default;
-    std::shared_ptr<RDGTexture> _next;
+    void setMetaData(Texture::TexMetaData metadata) { this->_pData->_metadata = metadata; }
 private:
     Texture* _pData;
 };
@@ -107,7 +107,7 @@ public:
     RDGBuffer(const RDGBuffer&) = delete;
     RDGBuffer& operator=(const RDGBuffer&) = delete;
     ~RDGBuffer() = default;
-    std::shared_ptr<RDGBuffer> _next;
+    void setMetaData(Buffer::BufferMetaData metadata) { this->_pData->_metadata = metadata; }
 private:
     Buffer* _pData;
 };
@@ -121,52 +121,25 @@ class RDGTextureDescription{
 public:
     RDGTextureDescription() = default;
     ~RDGTextureDescription() = default;
-    
-    VkFormat getFormat() const { return _format; }
-    VkImageType getType() const { return _type; }
-    VkExtent3D getExtent() const { return _extent; }
-    VkImageUsageFlags getUsageFlags() const { return _usageFlags; }
-    VkImageAspectFlags getAspectFlags() const { return _aspectFlags; }
-    int getSampleCount() const { return _sampleCount; }
+
 private:
     friend class RDGTextureDescriptionPool;
     friend class RenderDependencyGraph;
-    VkFormat _format;
-    VkImageType _type;
-    VkExtent3D _extent;
-    VkImageUsageFlags _usageFlags;
-    VkImageAspectFlags _aspectFlags;
-    RDGPass* _lastProducer = nullptr;
-    int _sampleCount = 1;
     bool _isExternalResource = false;
-    std::shared_ptr<RDGTexture> _texture = nullptr;
-    int32_t _textureCnt = 1;
-    std::string _debugName;
+    std::vector<std::shared_ptr<RDGTexture>> _textures;
+    RDGPass* _lastProducer = nullptr;
 };
 
 class RDGBufferDescriptionPool;
 class RDGBufferDescription{
 public:
-    VkBufferUsageFlags getUsageFlags() const { return _usageFlags; }
-    VkDeviceSize getSize() const { return _size; }
-    enum class BufferLocation {
-        eHostOnly,
-        eHostVisible,
-        eDeviceOnly,
-        eCount
-    };
+   
 private:
     friend class RDGBufferDescriptionPool;
     friend class RenderDependencyGraph;
-    VkBufferUsageFlags _usageFlags;
-    VkDeviceSize _size;
-    VkDeviceSize _range = VK_WHOLE_SIZE;
-    RDGPass* _lastProducer = nullptr;
-    BufferLocation _location;
-    std::string _debugName;
-    std::shared_ptr<RDGBuffer> _buffer;
+    std::vector<std::shared_ptr<RDGBuffer>> _buffers;
     bool _isExternalResource = false;
-    int32_t _bufferCnt;
+    RDGPass* _lastProducer = nullptr;
 };
 
 struct RDGShaderParameters{
@@ -312,7 +285,7 @@ public:
     void addRenderPass(RDGShaderParameters& shaderParameters, PipelineState pipelineState, LambdaFunction&& executeFunction, std::string name = "");
     void compile();
     void execute();
-    RDGResourceHandle createTexture(std::string name,VkFormat format,VkImageType type,VkExtent3D extent,VkImageUsageFlags usageFlags,VkImageAspectFlags aspectFlags,int textureCount,int sampleCount);
+    RDGResourceHandle createTexture(std::string name,VkFormat format,VkImageType type,VkExtent3D extent,VkImageUsageFlags usageFlags,VkImageAspectFlags aspectFlags,VkSampleCountFlags sampleCount,uint32_t mipmaplevel,int textureCount);
     RDGResourceHandle createTexture2D(VkFormat format, uint32_t width, uint32_t height, VkImageUsageFlags usageFlags,int textureCount=1);
     RDGResourceHandle createTexture2D(const std::string& name, VkFormat format, uint32_t width, uint32_t height, VkImageUsageFlags usageFlags,int textureCount);
     RDGResourceHandle createColorTarget(uint32_t width, uint32_t height, VkFormat format = VK_FORMAT_R8G8B8A8_UNORM);
@@ -326,21 +299,21 @@ public:
     using MSAALevel = VkSampleCountFlagBits;
     RDGResourceHandle createMSAATexture2D(uint32_t width, uint32_t height, VkFormat format, MSAALevel samples);
     RDGResourceHandle createMSAATexture2D(const std::string& name, uint32_t width, uint32_t height, VkFormat format, MSAALevel samples);
-    RDGResourceHandle createTextureLike(RDGResourceHandle reference, VkFormat format, VkImageUsageFlags usageFlags,int TextureCount = 1);
-    RDGResourceHandle createTextureLike(const std::string& name, RDGResourceHandle reference, VkFormat format, VkImageUsageFlags usageFlags,int TextureCount);
+    // RDGResourceHandle createTextureLike(RDGResourceHandle reference, VkFormat format, VkImageUsageFlags usageFlags,int TextureCount = 1);
+    // RDGResourceHandle createTextureLike(const std::string& name, RDGResourceHandle reference, VkFormat format, VkImageUsageFlags usageFlags,int TextureCount);
 
     RDGResourceHandle registExternalTexture(Texture* texture);
     RDGResourceHandle registExternalBuffer(Buffer* buffer);
 
     void destroyTexture(RDGResourceHandle handle);
     void destroyBuffer(RDGResourceHandle handle);
-    
-    RDGResourceHandle createBuffer(const std::string& name, VkDeviceSize size, VkBufferUsageFlags usageFlags, RDGBufferDescription::BufferLocation location,VkDeviceSize range,int bufferCount);
-    RDGResourceHandle createBuffer(VkDeviceSize size, VkBufferUsageFlags usageFlags, RDGBufferDescription::BufferLocation location = RDGBufferDescription::BufferLocation::eDeviceOnly,VkDeviceSize range = VK_WHOLE_SIZE,int bufferCount = 1);
+
+    RDGResourceHandle createBuffer(const std::string& name, VkDeviceSize size, VkBufferUsageFlags usageFlags, Buffer::BufferMetaData::BufferLocation location,VkDeviceSize range,int bufferCount);
+    RDGResourceHandle createBuffer(VkDeviceSize size, VkBufferUsageFlags usageFlags, Buffer::BufferMetaData::BufferLocation location = Buffer::BufferMetaData::BufferLocation::eDeviceOnly,VkDeviceSize range = VK_WHOLE_SIZE,int bufferCount = 1);
 
     // Uniform缓冲便利接口 - 作为UBO描述符绑定
-    RDGResourceHandle createUniformBuffer(VkDeviceSize size,VkDeviceSize range = VK_WHOLE_SIZE,RDGBufferDescription::BufferLocation location = RDGBufferDescription::BufferLocation::eHostVisible);
-    RDGResourceHandle createUniformBuffer(const std::string& name, VkDeviceSize size,VkDeviceSize range, RDGBufferDescription::BufferLocation location);
+    RDGResourceHandle createUniformBuffer(VkDeviceSize size,VkDeviceSize range = VK_WHOLE_SIZE,Buffer::BufferMetaData::BufferLocation location = Buffer::BufferMetaData::BufferLocation::eHostVisible);
+    RDGResourceHandle createUniformBuffer(const std::string& name, VkDeviceSize size,VkDeviceSize range, Buffer::BufferMetaData::BufferLocation location);
     template<typename T>
     RDGResourceHandle createUniformBuffer(const T& data);
     template<typename T>

@@ -29,9 +29,12 @@ void RDG::RDGTextureDescriptionPool::deinit()
 {
     for (auto obj : _objs)
     {
-        if (obj && obj->_texture)
+        if (obj && !obj->_textures.empty())
         {
-            Play::PlayApp::FreeTexture(obj->_texture->_pData);
+            for (auto texture : obj->_textures)
+            {
+                Play::PlayApp::FreeTexture(texture->_pData);
+            }
         }
         delete (obj);
     }
@@ -72,9 +75,12 @@ void RDG::RDGBufferDescriptionPool::deinit()
 {
     for (auto obj : _objs)
     {
-        if (obj && obj->_buffer)
+        if (obj && !obj->_buffers.empty())
         {
-            Play::PlayApp::FreeBuffer(obj->_buffer->_pData);
+            for (auto buffer : obj->_buffers)
+            {
+                Play::PlayApp::FreeBuffer(buffer->_pData);
+            }
         }
         delete (obj);
     }
@@ -157,21 +163,25 @@ void                         RDG::RenderDependencyGraph::compile()
 }
 RDG::RDGResourceHandle RDG::RenderDependencyGraph::createTexture(
     std::string name, VkFormat format, VkImageType type, VkExtent3D extent,
-    VkImageUsageFlags usageFlags, VkImageAspectFlags aspectFlags, int sampleCount,int textureCount)
+    VkImageUsageFlags usageFlags, VkImageAspectFlags aspectFlags, VkSampleCountFlags sampleCount,uint32_t mipmaplevel,int textureCount)
 {
     auto handle = this->_rdgTexturePool.alloc();
     if (!handle.isValid()) {
         throw std::runtime_error("RDGTextureDescriptionPool: Failed to allocate texture description handle");
     }
     auto textureDescription = this->getTextureDescription(handle);
-    textureDescription->_format = format;
-    textureDescription->_type = type;
-    textureDescription->_extent = extent;
-    textureDescription->_usageFlags = usageFlags;
-    textureDescription->_aspectFlags = aspectFlags;
-    textureDescription->_sampleCount = sampleCount;
-    textureDescription->_textureCnt = textureCount;
-    textureDescription->_debugName = name;
+    for(int i = 0;i<textureCount;i++){
+        textureDescription->_textures.emplace_back(std::make_shared<RDGTexture>(Play::PlayApp::AllocTexture()));
+        textureDescription->_textures.back()->setMetaData({._format = format,
+                                                          ._type = type,
+                                                          ._extent = extent,
+                                                          ._usageFlags = usageFlags,
+                                                          ._aspectFlags = aspectFlags,
+                                                          ._sampleCount = sampleCount,
+                                                          ._mipmapLevel = mipmaplevel, // Default mipmap level
+                                                          ._debugName = name});
+    }
+
     handle._resourceType = this->inferResourceTypeFromImageUsage(usageFlags, textureCount);
     return handle;
 }
@@ -188,7 +198,7 @@ RDG::RDGResourceHandle RDG::RenderDependencyGraph::createTexture2D(
 {
    return this->createTexture(
         name, format, VK_IMAGE_TYPE_2D, {width, height, 1}, usageFlags,
-        VK_IMAGE_ASPECT_COLOR_BIT, 1, textureCount);
+        VK_IMAGE_ASPECT_COLOR_BIT, VK_SAMPLE_COUNT_1_BIT,1, textureCount);
 }
 
 RDG::RDGResourceHandle RDG::RenderDependencyGraph::createColorTarget(uint32_t width, uint32_t height, VkFormat format)
@@ -245,7 +255,7 @@ RDG::RDGResourceHandle RDG::RenderDependencyGraph::createTexture3D(
 {
     return this->createTexture(
         name, format, VK_IMAGE_TYPE_3D, {width, height, depth}, usageFlags,
-        VK_IMAGE_ASPECT_COLOR_BIT, 1, textureCount);
+        VK_IMAGE_ASPECT_COLOR_BIT, VK_SAMPLE_COUNT_1_BIT,1, textureCount);
 }
 
 RDG::RDGResourceHandle RDG::RenderDependencyGraph::createMSAATexture2D(
@@ -262,82 +272,37 @@ RDG::RDGResourceHandle RDG::RenderDependencyGraph::createMSAATexture2D(
     if(!handle.isValid()){
         throw std::runtime_error("RDGTextureDescriptionPool: Failed to allocate texture description handle");
     }
-    auto textureDescription = this->getTextureDescription(handle);
-    textureDescription->_format = format;
-    textureDescription->_type = VK_IMAGE_TYPE_2D;
-    textureDescription->_extent = {width, height, 1};
-    textureDescription->_usageFlags = VK_IMAGE_USAGE_SAMPLED_BIT |
-                                      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                                      VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                                      VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    textureDescription->_aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT; // Default to color aspect
-    textureDescription->_sampleCount = samples;
-    textureDescription->_debugName = name;
+
+    return this->createTexture(name, format, VK_IMAGE_TYPE_2D, {width, height, 1}, 
+                    VK_IMAGE_USAGE_SAMPLED_BIT | 
+                    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                    VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                    VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_IMAGE_ASPECT_COLOR_BIT, samples, 1, 1);
+ 
     return handle;
 }
 
-RDG::RDGResourceHandle RDG::RenderDependencyGraph::createTextureLike(
-    RDGResourceHandle reference, VkFormat format, VkImageUsageFlags usageFlags,int textureCount)
-{
-    if (!reference.isValid()) {
-        throw std::runtime_error("RDGTextureDescriptionPool: Invalid reference texture handle");
-    }
-    auto refDesc = this->getTextureDescription(reference);
-    if (!refDesc) {
-        throw std::runtime_error("RDGTextureDescriptionPool: Reference texture description not found");
-    }
-    
-    return this->createTexture(
-        Play::GetUniqueName(), format, refDesc->_type, refDesc->_extent, usageFlags,
-        refDesc->_aspectFlags, refDesc->_sampleCount, textureCount);
-}
 
-RDG::RDGResourceHandle RDG::RenderDependencyGraph::createTextureLike(const std::string& name,
-                                                                     RDGResourceHandle  reference,
-                                                                     VkFormat           format,
-                                                                     VkImageUsageFlags  usageFlags,
-                                                                     int textureCount)
-{
-    if (!reference.isValid())
-    {
-        throw std::runtime_error("RDGTextureDescriptionPool: Invalid reference texture handle");
-    }
-    auto refDesc = this->getTextureDescription(reference);
-    if (!refDesc)
-    {
-        throw std::runtime_error(
-            "RDGTextureDescriptionPool: Reference texture description not found");
-    }
 
-    return this->createTexture(name, format, refDesc->_type, refDesc->_extent, usageFlags,
-                               refDesc->_aspectFlags, refDesc->_sampleCount, textureCount);
-}
+
 RDG::RDGResourceHandle RDG::RenderDependencyGraph::registExternalTexture(Texture* texture) {
     RDGResourceHandle handle = this->_rdgTexturePool.alloc();
-    handle._resourceType = inferResourceTypeFromImageUsage(texture->_usageFlags, 1);
+    handle._resourceType = inferResourceTypeFromImageUsage(texture->_metadata._usageFlags, 1);
     auto* textureDescription = this->getTextureDescription(handle);
-    textureDescription->_texture= std::make_shared<RDGTexture>(texture);
-    textureDescription->_format = texture->_format;
-    textureDescription->_type = texture->_type;
-    textureDescription->_extent = texture->_extent;
-    textureDescription->_usageFlags = texture->_usageFlags;
-    textureDescription->_aspectFlags = texture->_aspectFlags;
-    textureDescription->_sampleCount = texture->_sampleCount;
+
+    textureDescription->_textures.emplace_back(std::make_shared<RDGTexture>(texture));
     textureDescription->_isExternalResource = true;
     _externalTextures[texture] = handle;
     return handle;
 }
+
 RDG::RDGResourceHandle RDG::RenderDependencyGraph::registExternalBuffer(Buffer* buffer) {
     RDGResourceHandle handle = this->_rdgBufferPool.alloc();
     auto* bufferDescription = this->getBufferDescription(handle);
-    bufferDescription->_buffer = std::make_shared<RDGBuffer>(buffer);
-    bufferDescription->_size = buffer->_size;
-    bufferDescription->_usageFlags = buffer->_usageFlags;
-    bufferDescription->_location = RDGBufferDescription::BufferLocation::eDeviceOnly;
-    bufferDescription->_debugName = buffer->_debugName;
+    bufferDescription->_buffers.emplace_back(std::make_shared<RDGBuffer>(buffer));
     bufferDescription->_isExternalResource = true;
-    handle._resourceType = inferResourceTypeFromBufferUsage(*bufferDescription, 1);
     _externalBuffers[buffer] = handle;
+    handle._resourceType = inferResourceTypeFromBufferUsage(*bufferDescription, 1);
     return handle;
 }
 void                   RDG::RenderDependencyGraph::onCreatePass(RDGPass* pass) {}
@@ -427,10 +392,12 @@ void RDG::RenderDependencyGraph::destroyTexture(RDGResourceHandle handle) {
         LOGW("RDGTextureDescriptionPool: Texture description not found for handle");
         return;
     }
-    while(textureDescription->_texture) {
-        Play::PlayApp::FreeTexture(textureDescription->_texture->_pData);
-        textureDescription->_texture =  textureDescription->_texture->_next;
+    for(int i = 0;i<textureDescription->_textures.size();i++){
+        if(!textureDescription->_textures[i]) continue;
+        if(!textureDescription->_textures[i]->_pData) continue;
+        Play::PlayApp::FreeTexture(textureDescription->_textures[i]->_pData);
     }
+    textureDescription->_textures.clear();
     this->_rdgTexturePool.destroy(handle);
 }
 
@@ -448,45 +415,53 @@ void RDG::RenderDependencyGraph::destroyBuffer(RDGResourceHandle handle) {
         LOGW("RDGBufferDescriptionPool: Buffer description not found for handle");
         return;
     }
-    while (bufferDescription->_buffer) {
-        Play::PlayApp::FreeBuffer(bufferDescription->_buffer->_pData);
-        bufferDescription->_buffer = bufferDescription->_buffer->_next;
+
+    for(int i = 0;i<bufferDescription->_buffers.size();i++){
+        if(!bufferDescription->_buffers[i]) continue;
+        if(!bufferDescription->_buffers[i]->_pData) continue;
+        Play::PlayApp::FreeBuffer(bufferDescription->_buffers[i]->_pData);
     }
+    bufferDescription->_buffers.clear();
     this->_rdgBufferPool.destroy(handle);
 }
+
 RDG::RDGResourceHandle RDG::RenderDependencyGraph::createBuffer(
     const std::string& name, VkDeviceSize size, VkBufferUsageFlags usageFlags,
-    RDGBufferDescription::BufferLocation location,VkDeviceSize range,int bufferCount)
+    Buffer::BufferMetaData::BufferLocation location,VkDeviceSize range,int bufferCount)
 {
     auto resourceHandle = this->_rdgBufferPool.alloc();
     if (!resourceHandle.isValid()) {
         throw std::runtime_error("RDGBufferDescriptionPool: Failed to allocate buffer description handle");
     }
     auto bufferDescription = this->getBufferDescription(resourceHandle);
-    bufferDescription->_usageFlags = usageFlags;
-    bufferDescription->_size = size;
-    bufferDescription->_location = location;
-    bufferDescription->_bufferCnt = bufferCount;
-    bufferDescription->_range = range;
-    bufferDescription->_debugName = name;
+    for(int i = 0;i<bufferCount;i++){
+        bufferDescription->_buffers.emplace_back(std::make_shared<RDGBuffer>(Play::PlayApp::AllocBuffer()));
+        bufferDescription->_buffers.back()->setMetaData({
+            ._usageFlags = usageFlags,
+            ._size = size,
+            ._range = range,
+            ._location = location,
+            ._debugName = name,
+        });
+    } 
     resourceHandle._resourceType = this->inferResourceTypeFromBufferUsage(*bufferDescription, bufferCount);
     return resourceHandle;
 }
 
 RDG::RDGResourceHandle RDG::RenderDependencyGraph::createBuffer(
-    VkDeviceSize size, VkBufferUsageFlags usageFlags, RDGBufferDescription::BufferLocation location,VkDeviceSize range,int bufferCount)
+    VkDeviceSize size, VkBufferUsageFlags usageFlags, Buffer::BufferMetaData::BufferLocation location,VkDeviceSize range,int bufferCount)
 {
     return this->createBuffer(Play::GetUniqueName(), size, usageFlags, location, range, bufferCount);
 }
 
 RDG::RDGResourceHandle RDG::RenderDependencyGraph::createUniformBuffer(
-    VkDeviceSize size,VkDeviceSize range,RDGBufferDescription::BufferLocation location)
+    VkDeviceSize size,VkDeviceSize range,Buffer::BufferMetaData::BufferLocation location)
 {
     return this->createUniformBuffer(Play::GetUniqueName(), size, range, location);
 }
 
 RDG::RDGResourceHandle RDG::RenderDependencyGraph::createUniformBuffer(
-    const std::string& name, VkDeviceSize size,VkDeviceSize range,RDGBufferDescription::BufferLocation location)
+    const std::string& name, VkDeviceSize size,VkDeviceSize range,Buffer::BufferMetaData::BufferLocation location)
 {
    
     return createBuffer (
@@ -505,7 +480,7 @@ RDG::RDGResourceHandle RDG::RenderDependencyGraph::createStorageBuffer(
 {
     return createBuffer(
         name, size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        RDGBufferDescription::BufferLocation::eDeviceOnly, VK_WHOLE_SIZE, bufferCount);
+        Buffer::BufferMetaData::BufferLocation::eDeviceOnly, VK_WHOLE_SIZE, bufferCount);
 }
 
 RDG::RDGResourceHandle RDG::RenderDependencyGraph::createDynamicUniformBuffer(
@@ -519,7 +494,7 @@ RDG::RDGResourceHandle RDG::RenderDependencyGraph::createDynamicUniformBuffer(
 {
     return createBuffer(
         name, size, usageFlags  | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        RDGBufferDescription::BufferLocation::eHostVisible, range, 1);
+        Buffer::BufferMetaData::BufferLocation::eHostVisible, range, 1);
 }
 
 RDG::RDGTextureDescription* RDG::RenderDependencyGraph::getTextureDescription(RDGResourceHandle handle)const {
@@ -562,18 +537,18 @@ RDG::RDGResourceHandle::ResourceType RDG::RenderDependencyGraph::inferResourceTy
 RDG::RDGResourceHandle::ResourceType RDG::RenderDependencyGraph::inferResourceTypeFromBufferUsage(
     RDG::RDGBufferDescription& bufferDesc, int bufferCount)
 {
-    if (bufferDesc._usageFlags &
+    if (bufferDesc._buffers.front()->_pData->_metadata._usageFlags &
         (VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT))
     {
         assert(bufferCount == 1 && "Buffer count should be 1 for uniform buffers");
         return RDG::RDGResourceHandle::ResourceType::eSRVBuffer;
     }
-    else if (bufferDesc._usageFlags & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)
+    else if (bufferDesc._buffers.front()->_pData->_metadata._usageFlags & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)
     {
         return bufferCount > 1 ? RDG::RDGResourceHandle::ResourceType::eUAVBufferArray
                                : RDG::RDGResourceHandle::ResourceType::eUAVBuffer;
     }
-    else if (bufferDesc._usageFlags & VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT)
+    else if (bufferDesc._buffers.front()->_pData->_metadata._usageFlags & VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT)
     {
         return RDG::RDGResourceHandle::ResourceType::eIndirectBuffer;
     }

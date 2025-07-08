@@ -298,9 +298,9 @@ void                 ShadingRateRenderer::initPipeline()
 }
 
 void                 ShadingRateRenderer::createRenderTexture() {
-     _outputTexture = PlayApp::AllocTexture<Texture>();
-     _shadingRateTexture = PlayApp::AllocTexture<Texture>();
-     _gradientTexture = PlayApp::AllocTexture<Texture>();
+     _outputTexture = PlayApp::AllocTexture();
+     _shadingRateTexture = PlayApp::AllocTexture();
+     _gradientTexture = PlayApp::AllocTexture();
      VkImageCreateInfo image2DCreateinfo = nvvk::makeImage2DCreateInfo(_app->getSize(),VK_FORMAT_R8G8B8A8_UNORM,
           VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, false);
      auto cmd = _app->createTempCmdBuffer();
@@ -309,7 +309,7 @@ void                 ShadingRateRenderer::createRenderTexture() {
      _outputTexture->image      = texture.image;
      _outputTexture->memHandle  = texture.memHandle;
      _outputTexture->descriptor = texture.descriptor;
-     _outputTexture->_format    = image2DCreateinfo.format;
+     _outputTexture->_metadata._format    = image2DCreateinfo.format;
      CUSTOM_NAME_VK(_app->m_debug, _outputTexture->image);
   
      image2DCreateinfo.format = VK_FORMAT_R8G8_UINT;
@@ -320,7 +320,7 @@ void                 ShadingRateRenderer::createRenderTexture() {
      _gradientTexture->image      = texture.image;
      _gradientTexture->memHandle  = texture.memHandle;
      _gradientTexture->descriptor = texture.descriptor;
-     _gradientTexture->_format    = image2DCreateinfo.format;
+     _gradientTexture->_metadata._format    = image2DCreateinfo.format;
      CUSTOM_NAME_VK(_app->m_debug, _gradientTexture->image);
         
      image2DCreateinfo.extent.width  = static_cast<uint32_t>(ceil(static_cast<float>(_app->getSize().width) /
@@ -337,7 +337,7 @@ void                 ShadingRateRenderer::createRenderTexture() {
      _shadingRateTexture->image      = texture.image;
      _shadingRateTexture->memHandle  = texture.memHandle;
      _shadingRateTexture->descriptor = texture.descriptor;
-     _shadingRateTexture->_format    = image2DCreateinfo.format;
+     _shadingRateTexture->_metadata._format    = image2DCreateinfo.format;
      CUSTOM_NAME_VK(_app->m_debug, _shadingRateTexture->image);
 
     {
@@ -379,7 +379,7 @@ void                 ShadingRateRenderer::createRenderTexture() {
 }
 
 void ShadingRateRenderer::createUniformBuffer(){
-    _renderUniformBuffer = PlayApp::AllocBuffer<Buffer>();
+    _renderUniformBuffer = PlayApp::AllocBuffer();
     VkBufferCreateInfo bufferInfo = nvvk::makeBufferCreateInfo(sizeof(_ShaderRateUniformStruct), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
     auto nvvkBuffer = _app->_alloc.createBuffer(bufferInfo, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     _renderUniformBuffer->buffer            = nvvkBuffer.buffer;
@@ -417,7 +417,7 @@ void ShadingRateRenderer::createUniformBuffer(){
     _ComputeUniformStruct.FrameSize = glm::uvec2(_app->getSize().width, _app->getSize().height);
     _ComputeUniformStruct.ShadingRateSize = glm::uvec2(_shadingRateExtent.width, _shadingRateExtent.height);
     
-    _computeUniformBuffer= PlayApp::AllocBuffer<Buffer>();
+    _computeUniformBuffer= PlayApp::AllocBuffer();
     VkBufferCreateInfo computeBufferInfo{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
     computeBufferInfo.size = sizeof(ComputeUniformStruct)+sizeof(glm::uvec2)*fragment_shading_rate_count;
     computeBufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;

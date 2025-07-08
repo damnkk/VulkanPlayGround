@@ -35,11 +35,9 @@ class PlayApp : public nvvkhl::AppBaseVk
         return _alloc;
     }
     inline Texture* CreateTexture(VkImageCreateInfo& info, VkCommandBuffer* cmd = nullptr);
-    template <typename T>
     static inline Texture* AllocTexture();
     static inline void     FreeTexture(Texture* texture);
     inline Buffer* CreateBuffer(VkBufferCreateInfo& info, VkMemoryPropertyFlags memProperties);
-    template <typename T>
     static inline Buffer*  AllocBuffer();
     static inline void     FreeBuffer(Buffer* buffer);
     static inline void*    MapBuffer(Buffer& buffer);
@@ -82,10 +80,10 @@ class PlayApp : public nvvkhl::AppBaseVk
     Scene                     _scene;
 };
 
-template <typename T>
+
 inline Texture* PlayApp::AllocTexture()
 {
-    return _texturePool.alloc<T>();
+    return _texturePool.alloc();
 }
 
 inline void PlayApp::FreeTexture(Texture* texture)
@@ -93,10 +91,9 @@ inline void PlayApp::FreeTexture(Texture* texture)
     _texturePool.free(texture);
 }
 
-template <typename T>
 inline Buffer* PlayApp::AllocBuffer()
 {
-    return _bufferPool.alloc<T>();
+    return _bufferPool.alloc();
 }
 
 inline void PlayApp::FreeBuffer(Buffer* buffer)

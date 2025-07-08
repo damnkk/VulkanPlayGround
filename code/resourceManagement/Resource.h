@@ -10,15 +10,17 @@ struct Texture : public nvvk::Texture
 {
     Texture() = default;
     Texture(int poolID) : _poolId(poolID) {};
-    VkFormat    _format      = VK_FORMAT_UNDEFINED;
-    VkImageType _type        = VK_IMAGE_TYPE_2D;
-    VkExtent3D _extent;
-    VkImageUsageFlags _usageFlags;
-    VkImageAspectFlags _aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
-    VkSampleCountFlags _sampleCount = VK_SAMPLE_COUNT_1_BIT;
-    uint8_t     _mipmapLevel = 1;
-    std::string _debugName;
     int         _poolId = -1;
+    struct TexMetaData{
+        VkFormat    _format      = VK_FORMAT_UNDEFINED;
+        VkImageType _type        = VK_IMAGE_TYPE_2D;
+        VkExtent3D _extent;
+        VkImageUsageFlags _usageFlags;
+        VkImageAspectFlags _aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
+        VkSampleCountFlags _sampleCount = VK_SAMPLE_COUNT_1_BIT;
+        uint32_t     _mipmapLevel = 1;
+        std::string _debugName;
+    }_metadata;
 };
 
 struct Buffer : public nvvk::Buffer
@@ -26,10 +28,19 @@ struct Buffer : public nvvk::Buffer
     Buffer(int poolID) : _poolId(poolID) {};
     int                    _poolId = -1;
     VkDescriptorBufferInfo descriptor;
-    VkBufferUsageFlags _usageFlags;
-    VkDeviceSize _size;
-    VkDeviceSize _range = VK_WHOLE_SIZE;
-    std::string _debugName;
+    
+    struct BufferMetaData{
+        VkBufferUsageFlags _usageFlags;
+        VkDeviceSize _size;
+        VkDeviceSize _range = VK_WHOLE_SIZE;
+        enum class BufferLocation {
+            eHostOnly,
+            eHostVisible,
+            eDeviceOnly,
+            eCount
+        } _location;
+        std::string _debugName;
+    }_metadata;
 };
 
 template <typename T>
@@ -60,15 +71,6 @@ class BasePool
         }
     }
 
-    template <typename TT>
-    T* alloc()
-    {
-        assert(_availableIndex < _objs.size());
-        uint32_t index       = _freeIndices[_availableIndex++];
-        _objs[index]         = static_cast<T*>(new TT(index));
-        return _objs[index];
-    };
-
     std::vector<T*>             _objs;
     std::vector<uint32_t>       _freeIndices;
     uint32_t                    _availableIndex = 0;
@@ -78,6 +80,13 @@ class BasePool
 class TexturePool : public BasePool<Texture>
 {
    public:
+
+   Texture* alloc(){
+     assert(_availableIndex < _objs.size());
+        uint32_t index       = _freeIndices[_availableIndex++];
+        _objs[index]         = static_cast<Texture*>(new Texture(index));
+        return _objs[index];
+   }
     void free(Texture* obj)
     {
         if (obj == nullptr || !(obj->_poolId < _objs.size() && obj->_poolId >= 0))
@@ -93,6 +102,13 @@ class TexturePool : public BasePool<Texture>
 class BufferPool : public BasePool<Buffer>
 {
    public:
+
+   Buffer* alloc(){
+       assert(_availableIndex < _objs.size());
+       uint32_t index       = _freeIndices[_availableIndex++];
+       _objs[index]         = static_cast<Buffer*>(new Buffer(index));
+       return _objs[index];
+   }
     void free(Buffer* obj)
     {
         if (obj == nullptr || !(obj->_poolId < _objs.size() && obj->_poolId >= 0))

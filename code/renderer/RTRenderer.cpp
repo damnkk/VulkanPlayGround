@@ -135,7 +135,7 @@ void RTRenderer::loadEnvTexture()
         VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
         VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_FALSE,
         1.0f, VK_SAMPLER_MIPMAP_MODE_LINEAR);
-    _envTexture       = PlayApp::AllocTexture<Texture>();
+    _envTexture       = PlayApp::AllocTexture();
     auto          cmd = _app->createTempCmdBuffer();
     nvvk::Texture nvvkTexture =
         _app->_alloc.createTexture(cmd, width * height * 4 * sizeof(float), data, imageCreateInfo,
@@ -148,8 +148,8 @@ void RTRenderer::loadEnvTexture()
     _envTexture->image        = nvvkTexture.image;
     _envTexture->memHandle    = nvvkTexture.memHandle;
     _envTexture->descriptor   = nvvkTexture.descriptor;
-    _envTexture->_format      = imageCreateInfo.format;
-    _envTexture->_mipmapLevel = 1;
+    _envTexture->_metadata._format      = imageCreateInfo.format;
+    _envTexture->_metadata._mipmapLevel = 1;
 
     // build accel
     float lumSum = 0.0;
@@ -236,7 +236,7 @@ void RTRenderer::loadEnvTexture()
         VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
         VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_FALSE,
         1.0f, VK_SAMPLER_MIPMAP_MODE_LINEAR);
-    _envLookupTexture          = PlayApp::AllocTexture<Texture>();
+    _envLookupTexture          = PlayApp::AllocTexture();
     auto          cmd2         = _app->createTempCmdBuffer();
     nvvk::Texture nvvkTexture2 = _app->_alloc.createTexture(
         cmd2, width * height * 4 * sizeof(float), cache.data(), imageCreateInfo2,
@@ -244,8 +244,8 @@ void RTRenderer::loadEnvTexture()
     _envLookupTexture->image        = nvvkTexture2.image;
     _envLookupTexture->memHandle    = nvvkTexture2.memHandle;
     _envLookupTexture->descriptor   = nvvkTexture2.descriptor;
-    _envLookupTexture->_format      = imageCreateInfo2.format;
-    _envLookupTexture->_mipmapLevel = imageCreateInfo2.mipLevels;
+    _envLookupTexture->_metadata._format      = imageCreateInfo2.format;
+    _envLookupTexture->_metadata._mipmapLevel = imageCreateInfo2.mipLevels;
     CUSTOM_NAME_VK(_app->m_debug, _envLookupTexture->image);
     _app->submitTempCmdBuffer(cmd2);
     stbi_image_free(data);
@@ -508,7 +508,7 @@ void RTRenderer::rayTraceRTCreate()
         VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
         false);
-    rayTraceRT             = PlayApp::AllocTexture<Texture>();
+    rayTraceRT             = PlayApp::AllocTexture();
     auto samplerCreateInfo = nvvk::makeSamplerCreateInfo(
         VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT,
         VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT);
@@ -519,15 +519,15 @@ void RTRenderer::rayTraceRTCreate()
     rayTraceRT->image        = nvvkTexture.image;
     rayTraceRT->memHandle    = nvvkTexture.memHandle;
     rayTraceRT->descriptor   = nvvkTexture.descriptor;
-    rayTraceRT->_format      = VK_FORMAT_R32G32B32A32_SFLOAT;
-    rayTraceRT->_mipmapLevel = textureCreateinfo.mipLevels;
+    rayTraceRT->_metadata._format      = VK_FORMAT_R32G32B32A32_SFLOAT;
+    rayTraceRT->_metadata._mipmapLevel = textureCreateinfo.mipLevels;
     _rayTraceRT             = rayTraceRT;
     CUSTOM_NAME_VK(_app->m_debug, _rayTraceRT->image);
 }
 void RTRenderer::createRenderBuffer()
 {
     // Render Uniform Buffer
-    _renderUniformBuffer = PlayApp::AllocBuffer<Buffer>();
+    _renderUniformBuffer = PlayApp::AllocBuffer();
     VkBufferCreateInfo bufferInfo =
         nvvk::makeBufferCreateInfo(sizeof(RenderUniform), VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT_KHR);
     auto nvvkBuffer = _app->_alloc.createBuffer(
@@ -631,7 +631,7 @@ void RTRenderer::createPostProcessRT(){
     VkImageCreateInfo postProcessRTInfo =  nvvk::makeImage2DCreateInfo(this->_app->getSize(),VK_FORMAT_R8G8B8A8_UNORM,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,false);
     VkSamplerCreateInfo postProcessRTSamplerInfo = nvvk::makeSamplerCreateInfo(VK_FILTER_LINEAR,VK_FILTER_LINEAR,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
     auto cmd = _app->createTempCmdBuffer();
-    _postProcessRT = PlayApp::AllocTexture<Texture>();
+    _postProcessRT = PlayApp::AllocTexture();
     nvvk::Texture nvvkTexture = _app->_alloc.createTexture(cmd,0,nullptr,postProcessRTInfo,postProcessRTSamplerInfo,VK_IMAGE_LAYOUT_UNDEFINED);
     _app->submitTempCmdBuffer(cmd);
     VkImageViewCreateInfo postProcessRTViewInfo = nvvk::makeImage2DViewCreateInfo(nvvkTexture.image,postProcessRTInfo.format,VK_IMAGE_ASPECT_COLOR_BIT,1,nullptr);
@@ -639,7 +639,7 @@ void RTRenderer::createPostProcessRT(){
     _postProcessRT->image        = nvvkTexture.image;
     _postProcessRT->memHandle    = nvvkTexture.memHandle;
     _postProcessRT->descriptor   = nvvkTexture.descriptor;
-    _postProcessRT->_format      = postProcessRTInfo.format;
+    _postProcessRT->_metadata._format      = postProcessRTInfo.format;
     CUSTOM_NAME_VK(_app->m_debug, _postProcessRT->image);
 }
 

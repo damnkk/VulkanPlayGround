@@ -23,12 +23,12 @@ VolumeRenderer::VolumeRenderer(PlayApp& app)
     _app = &app;
     for (int i = 0; i < _textureSlot.size(); ++i)
     {
-        _textureSlot[i] = PlayApp::AllocTexture<Texture>();
+        _textureSlot[i] = PlayApp::AllocTexture();
     }
     // create volume texture
     loadVolumeTexture("content/volumeData/Textures/manix.dat");
     createRenderResource();
-    _renderUniformBuffer = PlayApp::AllocBuffer<Buffer>();
+    _renderUniformBuffer = PlayApp::AllocBuffer();
     VkBufferCreateInfo bufferInfo =
         nvvk::makeBufferCreateInfo(sizeof(VolumeUniform), VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT_KHR);
     auto nvvkBuffer = _app->_alloc.createBuffer(
@@ -341,9 +341,9 @@ void VolumeRenderer::loadVolumeTexture(const std::string& filename)
     }
 
     _textureSlot[uint32_t(TextureBinding::eVolumeTexture)] =
-        static_cast<VolumeTexture*>(PlayApp::AllocTexture<VolumeTexture>());
+        static_cast<VolumeTexture*>(PlayApp::AllocTexture());
     _textureSlot[uint32_t(TextureBinding::eGradientTexture)] =
-        static_cast<VolumeTexture*>(PlayApp::AllocTexture<VolumeTexture>());
+        static_cast<VolumeTexture*>(PlayApp::AllocTexture());
     auto _volumeTexture =
         static_cast<VolumeTexture*>(_textureSlot[uint32_t(TextureBinding::eVolumeTexture)]);
     auto _gradiantTexture =_textureSlot[uint32_t(TextureBinding::eGradientTexture)];
@@ -399,14 +399,14 @@ void VolumeRenderer::loadVolumeTexture(const std::string& filename)
     _volumeTexture->image = nvvkVolumeTexture.image;
     _volumeTexture->memHandle = nvvkVolumeTexture.memHandle;
     _volumeTexture->descriptor = nvvkVolumeTexture.descriptor;
-    _volumeTexture->_format    = imageCreateInfo.format;
-    _volumeTexture->_mipmapLevel = imageCreateInfo.mipLevels;
+    _volumeTexture->_metadata._format    = imageCreateInfo.format;
+    _volumeTexture->_metadata._mipmapLevel = imageCreateInfo.mipLevels;
     CUSTOM_NAME_VK(_app->m_debug, _volumeTexture->image);
     _gradiantTexture->image = nvvkGradiantTexture.image;
     _gradiantTexture->memHandle = nvvkGradiantTexture.memHandle;
     _gradiantTexture->descriptor = nvvkGradiantTexture.descriptor;
-    _gradiantTexture->_format    = imageCreateInfo.format;
-    _gradiantTexture->_mipmapLevel = imageCreateInfo.mipLevels;
+    _gradiantTexture->_metadata._format    = imageCreateInfo.format;
+    _gradiantTexture->_metadata._mipmapLevel = imageCreateInfo.mipLevels;
     CUSTOM_NAME_VK(_app->m_debug, _gradiantTexture->image);
 
     // gradiant pass
@@ -470,10 +470,10 @@ void VolumeRenderer::createRenderResource()
     image1DCreateInfo.mipLevels   = 1;
     image1DCreateInfo.flags       = 0;
     image1DCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    _textureSlot[eDiffuseLookUpTexture] = PlayApp::AllocTexture<Texture>();
-    _textureSlot[eSpecularLookUpTexture] = PlayApp::AllocTexture<Texture>();
-    _textureSlot[eRoughnessLookUpTexture] = PlayApp::AllocTexture<Texture>();
-    _textureSlot[eOpacityLookUpTexture] = PlayApp::AllocTexture<Texture>();
+    _textureSlot[eDiffuseLookUpTexture] = PlayApp::AllocTexture();
+    _textureSlot[eSpecularLookUpTexture] = PlayApp::AllocTexture();
+    _textureSlot[eRoughnessLookUpTexture] = PlayApp::AllocTexture();
+    _textureSlot[eOpacityLookUpTexture] = PlayApp::AllocTexture();
 
     auto          cmd                      = _app->createTempCmdBuffer();
     auto samplerCInfo = nvvk::makeSamplerCreateInfo();
@@ -483,7 +483,7 @@ void VolumeRenderer::createRenderResource()
         _textureSlot[eDiffuseLookUpTexture]->image      = nvvkDiffuseLookUpTexture.image;
         _textureSlot[eDiffuseLookUpTexture]->memHandle  = nvvkDiffuseLookUpTexture.memHandle;
         _textureSlot[eDiffuseLookUpTexture]->descriptor = nvvkDiffuseLookUpTexture.descriptor;
-        _textureSlot[eDiffuseLookUpTexture]->_format    = image1DCreateInfo.format;
+        _textureSlot[eDiffuseLookUpTexture]->_metadata._format    = image1DCreateInfo.format;
     CUSTOM_NAME_VK(_app->m_debug, _textureSlot[eDiffuseLookUpTexture]->image);
     nvvk::Texture nvvkSpecularLookUpTexture = _app->_alloc.createTexture(
         cmd, specularData.size() * sizeof(glm::u8vec4), specularData.data(), image1DCreateInfo,
@@ -491,7 +491,7 @@ void VolumeRenderer::createRenderResource()
         _textureSlot[eSpecularLookUpTexture]->image      = nvvkSpecularLookUpTexture.image;
         _textureSlot[eSpecularLookUpTexture]->memHandle  = nvvkSpecularLookUpTexture.memHandle;
         _textureSlot[eSpecularLookUpTexture]->descriptor = nvvkSpecularLookUpTexture.descriptor;
-        _textureSlot[eSpecularLookUpTexture]->_format    = image1DCreateInfo.format;
+        _textureSlot[eSpecularLookUpTexture]->_metadata._format    = image1DCreateInfo.format;
     CUSTOM_NAME_VK(_app->m_debug, _textureSlot[eSpecularLookUpTexture]->image);
     image1DCreateInfo.format = VK_FORMAT_R8_UNORM;
     nvvk::Texture nvvkRoughnessLoopUpTexture = _app->_alloc.createTexture(
@@ -500,7 +500,7 @@ void VolumeRenderer::createRenderResource()
         _textureSlot[eRoughnessLookUpTexture]->image      = nvvkRoughnessLoopUpTexture.image;
         _textureSlot[eRoughnessLookUpTexture]->memHandle  = nvvkRoughnessLoopUpTexture.memHandle;
         _textureSlot[eRoughnessLookUpTexture]->descriptor = nvvkRoughnessLoopUpTexture.descriptor;
-        _textureSlot[eRoughnessLookUpTexture]->_format    = image1DCreateInfo.format;
+        _textureSlot[eRoughnessLookUpTexture]->_metadata._format    = image1DCreateInfo.format;
     CUSTOM_NAME_VK(_app->m_debug,  _textureSlot[eRoughnessLookUpTexture]->image);
     nvvk::Texture nvvkOpacityLookUpTexture = _app->_alloc.createTexture(
         cmd, opacityData.size() * sizeof(uint8_t), opacityData.data(), image1DCreateInfo,
@@ -508,7 +508,7 @@ void VolumeRenderer::createRenderResource()
         _textureSlot[eOpacityLookUpTexture]->image      = nvvkOpacityLookUpTexture.image;
         _textureSlot[eOpacityLookUpTexture]->memHandle  = nvvkOpacityLookUpTexture.memHandle;
         _textureSlot[eOpacityLookUpTexture]->descriptor = nvvkOpacityLookUpTexture.descriptor;
-        _textureSlot[eOpacityLookUpTexture]->_format    = image1DCreateInfo.format;
+        _textureSlot[eOpacityLookUpTexture]->_metadata._format    = image1DCreateInfo.format;
     CUSTOM_NAME_VK(_app->m_debug,  _textureSlot[eOpacityLookUpTexture]->image);
     _app->submitTempCmdBuffer(cmd);
 
@@ -526,13 +526,13 @@ void VolumeRenderer::createRenderResource()
     VkImageCreateInfo imageCreateInfo = nvvk::makeImage2DCreateInfo(
         size, VK_FORMAT_R32G32B32A32_SFLOAT,
         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, true);
-    _textureSlot[eEnvTexture]       = PlayApp::AllocTexture<Texture>();
+    _textureSlot[eEnvTexture]       = PlayApp::AllocTexture();
     nvvk::Texture nvvkTexture = _app->_alloc.createTexture(
         cmd, sizeof(float)*width*height*4, data, imageCreateInfo, nvvk::makeSamplerCreateInfo(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     _textureSlot[eEnvTexture]->image      = nvvkTexture.image;
     _textureSlot[eEnvTexture]->memHandle  = nvvkTexture.memHandle;
     _textureSlot[eEnvTexture]->descriptor = nvvkTexture.descriptor;
-    _textureSlot[eEnvTexture]->_format    = imageCreateInfo.format;
+    _textureSlot[eEnvTexture]->_metadata._format    = imageCreateInfo.format;
     CUSTOM_NAME_VK(_app->m_debug, _textureSlot[eEnvTexture]->image);
     // nvvk::cmdGenerateMipmaps(cmd, _textureSlot[eEnvTexture]->image, imageCreateInfo.format, size, nvvk::mipLevels(size));
     stbi_image_free(data);
@@ -546,12 +546,12 @@ void VolumeRenderer::createRenderTarget()
 {
      // create multiple render target
 
-     _textureSlot[eDiffuseRT]                = PlayApp::AllocTexture<Texture>();
-     _textureSlot[eSpecularRT]               = PlayApp::AllocTexture<Texture>();
-     _textureSlot[eRadianceRT]               = PlayApp::AllocTexture<Texture>();
-     _textureSlot[eNormalRT]                 = PlayApp::AllocTexture<Texture>();
-     _textureSlot[eAccumulateRT]             = PlayApp::AllocTexture<Texture>();
-     _textureSlot[ePostProcessRT]            = PlayApp::AllocTexture<Texture>();
+     _textureSlot[eDiffuseRT]                = PlayApp::AllocTexture();
+     _textureSlot[eSpecularRT]               = PlayApp::AllocTexture();
+     _textureSlot[eRadianceRT]               = PlayApp::AllocTexture();
+     _textureSlot[eNormalRT]                 = PlayApp::AllocTexture();
+     _textureSlot[eAccumulateRT]             = PlayApp::AllocTexture();
+     _textureSlot[ePostProcessRT]            = PlayApp::AllocTexture();
      auto colorImageCreateInfo = nvvk::makeImage2DCreateInfo(
          _app->getSize(), VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT|VK_IMAGE_USAGE_SAMPLED_BIT, false);
      auto samplerCreateInfo = nvvk::makeSamplerCreateInfo();
@@ -564,7 +564,7 @@ void VolumeRenderer::createRenderTarget()
          texture->image      = nvvkTexture.image;
          texture->memHandle  = nvvkTexture.memHandle;
          texture->descriptor = nvvkTexture.descriptor;
-         texture->_format    = imgInfo.format;
+         texture->_metadata._format    = imgInfo.format;
          // CUSTOM_NAME_VK(_app->m_debug, nvvkTexture.image);
      };
      createTexture(_textureSlot[eDiffuseRT], colorImageCreateInfo);
@@ -576,7 +576,7 @@ void VolumeRenderer::createRenderTarget()
      CUSTOM_NAME_VK(_app->m_debug, _textureSlot[eNormalRT]->image);
      {
          // depth image creation
-         _textureSlot[eDepthRT] = PlayApp::AllocTexture<Texture>();
+         _textureSlot[eDepthRT] = PlayApp::AllocTexture();
          auto depthImageCreateInfo = nvvk::makeImage2DCreateInfo(
              _app->getSize(), VK_FORMAT_R32_SFLOAT,
              VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, false);

@@ -152,7 +152,7 @@ void ModelLoader::loadModel(std::string path)
     auto cmd = _app->createTempCmdBuffer();
     
     // Create material buffer
-    _materialBuffer = _app->_bufferPool.alloc<Buffer>();
+    _materialBuffer = _app->_bufferPool.alloc();
     nvvk::Buffer materialBuf = _app->_alloc.createBuffer(
         cmd, sizeof(Material) * _sceneMaterials.size(), _sceneMaterials.data(),
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_EXT);
@@ -216,7 +216,7 @@ void ModelLoader::loadModel(std::string path)
     }
 
     // Create instance buffer
-    _instanceBuffer = _app->_bufferPool.alloc<Buffer>();
+    _instanceBuffer = _app->_bufferPool.alloc();
     VkCommandBuffer tmpCmdBuffer = _app->createTempCmdBuffer();
     VkDeviceSize instanceBufferSize = sizeof(Mesh) * _sceneMeshes.size();
     nvvk::Buffer gpuInstanceBuffer = _app->_alloc.createBuffer(
@@ -233,7 +233,7 @@ void ModelLoader::loadModel(std::string path)
     
     // Create light mesh index buffer
     if (_emissiveMeshIdx.empty()) _emissiveMeshIdx.push_back(0);
-    _lightMeshIdxBuffer = _app->_bufferPool.alloc<Buffer>();
+    _lightMeshIdxBuffer = _app->_bufferPool.alloc();
     tmpCmdBuffer = _app->createTempCmdBuffer();
     nvvk::Buffer gpuLightMeshIdxBuffer = _app->_alloc.createBuffer(
         tmpCmdBuffer, sizeof(uint32_t) * _emissiveMeshIdx.size(), _emissiveMeshIdx.data(),
@@ -248,7 +248,7 @@ void ModelLoader::loadModel(std::string path)
     NAME_VK(_lightMeshIdxBuffer->buffer);
 
     // Create dynamic uniform buffer
-    _dynamicUniformBuffer = _app->_bufferPool.alloc<Buffer>();
+    _dynamicUniformBuffer = _app->_bufferPool.alloc();
     VkDeviceSize dynamicUniformBufferSize = sizeof(DynamicStruct) * _dynamicUniformData.size();
     VkBufferCreateInfo bufferInfo{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
     bufferInfo.size = dynamicUniformBufferSize;
@@ -329,7 +329,7 @@ uint32_t ModelLoader::processAssimpMesh(aiMesh* mesh, const aiScene* scene, uint
     }
     
     // Create vertex buffer
-    Buffer* vBuffer = _app->_bufferPool.alloc<Buffer>();
+    Buffer* vBuffer = _app->_bufferPool.alloc();
     VkCommandBuffer tmpCmdBuffer = _app->createTempCmdBuffer();
     VkDeviceSize vBufferSize = vertices.size() * sizeof(Vertex);
     nvvk::Buffer gpuVBuffer = _app->_alloc.createBuffer(
@@ -343,7 +343,7 @@ uint32_t ModelLoader::processAssimpMesh(aiMesh* mesh, const aiScene* scene, uint
     vBuffer->memHandle = gpuVBuffer.memHandle;
     
     // Create index buffer
-    Buffer* iBuffer = _app->_bufferPool.alloc<Buffer>();
+    Buffer* iBuffer = _app->_bufferPool.alloc();
     VkDeviceSize iBufferSize = indices.size() * sizeof(uint32_t);
     tmpCmdBuffer = _app->createTempCmdBuffer();
     nvvk::Buffer gpuIBuffer = _app->_alloc.createBuffer(
@@ -390,7 +390,7 @@ void ModelLoader::loadAssimpTexture(const std::string& texturePath)
 {
     // Check if texture already loaded
     for (const auto& tex : _sceneTextures) {
-        if (tex->_debugName == texturePath) {
+        if (tex->_metadata._debugName == texturePath) {
             return; // Already loaded
         }
     }
@@ -412,7 +412,7 @@ void ModelLoader::loadAssimpTexture(const std::string& texturePath)
         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         true);
     
-    Texture* tex = _app->_texturePool.alloc<Texture>();
+    Texture* tex = _app->_texturePool.alloc();
     size_t imageSize = width * height * 4; // RGBA
     nvvk::Image image = _app->_alloc.createImage(cmd, imageSize, pixels, imageInfo,
                                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
@@ -439,10 +439,10 @@ void ModelLoader::loadAssimpTexture(const std::string& texturePath)
     tex->image = nvvkTexture.image;
     tex->memHandle = image.memHandle;
     tex->descriptor = nvvkTexture.descriptor;
-    tex->_debugName = texturePath;
-    tex->_format = VK_FORMAT_R8G8B8A8_UNORM;
-    tex->_mipmapLevel = imageInfo.mipLevels;
-    
+    tex->_metadata._debugName = texturePath;
+    tex->_metadata._format = VK_FORMAT_R8G8B8A8_UNORM;
+    tex->_metadata._mipmapLevel = imageInfo.mipLevels;
+    tex->_metadata._extent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
     _sceneTextures.push_back(tex);
     
     // Free CPU image data

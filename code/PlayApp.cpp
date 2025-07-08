@@ -292,21 +292,21 @@ void PlayApp::OnPostRender()
 Texture* PlayApp::CreateTexture(VkImageCreateInfo& info, VkCommandBuffer* cmd)
 {
     if (!cmd) *cmd = createTempCmdBuffer();
-    Texture*      texture     = _texturePool.alloc<Texture>();
+    Texture*      texture     = _texturePool.alloc();
     auto          samplerInfo = nvvk::makeSamplerCreateInfo();
     nvvk::Texture nvvkTexture =
         _alloc.createTexture(*cmd, 0, nullptr, info, samplerInfo, VK_IMAGE_LAYOUT_UNDEFINED);
     texture->image      = nvvkTexture.image;
     texture->memHandle  = nvvkTexture.memHandle;
     texture->descriptor = nvvkTexture.descriptor;
-    texture->_format    = info.format;
+    texture->_metadata._format    = info.format;
     NAME_VK(texture->image);
     submitTempCmdBuffer(*cmd);
     return texture;
 }
 Buffer* PlayApp::CreateBuffer(VkBufferCreateInfo& info, VkMemoryPropertyFlags memProperties)
 {
-    Buffer*      buffer     = _bufferPool.alloc<Buffer>();
+    Buffer*      buffer     = _bufferPool.alloc();
     nvvk::Buffer nvvkBuffer = _alloc.createBuffer(info, memProperties);
     buffer->buffer          = nvvkBuffer.buffer;
     buffer->address         = nvvkBuffer.address;
