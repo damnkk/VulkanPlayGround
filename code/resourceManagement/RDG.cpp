@@ -8,7 +8,7 @@ bool RDG::RDGShaderParameters::addResource(RDGResourceHandle             resourc
                                            RDGResourceState::AccessType  accessType,
                                            RDGResourceState::AccessStage accessStage)
 {
-    assert(resource.isValid());
+    NV_ASSERT(resource.isValid());
     if (accessType >= RDGResourceState::AccessType::eCount) {
         throw std::runtime_error("RDGShaderParameters: Invalid access type");
     }
@@ -517,7 +517,7 @@ void RDG::RenderDependencyGraph::createBufferByDescription(
 
 RDG::RDGResourceHandle::ResourceType RDG::RenderDependencyGraph::inferResourceTypeFromImageUsage(VkImageUsageFlags usage, int textureCount){
     if (usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR)) {
-        assert(textureCount<=1 && "Texture count should be 1 for color or depth stencil attachments");
+        NV_ASSERT(textureCount<=1 && "Texture count should be 1 for color or depth stencil attachments");
             return
                 RDG::RDGResourceHandle::ResourceType::eAttachmentTexture;
         }
@@ -540,7 +540,7 @@ RDG::RDGResourceHandle::ResourceType RDG::RenderDependencyGraph::inferResourceTy
     if (bufferDesc._buffers.front()->_pData->_metadata._usageFlags &
         (VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT))
     {
-        assert(bufferCount == 1 && "Buffer count should be 1 for uniform buffers");
+        NV_ASSERT(bufferCount == 1 && "Buffer count should be 1 for uniform buffers");
         return RDG::RDGResourceHandle::ResourceType::eSRVBuffer;
     }
     else if (bufferDesc._buffers.front()->_pData->_metadata._usageFlags & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)

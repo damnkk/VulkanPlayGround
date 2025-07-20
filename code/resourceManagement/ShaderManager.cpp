@@ -7,6 +7,7 @@
 #include <queue>
 #include <unordered_set>
 #include <nvh/fileoperations.hpp>
+#include <nvh/container_utils.hpp>
 
 const size_t SHADER_HASH_SEED = 0xDEADBEEF;
 const std::string SHADER_SAVE_DIR = "./spv";
@@ -44,8 +45,8 @@ namespace Play{
     }
 
     void ShaderManager::registerShader(const std::string& ShaderName, const std::string& ShaderCodePath,const std::string& shaderEntryPoint, ShaderType shaderType) {
-        size_t seed = SHADER_HASH_SEED;
-        auto shaderHash = hash_combine(seed, ShaderName, shaderType);
+        size_t shaderHash = SHADER_HASH_SEED;
+        nvh::hashCombine(shaderHash, ShaderName, shaderType);
         if(_shaderMap.find(shaderHash) != _shaderMap.end()) {
             throw std::runtime_error("Shader already registered");
         }
@@ -303,8 +304,8 @@ namespace Play{
     }
 
     const ShaderInfo ShaderManager::GetShaderWithType(std::string ShaderName, ShaderType type){
-        auto seed = SHADER_HASH_SEED;
-        auto hash = hash_combine(seed, ShaderName, type);
+        auto hash = SHADER_HASH_SEED;
+        nvh::hashCombine(hash, ShaderName, type);
         auto it = _shaderMap.find(hash);
         if (it != _shaderMap.end()) {
             if(it->second.spvData.empty()){

@@ -154,8 +154,10 @@ public:
     ~RDGGraphicPipelineState() = default;
     
     void setShaderInfo(const ShaderInfo& shaderInfo);
-    std::string  _vertexShaderName;
-    std::string  _fragmentShaderName;
+    VkPipeline _pipeline;
+    ShaderInfo* _vshaderInfo;
+    ShaderInfo* _fshaderInfo;
+    ShaderInfo* _gshaderInfo;
 };
 
 class RDGComputePipelineState{
@@ -164,7 +166,8 @@ public:
     RDGComputePipelineState(const RDGComputePipelineState& other)= default;
     ~RDGComputePipelineState() = default;
     void setShaderInfo(const ShaderType& shaderInfo);
-    std::string _computeShaderName;
+    VkPipeline _pipeline;
+    ShaderInfo* _cshaderInfo;
 };
 
 
@@ -200,8 +203,14 @@ private:
 template<typename FLambdaFunction>
 class RDGRenderPass:public RDGPass{
 public:
-    RDGRenderPass(RDGShaderParameters& shaderParameters, RDGGraphicPipelineState pipelineState,uint8_t passType,std::string name="",FLambdaFunction&& executeFunction = nullptr)
+    RDGRenderPass(RDGShaderParameters& shaderParameters, RDGGraphicPipelineState& pipelineState,uint8_t passType,std::string name="",FLambdaFunction&& executeFunction = nullptr)
         :RDGPass(shaderParameters, passType, std::move(name)), _pipelineState(pipelineState), _executeFunction(std::forward<FLambdaFunction>(executeFunction)) {
+        int RTCnt = 0;
+        for(auto& resourceState:shaderParameters._resources[static_cast<size_t>(RDGResourceState::AccessType::eWriteOnly)]) {
+            if(!resourceState._resourceHandle.isTexture()||resourceState._resourceHandle.isArray()) continue;
+            NV_ASSERT(RTCnt < _RTSlots.size());
+            _RTSlots[RTCnt++] = resourceState._resourceHandle;
+        }
     }
     void prepareResource() override;
     void execute() {
@@ -214,6 +223,7 @@ protected:
 private:
     VkRenderPass _renderPass;
     VkFramebuffer _frameBuffer;
+    std::vector<VkDescriptorSet> _descriptorSets;
     RDGGraphicPipelineState _pipelineState;
     FLambdaFunction _executeFunction;
     std::array<RDGResourceHandle,32> _RTSlots;

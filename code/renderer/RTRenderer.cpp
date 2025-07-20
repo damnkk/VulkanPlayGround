@@ -281,7 +281,7 @@ void RTRenderer::buildTlas()
             nodes.push(child.get());
         }
     }
-    assert(instances.size());
+    NV_ASSERT(instances.size());
     _rtBuilder.buildTlas(instances);
     _tlasAccels = _rtBuilder.getAccelerationStructure();
 }
@@ -619,7 +619,7 @@ void RTRenderer::createRTPipeline()
 
     auto res = vkCreateRayTracingPipelinesKHR(_app->m_device, {}, {}, 1, &rtPipelineInfo, nullptr,
                                               &_rtPipeline);
-    assert(res == VK_SUCCESS);
+    NV_ASSERT(res == VK_SUCCESS);
     CUSTOM_NAME_VK(_app->m_debug, _rtPipeline);
 
     _sbtWrapper.addIndex(nvvk::SBTWrapper::GroupType::eRaygen, 0);
@@ -666,7 +666,7 @@ void RTRenderer::createPostProcessFBO()
     framebufferInfo.layers          = 1;
     VkResult res =
         vkCreateFramebuffer(_app->m_device, &framebufferInfo, nullptr, &_postProcessFBO);
-    assert(res == VK_SUCCESS);
+    NV_ASSERT(res == VK_SUCCESS);
 }
 
 void RTRenderer::createPostPipeline()

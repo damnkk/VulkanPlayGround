@@ -64,7 +64,7 @@ ComputePass&         ComputePass::addInputBuffer(Buffer* buffer,VkDescriptorType
 
 ComputePass& ComputePass::addComponent(Texture* texture, VkImageLayout initLayout,VkImageLayout finalLayout, bool needClear)
 {
-    assert(texture!=nullptr);
+    NV_ASSERT(texture!=nullptr);
     this->outputComponent.push_back(texture);
     this->layoutStates.push_back({initLayout,finalLayout,needClear});
     return *this;
@@ -539,7 +539,7 @@ void VolumeRenderer::createRenderResource()
  
     _app->submitTempCmdBuffer(cmd);
     createRenderTarget();
-    assert(checkResourceState() && "Some crutial resource is not created successfully!");
+    NV_ASSERT(checkResourceState() && "Some crutial resource is not created successfully!");
 }
 
 void VolumeRenderer::createRenderTarget()
