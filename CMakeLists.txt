@@ -36,7 +36,7 @@ set(SHADERC_SKIP_EXAMPLES ON)
 set(SHADERC_SKIP_COPYRIGHT_CHECK ON)
 
 # 强制shaderc使用静态版本的依赖
-set(SPIRV_TOOLS_BUILD_STATIC ON CACHE BOOL "Build SPIRV-Tools as static library")
+# set(SPIRV_TOOLS_BUILD_STATIC ON CACHE BOOL "Build SPIRV-Tools as static library")
 add_subdirectory(External/shaderc)
 
 ## Various functions and macros REQUIRED
@@ -109,8 +109,9 @@ foreach(RELEASELIB ${LIBRARIES_OPTIMIZED})
 endforeach(RELEASELIB)
 
 target_include_directories(VulkanPlayGround PRIVATE 
-    ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/code
+    ${PROJECT_SOURCE_DIR}/code/renderer
+    ${PROJECT_SOURCE_DIR}/code/resourceManagement
     ${PROJECT_SOURCE_DIR}/shaders
     ${CMAKE_SOURCE_DIR}/External/Assimp/include
     ${CMAKE_SOURCE_DIR}/External/shaderc/libshaderc/include

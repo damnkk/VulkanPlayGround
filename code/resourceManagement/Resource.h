@@ -6,8 +6,9 @@
 #include "host_device.h"
 namespace Play
 {
-struct Texture : public nvvk::Texture
+class Texture : public nvvk::Texture
 {
+public:
     Texture() = default;
     Texture(int poolID) : _poolId(poolID) {};
     int         _poolId = -1;
@@ -19,12 +20,14 @@ struct Texture : public nvvk::Texture
         VkImageAspectFlags _aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
         VkSampleCountFlags _sampleCount = VK_SAMPLE_COUNT_1_BIT;
         uint32_t     _mipmapLevel = 1;
+        uint32_t     _layerCount = 1;
         std::string _debugName;
     }_metadata;
 };
 
-struct Buffer : public nvvk::Buffer
+class Buffer : public nvvk::Buffer
 {
+public:
     Buffer(int poolID) : _poolId(poolID) {};
     int                    _poolId = -1;
     VkDescriptorBufferInfo descriptor;

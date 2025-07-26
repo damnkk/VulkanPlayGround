@@ -16,8 +16,8 @@ use resource handle as resource itself,to confirm the dependency, and specify th
 #include "nvvk/pipeline_vk.hpp"
 #include "nvvk/renderpasses_vk.hpp"
 #include "ShaderManager.h"
-#include "Resource.h"
 #include "PlayApp.h"
+#include "RDGResources.h"
 namespace Play{
 namespace RDG{
 
@@ -80,68 +80,6 @@ class RDGResourceState{
     RDGResourceHandle _resourceHandle;
 };
 
-class RDGTexture{
-public:
-    friend class RenderDependencyGraph;
-    friend class RDGTextureDescriptionPool;
-    RDGTexture() = default;
-    RDGTexture(Texture* texture) : _pData(texture) {}
-    RDGTexture(const RDGTexture&) = delete;
-    RDGTexture& operator=(const RDGTexture&) = delete;
-    ~RDGTexture() = default;
-    void setMetaData(Texture::TexMetaData metadata) { this->_pData->_metadata = metadata; }
-private:
-    Texture* _pData;
-};
-
-class TextureStates:public RDGResourceState{
-   
-};
-
-class RDGBuffer{
-public:
-    friend class RenderDependencyGraph;
-    friend class RDGBufferDescriptionPool;
-    RDGBuffer() = default;
-    RDGBuffer(Buffer* buffer) : _pData(buffer) {}
-    RDGBuffer(const RDGBuffer&) = delete;
-    RDGBuffer& operator=(const RDGBuffer&) = delete;
-    ~RDGBuffer() = default;
-    void setMetaData(Buffer::BufferMetaData metadata) { this->_pData->_metadata = metadata; }
-private:
-    Buffer* _pData;
-};
-
-class BufferStates:public RDGResourceState{
-
-};
-
-class RDGTextureDescriptionPool;
-class RDGTextureDescription{
-public:
-    RDGTextureDescription() = default;
-    ~RDGTextureDescription() = default;
-
-private:
-    friend class RDGTextureDescriptionPool;
-    friend class RenderDependencyGraph;
-    bool _isExternalResource = false;
-    std::vector<std::shared_ptr<RDGTexture>> _textures;
-    RDGPass* _lastProducer = nullptr;
-};
-
-class RDGBufferDescriptionPool;
-class RDGBufferDescription{
-public:
-   
-private:
-    friend class RDGBufferDescriptionPool;
-    friend class RenderDependencyGraph;
-    std::vector<std::shared_ptr<RDGBuffer>> _buffers;
-    bool _isExternalResource = false;
-    RDGPass* _lastProducer = nullptr;
-};
-
 struct RDGShaderParameters{
     bool addResource(RDGResourceHandle resource, RDGResourceState::AccessType accessType, RDGResourceState::AccessStage accessStage = RDGResourceState::AccessStage::eAll);
     std::array<std::vector<RDGResourceState>, static_cast<size_t>(RDGResourceState::AccessType::eCount)> _resources;
@@ -190,8 +128,6 @@ private:
     PassType _passType;
     std::string _name;
     RDGShaderParameters* _shaderParameters;
-    std::vector<TextureStates> _textureStates;
-    std::vector<BufferStates> _bufferStates;
     std::vector<RDGPass*> _dependencies;
 };
 
@@ -247,40 +183,40 @@ private:
     FLambdaFunction _executeFunction;
 };
 
-class RDGTextureDescriptionPool : public BasePool<RDGTextureDescription>
+class RDGTexturePool : public BasePool<RDGTexture>
 {
 public:
     void init(uint32_t poolSize);
     void deinit();
-    RDGResourceHandle alloc();
-    void destroy(RDGResourceHandle handle);
-    RDGTextureDescription* operator[](RDGResourceHandle handle) const {
-        if (!handle.isValid() || handle.getHandle() >= _objs.size()) {
-            throw std::runtime_error("RDGTextureDescriptionPool: Invalid texture description handle");
+    RDGTexture* alloc();
+    void destroy(TextureHandle handle);
+    void destroy(RDGTexture* texture);
+    RDGTexture* operator[](TextureHandle handle) const {
+        if (!handle.isValid() || handle.index >= _objs.size()) {
+            throw std::runtime_error("RDGTexturePool: Invalid texture handle");
         }
-        return _objs[handle.getHandle()];
+        return _objs[handle.index];
     }
-    
 private:
-    using BasePool<RDGTextureDescription>::init;
+    using BasePool<RDGTexture>::init;
 };
 
-class RDGBufferDescriptionPool : public BasePool<RDGBufferDescription>
+class RDGBufferPool : public BasePool<RDGBuffer>
 {
 public:
     void init(uint32_t poolSize);
     void deinit();
-    RDGResourceHandle alloc();
-    void destroy(RDGResourceHandle handle);
-    RDGBufferDescription* operator[](RDGResourceHandle handle) const {
-        if (!handle.isValid() || handle.getHandle() >= _objs.size()) {
-            throw std::runtime_error("RDGBufferDescriptionPool: Invalid buffer description handle");
+    RDGBuffer* alloc();
+    void destroy(BufferHandle handle);
+    void destroy(RDGBuffer* buffer);
+    RDGBuffer* operator[](BufferHandle handle) const {
+        if (!handle.isValid() || handle.index >= _objs.size()) {
+            throw std::runtime_error("RDGBufferPool: Invalid buffer handle");
         }
-        return _objs[handle.getHandle()];
+        return _objs[handle.index];
     }
-    
 private:
-    using BasePool<RDGBufferDescription>::init;
+    using BasePool<RDGBuffer>::init;
 };
 
 class RenderDependencyGraph{
@@ -295,59 +231,15 @@ public:
     void addRenderPass(RDGShaderParameters& shaderParameters, PipelineState pipelineState, LambdaFunction&& executeFunction, std::string name = "");
     void compile();
     void execute();
-    RDGResourceHandle createTexture(std::string name,VkFormat format,VkImageType type,VkExtent3D extent,VkImageUsageFlags usageFlags,VkImageAspectFlags aspectFlags,VkSampleCountFlags sampleCount,uint32_t mipmaplevel,int textureCount);
-    RDGResourceHandle createTexture2D(VkFormat format, uint32_t width, uint32_t height, VkImageUsageFlags usageFlags,int textureCount=1);
-    RDGResourceHandle createTexture2D(const std::string& name, VkFormat format, uint32_t width, uint32_t height, VkImageUsageFlags usageFlags,int textureCount);
-    RDGResourceHandle createColorTarget(uint32_t width, uint32_t height, VkFormat format = VK_FORMAT_R8G8B8A8_UNORM);
-    RDGResourceHandle createColorTarget(const std::string& name, uint32_t width, uint32_t height, VkFormat format);
-    RDGResourceHandle createDepthTarget(uint32_t width, uint32_t height, VkFormat format ,VkSampleCountFlagBits sampleCnt);
-    RDGResourceHandle createDepthTarget(const std::string& name, uint32_t width, uint32_t height, VkFormat format = VK_FORMAT_D24_UNORM_S8_UINT,VkSampleCountFlagBits sampleCnt= VK_SAMPLE_COUNT_1_BIT);
-    RDGResourceHandle createComputeTexture2D(uint32_t width, uint32_t height, VkFormat format = VK_FORMAT_R8G8B8A8_UNORM,int textureCount = 1);
-    RDGResourceHandle createComputeTexture2D(const std::string& name, uint32_t width, uint32_t height, VkFormat format, int textureCount);
-    RDGResourceHandle createTexture3D(uint32_t width, uint32_t height, uint32_t depth, VkFormat format, VkImageUsageFlags usageFlags,int textureCount = 1);
-    RDGResourceHandle createTexture3D(const std::string& name, uint32_t width, uint32_t height, uint32_t depth, VkFormat format, VkImageUsageFlags usageFlags,int textureCount);
-    using MSAALevel = VkSampleCountFlagBits;
-    RDGResourceHandle createMSAATexture2D(uint32_t width, uint32_t height, VkFormat format, MSAALevel samples);
-    RDGResourceHandle createMSAATexture2D(const std::string& name, uint32_t width, uint32_t height, VkFormat format, MSAALevel samples);
-    // RDGResourceHandle createTextureLike(RDGResourceHandle reference, VkFormat format, VkImageUsageFlags usageFlags,int TextureCount = 1);
-    // RDGResourceHandle createTextureLike(const std::string& name, RDGResourceHandle reference, VkFormat format, VkImageUsageFlags usageFlags,int TextureCount);
-
+    
     RDGResourceHandle registExternalTexture(Texture* texture);
     RDGResourceHandle registExternalBuffer(Buffer* buffer);
 
-    void destroyTexture(RDGResourceHandle handle);
-    void destroyBuffer(RDGResourceHandle handle);
-
-    RDGResourceHandle createBuffer(const std::string& name, VkDeviceSize size, VkBufferUsageFlags usageFlags, Buffer::BufferMetaData::BufferLocation location,VkDeviceSize range,int bufferCount);
-    RDGResourceHandle createBuffer(VkDeviceSize size, VkBufferUsageFlags usageFlags, Buffer::BufferMetaData::BufferLocation location = Buffer::BufferMetaData::BufferLocation::eDeviceOnly,VkDeviceSize range = VK_WHOLE_SIZE,int bufferCount = 1);
-
-    // Uniform缓冲便利接口 - 作为UBO描述符绑定
-    RDGResourceHandle createUniformBuffer(VkDeviceSize size,VkDeviceSize range = VK_WHOLE_SIZE,Buffer::BufferMetaData::BufferLocation location = Buffer::BufferMetaData::BufferLocation::eHostVisible);
-    RDGResourceHandle createUniformBuffer(const std::string& name, VkDeviceSize size,VkDeviceSize range, Buffer::BufferMetaData::BufferLocation location);
-    template<typename T>
-    RDGResourceHandle createUniformBuffer(const T& data);
-    template<typename T>
-    RDGResourceHandle createUniformBuffer(const std::string& name, const T& data);
-    // 动态缓冲接口 - 每帧更新的描述符缓冲
-    RDGResourceHandle createDynamicUniformBuffer(VkDeviceSize size, VkBufferUsageFlags usageFlags,VkDeviceSize range = VK_WHOLE_SIZE);
-    RDGResourceHandle createDynamicUniformBuffer(const std::string& name, VkDeviceSize size, VkBufferUsageFlags usageFlags,VkDeviceSize range);
-
-    // 存储缓冲便利接口 - 作为SSBO描述符绑定（计算着色器常用）
-    RDGResourceHandle createStorageBuffer(VkDeviceSize size,int bufferCount = 1);
-    RDGResourceHandle createStorageBuffer(const std::string& name, VkDeviceSize size,int bufferCount);
-    template<typename T>
-    RDGResourceHandle createStorageBuffer(const std::vector<T>& data);
-    template<typename T>
-    RDGResourceHandle createStorageBuffer(const std::string& name, const std::vector<T>& data);
+    void destroyTexture(TextureHandle handle);
+    void destroyBuffer(BufferHandle handle);
 
 protected:
     void onCreatePass(RDGPass* pass);
-    void createTextureByDescription(const RDGTextureDescription& description);
-    void createBufferByDescription(const RDGBufferDescription& description);
-    RDGTextureDescription* getTextureDescription(RDGResourceHandle handle) const;
-    RDGBufferDescription* getBufferDescription(RDGResourceHandle handle) const;
-    RDGResourceHandle::ResourceType inferResourceTypeFromImageUsage(VkImageUsageFlags usage, int textureCount);
-    RDGResourceHandle::ResourceType inferResourceTypeFromBufferUsage(RDG::RDGBufferDescription& bufferDesc, int bufferCount);
     void clipPasses();
     bool hasCircle();
     void prepareResource();
@@ -356,14 +248,14 @@ private:
     bool hasCircle(RDGPass* pass, std::unordered_set<RDGPass*>& visited);
 
 protected:
-    RDGTextureDescriptionPool _rdgTexturePool;
-    RDGBufferDescriptionPool _rdgBufferPool;
+    RDGTexturePool _rdgTexturePool;
+    RDGBufferPool _rdgBufferPool;
     std::vector<int> _rdgAvaliableTextureIndices;
     std::vector<int> _rdgAvaliableBufferIndices;
     std::vector<RDGPass*> _rdgPasses;
     std::vector<RDGPass*> _clippedPasses;
-    std::unordered_map<Texture*, RDGResourceHandle> _externalTextures;
-    std::unordered_map<Buffer*, RDGResourceHandle> _externalBuffers;
+    std::unordered_map<RDGTexture*, RDGResourceHandle> _externalTextures;
+    std::unordered_map<RDGBuffer*, RDGResourceHandle> _externalBuffers;
     PlayApp* _app = nullptr;
 };
 
@@ -396,29 +288,6 @@ void Play::RDG::RenderDependencyGraph::addRenderPass(
     addPass(shaderParameters,pipelineState,std::forward<LambdaFunction>(executeFunction), 0, std::move(name));
 }
 
-template <typename T>
-Play::RDG::RDGResourceHandle Play::RDG::RenderDependencyGraph::createUniformBuffer(const T& data)
-{
-
-}
-
-template <typename T>
-Play::RDG::RDGResourceHandle Play::RDG::RenderDependencyGraph::createUniformBuffer(
-    const std::string& name, const T& data)
-{
-}
-
-template <typename T>
-Play::RDG::RDGResourceHandle Play::RDG::RenderDependencyGraph::createStorageBuffer(
-    const std::vector<T>& data)
-{
-}
-
-template <typename T>
-Play::RDG::RDGResourceHandle Play::RDG::RenderDependencyGraph::createStorageBuffer(
-    const std::string& name, const std::vector<T>& data)
-{
-}
 
 } //namespace RDG
 }// namespace Play
