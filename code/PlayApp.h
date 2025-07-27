@@ -12,6 +12,7 @@
 #include "nvp/NvFoundation.h"
 #include "pch.h"
 #include "renderer/Renderer.h"
+#include "RDG/RDG.h"
 namespace Play
 {
 struct Renderer;
@@ -19,7 +20,7 @@ struct RTRenderer;
 struct VolumeRenderer;
 class PlayApp : public nvvkhl::AppBaseVk
 {
-   public:
+public:
     void   onResize(int width, int height) override;
     void   onDestroy();
     void   OnInit();
@@ -43,19 +44,23 @@ class PlayApp : public nvvkhl::AppBaseVk
     static inline void     FreeBuffer(Buffer* buffer);
     static inline void*    MapBuffer(Buffer& buffer);
     static inline void     UnmapBuffer(Buffer& buffer);
+    static nvvk::ResourceAllocatorVma _alloc;
+    static TexturePool         _texturePool;
+    static BufferPool          _bufferPool;
 
     nvvk::DebugUtil m_debug;
 
-   protected:
+protected:
     void createGraphicsDescriptResource();
     void createGraphicsDescriptorSet();
     void createGraphicsDescriptorSetLayout();
     void createGraphicsPipeline();
 
-   private:
+private:
     friend class RTRenderer;
     friend class VolumeRenderer;
     friend class ShadingRateRenderer;
+    friend class RenderDependencyGraph;
 
     enum RenderMode
     {
@@ -68,9 +73,6 @@ class PlayApp : public nvvkhl::AppBaseVk
     } _renderMode = eShadingRateRendering;
     friend class ModelLoader;
     ModelLoader _modelLoader;
-    static nvvk::ResourceAllocatorVma _alloc;
-    static TexturePool         _texturePool;
-    static BufferPool          _bufferPool;
     VkDescriptorPool          _descriptorPool;
 
     VkDescriptorSet          _graphicDescriptorSet;

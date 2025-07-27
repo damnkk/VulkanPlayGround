@@ -303,7 +303,7 @@ namespace Play{
         return true;
     }
 
-    const ShaderInfo ShaderManager::GetShaderWithType(std::string ShaderName, ShaderType type){
+    const ShaderInfo* ShaderManager::GetShaderWithType(std::string ShaderName, ShaderType type){
         auto hash = SHADER_HASH_SEED;
         nvh::hashCombine(hash, ShaderName, type);
         auto it = _shaderMap.find(hash);
@@ -311,8 +311,9 @@ namespace Play{
             if(it->second.spvData.empty()){
                 it->second.spvData = nvh::loadFile(it->second.spvData, true);
             }
+            return &it->second;
         }
-        return {};
+        return nullptr;
     }
 
 } // namespace Play

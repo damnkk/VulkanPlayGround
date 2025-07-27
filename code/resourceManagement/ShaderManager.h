@@ -34,7 +34,7 @@ public:
     static void initialize();
     static bool CompileShader();
     static void SetCompilerOptions(const std::unordered_map<std::string, std::string>& options);
-    static const ShaderInfo GetShaderWithType(std::string ShaderName, ShaderType type);
+    static const ShaderInfo* GetShaderWithType(std::string ShaderName, ShaderType type);
 
 private:
     static std::unordered_set<std::string> parseIncludeDependencies(const std::string& shaderPath, bool recursive = true);

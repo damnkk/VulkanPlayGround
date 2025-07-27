@@ -2,21 +2,12 @@
 #include <stdexcept>
 #include "utils.hpp"
 #include "nvh/nvprint.hpp"
-namespace Play
+namespace Play::RDG
 {
-bool RDG::RDGShaderParameters::addResource(RDGResourceHandle             resource,
-                                           RDGResourceState::AccessType  accessType,
-                                           RDGResourceState::AccessStage accessStage)
-{
-    NV_ASSERT(resource.isValid());
-    if (accessType >= RDGResourceState::AccessType::eCount) {
-        throw std::runtime_error("RDGShaderParameters: Invalid access type");
-    }
-    _resources[static_cast<size_t>(accessType)].push_back({accessType,accessStage, resource});
-}
+
 
 // RDGTexturePool implementations
-void RDG::RDGTexturePool::init(uint32_t poolSize)
+void RDGTexturePool::init(uint32_t poolSize)
 {
     this->_objs.resize(poolSize);
     this->_freeIndices.resize(poolSize);
@@ -26,7 +17,7 @@ void RDG::RDGTexturePool::init(uint32_t poolSize)
     this->_availableIndex = 0;
 }
 
-void RDG::RDGTexturePool::deinit()
+void RDGTexturePool::deinit()
 {
     for (auto obj : _objs)
     {
@@ -40,7 +31,7 @@ void RDG::RDGTexturePool::deinit()
     }
 }
 
-RDG::RDGTexture* RDG::RDGTexturePool::alloc()
+RDGTexture* RDGTexturePool::alloc()
 {
     if(this->_availableIndex >= this->_objs.size()){
         throw std::runtime_error("RDGTexturePool: No available texture in pool");
@@ -50,7 +41,7 @@ RDG::RDGTexture* RDG::RDGTexturePool::alloc()
     return this->_objs[index];
 }
 
-void RDG::RDGTexturePool::destroy(TextureHandle handle)
+void RDGTexturePool::destroy(TextureHandle handle)
 {
     if(!handle.isValid()) return ;
     if(handle.index >= this->_objs.size()){
@@ -60,7 +51,7 @@ void RDG::RDGTexturePool::destroy(TextureHandle handle)
     this->_objs[handle.index] = nullptr; // Clear the pointer
 }
 
-void RDG::RDGTexturePool::destroy(RDG::RDGTexture* texture){
+void RDGTexturePool::destroy(RDGTexture* texture){
     if (texture == nullptr) {
         return;
     }
@@ -68,7 +59,7 @@ void RDG::RDGTexturePool::destroy(RDG::RDGTexture* texture){
 }
 
 // RDGBufferPool implementations
-void RDG::RDGBufferPool::init(uint32_t poolSize)
+void RDGBufferPool::init(uint32_t poolSize)
 {
     this->_objs.resize(poolSize);
     this->_freeIndices.resize(poolSize);
@@ -78,7 +69,7 @@ void RDG::RDGBufferPool::init(uint32_t poolSize)
     this->_availableIndex = 0;
 }
 
-void RDG::RDGBufferPool::deinit()
+void RDGBufferPool::deinit()
 {
     for (auto obj : _objs)
     {
@@ -90,7 +81,7 @@ void RDG::RDGBufferPool::deinit()
     }
 }
 
-RDG::RDGBuffer* RDG::RDGBufferPool::alloc()
+RDGBuffer* RDGBufferPool::alloc()
 {
     if(this->_availableIndex >= this->_objs.size()){
         throw std::runtime_error("RDGBufferDescriptionPool: No available buffer description in pool");
@@ -100,7 +91,7 @@ RDG::RDGBuffer* RDG::RDGBufferPool::alloc()
     return this->_objs[index];
 }
 
-void RDG::RDGBufferPool::destroy(RDG::BufferHandle handle)
+void RDGBufferPool::destroy(BufferHandle handle)
 {
     if(!handle.isValid()) return ;
     if(handle.index>= this->_objs.size()){
@@ -111,44 +102,80 @@ void RDG::RDGBufferPool::destroy(RDG::BufferHandle handle)
 }
 
 // RenderDependencyGraph implementations
-RDG::RenderDependencyGraph::RenderDependencyGraph()
+RenderDependencyGraph::RenderDependencyGraph()
 {
 
 }
-RDG::RenderDependencyGraph::~RenderDependencyGraph()
+RenderDependencyGraph::~RenderDependencyGraph()
 {
 
 }
 
-void                         RDG::RenderDependencyGraph::execute() {}
-void                         RDG::RenderDependencyGraph::compile()
+void             RenderDependencyGraph::execute() {}
+RDGTexture* RenderDependencyGraph::registExternalTexture(Texture* texture) {
+    return nullptr;
+}
+RDGBuffer*  RenderDependencyGraph::registExternalBuffer(Buffer* buffer) {
+    return nullptr;
+}
+RDGTexture* RenderDependencyGraph::createTexture(const TextureDesc& desc)
 {
-    for(auto& pass :this->_rdgPasses){
-        
-       
+    RDGTexture* texture = this->_rdgTexturePool.alloc();
+    texture->_pData = PlayApp::AllocTexture();
+    texture->_pData->_metadata._debugName = desc._debugName;
+    texture->_pData->_metadata._extent = desc._extent;
+    texture->_pData->_metadata._format = desc._format;
+    texture->_pData->_metadata._type = desc._type;
+    texture->_pData->_metadata._usageFlags = desc._usageFlags;
+    texture->_pData->_metadata._aspectFlags = desc._aspectFlags;
+    texture->_pData->_metadata._sampleCount = desc._sampleCount;
+    texture->_pData->_metadata._mipmapLevel = desc._mipmapLevel;
+    texture->_pData->_metadata._layerCount = desc._layerCount;
+    return texture;
+}
+
+RDGBuffer*  RenderDependencyGraph::createBuffer(const BufferDesc& desc)
+{
+    RDGBuffer* buffer = this->_rdgBufferPool.alloc();
+    buffer->_pData = PlayApp::AllocBuffer();
+    buffer->_pData->_metadata._debugName = desc._debugName;
+    buffer->_pData->_metadata._usageFlags = desc._usageFlags;
+    buffer->_pData->_metadata._size = desc._size;
+    buffer->_pData->_metadata._range = desc._range;
+    buffer->_pData->_metadata._location = desc._location;
+    return buffer;
+}
+
+void             RenderDependencyGraph::destroyTexture(TextureHandle handle) {}
+void             RenderDependencyGraph::destroyBuffer(BufferHandle handle) {}
+void             RenderDependencyGraph::destroyTexture(RDGTexture* texture) {}
+void             RenderDependencyGraph::destroyBuffer(RDGBuffer* buffer) {}
+void                         RenderDependencyGraph::compile()
+{
+    for(auto& pass :this->_rdgPasses){    
         hasCircle();
     }
     clipPasses();
     prepareResource();
 }
 
-void                   RDG::RenderDependencyGraph::onCreatePass(RDGPass* pass) {}
-void                   RDG::RenderDependencyGraph::clipPasses()
+void                   RenderDependencyGraph::onCreatePass(RDGPass* pass) {}
+void                   RenderDependencyGraph::clipPasses()
 {
     std::queue<RDGPass*> dependencyPassQueue;
     for (auto& externalTexture : this->_externalTextures)
     {
         
-        if (externalTexture.first->_lastProducer)
+        if (externalTexture->_lastProducer)
         {
-            dependencyPassQueue.push(externalTexture.first->_lastProducer);
+            dependencyPassQueue.push(externalTexture->_lastProducer);
         }
     }
     for (auto& externalBuffer : this->_externalBuffers)
     {
-        if (externalBuffer.first->_lastProducer)
+        if (externalBuffer->_lastProducer)
         {
-            dependencyPassQueue.push(externalBuffer.first->_lastProducer);
+            dependencyPassQueue.push(externalBuffer->_lastProducer);
         }
     }
     while (!dependencyPassQueue.empty())
@@ -163,47 +190,80 @@ void                   RDG::RenderDependencyGraph::clipPasses()
         }
     }
 }
-bool RDG::RenderDependencyGraph::hasCircle()
+bool RenderDependencyGraph::hasCircle()
 {
     std::unordered_set<RDGPass*> visited;
     std::unordered_set<RDGPass*> checked;
-    for (auto& [first,second] : this->_externalTextures)
+    for (auto& externalTexture : this->_externalTextures)
     {
 
-        if (!first->_lastProducer||checked.contains(first->_lastProducer)) continue;
+        if (!externalTexture->_lastProducer||checked.contains(externalTexture->_lastProducer)) continue;
 
-        if (this->hasCircle(first->_lastProducer, visited))
+        if (this->hasCircle(externalTexture->_lastProducer, visited))
         {
             LOGE("RDG: RenderDependencyGraph has circle dependency");
             return true;
         }
-        checked.insert(first->_lastProducer);
+        checked.insert(externalTexture->_lastProducer);
     }
-    for (auto & [first,second] : this->_externalBuffers)
+    for (auto& externalBuffer : this->_externalBuffers)
     {
-        if (!first->_lastProducer||checked.contains(first->_lastProducer)) continue;
+        if (!externalBuffer->_lastProducer || checked.contains(externalBuffer->_lastProducer)) continue;
 
-        if (this->hasCircle(first->_lastProducer, visited))
+        if (this->hasCircle(externalBuffer->_lastProducer, visited))
         {
             LOGE("RDG: RenderDependencyGraph has circle dependency");
             return true;
         }
-        checked.insert(first->_lastProducer);
+        checked.insert(externalBuffer->_lastProducer);
     }
     return false;
 }
-void                   RDG::RenderDependencyGraph::prepareResource() {
-
-    //textures, buffers, fbo, render pass,
-    for (auto& pass : this->_rdgPasses) {
+void RenderDependencyGraph::prepareResource()
+{
+    // textures, buffers, fbo, render pass,
+    for (auto& pass : this->_rdgPasses)
+    {
         if (pass->_isClipped) continue; // Skip already clipped passes
-        
     }
 }
+void RenderDependencyGraph::allocRHITexture(RDGTexture* texture) {
+    // if(texture->_metadata._usageFlags&VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT){}
+    //                 else{
+    //                    VkImageCreateInfo imgInfo {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    //                    switch (texture->_metadata._type) {
+    //                     case VK_IMAGE_TYPE_1D:
+    //                         imgInfo.extent = {texture->_metadata._extent.width, 1, 1};
+    //                         imgInfo.imageType = VK_IMAGE_TYPE_1D;
+    //                         imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    //                         imgInfo.format = texture->_metadata._format;
+    //                         imgInfo.usage = texture->_metadata._usageFlags;
+    //                         imgInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    //                         imgInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    //                         imgInfo.arrayLayers = 1;
+    //                     case VK_IMAGE_TYPE_2D:
+    //                         imgInfo = nvvk::makeImage2DCreateInfo(
+    //                             {texture->_metadata._extent.width, texture->_metadata._extent.height},
+    //                             texture->_metadata._format, texture->_metadata._usageFlags,
+    //                             texture->_metadata._mipmapLevel > 1);
+    //                         break;
+    //                     case VK_IMAGE_TYPE_3D:
+    //                         imgInfo = nvvk::makeImage3DCreateInfo(
+    //                             {texture->_metadata._extent.width, texture->_metadata._extent.height, texture->_metadata._extent.depth},
+    //                             texture->_metadata._format, texture->_metadata._usageFlags,
+    //                             texture->_metadata._mipmapLevel > 1);
+    //                         break;
+    //                     default:
+    //                         NV_ASSERT(false);
+    //                         break;
+    //                    }
+    //                    auto cmd= _hostGraph->getApp()->createTempCmdBuffer();
+    //                     nvvk::Texture image = _hostGraph->getApp()->_alloc.createTexture(const Image &image, const VkImageViewCreateInfo &imageViewCreateInfo, const VkSamplerCreateInfo &samplerCreateInfo);
+    //                 }
+}
+void RenderDependencyGraph::allocRHIBuffer(RDGBuffer* buffer) {}
 
-
-
-bool RDG::RenderDependencyGraph::hasCircle(RDGPass* pass, std::unordered_set<RDGPass*>& visited)
+bool RenderDependencyGraph::hasCircle(RDGPass* pass, std::unordered_set<RDGPass*>& visited)
 {
     if(!pass) return false;
     if(visited.find(pass) != visited.end()) {

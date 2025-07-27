@@ -37,7 +37,6 @@ public:
         VkDeviceSize _size;
         VkDeviceSize _range = VK_WHOLE_SIZE;
         enum class BufferLocation {
-            eHostOnly,
             eHostVisible,
             eDeviceOnly,
             eCount
