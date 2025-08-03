@@ -4,30 +4,29 @@
 #include <vector>
 #include "RDGResources.h"
 namespace Play::RDG {
+enum class AccessType{
+    eReadOnly, //uniform buffer, sampled texture
+    eWriteOnly, //most used for color attachments, depth attachments, msaa attachments, shading rate resolve attachments
+    eReadWrite, //storage buffer, storage texture
+    eCount
+};
+enum class AccessStage{
+    eVertexShader = 1 << 0,
+    eFragmentShader = 1 << 1,
+    eComputeShader = 1 << 2,
+    eRayTracingShader = 1 << 3,
+    eAllGraphics = eVertexShader | eFragmentShader | eComputeShader,
+    eAllCompute = eComputeShader | eRayTracingShader,
+    eAll = eAllGraphics | eAllCompute
+};
+
+enum class ResourceType{
+    eTexture,
+    eBuffer,
+    eCount
+};
 class RDGResourceState{
- public:
-    enum class AccessType{
-        eReadOnly, //uniform buffer, sampled texture
-        eWriteOnly, //most used for color attachments, depth attachments, msaa attachments, shading rate resolve attachments
-        eReadWrite, //storage buffer, storage texture
-        eCount
-    };
-    enum class AccessStage{
-        eVertexShader = 1 << 0,
-        eFragmentShader = 1 << 1,
-        eComputeShader = 1 << 2,
-        eRayTracingShader = 1 << 3,
-        eAllGraphics = eVertexShader | eFragmentShader | eComputeShader,
-        eAllCompute = eComputeShader | eRayTracingShader,
-        eAll = eAllGraphics | eAllCompute
-    };
-
-    enum class ResourceType{
-        eTexture,
-        eBuffer,
-        eCount
-    };
-
+public:
     ResourceType _resourceType = ResourceType::eCount;
     AccessType _accessType;
     AccessStage _accessStage;
@@ -36,18 +35,18 @@ class RDGResourceState{
 
 struct RDGShaderParameters{
     template<typename T>
-    bool addUAVResource(T* resource, RDGResourceState::AccessStage accessStage = RDGResourceState::AccessStage::eAll);
+    bool addUAVResource(T* resource, AccessStage accessStage = AccessStage::eAll);
     template<typename T>
-    bool addUAVBindlessArray(std::vector<T*> resources, RDGResourceState::AccessStage accessStage = RDGResourceState::AccessStage::eAll);
+    bool addUAVBindlessArray(std::vector<T*> resources, AccessStage accessStage = AccessStage::eAll);
     template<typename T>
-    bool addSRVResource(T* resource, RDGResourceState::AccessStage accessStage = RDGResourceState::AccessStage::eAll);
+    bool addSRVResource(T* resource, AccessStage accessStage = AccessStage::eAll);
     template<typename T>
-    bool addSRVBindlessArray(std::vector<T*> resources, RDGResourceState::AccessStage accessStage = RDGResourceState::AccessStage::eAll);
+    bool addSRVBindlessArray(std::vector<T*> resources, AccessStage accessStage = AccessStage::eAll);
     template<typename T>
-    bool addResource(T* resource, RDGResourceState::AccessType accessType, RDGResourceState::AccessStage accessStage = RDGResourceState::AccessStage::eAll);
+    bool addResource(T* resource, AccessType accessType, AccessStage accessStage = AccessStage::eAll);
     template<typename T>
-    bool addResourceBindlessArray(std::vector<T*> resources, RDGResourceState::AccessType accessType, RDGResourceState::AccessStage accessStage = RDGResourceState::AccessStage::eAll);
-    std::array<std::vector<RDGResourceState>, static_cast<size_t>(RDGResourceState::AccessType::eCount)> _resources;
+    bool addResourceBindlessArray(std::vector<T*> resources, AccessType accessType, AccessStage accessStage = AccessStage::eAll);
+    std::array<std::vector<RDGResourceState>, static_cast<size_t>(AccessType::eCount)> _resources;
 };
 
 struct RDGRTState{
@@ -66,15 +65,15 @@ struct RDGRTState{
 };
 
 template<typename T>
-bool RDGShaderParameters::addResource(T* resource, RDGResourceState::AccessType accessType, RDGResourceState::AccessStage accessStage) {
+bool RDGShaderParameters::addResource(T* resource, AccessType accessType,AccessStage accessStage) {
     if (!resource) return false;
     RDGResourceState state;
     state._accessType = accessType;
     state._accessStage = accessStage;
     if constexpr(std::is_same<T,RDGTexture>::value) {
-        state._resourceType = RDGResourceState::ResourceType::eTexture;
+        state._resourceType = ResourceType::eTexture;
     } else if constexpr(std::is_same<T,RDGBuffer>::value) {
-        state._resourceType = RDGResourceState::ResourceType::eBuffer;
+        state._resourceType = ResourceType::eBuffer;
     } else {
         return false; // Unsupported resource type
     }
@@ -84,15 +83,15 @@ bool RDGShaderParameters::addResource(T* resource, RDGResourceState::AccessType 
 }
 
 template<typename T>
-bool RDGShaderParameters::addResourceBindlessArray(std::vector<T*> resources, RDGResourceState::AccessType accessType, RDGResourceState::AccessStage accessStage) {
+bool RDGShaderParameters::addResourceBindlessArray(std::vector<T*> resources, AccessType accessType, AccessStage accessStage) {
     if (resources.empty()) return false;
     RDGResourceState state;
     state._accessType = accessType;
     state._accessStage = accessStage;
     if constexpr(std::is_same<T,RDGTexture>::value) {
-        state._resourceType = RDGResourceState::ResourceType::eTexture;
+        state._resourceType = ResourceType::eTexture;
     } else if constexpr(std::is_same<T,RDGBuffer>::value) {
-        state._resourceType = RDGResourceState::ResourceType::eBuffer;
+        state._resourceType = ResourceType::eBuffer;
     } else {
         return false; // Unsupported resource type
     }
@@ -102,28 +101,24 @@ bool RDGShaderParameters::addResourceBindlessArray(std::vector<T*> resources, RD
 }
 
 template<typename T>
-bool RDGShaderParameters::addUAVResource(T* resource, RDGResourceState::AccessStage accessStage) {
-    return addResource(resource, RDGResourceState::AccessType::eReadWrite, accessStage);
+bool RDGShaderParameters::addUAVResource(T* resource, AccessStage accessStage) {
+    return addResource(resource, AccessType::eReadWrite, accessStage);
 }
 
 template<typename T>
-bool RDGShaderParameters::addUAVBindlessArray(std::vector<T*> resources, RDGResourceState::AccessStage accessStage) {
-    return addResourceBindlessArray(resources, RDGResourceState::AccessType::eReadWrite, accessStage);
+bool RDGShaderParameters::addUAVBindlessArray(std::vector<T*> resources, AccessStage accessStage) {
+    return addResourceBindlessArray(resources, AccessType::eReadWrite, accessStage);
 }
 
 template<typename T>
-bool RDGShaderParameters::addSRVResource(T* resource, RDGResourceState::AccessStage accessStage) {
-    return addResource(resource, RDGResourceState::AccessType::eReadOnly, accessStage);
+bool RDGShaderParameters::addSRVResource(T* resource, AccessStage accessStage) {
+    return addResource(resource, AccessType::eReadOnly, accessStage);
 }
 
 template<typename T>
-bool RDGShaderParameters::addSRVBindlessArray(std::vector<T*> resources, RDGResourceState::AccessStage accessStage) {
-    return addResourceBindlessArray(resources, RDGResourceState::AccessType::eReadOnly, accessStage);   
+bool RDGShaderParameters::addSRVBindlessArray(std::vector<T*> resources, AccessStage accessStage) {
+    return addResourceBindlessArray(resources, AccessType::eReadOnly, accessStage);
 }
-
-
-
-
 }// namespace Play::RDG
 
 #endif // RDG_SHADER_PARAMETERS_HPP

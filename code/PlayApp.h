@@ -3,7 +3,7 @@
 #include "nvvkhl/appbase_vk.hpp"
 #include "resourceManagement/ModelLoader.h" // Ensure ModelLoader class is defined in this header
 #include "nvvk/memallocator_vma_vk.hpp"
-#include "nvvk/acceleration_structures.hpp"
+#include "PlayAllocator.h"
 #include "resourceManagement/Resource.h"
 #include "resourceManagement/SceneNode.h"
 #include "nvvk/raytraceKHR_vk.hpp"
@@ -12,12 +12,15 @@
 #include "nvp/NvFoundation.h"
 #include "pch.h"
 #include "renderer/Renderer.h"
-#include "RDG/RDG.h"
+
 namespace Play
 {
-struct Renderer;
-struct RTRenderer;
-struct VolumeRenderer;
+class Renderer;
+class RTRenderer;
+class VolumeRenderer;
+namespace RDG{
+class RenderDependencyGraph;
+}
 class PlayApp : public nvvkhl::AppBaseVk
 {
 public:
@@ -32,7 +35,7 @@ public:
     {
         return _scene;
     };
-    nvvk::ResourceAllocatorVma& getAlloc()
+    PlayAllocator& getAlloc()
     {
         return _alloc;
     }
@@ -44,23 +47,24 @@ public:
     static inline void     FreeBuffer(Buffer* buffer);
     static inline void*    MapBuffer(Buffer& buffer);
     static inline void     UnmapBuffer(Buffer& buffer);
-    static nvvk::ResourceAllocatorVma _alloc;
+    static PlayAllocator   _alloc;
     static TexturePool         _texturePool;
     static BufferPool          _bufferPool;
 
-    nvvk::DebugUtil m_debug;
+        nvvk::DebugUtil m_debug;
 
-protected:
-    void createGraphicsDescriptResource();
-    void createGraphicsDescriptorSet();
-    void createGraphicsDescriptorSetLayout();
-    void createGraphicsPipeline();
+    protected:
+        void createGraphicsDescriptResource();
+        void createGraphicsDescriptorSet();
+        void createGraphicsDescriptorSetLayout();
+        void createGraphicsPipeline();
 
-private:
-    friend class RTRenderer;
-    friend class VolumeRenderer;
-    friend class ShadingRateRenderer;
-    friend class RenderDependencyGraph;
+    private:
+        friend class RTRenderer;
+        friend class VolumeRenderer;
+        friend class ShadingRateRenderer;
+        friend class RDG::RenderDependencyGraph;
+
 
     enum RenderMode
     {

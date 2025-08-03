@@ -21,121 +21,11 @@ use resource handle as resource itself,to confirm the dependency, and specify th
 #include "RDGPasses.hpp"
 namespace Play{
 namespace RDG{
-// class PlayApp;
-class RDGPass;
-class RenderDependencyGraph;
-
-class RDGGraphicPipelineState:public nvvk::GraphicsPipelineState{
-public:
-    RDGGraphicPipelineState() = default;
-    RDGGraphicPipelineState(const RDGGraphicPipelineState& other)= default;
-    ~RDGGraphicPipelineState() = default;
-
-    RDGGraphicPipelineState& setVertexShaderInfo(const ShaderInfo& shaderInfo);
-    RDGGraphicPipelineState& setFragmentShaderInfo(const ShaderInfo& shaderInfo);
-    RDGGraphicPipelineState& setGeometryShaderInfo(const ShaderInfo& shaderInfo);
-    VkPipeline _pipeline;
-    ShaderInfo* _vshaderInfo;
-    ShaderInfo* _fshaderInfo;
-    ShaderInfo* _gshaderInfo;
-};
-
-class RDGComputePipelineState{
-public: 
-    RDGComputePipelineState() = default;
-    RDGComputePipelineState(const RDGComputePipelineState& other)= default;
-    ~RDGComputePipelineState() = default;
-    void setShaderInfo(const ShaderType& shaderInfo);
-    VkPipeline _pipeline;
-    ShaderInfo* _cshaderInfo;
-};
-
-
-class RDGPass
+enum PassType : uint8_t
 {
-   public:
-    RDGPass(uint8_t passType, std::string name = "");
-    RDGPass(std::shared_ptr<RDGShaderParameters> shaderParameters, uint8_t passType,
-            std::string name = "");
-    RDGPass(const RDGPass&) = delete;
-    virtual ~RDGPass() {};
-    void         setShaderParameters(const std::shared_ptr<RDGShaderParameters> shaderParameters);
-    virtual void prepareResource() {};
-    enum class PassType : uint8_t
-    {
-        eRenderPass,
-        eComputePass,
-    };
-
-   protected:
-    RenderDependencyGraph* _hostGraph = nullptr;
-    friend class RenderDependencyGraph;
-    bool                                 _isClipped = true;
-    PassType                             _passType;
-    std::string                          _name;
-    std::shared_ptr<RDGShaderParameters> _shaderParameters;
-    std::vector<RDGPass*>                _dependencies;
+    eRenderPass,
+    eComputePass,
 };
-
-inline RDGPass::RDGPass(std::shared_ptr<RDGShaderParameters> shaderParameters, uint8_t passType,
-                        std::string name)
-{
-    NV_ASSERT(shaderParameters);
-    _shaderParameters = std::move(shaderParameters);
-    _passType = static_cast<PassType>(passType);
-    _name = std::move(name);
-}
-/*
-    So called _executeFunction is a lambda function that include the total render logic in this
-   pass,is may include a scene or some geometry data, shader ref as parameters
-*/
-template<typename FLambdaFunction>
-class RDGRenderPass:public RDGPass{
-public:
-    RDGRenderPass(std::shared_ptr<RDGShaderParameters> shaderParameters, RDGGraphicPipelineState& pipelineState,uint8_t passType,std::string name="",FLambdaFunction&& executeFunction = nullptr)
-        :RDGPass(shaderParameters, passType, std::move(name)),_executeFunction(std::forward<FLambdaFunction>(executeFunction)) {
-        NV_ASSERT(pipelineState._fshaderInfo&&pipelineState._vshaderInfo);
-        _RTSlots.reserve(16);
-    }
-    ~RDGRenderPass() override;
-    void prepareResource() override;
-    void execute() {
-        if (_executeFunction) {
-            _executeFunction();
-        }
-    }
-    void addSlot(RDGTexture* rtTexture,RDGTexture* resolveTexture,RDGRTState::LoadType loadType = RDGRTState::LoadType::eDontCare, RDGRTState::StoreType storeType = RDGRTState::StoreType::eStore);
-
-protected:
-   friend class RenderDependencyGraph;
-private:
-    VkRenderPass _renderPass;
-    VkFramebuffer _frameBuffer;
-    std::vector<VkDescriptorSet> _descriptorSets;
-    RDGGraphicPipelineState _pipelineState;
-    FLambdaFunction _executeFunction;
-    std::vector<RDGRTState> _RTSlots;
-};
-
-template<typename FLambdaFunction>
-class RDGComputePass:public RDGPass{
-public:
-    RDGComputePass(std::shared_ptr<RDGShaderParameters> shaderParameters, uint8_t passType,std::string name="",FLambdaFunction&& executeFunction = nullptr)
-        :RDGPass(shaderParameters, passType, std::move(name)), _executeFunction(std::forward<FLambdaFunction>(executeFunction)) {
-    }
-    ~RDGComputePass() override;
-    void prepareResource() override;
-    void execute() {
-        if (_executeFunction) {
-            _executeFunction();
-        }
-    }
-protected:
-    friend class RenderDependencyGraph;
-private:
-    FLambdaFunction _executeFunction;
-};
-
 
 class RDGTexturePool : public BasePool<RDGTexture>
 {
@@ -179,7 +69,7 @@ struct TextureDesc{
     VkExtent3D _extent = {1, 1, 1};
     VkImageUsageFlags _usageFlags = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     VkImageAspectFlags _aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
-    VkSampleCountFlags _sampleCount = VK_SAMPLE_COUNT_1_BIT;
+    VkSampleCountFlagBits _sampleCount = VK_SAMPLE_COUNT_1_BIT;
     uint32_t     _mipmapLevel = 1;
     uint32_t     _layerCount = 1;
     std::string _debugName;
@@ -192,11 +82,18 @@ struct BufferDesc{
     Buffer::BufferMetaData::BufferLocation _location= Buffer::BufferMetaData::BufferLocation::eDeviceOnly;
     std::string _debugName;
 };
+
 class RenderDependencyGraph
 {
 public:
     RenderDependencyGraph();
     ~RenderDependencyGraph();
+    /*
+      if the pass shader parameters have readAndWrite resource,that will flush the resource's lastproducer, so if you have several passes
+      need the same input resource, the adding order is important. for instance, passX output a textureA, then you add passY to readAndWrite
+      textureA, then you add passZ to read textureA to do something. as this order, passZ will get passY's output, is u want passX's "textureA"
+      this will lead a mistake, so you should add passZ before passY.
+    */
     template <typename PipelineState, typename LambdaFunction>
     void addPass(RDGShaderParameters& shaderParameters, PipelineState pipelineState,
                  LambdaFunction&& executeFunction, uint8_t passType = 0, std::string name = "");
@@ -230,9 +127,9 @@ protected:
     void clipPasses();
     bool hasCircle();
     void prepareResource();
-
     void allocRHITexture(RDGTexture* texture);
     void allocRHIBuffer(RDGBuffer* buffer);
+    void updatePassDependency();
 
 private:
     bool hasCircle(RDGPass* pass, std::unordered_set<RDGPass*>& visited);
@@ -247,24 +144,11 @@ protected:
     std::vector<RDGTexture*> _externalTextures;
     std::vector<RDGBuffer*>  _externalBuffers;
     PlayApp*                 _app = nullptr;
+    std::array<std::vector<RDGPass*>,64> _passDepthLayout;
+    std::optional<uint32_t> _passCounter = 0;
     template<typename FLambdaFunction>
     friend class RDGRenderPass;
 };
-
-template <typename PipelineState,typename LambdaFunction>
-void Play::RDG::RenderDependencyGraph::addPass(
-    RDGShaderParameters& shaderParameters, PipelineState pipelineState, LambdaFunction&& executeFunction, uint8_t passType, std::string name)
-{
-    RDGPass* pass = nullptr;
-    if (passType == 0) {
-        pass = new RDGRenderPass(shaderParameters, passType, std::move(name), std::forward<LambdaFunction>(executeFunction));
-    } else {
-        pass = new RDGComputePass(shaderParameters, passType, std::move(name), std::forward<LambdaFunction>(executeFunction));
-    }
-    // createPass(pass);
-    _rdgPasses.push_back(pass);
-}
-
 
 template<typename PipelineState,typename LambdaFunction>
 void Play::RDG::RenderDependencyGraph::addComputePass(
@@ -280,58 +164,18 @@ void Play::RDG::RenderDependencyGraph::addRenderPass(
     addPass(shaderParameters,pipelineState,std::forward<LambdaFunction>(executeFunction), 0, std::move(name));
 }
 
-
-template <typename FLambdaFunction>
-RDGRenderPass<FLambdaFunction>::~RDGRenderPass()
+template <typename PipelineState,typename LambdaFunction>
+void Play::RDG::RenderDependencyGraph::addPass(
+    RDGShaderParameters& shaderParameters, PipelineState pipelineState, LambdaFunction&& executeFunction, uint8_t passType, std::string name)
 {
-    vkDestroyFramebuffer(_hostGraph->getApp()->getDevice(), _frameBuffer, nullptr);
-}
-template <typename FLambdaFunction>
-void RDGRenderPass<FLambdaFunction>::prepareResource()
-{
-    for(auto& accessTypeArray: _shaderParameters->_resources){
-        for(auto& resourceState: accessTypeArray){
-            for(auto& resource: resourceState._resources){
-                if(resourceState._resourceType == RDGResourceState::ResourceType::eTexture){
-                    NV_ASSERT(resource);
-                    _hostGraph->allocRHITexture(static_cast<RDGTexture*>(resource));
-                }else if(resourceState._resourceType == RDGResourceState::ResourceType::eBuffer){
-                    NV_ASSERT(resource);
-                    _hostGraph->allocRHIBuffer(static_cast<RDGBuffer*>(resource));
-                }
-            }
-        }
+    RDGPass* pass = nullptr;
+    if (passType == PassType::eRenderPass) {
+        pass = new RDGRenderPass(shaderParameters, this->_passCounter.value()++, std::move(name), std::forward<LambdaFunction>(executeFunction));
+    } else {
+        pass = new RDGComputePass(shaderParameters, this->_passCounter.value()++, std::move(name), std::forward<LambdaFunction>(executeFunction));
     }
-
-    for(auto& rt: _RTSlots){
-        if(rt.rtTexture){
-            NV_ASSERT(rt.rtTexture);
-            _hostGraph->allocRHITexture(rt.rtTexture);
-        }
-        if(rt.resolveTexture){
-            NV_ASSERT(rt.resolveTexture);
-            _hostGraph->allocRHITexture(rt.resolveTexture);
-        }
-    }
-}
-
-template <typename FLambdaFunction>
-void RDGRenderPass<FLambdaFunction>::addSlot(RDGTexture* rtTexture, RDGTexture* resolveTexture,
-                                             RDGRTState::LoadType  loadType,
-                                             RDGRTState::StoreType storeType)
-{
-    NV_ASSERT(rtTexture);
-    _RTSlots.emplace_back(loadType, storeType, rtTexture, resolveTexture);
-}
-
-template <typename FLambdaFunction>
-RDGComputePass<FLambdaFunction>::~RDGComputePass()
-{
-}
-template <typename FLambdaFunction>
-void RDGComputePass<FLambdaFunction>::prepareResource()
-{
-    
+    // createPass(pass);
+    _rdgPasses.push_back(pass);
 }
 } //namespace RDG
 }// namespace Play

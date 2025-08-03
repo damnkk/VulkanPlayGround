@@ -21,7 +21,7 @@
 #include "debugger/debugger.h"
 namespace Play
 {
-nvvk::ResourceAllocatorVma PlayApp::_alloc;
+PlayAllocator PlayApp::_alloc;
 TexturePool                PlayApp::_texturePool;
 BufferPool                 PlayApp::_bufferPool;
 struct ScopeTimer

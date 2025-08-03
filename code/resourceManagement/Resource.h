@@ -18,7 +18,7 @@ public:
         VkExtent3D _extent;
         VkImageUsageFlags _usageFlags;
         VkImageAspectFlags _aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
-        VkSampleCountFlags _sampleCount = VK_SAMPLE_COUNT_1_BIT;
+        VkSampleCountFlagBits _sampleCount = VK_SAMPLE_COUNT_1_BIT;
         uint32_t     _mipmapLevel = 1;
         uint32_t     _layerCount = 1;
         std::string _debugName;
