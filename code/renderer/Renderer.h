@@ -5,8 +5,8 @@ namespace Play
 {
 
 struct Scene;
-struct PlayApp;
-struct Texture;
+class PlayApp;
+class Texture;
 class Renderer
 {
    public:

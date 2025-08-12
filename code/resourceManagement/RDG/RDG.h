@@ -12,20 +12,14 @@ use resource handle as resource itself,to confirm the dependency, and specify th
 #include "functional"
 #include "array"
 #include "list"
-
+#include "RDGPreDefine.h"
 #include "vulkan/vulkan.h"
 #include "nvvk/images_vk.hpp"
 #include "PlayApp.h"
 #include "RDGResources.h"
 #include "RDGShaderParameters.hpp"
 #include "RDGPasses.hpp"
-namespace Play{
-namespace RDG{
-enum PassType : uint8_t
-{
-    eRenderPass,
-    eComputePass,
-};
+namespace Play::RDG{
 
 class RDGTexturePool : public BasePool<RDGTexture>
 {
@@ -90,8 +84,8 @@ public:
     ~RenderDependencyGraph();
     /*
       if the pass shader parameters have readAndWrite resource,that will flush the resource's lastproducer, so if you have several passes
-      need the same input resource, the adding order is important. for instance, passX output a textureA, then you add passY to readAndWrite
-      textureA, then you add passZ to read textureA to do something. as this order, passZ will get passY's output, is u want passX's "textureA"
+      need the same input resource, the adding order is important. For instance, passX output a textureA, then you add passY to readAndWrite
+      textureA, then you add passZ to read textureA to do something. as this order, passZ will get passY's output, if you want passX's "textureA"
       this will lead a mistake, so you should add passZ before passY.
     */
     template <typename PipelineState, typename LambdaFunction>
@@ -111,30 +105,29 @@ public:
 
     RDGTexture* createTexture(const TextureDesc& desc);
     RDGBuffer*  createBuffer(const BufferDesc& desc);
+    RDGTexture* allocRHITexture(RDGTexture* texture);
+    RDGBuffer*  allocRHIBuffer(RDGBuffer* buffer);
 
     void destroyTexture(TextureHandle handle);
     void destroyBuffer(BufferHandle handle);
     void destroyTexture(RDGTexture* texture);
     void destroyBuffer(RDGBuffer* buffer);
 
-    PlayApp* getApp() const
-    {
-        return _app;
-    }
+    PlayApp* getApp() const{ return _app; }
 
 protected:
     void onCreatePass(RDGPass* pass);
     void clipPasses();
     bool hasCircle();
     void prepareResource();
-    void allocRHITexture(RDGTexture* texture);
-    void allocRHIBuffer(RDGBuffer* buffer);
     void updatePassDependency();
 
-private:
-    bool hasCircle(RDGPass* pass, std::unordered_set<RDGPass*>& visited);
+    VkRenderPass getOrCreateRenderPass(std::vector<RDGRTState>& rtStates);
+    void getOrCreatePipeline(RDGGraphicPipelineState& pipelineState,VkRenderPass renderPass);
+    void getOrCreatePipeline(RDGComputePipelineState& pipelineState);
 
-protected:
+private:
+    bool hasCircle(RDGPass* pass, std::unordered_set<RDGPass*>& visited,int currDepth);
     RDGTexturePool           _rdgTexturePool;
     RDGBufferPool            _rdgBufferPool;
     std::vector<int>         _rdgAvaliableTextureIndices;
@@ -144,9 +137,8 @@ protected:
     std::vector<RDGTexture*> _externalTextures;
     std::vector<RDGBuffer*>  _externalBuffers;
     PlayApp*                 _app = nullptr;
-    std::array<std::vector<RDGPass*>,64> _passDepthLayout;
+    std::vector<int32_t> _passDepthLayout;
     std::optional<uint32_t> _passCounter = 0;
-    template<typename FLambdaFunction>
     friend class RDGRenderPass;
 };
 
@@ -177,7 +169,6 @@ void Play::RDG::RenderDependencyGraph::addPass(
     // createPass(pass);
     _rdgPasses.push_back(pass);
 }
-} //namespace RDG
 }// namespace Play
 
 #endif // RDG_H

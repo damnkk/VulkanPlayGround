@@ -108,11 +108,16 @@ void RDGBufferPool::destroy(RDGBuffer* buffer){
 // RenderDependencyGraph implementations
 RenderDependencyGraph::RenderDependencyGraph()
 {
-
+    _rdgTexturePool.init(1024);
+    _rdgBufferPool.init(1024);
 }
 RenderDependencyGraph::~RenderDependencyGraph()
 {
-
+    _rdgTexturePool.deinit();
+    _rdgBufferPool.deinit();
+    for(auto& pass : _rdgPasses) {
+        delete pass;
+    }
 }
 
 void             RenderDependencyGraph::execute() {}
@@ -156,10 +161,18 @@ RDGBuffer*  RenderDependencyGraph::createBuffer(const BufferDesc& desc)
     return buffer;
 }
 
-void             RenderDependencyGraph::destroyTexture(TextureHandle handle) {}
-void             RenderDependencyGraph::destroyBuffer(BufferHandle handle) {}
-void             RenderDependencyGraph::destroyTexture(RDGTexture* texture) {}
-void             RenderDependencyGraph::destroyBuffer(RDGBuffer* buffer) {}
+void             RenderDependencyGraph::destroyTexture(TextureHandle handle) {
+    _rdgTexturePool.destroy(handle);
+}
+void             RenderDependencyGraph::destroyBuffer(BufferHandle handle) {
+    _rdgBufferPool.destroy(handle);
+}
+void             RenderDependencyGraph::destroyTexture(RDGTexture* texture) {
+    _rdgTexturePool.destroy(texture);
+}
+void             RenderDependencyGraph::destroyBuffer(RDGBuffer* buffer) {
+    _rdgBufferPool.destroy(buffer);
+}
 void             RenderDependencyGraph::compile()
 {
     if (_rdgPasses.empty()) {
@@ -170,9 +183,13 @@ void             RenderDependencyGraph::compile()
     NV_ASSERT(hasCircle());
     clipPasses();
     prepareResource();
+
 }
 
 void RenderDependencyGraph::updatePassDependency(){
+    for(auto& pass:_rdgPasses){
+        pass->updateResourceAccessState();
+    }
     for(auto& pass:_rdgPasses){
         for(auto& readAccessResource: pass->_shaderParameters->_resources[static_cast<size_t>(AccessType::eReadOnly)]){
             for(auto& resource: readAccessResource._resources){
@@ -211,6 +228,7 @@ void RenderDependencyGraph::updatePassDependency(){
                     if(lastProducer.has_value()){
                         pass->_dependencies.insert(_rdgPasses[lastProducer.value()]);
                     }
+                    baseResource->getProducers().push_back(pass->_passID.value());
                 }
             } 
         }
@@ -223,7 +241,7 @@ void                   RenderDependencyGraph::clipPasses()
     std::queue<RDGPass*> dependencyPassQueue;
     for (auto& externalTexture : this->_externalTextures)
     {
-        RDGPass* passPtr = _rdgPasses[externalTexture->getProducers().back().value()];
+        RDGPass* passPtr = _rdgPasses[externalTexture->getLastProducer().value()];
         if (passPtr)
         {
             dependencyPassQueue.push(passPtr);
@@ -231,7 +249,7 @@ void                   RenderDependencyGraph::clipPasses()
     }
     for (auto& externalBuffer : this->_externalBuffers)
     {
-        RDGPass* passPtr = _rdgPasses[externalBuffer->getProducers().back().value()];
+        RDGPass* passPtr = _rdgPasses[externalBuffer->getLastProducer().value()];
         if (passPtr)
         {
             dependencyPassQueue.push(passPtr);
@@ -250,13 +268,14 @@ void                   RenderDependencyGraph::clipPasses()
 }
 bool RenderDependencyGraph::hasCircle()
 {
-    std::unordered_set<RDGPass*> visited;   
+    std::unordered_set<RDGPass*> visited;
+    _passDepthLayout.resize(_rdgPasses.size(), -1);
     for (auto& externalTexture : this->_externalTextures)
     {
         if (!externalTexture->getProducers().empty()) continue;
-        if (this->hasCircle(_rdgPasses[externalTexture->getProducers().back().value()], visited))
+        if (this->hasCircle(_rdgPasses[externalTexture->getLastProducer().value()], visited, 0))
         {
-            LOGE("RDG: RenderDependencyGraph has circle dependency");
+            LOGE("RDG: RenderDependencyGraph has circle dependency or invalid pass");
             return true;
         }
         visited.clear();
@@ -264,9 +283,9 @@ bool RenderDependencyGraph::hasCircle()
     for (auto& externalBuffer : this->_externalBuffers)
     {
         if (!externalBuffer->getProducers().empty()) continue;
-        if (this->hasCircle(_rdgPasses[externalBuffer->getProducers().back().value()], visited))
+        if (this->hasCircle(_rdgPasses[externalBuffer->getLastProducer().value()], visited, 0))
         {
-            LOGE("RDG: RenderDependencyGraph has circle dependency");
+            LOGE("RDG: RenderDependencyGraph has circle dependency or invalid pass");
             return true;
         }
         visited.clear();
@@ -284,14 +303,14 @@ void RenderDependencyGraph::prepareResource()
     }
 }
 
-void RenderDependencyGraph::allocRHITexture(RDGTexture* texture) {
+RDGTexture* RenderDependencyGraph::allocRHITexture(RDGTexture* texture) {
     if(texture == nullptr) {
         LOGW("RDG: Attempt to allocate invalid RDGTexture");
-        return;
+        return nullptr;
     }
     if(texture->_pData){
         LOGW("RDG: RDGTexture already allocated, skipping allocation");
-        return;
+        return texture;
     }
     if(texture->_pData->_metadata._usageFlags&VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT){
         VkImageCreateInfo imgInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
@@ -387,15 +406,35 @@ void RenderDependencyGraph::allocRHITexture(RDGTexture* texture) {
         texture->_pData->memHandle = nvvkTexture.memHandle;
         texture->_pData->descriptor = nvvkTexture.descriptor;
     }
+    return texture;
 }
-void RenderDependencyGraph::allocRHIBuffer(RDGBuffer* buffer) {
+
+VkRenderPass RenderDependencyGraph::getOrCreateRenderPass(std::vector<RDGRTState>& rtStates){
+    std::vector<RTState> contextRtState;
+    for(std::size_t i = 0;i<rtStates.size();++i){
+        auto& stat = rtStates[i];
+        contextRtState.emplace_back(static_cast<uint8_t>(stat.loadType), static_cast<uint8_t>(stat.storeType),
+         stat.rtTexture->RHI(), stat.resolveTexture ? stat.resolveTexture->RHI() : nullptr);
+    }
+    return this->_app->GetOrCreateRenderPass(contextRtState);
+}
+void   RenderDependencyGraph::getOrCreatePipeline(RDGGraphicPipelineState& pipelineState,VkRenderPass renderPass){
+    if(pipelineState._pipeline!= VK_NULL_HANDLE) return;
+    _app->GetOrCreatePipeline(pipelineState,{pipelineState._vshaderInfo,pipelineState._fshaderInfo},renderPass);
+}
+void   RenderDependencyGraph::getOrCreatePipeline(RDGComputePipelineState& pipelineState){
+    if(pipelineState._pipeline!= VK_NULL_HANDLE) return;
+    _app->GetOrCreatePipeline(pipelineState._cshaderInfo);
+}
+
+RDGBuffer* RenderDependencyGraph::allocRHIBuffer(RDGBuffer* buffer) {
     if(buffer == nullptr){
         LOGW("RDG: Attempt to allocate invalid RDGBufer");
-        return;
+        return nullptr;
     }
     if(buffer->_pData){
         LOGW("RDG: RDGBufer already allocated, skipping allocation");
-        return;
+        return buffer;
     }
     Buffer::BufferMetaData* metaData = &buffer->_pData->_metadata;
     nvvk::Buffer nvvkBuffer = _app->_alloc.createBuffer(metaData->_size,metaData->_usageFlags,metaData->_location==Buffer::BufferMetaData::BufferLocation::eDeviceOnly? VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT : VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -405,17 +444,19 @@ void RenderDependencyGraph::allocRHIBuffer(RDGBuffer* buffer) {
     buffer->_pData->descriptor.buffer = buffer->_pData->buffer;
     buffer->_pData->descriptor.offset = 0;
     buffer->_pData->descriptor.range = buffer->_pData->_metadata._range;
+    return buffer;
 }
 
-bool RenderDependencyGraph::hasCircle(RDGPass* pass, std::unordered_set<RDGPass*>& visited)
+bool RenderDependencyGraph::hasCircle(RDGPass* pass, std::unordered_set<RDGPass*>& visited,int currDepth)
 {
-    if(!pass) return false;
+    if(!pass||!pass->_passID.has_value()) return false;
     if(visited.find(pass) != visited.end()) {
         return true; // Found a circle
     }
     visited.insert(pass);
+    _passDepthLayout[pass->_passID.value()] = std::max(_passDepthLayout[pass->_passID.value()], currDepth);
     for(auto* consumer : pass->_dependencies) {
-        if(this->hasCircle(consumer, visited)) {
+        if(this->hasCircle(consumer, visited, currDepth + 1)) {
             return true;
         }
     }

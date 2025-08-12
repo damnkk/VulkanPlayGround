@@ -1,6 +1,5 @@
 #ifndef RDG_HANDLE_H
 #define RDG_HANDLE_H
-#include "RDGResources.h"
 #include "nvp/NvFoundation.h"
 namespace Play::RDG{
 
@@ -51,7 +50,6 @@ struct TNumericLimits<uint8_t>
 		return Min();
 	}
 };
-
 
 template<>
 struct TNumericLimits<uint16_t> 
@@ -118,15 +116,7 @@ public:
 };
 
 template<typename LocalObjectType,typename LocalIndexType>
-const RDGHandle<LocalObjectType, LocalIndexType> RDGHandle<LocalObjectType, LocalIndexType>::Null ;
-class RDGTexture;
-class RDGBuffer;
-using TextureHandle = RDGHandle<RDGTexture, uint32_t>;
-using BufferHandle = RDGHandle<RDGBuffer, uint32_t>;
-using TextureHandleArray = std::vector<TextureHandle>;
-using BufferHandleArray = std::vector<BufferHandle>;
-
-
+const RDGHandle<LocalObjectType, LocalIndexType> RDGHandle<LocalObjectType, LocalIndexType>::Null;
 } // namespace Play::RDG
 
 #endif // RDG_HANDLE_H

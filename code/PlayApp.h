@@ -3,24 +3,22 @@
 #include "nvvkhl/appbase_vk.hpp"
 #include "resourceManagement/ModelLoader.h" // Ensure ModelLoader class is defined in this header
 #include "nvvk/memallocator_vma_vk.hpp"
+#include "nvvk/pipeline_vk.hpp"
 #include "PlayAllocator.h"
 #include "resourceManagement/Resource.h"
 #include "resourceManagement/SceneNode.h"
-#include "nvvk/raytraceKHR_vk.hpp"
-#include "nvvk/sbtwrapper_vk.hpp"
-#include "nvvk/shadermodulemanager_vk.hpp"
-#include "nvp/NvFoundation.h"
-#include "pch.h"
 #include "renderer/Renderer.h"
-
+#include "utils.hpp"
 namespace Play
 {
 class Renderer;
 class RTRenderer;
 class VolumeRenderer;
+class ShaderInfo;
 namespace RDG{
 class RenderDependencyGraph;
 }
+
 class PlayApp : public nvvkhl::AppBaseVk
 {
 public:
@@ -50,8 +48,11 @@ public:
     static PlayAllocator   _alloc;
     static TexturePool         _texturePool;
     static BufferPool          _bufferPool;
+    nvvk::DebugUtil m_debug;
+    VkRenderPass GetOrCreateRenderPass(std::vector<RTState>& rtStates);
+    VkPipeline GetOrCreatePipeline(nvvk::GraphicsPipelineState& pipelineState, std::vector<ShaderInfo*> graphicsShaderInfo,VkRenderPass targetRdPass);
+    VkPipeline GetOrCreatePipeline(const ShaderInfo* computeShaderInfo);
 
-        nvvk::DebugUtil m_debug;
 
     protected:
         void createGraphicsDescriptResource();
@@ -84,6 +85,8 @@ public:
     VkPipeline                _graphicsPipeline;
     VkPipelineLayout         _graphicsPipelineLayout;
     std::unique_ptr<Renderer> _renderer;
+    std::unordered_map<std::size_t,VkRenderPass> _renderPassesCache;
+    std::unordered_map<std::size_t,VkPipeline> _pipelineCache;
     Scene                     _scene;
 };
 

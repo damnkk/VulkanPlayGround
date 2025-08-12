@@ -316,4 +316,9 @@ namespace Play{
         return nullptr;
     }
 
+    std::size_t ShaderInfo::getHash()const{
+        std::size_t hash = nvh::hashVal(shaderName,type,entryPoint,spvData);
+        return hash;
+    }
+
 } // namespace Play

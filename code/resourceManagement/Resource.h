@@ -11,6 +11,13 @@ class Texture : public nvvk::Texture
 public:
     Texture() = default;
     Texture(int poolID) : _poolId(poolID) {};
+    VkFormat getFormat() const { return _metadata._format; }
+    VkImageType getType() const { return _metadata._type; }
+    VkExtent3D getExtent() const { return _metadata._extent; }
+    VkSampleCountFlagBits getSampleCount() const { return _metadata._sampleCount; }
+    std::string getDebugName() const { return _metadata._debugName; }
+    uint32_t getMipLevel() const{ return _metadata._mipmapLevel; }
+    bool isDepth() const { return _metadata._aspectFlags &(VK_IMAGE_ASPECT_DEPTH_BIT|VK_IMAGE_ASPECT_STENCIL_BIT); }
     int         _poolId = -1;
     struct TexMetaData{
         VkFormat    _format      = VK_FORMAT_UNDEFINED;
@@ -31,7 +38,8 @@ public:
     Buffer(int poolID) : _poolId(poolID) {};
     int                    _poolId = -1;
     VkDescriptorBufferInfo descriptor;
-    
+    VkDeviceSize getBufferSize()const{return _metadata._size;}
+    std::string getDebugName()const {return _metadata._debugName;}
     struct BufferMetaData{
         VkBufferUsageFlags _usageFlags;
         VkDeviceSize _size;

@@ -10,8 +10,8 @@
 namespace Play
 {
 struct Scene;
-struct PlayApp;
-struct Texture;
+class PlayApp;
+class Texture;
 class RTRenderer : public Renderer
 {
 public:

@@ -12,6 +12,7 @@
 #include "nvvk/shaders_vk.hpp"
 #include "nvh/fileoperations.hpp"
 #include "nvh/cameramanipulator.hpp"
+#include "nvh/container_utils.hpp"
 #include "stb_image.h"
 #include "resourceManagement/SceneNode.h"
 #include "renderer/RTRenderer.h"
@@ -19,6 +20,7 @@
 #include "renderer/ShadingRateRenderer.h"
 #include "resourceManagement/Resource.h"
 #include "debugger/debugger.h"
+#include "ShaderManager.h"
 namespace Play
 {
 PlayAllocator PlayApp::_alloc;
@@ -242,6 +244,119 @@ void PlayApp::createGraphicsPipeline()
 
     _graphicsPipeline = gpipelineState.createPipeline();
 }
+VkRenderPass PlayApp::GetOrCreateRenderPass(std::vector<RTState>& rtStates){
+    std::size_t key = 0;
+    for(const auto& state : rtStates)
+    {
+        std::size_t tempKey = nvh::hashVal(state._loadOp,state._storeOp,state._texture->_metadata._format,state._resolveTexture->_metadata._format);
+        nvh::hashCombine(key, tempKey);
+    }
+    if(_renderPassesCache.find(key) != _renderPassesCache.end()) return _renderPassesCache[key];
+    VkRenderPassCreateInfo2 rpci{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2};
+    std::vector<VkAttachmentDescription2> renderAttachments;
+    VkAttachmentReference2 depthReference{VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2};
+    for(int i = 0;i<rtStates.size();++i){
+        const auto& state = rtStates[i];
+        auto& attachmentDesc = renderAttachments.emplace_back(VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2);
+        attachmentDesc.format = state._texture->getFormat();
+        attachmentDesc.samples = VK_SAMPLE_COUNT_1_BIT;
+        attachmentDesc.loadOp = state.getVkLoadOp();
+        attachmentDesc.storeOp = state.getVkStoreOp();
+        attachmentDesc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        attachmentDesc.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attachmentDesc.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attachmentDesc.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        if (state._resolveTexture)
+        {
+            auto& resolveAttachmentDesc = renderAttachments.emplace_back(VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2);
+            resolveAttachmentDesc.format = state._resolveTexture->getFormat();
+            resolveAttachmentDesc.samples = state._resolveTexture->getSampleCount();
+            resolveAttachmentDesc.loadOp = state.getVkLoadOp();
+            resolveAttachmentDesc.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            resolveAttachmentDesc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            resolveAttachmentDesc.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            resolveAttachmentDesc.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            resolveAttachmentDesc.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        }
+        if(state._texture->isDepth()){
+            depthReference.attachment = renderAttachments.size()-1;
+            depthReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        }
+    }
+
+    std::vector<VkAttachmentReference2> attachmentReferences;
+    std::vector<VkAttachmentReference2> resolveAttachmentReferences;
+    for(int i = 0;i<rtStates.size();++i){
+        RTState& state = rtStates[i];
+        if(state._texture->isDepth()){
+            continue;
+        }
+       VkAttachmentReference2& attachmentRef = attachmentReferences.emplace_back(VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2);
+       attachmentRef.attachment = attachmentReferences.size()-1;
+       attachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+       if(state._resolveTexture)
+       {
+            VkAttachmentReference2 resolveAttachmentRef = resolveAttachmentReferences.emplace_back(VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2);
+           resolveAttachmentRef.attachment = resolveAttachmentReferences.size()-1;
+           resolveAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+       }else{
+            VkAttachmentReference2& resolveAttachmentRef = resolveAttachmentReferences.emplace_back(VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2);
+           resolveAttachmentRef.attachment = VK_ATTACHMENT_UNUSED;
+           resolveAttachmentRef.layout = VK_IMAGE_LAYOUT_UNDEFINED;
+       }
+    }
+    VkSubpassDescription2 subpassDescription{VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2};
+    subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpassDescription.inputAttachmentCount = 0;
+    subpassDescription.pInputAttachments = nullptr;
+    subpassDescription.colorAttachmentCount = static_cast<uint32_t>(attachmentReferences.size());
+    subpassDescription.pColorAttachments = attachmentReferences.data();
+    subpassDescription.pResolveAttachments = resolveAttachmentReferences.data();
+    subpassDescription.pDepthStencilAttachment = &depthReference;
+    subpassDescription.pPreserveAttachments = nullptr;
+
+    VkSubpassDependency2 dependencies[2];
+    dependencies[0].sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2;
+    dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+    dependencies[0].dstSubpass = 0;
+    dependencies[0].srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    dependencies[0].dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies[0].srcAccessMask = VK_ACCESS_2_NONE;
+    dependencies[0].dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+    dependencies[1].sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2;
+    dependencies[1].srcSubpass = 1;
+    dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+    dependencies[1].srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies[1].dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+    dependencies[1].srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    dependencies[1].dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
+
+    rpci.attachmentCount = renderAttachments.size();
+    rpci.pAttachments = renderAttachments.data();
+    rpci.dependencyCount = 2;
+    rpci.pDependencies = dependencies;
+    rpci.subpassCount = 1;
+    rpci.pSubpasses = &subpassDescription;
+
+    VkRenderPass rp;
+    NV_ASSERT(vkCreateRenderPass2(getDevice(), &rpci, nullptr, &rp));
+    _renderPassesCache.emplace(key,rp);
+    return rp;
+}
+
+VkPipeline PlayApp::GetOrCreatePipeline(nvvk::GraphicsPipelineState& pipelineState, std::vector<ShaderInfo*> graphicsShaderInfo,VkRenderPass targetRdPass){
+
+    return VkPipeline();
+}
+
+VkPipeline PlayApp::GetOrCreatePipeline(const ShaderInfo* computeShaderInfo){
+    std::size_t computePiplineHash = computeShaderInfo->getHash();
+    if(_pipelineCache.find(computePiplineHash) != _pipelineCache.end())
+        return _pipelineCache[computePiplineHash];
+    VkComputePipelineCreateInfo computePplci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+    return VK_NULL_HANDLE;
+}
 
 void PlayApp::OnPostRender()
 {
@@ -359,5 +474,9 @@ void PlayApp::onDestroy()
     this->_bufferPool.deinit();
     vkDestroyDescriptorPool(m_device, this->_descriptorPool, nullptr);
     _alloc.deinit();
+    // for(auto& [createInfo, renderPass] : _renderPassesCache) {
+    //     if(renderPass == VK_NULL_HANDLE) continue;
+    //     vkDestroyRenderPass(m_device, renderPass, nullptr);
+    // }
 }
 } // namespace Play

@@ -23,4 +23,14 @@ std::optional<uint32_t> RDGResourceBase::getLastReader(uint32_t currentPassIdx) 
     return std::nullopt;
 }
 
+std::optional<uint32_t> RDGResourceBase::getLastReader() const {
+    if (_readers.empty()) return std::nullopt;
+    return _readers.back();
+}
+
+std::optional<uint32_t> RDGResourceBase::getLastProducer() const {
+    if (_producers.empty()) return std::nullopt;
+    return _producers.back();
+}
+
 }// namespace Play::RDG

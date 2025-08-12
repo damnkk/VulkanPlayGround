@@ -8,7 +8,7 @@
 namespace Play
 {
 class PlayApp;
-class SceneNode;
+struct SceneNode;
 class ModelLoader
 {
    public:

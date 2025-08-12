@@ -6,6 +6,14 @@
 #include "ShaderManager.h"
 
 namespace Play::RDG{
+
+class RDGTexture;
+class RDGBuffer;
+using TextureHandle = RDGHandle<RDGTexture, uint32_t>;
+using BufferHandle = RDGHandle<RDGBuffer, uint32_t>;
+using TextureHandleArray = std::vector<TextureHandle>;
+using BufferHandleArray = std::vector<BufferHandle>;
+
 class RDGPass;
 class RDGTexturePool;
 class RenderDependencyGraph;
@@ -14,10 +22,12 @@ class RenderDependencyGraph;
 class RDGResourceBase {
 public:
     virtual ~RDGResourceBase() = default;
-    const std::vector<std::optional<uint32_t>>& getProducers() const { return _producers; }
-    const std::vector<std::optional<uint32_t>>& getReaders() const { return _readers; }
+    std::vector<std::optional<uint32_t>>& getProducers() { return _producers; }
+    std::vector<std::optional<uint32_t>>& getReaders() { return _readers; }
     std::optional<uint32_t> getLastProducer(uint32_t currentPassIdx) const;
     std::optional<uint32_t> getLastReader(uint32_t currentPassIdx) const;
+    std::optional<uint32_t> getLastProducer() const;
+    std::optional<uint32_t> getLastReader() const;
     bool isExternal = false;
     
 protected:
@@ -65,14 +75,13 @@ public:
     RDGGraphicPipelineState() = default;
     RDGGraphicPipelineState(const RDGGraphicPipelineState& other)= default;
     ~RDGGraphicPipelineState() = default;
-
+    void createPipeline(){};
     RDGGraphicPipelineState& setVertexShaderInfo(const ShaderInfo& shaderInfo);
     RDGGraphicPipelineState& setFragmentShaderInfo(const ShaderInfo& shaderInfo);
-    RDGGraphicPipelineState& setGeometryShaderInfo(const ShaderInfo& shaderInfo);
-    VkPipeline _pipeline;
-    ShaderInfo* _vshaderInfo;
-    ShaderInfo* _fshaderInfo;
-    ShaderInfo* _gshaderInfo;
+    VkPipeline _pipeline = VK_NULL_HANDLE;
+    VkPipelineLayout _pipelineLayout = VK_NULL_HANDLE;
+    ShaderInfo* _vshaderInfo = nullptr;
+    ShaderInfo* _fshaderInfo = nullptr;
 };
 
 class RDGComputePipelineState{
@@ -82,6 +91,7 @@ public:
     ~RDGComputePipelineState() = default;
     void setShaderInfo(const Play::ShaderType& shaderInfo);
     VkPipeline _pipeline;
+    VkPipelineLayout _pipelineLayout;
     ShaderInfo* _cshaderInfo;
 };
 

@@ -22,6 +22,7 @@ namespace Play {
         sMiss
     };
 struct ShaderInfo{
+    std::size_t getHash()const;
     ShaderType type;
     std::string shaderName;
     std::string codePath;

@@ -176,9 +176,9 @@ struct ComputePass
 }; 
 
 struct Scene;
-struct PlayApp;
-struct Texture;
-struct VolumeTexture;
+class PlayApp;
+class Texture;
+class VolumeTexture;
 class VolumeRenderer : public Renderer
 {
     public:
