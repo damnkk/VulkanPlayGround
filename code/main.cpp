@@ -82,7 +82,7 @@ int main()
 
     nvvk::Context vkCtx;
     vkCtx.init(ctxCreateInfo);
-    Play::ShaderManager::initialize();
+    Play::ShaderManager::initialize(vkCtx);
 
     Play::PlayApp*              app = new Play::PlayApp();
     nvvkhl::AppBaseVkCreateInfo appInfo;

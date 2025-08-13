@@ -1,6 +1,7 @@
 #ifndef RDGPASSES_HPP
 #define RDGPASSES_HPP
 #include <set>
+#include <optional>
 #include "RDGPreDefine.h"
 #include "RDGShaderParameters.hpp"
 #include "ShaderManager.h"

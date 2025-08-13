@@ -3,29 +3,23 @@
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_vulkan.h"
 #include "imgui.h"
-#include "imgui/imgui_helper.h"
-#include "nvh/nvprint.hpp"
 #include "nvvk/debug_util_vk.hpp"
-#include "nvvk/buffers_vk.hpp"
-#include "nvvk/images_vk.hpp"
 #include "nvvk/pipeline_vk.hpp"
-#include "nvvk/shaders_vk.hpp"
-#include "nvh/fileoperations.hpp"
+#include "nvvk/shadermodulemanager_vk.hpp"
 #include "nvh/cameramanipulator.hpp"
 #include "nvh/container_utils.hpp"
 #include "stb_image.h"
-#include "resourceManagement/SceneNode.h"
 #include "renderer/RTRenderer.h"
 #include "renderer/VolumeRenderer.h"
 #include "renderer/ShadingRateRenderer.h"
 #include "resourceManagement/Resource.h"
-#include "debugger/debugger.h"
 #include "ShaderManager.h"
 namespace Play
 {
 PlayAllocator PlayApp::_alloc;
 TexturePool                PlayApp::_texturePool;
 BufferPool                 PlayApp::_bufferPool;
+
 struct ScopeTimer
 {
     std::chrono::high_resolution_clock::time_point start;
@@ -67,7 +61,7 @@ void PlayApp::OnInit()
         {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1024},
     };
 
-    poolInfo.poolSizeCount = 5;
+    poolInfo.poolSizeCount = arraySize(poolSize);
     poolInfo.pPoolSizes    = poolSize;
     poolInfo.maxSets       = 4096;
     poolInfo.flags         = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
@@ -117,76 +111,6 @@ void PlayApp::RenderFrame()
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkBeginCommandBuffer(cmd, &beginInfo);
     _renderer->RenderFrame();
-    {
-        // if (_renderMode == RenderMode::eRasterization)
-        // {
-        //     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _graphicsPipeline);
-        //     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-        //     _graphicsPipelineLayout, 0, 1,
-        //                             &_descriptorSet, 0, nullptr);
-        //     VkClearValue clearValue[2];
-        //     clearValue[0].color        = {{0.0f, 1.0f, 1.0f, 1.0f}};
-        //     clearValue[1].depthStencil = {1.0f, 0};
-        //     VkRenderPassBeginInfo renderPassBeginInfo{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-        //     renderPassBeginInfo.renderPass      = _rasterizationRenderPass;
-        //     renderPassBeginInfo.framebuffer     = _rasterizationFBO;
-        //     renderPassBeginInfo.renderArea      = VkRect2D({0, 0}, this->getSize());
-        //     renderPassBeginInfo.clearValueCount = 2;
-        //     renderPassBeginInfo.pClearValues    = clearValue;
-        //     vkCmdBeginRenderPass(cmd, &renderPassBeginInfo,
-        //                          VkSubpassContents::VK_SUBPASS_CONTENTS_INLINE);
-        //     std::queue<SceneNode*> nodes;
-        //     nodes.push(this->_scene._root.get());
-        //     auto       sceneVBuffers = this->_modelLoader.getSceneVBuffers();
-        //     auto       sceneIBuffers = this->_modelLoader.getSceneIBuffers();
-        //     auto       meshes        = this->_modelLoader.getSceneMeshes();
-        //     VkViewport viewport      = {
-        //         0.0f, 0.0f, (float) this->getSize().width, (float) this->getSize().height,
-        //         0.0f, 1.0f};
-        //     VkRect2D scissor = {{0, 0}, this->getSize()};
-        //     vkCmdSetViewport(cmd, 0, 1, &viewport);
-        //     vkCmdSetScissor(cmd, 0, 1, &scissor);
-        //     vkCmdSetDepthWriteEnable(cmd, true);
-        //     vkCmdSetDepthTestEnable(cmd, true);
-        //     {
-        //         // ScopeTimer timer;
-        //         while (!nodes.empty())
-        //         {
-        //             SceneNode* currnode = nodes.front();
-        //             nodes.pop();
-        //             if (!currnode->_meshIdx.empty())
-        //             {
-        //                 for (auto& meshIdx : currnode->_meshIdx)
-        //                 {
-        //                     Constants constants;
-        //                     constants.model  = currnode->_transform;
-        //                     constants.matIdx = meshes[meshIdx]._materialIndex;
-        //                     // LOGI(std::to_string(constants.matIdx).c_str());
-        //                     vkCmdPushConstants(
-        //                         cmd, _graphicsPipelineLayout,
-        //                         VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
-        //                         sizeof(Constants), &constants);
-        //                     VkDeviceSize offset = 0;
-        //                     vkCmdBindVertexBuffers(cmd, 0, 1,
-        //                                            &(sceneVBuffers[meshes[meshIdx]._vBufferIdx].buffer),
-        //                                            &offset);
-        //                     vkCmdBindIndexBuffer(cmd,
-        //                     sceneIBuffers[meshes[meshIdx]._iBufferIdx].buffer,
-        //                                          0, VkIndexType::VK_INDEX_TYPE_UINT32);
-        //                     vkCmdDrawIndexed(cmd,
-        //                                      this->_modelLoader.getSceneMeshes()[meshIdx]._faceCnt
-        //                                      * 3, 1, 0, 0, 0);
-        //                 }
-        //             }
-        //             for (auto& child : currnode->_children)
-        //             {
-        //                 nodes.push(child.get());
-        //             }
-        //         }
-        //     }
-        //     vkCmdEndRenderPass(cmd);
-        // }
-    }
 }
 
 void PlayApp::createGraphicsDescriptResource()
@@ -236,11 +160,13 @@ void PlayApp::createGraphicsPipeline()
     {
         gpipelineState.setDynamicStateEnable(i, dynamicStates[i]);
     }
-
-    gpipelineState.addShader(nvh::loadFile("spv/post.vert.spv", true), VK_SHADER_STAGE_VERTEX_BIT,
+    nvvk::ShaderModuleID vID = ShaderManager::registeShader(VK_SHADER_STAGE_VERTEX_BIT, "shaders/post.vert", "main", "");
+    nvvk::ShaderModuleID fID = ShaderManager::registeShader(VK_SHADER_STAGE_FRAGMENT_BIT, "shaders/outputBlit.frag", "main", "");
+    
+    gpipelineState.addShader(ShaderManager::Instance().get(vID), VK_SHADER_STAGE_VERTEX_BIT,
                              "main");
-    gpipelineState.addShader(nvh::loadFile("spv/outputBlit.frag.spv", true),
-                             VK_SHADER_STAGE_FRAGMENT_BIT, "main");
+    gpipelineState.addShader(ShaderManager::Instance().get(fID), VK_SHADER_STAGE_FRAGMENT_BIT,
+                             "main");
 
     _graphicsPipeline = gpipelineState.createPipeline();
 }
@@ -351,10 +277,10 @@ VkPipeline PlayApp::GetOrCreatePipeline(nvvk::GraphicsPipelineState& pipelineSta
 }
 
 VkPipeline PlayApp::GetOrCreatePipeline(const ShaderInfo* computeShaderInfo){
-    std::size_t computePiplineHash = computeShaderInfo->getHash();
-    if(_pipelineCache.find(computePiplineHash) != _pipelineCache.end())
-        return _pipelineCache[computePiplineHash];
-    VkComputePipelineCreateInfo computePplci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+    // std::size_t computePiplineHash = computeShaderInfo->getHash();
+    // if(_pipelineCache.find(computePiplineHash) != _pipelineCache.end())
+    //     return _pipelineCache[computePiplineHash];
+    // VkComputePipelineCreateInfo computePplci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
     return VK_NULL_HANDLE;
 }
 

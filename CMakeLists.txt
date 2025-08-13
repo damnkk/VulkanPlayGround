@@ -21,23 +21,23 @@ DOC "Directory containing nvpro_core"
 )
 endif()
 
-execute_process(
-        COMMAND python ./External/shaderc/utils/git-sync-deps
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-        RESULT_VARIABLE GLSLANG_SYNC_RESULT
-)
-if(NOT GLSLANG_SYNC_RESULT EQUAL "0")
-    message(FATAL_ERROR "Can not clone spirv-tools, glslang will not be compile successfully")
-endif()
-# 在add_subdirectory(External/shaderc)之前添加
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries" FORCE)
-set(SHADERC_SKIP_TESTS ON)
-set(SHADERC_SKIP_EXAMPLES ON)
-set(SHADERC_SKIP_COPYRIGHT_CHECK ON)
+# execute_process(
+#         COMMAND python ./External/shaderc/utils/git-sync-deps
+#         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+#         RESULT_VARIABLE GLSLANG_SYNC_RESULT
+# )
+# if(NOT GLSLANG_SYNC_RESULT EQUAL "0")
+#     message(FATAL_ERROR "Can not clone spirv-tools, glslang will not be compile successfully")
+# endif()
+# # 在add_subdirectory(External/shaderc)之前添加
+# set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries" FORCE)
+# set(SHADERC_SKIP_TESTS ON)
+# set(SHADERC_SKIP_EXAMPLES ON)
+# set(SHADERC_SKIP_COPYRIGHT_CHECK ON)
 
-# 强制shaderc使用静态版本的依赖
-# set(SPIRV_TOOLS_BUILD_STATIC ON CACHE BOOL "Build SPIRV-Tools as static library")
-add_subdirectory(External/shaderc)
+# # 强制shaderc使用静态版本的依赖
+# # set(SPIRV_TOOLS_BUILD_STATIC ON CACHE BOOL "Build SPIRV-Tools as static library")
+# add_subdirectory(External/shaderc)
 
 ## Various functions and macros REQUIRED
 if(EXISTS ${BASE_DIRECTORY}/nvpro_core/cmake/setup.cmake)
@@ -86,18 +86,18 @@ compile_glsl_directory(
 )
 
 # Package shared by all projects
-_add_package_VulkanSDK()
+# _add_package_VulkanSDK()
+_add_package_ShaderC()
 _add_package_ImGUI()
 _add_nvpro_core_lib()
 add_subdirectory(External/Assimp)
-
 add_definitions(-DBUILD_SHARED_LIBS=OFF -DASSIMP_WARNINGS_AS_ERRORS=OFF )
 target_compile_definitions(${PROJNAME} PUBLIC ALLOC_VMA)
 target_sources(${PROJNAME} PUBLIC ${COMMON_SOURCE_FILES})
 target_sources(${PROJNAME} PUBLIC ${PACKAGE_SOURCE_FILES})
 target_sources(${PROJNAME} PUBLIC ${GLSL_SOURCES})
 target_sources(${PROJNAME} PUBLIC ${GLSL_HEADERS})
-target_link_libraries(${PROJNAME} ${PLATFORM_LIBRARIES} nvpro_core assimp shaderc)
+target_link_libraries(${PROJNAME} ${PLATFORM_LIBRARIES} nvpro_core assimp)
 target_link_libraries(${PROJNAME}  "${PROJECT_SOURCE_DIR}/code/debugger/Nsight/graphics/lib/x64/NGFX_Injection.lib")
 
 foreach(DEBUGLIB ${LIBRARIES_DEBUG})
@@ -114,8 +114,8 @@ target_include_directories(VulkanPlayGround PRIVATE
     ${PROJECT_SOURCE_DIR}/code/resourceManagement
     ${PROJECT_SOURCE_DIR}/shaders
     ${CMAKE_SOURCE_DIR}/External/Assimp/include
-    ${CMAKE_SOURCE_DIR}/External/shaderc/libshaderc/include
-    ${CMAKE_SOURCE_DIR}/External/shaderc/libshaderc_util/include
+    # ${CMAKE_SOURCE_DIR}/External/shaderc/libshaderc/include
+    # ${CMAKE_SOURCE_DIR}/External/shaderc/libshaderc_util/include
 )
 
 add_custom_command(TARGET ${PROJNAME} POST_BUILD

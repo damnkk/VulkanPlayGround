@@ -4,6 +4,7 @@
 #include "RDGHandle.h"
 #include "nvvk/pipeline_vk.hpp"
 #include "ShaderManager.h"
+#include <optional>
 
 namespace Play::RDG{
 
@@ -76,12 +77,12 @@ public:
     RDGGraphicPipelineState(const RDGGraphicPipelineState& other)= default;
     ~RDGGraphicPipelineState() = default;
     void createPipeline(){};
-    RDGGraphicPipelineState& setVertexShaderInfo(const ShaderInfo& shaderInfo);
-    RDGGraphicPipelineState& setFragmentShaderInfo(const ShaderInfo& shaderInfo);
+    RDGGraphicPipelineState& setVertexShaderInfo(const nvvk::ShaderModuleID& shaderId);
+    RDGGraphicPipelineState& setFragmentShaderInfo(const nvvk::ShaderModuleID& shaderId);
     VkPipeline _pipeline = VK_NULL_HANDLE;
     VkPipelineLayout _pipelineLayout = VK_NULL_HANDLE;
-    ShaderInfo* _vshaderInfo = nullptr;
-    ShaderInfo* _fshaderInfo = nullptr;
+    nvvk::ShaderModuleID _vshaderInfo = nvvk::ShaderModuleID();
+    nvvk::ShaderModuleID _fshaderInfo = nvvk::ShaderModuleID();
 };
 
 class RDGComputePipelineState{
@@ -89,10 +90,10 @@ public:
     RDGComputePipelineState() = default;
     RDGComputePipelineState(const RDGComputePipelineState& other)= default;
     ~RDGComputePipelineState() = default;
-    void setShaderInfo(const Play::ShaderType& shaderInfo);
+    void setShaderInfo(const nvvk::ShaderModuleID& shaderInfo);
     VkPipeline _pipeline;
     VkPipelineLayout _pipelineLayout;
-    ShaderInfo* _cshaderInfo;
+    nvvk::ShaderModuleID _cshaderInfo = size_t(~0);
 };
 
 

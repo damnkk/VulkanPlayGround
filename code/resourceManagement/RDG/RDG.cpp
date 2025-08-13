@@ -420,11 +420,11 @@ VkRenderPass RenderDependencyGraph::getOrCreateRenderPass(std::vector<RDGRTState
 }
 void   RenderDependencyGraph::getOrCreatePipeline(RDGGraphicPipelineState& pipelineState,VkRenderPass renderPass){
     if(pipelineState._pipeline!= VK_NULL_HANDLE) return;
-    _app->GetOrCreatePipeline(pipelineState,{pipelineState._vshaderInfo,pipelineState._fshaderInfo},renderPass);
+    // _app->GetOrCreatePipeline(pipelineState,{pipelineState._vshaderInfo,pipelineState._fshaderInfo},renderPass);
 }
 void   RenderDependencyGraph::getOrCreatePipeline(RDGComputePipelineState& pipelineState){
     if(pipelineState._pipeline!= VK_NULL_HANDLE) return;
-    _app->GetOrCreatePipeline(pipelineState._cshaderInfo);
+    // _app->GetOrCreatePipeline(pipelineState._cshaderInfo);
 }
 
 RDGBuffer* RenderDependencyGraph::allocRHIBuffer(RDGBuffer* buffer) {
