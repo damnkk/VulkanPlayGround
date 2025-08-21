@@ -50,7 +50,7 @@ public:
     static BufferPool          _bufferPool;
     nvvk::DebugUtil m_debug;
     VkRenderPass GetOrCreateRenderPass(std::vector<RTState>& rtStates);
-    VkPipeline GetOrCreatePipeline(nvvk::GraphicsPipelineState& pipelineState, std::vector<ShaderInfo*> graphicsShaderInfo,VkRenderPass targetRdPass);
+    VkPipeline GetOrCreatePipeline(nvvk::GraphicsPipelineState& pipelineState,VkPipelineLayout pipLayout,VkRenderPass targetRdPass);
     VkPipeline GetOrCreatePipeline(const ShaderInfo* computeShaderInfo);
 
 

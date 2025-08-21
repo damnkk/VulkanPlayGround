@@ -271,10 +271,7 @@ VkRenderPass PlayApp::GetOrCreateRenderPass(std::vector<RTState>& rtStates){
     return rp;
 }
 
-VkPipeline PlayApp::GetOrCreatePipeline(nvvk::GraphicsPipelineState& pipelineState, std::vector<ShaderInfo*> graphicsShaderInfo,VkRenderPass targetRdPass){
 
-    return VkPipeline();
-}
 
 VkPipeline PlayApp::GetOrCreatePipeline(const ShaderInfo* computeShaderInfo){
     // std::size_t computePiplineHash = computeShaderInfo->getHash();

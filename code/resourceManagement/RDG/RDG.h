@@ -17,7 +17,6 @@ use resource handle as resource itself,to confirm the dependency, and specify th
 #include "nvvk/images_vk.hpp"
 #include "PlayApp.h"
 #include "RDGResources.h"
-#include "RDGShaderParameters.hpp"
 #include "RDGPasses.hpp"
 namespace Play::RDG{
 
@@ -88,15 +87,10 @@ public:
       textureA, then you add passZ to read textureA to do something. as this order, passZ will get passY's output, if you want passX's "textureA"
       this will lead a mistake, so you should add passZ before passY.
     */
-    template <typename PipelineState, typename LambdaFunction>
-    void addPass(RDGShaderParameters& shaderParameters, PipelineState pipelineState,
-                 LambdaFunction&& executeFunction, uint8_t passType = 0, std::string name = "");
-    template <typename PipelineState, typename LambdaFunction>
-    void addComputePass(RDGShaderParameters& shaderParameters, PipelineState pipelineState,
-                        LambdaFunction&& executeFunction, std::string name = "");
-    template <typename PipelineState, typename LambdaFunction>
-    void addRenderPass(RDGShaderParameters& shaderParameters, PipelineState pipelineState,
-                       LambdaFunction&& executeFunction, std::string name = "");
+  
+    void addPass(PassType type, std::string name = "");
+    void addComputePass(std::optional<uint32_t> passID, std::string name = "");
+    void addRenderPass(std::optional<uint32_t> passID, std::string name = "");
     void compile();
     void execute();
 
@@ -123,8 +117,8 @@ protected:
     void updatePassDependency();
 
     VkRenderPass getOrCreateRenderPass(std::vector<RDGRTState>& rtStates);
-    void getOrCreatePipeline(RDGGraphicPipelineState& pipelineState,VkRenderPass renderPass);
-    void getOrCreatePipeline(RDGComputePipelineState& pipelineState);
+    template<typename Pass>
+    void getOrCreatePipeline(Pass& pass);
 
 private:
     bool hasCircle(RDGPass* pass, std::unordered_set<RDGPass*>& visited,int currDepth);
@@ -142,32 +136,13 @@ private:
     friend class RDGRenderPass;
 };
 
-template<typename PipelineState,typename LambdaFunction>
-void Play::RDG::RenderDependencyGraph::addComputePass(
-    RDGShaderParameters& shaderParameters, PipelineState pipelineState, LambdaFunction&& executeFunction, std::string name)
-{
-    addPass(shaderParameters, pipelineState,std::forward<LambdaFunction>(executeFunction), 1, std::move(name));
-}
-
-template<typename PipelineState,typename LambdaFunction>
-void Play::RDG::RenderDependencyGraph::addRenderPass(
-    RDGShaderParameters& shaderParameters, PipelineState pipelineState, LambdaFunction&& executeFunction, std::string name)
-{
-    addPass(shaderParameters,pipelineState,std::forward<LambdaFunction>(executeFunction), 0, std::move(name));
-}
-
-template <typename PipelineState,typename LambdaFunction>
-void Play::RDG::RenderDependencyGraph::addPass(
-    RDGShaderParameters& shaderParameters, PipelineState pipelineState, LambdaFunction&& executeFunction, uint8_t passType, std::string name)
-{
-    RDGPass* pass = nullptr;
-    if (passType == PassType::eRenderPass) {
-        pass = new RDGRenderPass(shaderParameters, this->_passCounter.value()++, std::move(name), std::forward<LambdaFunction>(executeFunction));
-    } else {
-        pass = new RDGComputePass(shaderParameters, this->_passCounter.value()++, std::move(name), std::forward<LambdaFunction>(executeFunction));
+template<typename Pass>
+void RenderDependencyGraph::getOrCreatePipeline(Pass& pass){
+    if constexpr(std::is_same_v<Pass, RDGRenderPass>) {
+        _app->GetOrCreatePipeline(pass._pipelineState, pass.getRenderPass());
+    } else if constexpr(std::is_same_v<Pass, RDGComputePass>) {
+        // Create compute pipeline
     }
-    // createPass(pass);
-    _rdgPasses.push_back(pass);
 }
 }// namespace Play
 

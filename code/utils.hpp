@@ -1,7 +1,9 @@
 #ifndef UTILS_HPP
 #define UTILS_HPP
 #include <string>
+#include <type_traits>
 #include "vulkan/vulkan.h"
+using MAX_DESCRIPTOR_SETS  = std::integral_constant<size_t, 8>;
 #define CUSTOM_NAME_VK(DEBUGER,_x ) DEBUGER.setObjectName(_x, (std::string(CLASS_NAME) + std::string("::") + std::string(#_x " (") + NAME_FILE_LOCATION).c_str())
 namespace Play{
 class Texture;

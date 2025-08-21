@@ -18,6 +18,7 @@ public:
     std::string getDebugName() const { return _metadata._debugName; }
     uint32_t getMipLevel() const{ return _metadata._mipmapLevel; }
     bool isDepth() const { return _metadata._aspectFlags &(VK_IMAGE_ASPECT_DEPTH_BIT|VK_IMAGE_ASPECT_STENCIL_BIT); }
+    VkImageLayout getLayout()const{return descriptor.imageLayout;}
     int         _poolId = -1;
     struct TexMetaData{
         VkFormat    _format      = VK_FORMAT_UNDEFINED;

@@ -2,35 +2,52 @@
 #define RDGPASSES_HPP
 #include <set>
 #include <optional>
-#include "RDGPreDefine.h"
-#include "RDGShaderParameters.hpp"
-#include "ShaderManager.h"
-#include "nvvk/pipeline_vk.hpp"
-#include "vulkan/vulkan.h"
+#include "PlayProgram.h"
+#include "nvvk/descriptorsets_vk.hpp"
 #include "RDGResources.h"
+#include "RDGPreDefine.h"
 namespace Play::RDG{
+/*
+当前实现了全新的RDG pass, RDGpass的构建交给上层逻辑pass的Build函数,pass本身只维护资源依赖逻辑,渲染逻辑以及相关的管线资源都交给上层逻辑pass管理,
+由逻辑pass向底层RHI缓存进行申请
+*/
+using DescSetManagerRef = std::shared_ptr<Play::DescriptorSetManager>;
+struct Scene;
 class RenderDependencyGraph;
+
 class RDGPass
 {
 public:
-    RDGPass(uint8_t passType, std::string name = "");
-    RDGPass(std::shared_ptr<RDGShaderParameters> shaderParameters, uint8_t passType, std::optional<uint32_t> passID = std::nullopt,
-            std::string name = "");
+    // RDGPass只由graph本身分配
+    RDGPass(std::optional<uint32_t> passID = std::nullopt,std::string name = "");
     RDGPass(const RDGPass&) = delete;
     virtual ~RDGPass() {};
-    void         setShaderParameters(const std::shared_ptr<RDGShaderParameters> shaderParameters);
-    virtual void prepareResource();
-
+    virtual void prepareDescriptors(){};
+    virtual void preparePipeline(){};
+    virtual void prepareRenderPass(){};
+    void setDescSetManager(DescSetManagerRef descSetManager) {_passLayout = descSetManager;}
+    void addRead( RDGTexture* texture, uint32_t setIdx, uint32_t bindIdx,uint32_t offset = 0);
+    void addRead(RDGBuffer* buffer, uint32_t setIdx, uint32_t bindIdx, uint32_t offset = 0);
+    void addReadWrite( RDGTexture* texture, uint32_t setIdx, uint32_t bindIdx, uint32_t offset = 0);
+    void addReadWrite(RDGBuffer* buffer, uint32_t setIdx, uint32_t bindIdx, uint32_t offset = 0);
+    struct DescriptorInfo{
+        RDGResourceBase* resource = nullptr;
+        uint32_t setIdx = 0;
+        uint32_t bindIdx = 0;
+        uint32_t offset = 0;
+    };
+    
 protected:
-    virtual void updateResourceAccessState();
-    RenderDependencyGraph* _hostGraph = nullptr;
+    void updateDependency();
+   
     friend class RenderDependencyGraph;
     bool                                 _isClipped = true;
-    PassType                             _passType;
+    RenderDependencyGraph* _hostGraph = nullptr;
+    DescSetManagerRef _passLayout;
     std::string                          _name;
-    std::shared_ptr<RDGShaderParameters> _shaderParameters;
     std::set<RDGPass*>                   _dependencies;
     std::optional<uint32_t>              _passID = std::nullopt;
+    std::array<std::vector<DescriptorInfo>,static_cast<size_t>(AccessType::eCount)> _resourceMap;
 };
 
 /*
@@ -38,52 +55,60 @@ protected:
    pass,is may include a scene or some geometry data, shader ref as parameters
 */
 
-using FLambdaFunction = std::function<bool()>;
+using FLambdaFunction = std::function<void()>;
 
 class RDGRenderPass:public RDGPass{
 public:
-    RDGRenderPass(std::shared_ptr<RDGShaderParameters> shaderParameters,std::optional<uint32_t> passID, std::string name="",FLambdaFunction&& executeFunction = nullptr)
-        :RDGPass(shaderParameters, uint8_t(PassType::eRenderPass), passID, std::move(name)),_executeFunction(std::forward<FLambdaFunction>(executeFunction)) {
-        _RTSlots.reserve(16);
+    RDGRenderPass(std::optional<uint32_t> paddID, std::string name = "");
+    RDGRenderPass(std::optional<uint32_t> passID, std::string name="",FLambdaFunction&& executeFunction = nullptr)
+        :RDGPass(passID, std::move(name)),_executeFunction(std::forward<FLambdaFunction>(executeFunction)) {
+        _RTSlots.reserve(MAX_RT_NUM::value);
     }
     ~RDGRenderPass() override;
     //setting func
-    void addSlot(RDGTexture* rtTexture,RDGTexture* resolveTexture,RDGRTState::LoadType loadType = RDGRTState::LoadType::eDontCare, RDGRTState::StoreType storeType = RDGRTState::StoreType::eStore);
-    void setPipelineState(const RDGGraphicPipelineState& pipelineState);
-    void updateResourceAccessState() override;
-    void prepareResource() override;
+    void colorAttach(RDGRTState::LoadType loadType,
+                    RDGRTState::StoreType storeType,
+                    RDGTexture* texture,
+                    RDGTexture* resolveTexture,
+                    VkImageLayout initLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                    VkImageLayout finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    void colorAttach(RDGRTState& state);
+    void depthStencilAttach(RDGRTState::LoadType loadType,
+                            RDGRTState::StoreType storeType,
+                            RDGTexture* texture,
+                            VkImageLayout initLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                            VkImageLayout finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+    void executeFunction(FLambdaFunction&& func);
     void execute();
-    //getter setter
-    void setRenderPass(VkRenderPass renderPass);
-    void setFramebuffer(VkFramebuffer frameBuffer);
-    VkRenderPass getRenderPass() const{return _renderPass;};
-    VkFramebuffer getFramebuffer() const{return _frameBuffer;};
+    virtual void prepareDescriptors()override;
+    virtual void preparePipeline()override;
+    virtual void prepareRenderPass()override;
+    //RDGRenderPass中不必维护底层vkRenderPass/vkFrameBuffer,这些都在RHI层做池缓存,渲染时候直接get即可
+
 protected:
-    void createVkRenderPass();
-    void createVkFrameBuffer();
     friend class RenderDependencyGraph;
+
 private:
-    VkRenderPass _renderPass;
-    VkFramebuffer _frameBuffer;
-    std::vector<VkDescriptorSet> _descriptorSets;
-    RDGGraphicPipelineState _pipelineState;
     FLambdaFunction _executeFunction;
     std::vector<RDGRTState> _RTSlots;
 };
 
 class RDGComputePass:public RDGPass{
 public:
-    RDGComputePass(std::shared_ptr<RDGShaderParameters> shaderParameters, std::optional<uint32_t> passID, std::string name="",FLambdaFunction&& executeFunction = nullptr)
-        :RDGPass(shaderParameters, uint8_t(PassType::eComputePass), passID, std::move(name)), _executeFunction(std::forward<FLambdaFunction>(executeFunction)) {
+    RDGComputePass(std::optional<uint32_t>passID, std::string name = "");
+    RDGComputePass(std::optional<uint32_t> passID, std::string name= "",FLambdaFunction&& executeFunction = nullptr)
+        :RDGPass(passID, std::move(name)), _executeFunction(std::forward<FLambdaFunction>(executeFunction)) {
     }
     ~RDGComputePass() override;
-    void prepareResource() override;
     void execute();
-protected:
-    friend class RenderDependencyGraph;
-    RDGComputePipelineState _pipelineState;
-    std::vector<VkDescriptorSet> _descriptorSets;
+    void executeFunction(FLambdaFunction&& func);
+    virtual void prepareDescriptors()override;
+    virtual void preparePipeline()override;
+    virtual void prepareRenderPass()override;
+
 private:
+    friend class RenderDependencyGraph;
+    nvvk::DescriptorSetContainer _descriptorSetContainer;
     FLambdaFunction _executeFunction;
 };
 

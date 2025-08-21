@@ -187,52 +187,7 @@ void             RenderDependencyGraph::compile()
 }
 
 void RenderDependencyGraph::updatePassDependency(){
-    for(auto& pass:_rdgPasses){
-        pass->updateResourceAccessState();
-    }
-    for(auto& pass:_rdgPasses){
-        for(auto& readAccessResource: pass->_shaderParameters->_resources[static_cast<size_t>(AccessType::eReadOnly)]){
-            for(auto& resource: readAccessResource._resources){
-                NV_ASSERT(resource);
-                // 直接转换为基类指针，避免重复的类型检查
-                RDGResourceBase* baseResource = nullptr;
-                if(readAccessResource._resourceType == ResourceType::eTexture){
-                    baseResource = static_cast<RDGTexture*>(resource);
-                }
-                else if(readAccessResource._resourceType == ResourceType::eBuffer){
-                    baseResource = static_cast<RDGBuffer*>(resource);
-                }
-                
-                if(baseResource) {
-                    std::optional<uint32_t> lastProducer = baseResource->getLastProducer(pass->_passID.value());
-                    if(lastProducer.has_value()){
-                        pass->_dependencies.insert(_rdgPasses[lastProducer.value()]);
-                    }
-                }
-            }
-        }
-        for(auto& rwAccessResource: pass->_shaderParameters->_resources[static_cast<size_t>(AccessType::eReadWrite)]){
-            for(auto& resource: rwAccessResource._resources){
-                NV_ASSERT(resource);
-                // 直接转换为基类指针，避免重复的类型检查
-                RDGResourceBase* baseResource = nullptr;
-                if(rwAccessResource._resourceType == ResourceType::eTexture){
-                    baseResource = static_cast<RDGTexture*>(resource);
-                }
-                else if(rwAccessResource._resourceType == ResourceType::eBuffer){
-                    baseResource = static_cast<RDGBuffer*>(resource);
-                }
-                
-                if(baseResource) {
-                    std::optional<uint32_t> lastProducer = baseResource->getLastProducer(pass->_passID.value());
-                    if(lastProducer.has_value()){
-                        pass->_dependencies.insert(_rdgPasses[lastProducer.value()]);
-                    }
-                    baseResource->getProducers().push_back(pass->_passID.value());
-                }
-            } 
-        }
-    }
+   
 }
 
 void                   RenderDependencyGraph::onCreatePass(RDGPass* pass) {}
@@ -295,12 +250,7 @@ bool RenderDependencyGraph::hasCircle()
 
 void RenderDependencyGraph::prepareResource()
 {
-    // textures, buffers, fbo, render pass,
-    for (auto& pass : this->_rdgPasses)
-    {
-        if (pass->_isClipped) continue; // Skip already clipped passes
-        pass->prepareResource();
-    }
+   
 }
 
 RDGTexture* RenderDependencyGraph::allocRHITexture(RDGTexture* texture) {
@@ -418,14 +368,7 @@ VkRenderPass RenderDependencyGraph::getOrCreateRenderPass(std::vector<RDGRTState
     }
     return this->_app->GetOrCreateRenderPass(contextRtState);
 }
-void   RenderDependencyGraph::getOrCreatePipeline(RDGGraphicPipelineState& pipelineState,VkRenderPass renderPass){
-    if(pipelineState._pipeline!= VK_NULL_HANDLE) return;
-    // _app->GetOrCreatePipeline(pipelineState,{pipelineState._vshaderInfo,pipelineState._fshaderInfo},renderPass);
-}
-void   RenderDependencyGraph::getOrCreatePipeline(RDGComputePipelineState& pipelineState){
-    if(pipelineState._pipeline!= VK_NULL_HANDLE) return;
-    // _app->GetOrCreatePipeline(pipelineState._cshaderInfo);
-}
+
 
 RDGBuffer* RenderDependencyGraph::allocRHIBuffer(RDGBuffer* buffer) {
     if(buffer == nullptr){

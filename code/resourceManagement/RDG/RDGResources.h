@@ -76,13 +76,16 @@ public:
     RDGGraphicPipelineState() = default;
     RDGGraphicPipelineState(const RDGGraphicPipelineState& other)= default;
     ~RDGGraphicPipelineState() = default;
-    void createPipeline(){};
     RDGGraphicPipelineState& setVertexShaderInfo(const nvvk::ShaderModuleID& shaderId);
     RDGGraphicPipelineState& setFragmentShaderInfo(const nvvk::ShaderModuleID& shaderId);
     VkPipeline _pipeline = VK_NULL_HANDLE;
     VkPipelineLayout _pipelineLayout = VK_NULL_HANDLE;
     nvvk::ShaderModuleID _vshaderInfo = nvvk::ShaderModuleID();
     nvvk::ShaderModuleID _fshaderInfo = nvvk::ShaderModuleID();
+    void test(){
+
+    }
+
 };
 
 class RDGComputePipelineState{
