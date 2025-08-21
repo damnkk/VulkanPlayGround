@@ -1,12 +1,12 @@
 #ifndef RESOURCE_H
-#define RESOURCE_H
+#define RESOURCE_H1
 #include "stdint.h"
 #include "vector"
-#include "nvvk/memallocator_vma_vk.hpp"
-#include "host_device.h"
+#include "nvvk/resources.hpp"
+#include "PlayAllocator.h"
 namespace Play
 {
-class Texture : public nvvk::Texture
+class Texture : public nvvk::Image
 {
 public:
     Texture() = default;
@@ -58,7 +58,7 @@ template <typename T>
 class BasePool
 {
    public:
-    void init(uint32_t poolSize, nvvk::ResourceAllocatorVma* allocator)
+    void init(uint32_t poolSize, PlayAllocator* allocator)
     {
         _allocator = allocator;
         _objs.resize(poolSize);
@@ -69,23 +69,13 @@ class BasePool
         }
     }
 
-    void deinit()
-    {
-        for (auto& obj : _objs)
-        {
-            if (obj && obj->_poolId >= 0)
-            {
-                _allocator->destroy(*obj);
-                obj->_poolId = -1;
-                delete (obj);
-            }
-        }
-    }
+    virtual void deinit();
+
 
     std::vector<T*>             _objs;
     std::vector<uint32_t>       _freeIndices;
     uint32_t                    _availableIndex = 0;
-    nvvk::ResourceAllocatorVma* _allocator;
+    PlayAllocator* _allocator;
 };
 
 class TexturePool : public BasePool<Texture>
@@ -105,9 +95,22 @@ class TexturePool : public BasePool<Texture>
             return;
         }
         _freeIndices[--_availableIndex] = obj->_poolId;
-        _allocator->destroy(*obj);
+        _allocator->destroyImage(*obj);
         obj->_poolId = -1;
     };
+
+    void deinit() override{
+            
+        for (auto& obj : _objs)
+        {
+            if (obj && obj->_poolId >= 0)
+            {
+                _allocator->destroyImage(*obj);
+                obj->_poolId = -1;
+                delete (obj);
+            }
+        }
+    }
 };
 
 class BufferPool : public BasePool<Buffer>
@@ -127,9 +130,22 @@ class BufferPool : public BasePool<Buffer>
             return;
         }
         _freeIndices[--_availableIndex] = obj->_poolId;
-        _allocator->destroy(*obj);
+        _allocator->destroyBuffer(*obj);
         obj->_poolId = -1;
     };
+
+    void deinit() override{
+            
+        for (auto& obj : _objs)
+        {
+            if (obj && obj->_poolId >= 0)
+            {
+                _allocator->destroyBuffer(*obj);
+                obj->_poolId = -1;
+                delete (obj);
+            }
+        }
+    }
 };
 } // namespace Play
 #endif // RESOURCE_H

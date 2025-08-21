@@ -1,134 +1,63 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.22 FATAL_ERROR)
+get_filename_component(PROJECT_NAME ${CMAKE_CURRENT_SOURCE_DIR} NAME)
+project(${PROJECT_NAME} LANGUAGES C CXX)
 
-get_filename_component(PROJNAME ${CMAKE_CURRENT_SOURCE_DIR} NAME)
-set(PROJNAME VulkanPlayGround)
-project(${PROJNAME} VERSION 1.0 LANGUAGES  C CXX)
+# Prior adding the package one can disable certain libraries
+# e.g.
+option(NVPRO2_ENABLE_nvgl OFF)
+option(NVPRO2_ENABLE_nvgpu_monitor OFF)
 
-message(STATUS "-------------------------------")
-message(STATUS "Processing Project ${PROJNAME}:")
+find_path(NVPRO_CORE2_DIR
+  NAMES cmake/Setup.cmake
+  PATHS ${CMAKE_CURRENT_LIST_DIR}/External/nvpro_core2
+  REQUIRED
+  DOC "Path to nvpro_core2"
+)
+include(${NVPRO_CORE2_DIR}/cmake/Setup.cmake)
 
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+#####################################################################################
+# Source files for this project
+#
 
-
-if(NOT BASE_DIRECTORY)
-find_path(BASE_DIRECTORY
-NAMES nvpro_core/cmake/setup.cmake
-PATHS ${CMAKE_CURRENT_SOURCE_DIR}/External
-REQUIRED
-DOC "Directory containing nvpro_core"
-)
-endif()
-
-# execute_process(
-#         COMMAND python ./External/shaderc/utils/git-sync-deps
-#         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-#         RESULT_VARIABLE GLSLANG_SYNC_RESULT
-# )
-# if(NOT GLSLANG_SYNC_RESULT EQUAL "0")
-#     message(FATAL_ERROR "Can not clone spirv-tools, glslang will not be compile successfully")
-# endif()
-# # 在add_subdirectory(External/shaderc)之前添加
-# set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries" FORCE)
-# set(SHADERC_SKIP_TESTS ON)
-# set(SHADERC_SKIP_EXAMPLES ON)
-# set(SHADERC_SKIP_COPYRIGHT_CHECK ON)
-
-# # 强制shaderc使用静态版本的依赖
-# # set(SPIRV_TOOLS_BUILD_STATIC ON CACHE BOOL "Build SPIRV-Tools as static library")
-# add_subdirectory(External/shaderc)
-
-## Various functions and macros REQUIRED
-if(EXISTS ${BASE_DIRECTORY}/nvpro_core/cmake/setup.cmake)
-include(${BASE_DIRECTORY}/nvpro_core/cmake/setup.cmake)
-include(${BASE_DIRECTORY}/nvpro_core/cmake/utilities.cmake)
-else()
-message(FATAL_ERROR "could not find base directory, please set BASE_DIRECTORY to folder containing nvpro_core")
-endif()
-
-
-
-# if(MSVC)
-# add_definitions(/wd26812)  # 'enum class' over 'enum'
-# add_definitions(/wd26451)  # Arithmetic overflow, casting 4 byte value to 8 byte value
-# endif()
-
-set(OUTPUT_PATH ${CMAKE_CURRENT_SOURCE_DIR}/build)
-FILE(GLOB_RECURSE COMMON_SOURCE_FILES
-${PROJECT_SOURCE_DIR}/code/*.cpp
+FILE(GLOB_RECURSE SOURCE_FILES
+  # ${CMAKE_CURRENT_LIST_DIR}/code/*.cpp
+  ${CMAKE_CURRENT_LIST_DIR}/code/main.cpp
 )
 
-add_executable(VulkanPlayGround 
-${COMMON_SOURCE_FILES}
+source_group("Source Files" FILES ${SOURCE_FILES})
+
+#####################################################################################
+# Executable
+#
+
+add_executable(${PROJECT_NAME} ${SOURCE_FILES})
+set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME})
+target_include_directories(${PROJECT_NAME} PRIVATE
+  ${NVPRO_CORE2_DIR}
+  ${CMAKE_CURRENT_LIST_DIR}/code/renderer
+  ${CMAKE_CURRENT_LIST_DIR}/code/resourceManagement
+
 )
-_add_project_definitions(${PROJNAME})
-compile_glsl_directory(
-	SRC "${CMAKE_CURRENT_SOURCE_DIR}/shaders" 
-	DST "${CMAKE_CURRENT_SOURCE_DIR}/spv" 
-	VULKAN_TARGET "vulkan1.3"
-	DEPENDENCY ${VULKAN_BUILD_DEPENDENCIES}
-  FLAGS "-I${CMAKE_CURRENT_SOURCE_DIR}/External/nvpro_core/nvvkhl/shaders"
-)
-compile_glsl_directory(
-	SRC "${CMAKE_CURRENT_SOURCE_DIR}/shaders/volumeRender" 
-	DST "${CMAKE_CURRENT_SOURCE_DIR}/spv" 
-	VULKAN_TARGET "vulkan1.3"
-	DEPENDENCY ${VULKAN_BUILD_DEPENDENCIES}
-  FLAGS "-I${CMAKE_CURRENT_SOURCE_DIR}/External/nvpro_core/nvvkhl/shaders"
-)
-compile_glsl_directory(
-	SRC "${CMAKE_CURRENT_SOURCE_DIR}/shaders/VRS" 
-	DST "${CMAKE_CURRENT_SOURCE_DIR}/spv" 
-	VULKAN_TARGET "vulkan1.3"
-	DEPENDENCY ${VULKAN_BUILD_DEPENDENCIES}
-  FLAGS "-I${CMAKE_CURRENT_SOURCE_DIR}/External/nvpro_core/nvvkhl/shaders"
+target_link_libraries(${PROJECT_NAME} PRIVATE
+  nvpro2::nvapp
+  nvpro2::nvaftermath
+  nvpro2::nvgui
+  nvpro2::nvimageformats
+  nvpro2::nvnsight
+  nvpro2::nvshaders_host
+  nvpro2::nvslang
+  nvpro2::nvutils
+  nvpro2::nvvk
+  nvpro2::nvvkglsl
+  nvpro2::nvvkgltf
 )
 
-# Package shared by all projects
-# _add_package_VulkanSDK()
-_add_package_ShaderC()
-_add_package_ImGUI()
-_add_nvpro_core_lib()
-add_subdirectory(External/Assimp)
-add_definitions(-DBUILD_SHARED_LIBS=OFF -DASSIMP_WARNINGS_AS_ERRORS=OFF )
-target_compile_definitions(${PROJNAME} PUBLIC ALLOC_VMA)
-target_sources(${PROJNAME} PUBLIC ${COMMON_SOURCE_FILES})
-target_sources(${PROJNAME} PUBLIC ${PACKAGE_SOURCE_FILES})
-target_sources(${PROJNAME} PUBLIC ${GLSL_SOURCES})
-target_sources(${PROJNAME} PUBLIC ${GLSL_HEADERS})
-target_link_libraries(${PROJNAME} ${PLATFORM_LIBRARIES} nvpro_core assimp)
-target_link_libraries(${PROJNAME}  "${PROJECT_SOURCE_DIR}/code/debugger/Nsight/graphics/lib/x64/NGFX_Injection.lib")
+add_project_definitions(${PROJECT_NAME})
 
-foreach(DEBUGLIB ${LIBRARIES_DEBUG})
-  target_link_libraries(${PROJNAME} debug ${DEBUGLIB})
-endforeach(DEBUGLIB)
+# This sample doesn't need addtional files, but one might need to
+# copy required dlls, additional commands etc. through this command
+copy_to_runtime_and_install( ${PROJECT_NAME}  AUTO)
 
-foreach(RELEASELIB ${LIBRARIES_OPTIMIZED})
-  target_link_libraries(${PROJNAME} optimized ${RELEASELIB})
-endforeach(RELEASELIB)
-
-target_include_directories(VulkanPlayGround PRIVATE 
-    ${PROJECT_SOURCE_DIR}/code
-    ${PROJECT_SOURCE_DIR}/code/renderer
-    ${PROJECT_SOURCE_DIR}/code/resourceManagement
-    ${PROJECT_SOURCE_DIR}/shaders
-    ${CMAKE_SOURCE_DIR}/External/Assimp/include
-    # ${CMAKE_SOURCE_DIR}/External/shaderc/libshaderc/include
-    # ${CMAKE_SOURCE_DIR}/External/shaderc/libshaderc_util/include
-)
-
-add_custom_command(TARGET ${PROJNAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy
-        "${CMAKE_CURRENT_SOURCE_DIR}/code/debugger/Nsight/graphics/lib/x64/NGFX_Injection.dll"
-        "${CMAKE_CURRENT_SOURCE_DIR}/build/Debug/NGFX_Injection.dll"
-)
-add_custom_command(TARGET ${PROJNAME} POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "$<TARGET_FILE:assimp>"
-    "$<TARGET_FILE_DIR:${PROJNAME}>/"
-)
-target_copy_to_output_dir()
-_finalize_target( ${PROJNAME} )
-install(FILES ${SPV_OUTPUT} CONFIGURATIONS Release DESTINATION "bin_${ARCH}/${PROJNAME}/spv")
-install(FILES ${SPV_OUTPUT} CONFIGURATIONS Debug DESTINATION "bin_${ARCH}_debug/${PROJNAME}/spv")

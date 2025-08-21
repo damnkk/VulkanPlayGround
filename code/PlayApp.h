@@ -1,9 +1,9 @@
 #ifndef PLAYAPP_H
 #define PLAYAPP_H
-#include "nvvkhl/appbase_vk.hpp"
-#include "resourceManagement/ModelLoader.h" // Ensure ModelLoader class is defined in this header
-#include "nvvk/memallocator_vma_vk.hpp"
-#include "nvvk/pipeline_vk.hpp"
+#include "nvapp/application.hpp"
+// #include "resourceManagement/ModelLoader.h" // Ensure ModelLoader class is defined in this header
+#include <nvvk/profiler_vk.hpp>
+#include <nvutils/parameter_parser.hpp>
 #include "PlayAllocator.h"
 #include "resourceManagement/Resource.h"
 #include "resourceManagement/SceneNode.h"
@@ -19,20 +19,20 @@ namespace RDG{
 class RenderDependencyGraph;
 }
 
-class PlayApp : public nvvkhl::AppBaseVk
-{
+class PlayElement : public nvapp::IAppElement{
 public:
-    void   onResize(int width, int height) override;
-    void   onDestroy();
-    void   OnInit();
-    void   Run();
-    void   RenderFrame();
-    void   OnPreRender();
-    void   OnPostRender();
-    Scene& getScene()
-    {
-        return _scene;
-    };
+      // Interface
+    virtual void onAttach(nvapp::Application* app) override;                      // Called once at start
+    virtual void onDetach() override;                                             // Called before destroying the application
+    virtual void onResize(VkCommandBuffer cmd, const VkExtent2D& size) override;  // Called when the viewport size is changing
+    virtual void onUIRender() override;                                           // Called for anything related to UI
+    virtual void onUIMenu() override;                                             // This is the menubar to create
+    virtual void onPreRender() override;                                          // called post onUIRender and prior onRender (looped over all elements)
+    virtual void onRender(VkCommandBuffer cmd) override;                          // For anything to render within a frame
+    virtual void onFileDrop(const std::filesystem::path& filename) override;      // For when a file is dragged on top of the window
+    virtual void onLastHeadlessFrame() override;                                  // Called at the end of the last frame in headless mode
+    virtual ~PlayElement();
+
     PlayAllocator& getAlloc()
     {
         return _alloc;
@@ -48,24 +48,6 @@ public:
     static PlayAllocator   _alloc;
     static TexturePool         _texturePool;
     static BufferPool          _bufferPool;
-    nvvk::DebugUtil m_debug;
-    VkRenderPass GetOrCreateRenderPass(std::vector<RTState>& rtStates);
-    VkPipeline GetOrCreatePipeline(nvvk::GraphicsPipelineState& pipelineState,VkPipelineLayout pipLayout,VkRenderPass targetRdPass);
-    VkPipeline GetOrCreatePipeline(const ShaderInfo* computeShaderInfo);
-
-
-    protected:
-        void createGraphicsDescriptResource();
-        void createGraphicsDescriptorSet();
-        void createGraphicsDescriptorSetLayout();
-        void createGraphicsPipeline();
-
-    private:
-        friend class RTRenderer;
-        friend class VolumeRenderer;
-        friend class ShadingRateRenderer;
-        friend class RDG::RenderDependencyGraph;
-
 
     enum RenderMode
     {
@@ -76,47 +58,53 @@ public:
         eDeferRendering,
         eRCount
     } _renderMode = eShadingRateRendering;
-    friend class ModelLoader;
-    ModelLoader _modelLoader;
-    VkDescriptorPool          _descriptorPool;
-
-    VkDescriptorSet          _graphicDescriptorSet;
-    VkDescriptorSetLayout    _graphicsSetLayout;
-    VkPipeline                _graphicsPipeline;
-    VkPipelineLayout         _graphicsPipelineLayout;
+protected:
+    //SceneManager
+    //RenderPassCache
+    //FrameBufferCache
+    //PipelineCache
     std::unique_ptr<Renderer> _renderer;
-    std::unordered_map<std::size_t,VkRenderPass> _renderPassesCache;
-    std::unordered_map<std::size_t,VkPipeline> _pipelineCache;
-    Scene                     _scene;
+    Texture _uiTexture;
+    VkDescriptorSet _uiTextureDescriptor;
+
+private:
+    friend class RTRenderer;
+    friend class VolumeRenderer;
+    friend class ShadingRateRenderer;
+    friend class RDG::RenderDependencyGraph;
+    nvapp::Application* _app{};
+    nvutils::ProfilerTimeline* m_profilerTimeline{};
+    nvvk::ProfilerGpuTimer     m_profilerGpuTimer{};
 };
 
 
-inline Texture* PlayApp::AllocTexture()
+
+inline Texture* PlayElement::AllocTexture()
 {
     return _texturePool.alloc();
 }
 
-inline void PlayApp::FreeTexture(Texture* texture)
+inline void PlayElement::FreeTexture(Texture* texture)
 {
     _texturePool.free(texture);
 }
 
-inline Buffer* PlayApp::AllocBuffer()
+inline Buffer* PlayElement::AllocBuffer()
 {
     return _bufferPool.alloc();
 }
 
-inline void PlayApp::FreeBuffer(Buffer* buffer)
+inline void PlayElement::FreeBuffer(Buffer* buffer)
 {
     _bufferPool.free(buffer);
 }
 
-inline void* PlayApp::MapBuffer(Buffer& buffer)
+inline void* PlayElement::MapBuffer(Buffer& buffer)
 {
     return _alloc.map(buffer);
 }
 
-inline void PlayApp::UnmapBuffer(Buffer& buffer)
+inline void PlayElement::UnmapBuffer(Buffer& buffer)
 {
     _alloc.unmap(buffer);
 }
