@@ -2,8 +2,11 @@
 #define RDG_RESOURCES_H
 #include "Resource.h"
 #include "RDGHandle.h"
-#include "nvvk/pipeline_vk.hpp"
-#include "ShaderManager.h"
+#include "nvvk/pipeline.hpp"
+#include "nvvk/graphics_pipeline.hpp"
+#include "nvvk/compute_pipeline.hpp"
+#include "nvvk/shaders.hpp"
+#include "ShaderManager.hpp"
 #include <optional>
 
 namespace Play::RDG{
@@ -41,15 +44,15 @@ class RDGTexture : public RDGResourceBase {
 public:
     RDGTexture() = default;
     RDGTexture(TextureHandle handle) :_handle(handle){}
-    RDGTexture(Texture* texture) : _pData(texture) {}
+    RDGTexture(Texture* texture) : _rhi(texture) {}
     RDGTexture(const RDGTexture&) = delete;
     RDGTexture& operator=(const RDGTexture&) = delete;
     ~RDGTexture() = default;
-    void setMetaData(Texture::TexMetaData metadata) { this->_pData->_metadata = metadata; }
-    Texture* RHI(){return _pData;}
+    void setMetaData(Texture::TexMetaData metadata) { this->_rhi->setMetaData(metadata); }
+    Texture* RHI(){return _rhi;}
     TextureHandle _handle = TextureHandle::Null;
 protected:
-    Texture* _pData= nullptr;
+    Texture* _rhi = nullptr;
     friend class RDGTexturePool;
     friend class RenderDependencyGraph;
 };
@@ -58,15 +61,15 @@ class RDGBuffer : public RDGResourceBase {
 public:
     RDGBuffer() = default;
     RDGBuffer(BufferHandle handle) :_handle(handle){}
-    RDGBuffer(Buffer* buffer) : _pData(buffer) {}
+    RDGBuffer(Buffer* buffer) : _rhi(buffer) {}
     RDGBuffer(const RDGBuffer&) = delete;
     RDGBuffer& operator=(const RDGBuffer&) = delete;
     ~RDGBuffer() = default;
     BufferHandle _handle = BufferHandle::Null;
-    void setMetaData(Buffer::BufferMetaData metadata) { this->_pData->_metadata = metadata; }
-    Buffer* RHI(){return _pData;}
+    void setMetaData(Buffer::BufferMetaData metadata) { this->_rhi->setMetaData(metadata); }
+    Buffer* RHI(){return _rhi;}
 protected:
-    Buffer* _pData = nullptr;
+    Buffer* _rhi = nullptr;
     friend class RDGBufferPool;
     friend class RenderDependencyGraph;
 };
@@ -76,12 +79,12 @@ public:
     RDGGraphicPipelineState() = default;
     RDGGraphicPipelineState(const RDGGraphicPipelineState& other)= default;
     ~RDGGraphicPipelineState() = default;
-    RDGGraphicPipelineState& setVertexShaderInfo(const nvvk::ShaderModuleID& shaderId);
-    RDGGraphicPipelineState& setFragmentShaderInfo(const nvvk::ShaderModuleID& shaderId);
+    RDGGraphicPipelineState& setVertexShaderInfo(uint32_t shaderId);
+    RDGGraphicPipelineState& setFragmentShaderInfo(uint32_t shaderId);
     VkPipeline _pipeline = VK_NULL_HANDLE;
     VkPipelineLayout _pipelineLayout = VK_NULL_HANDLE;
-    nvvk::ShaderModuleID _vshaderInfo = nvvk::ShaderModuleID();
-    nvvk::ShaderModuleID _fshaderInfo = nvvk::ShaderModuleID();
+    uint32_t _vshaderId = size_t(~0);
+    uint32_t _fshaderId = size_t(~0);
     void test(){
 
     }
@@ -93,10 +96,10 @@ public:
     RDGComputePipelineState() = default;
     RDGComputePipelineState(const RDGComputePipelineState& other)= default;
     ~RDGComputePipelineState() = default;
-    void setShaderInfo(const nvvk::ShaderModuleID& shaderInfo);
+    void setShaderInfo(uint32_t shaderId);
     VkPipeline _pipeline;
     VkPipelineLayout _pipelineLayout;
-    nvvk::ShaderModuleID _cshaderInfo = size_t(~0);
+    uint32_t _cshaderId = size_t(~0);
 };
 
 

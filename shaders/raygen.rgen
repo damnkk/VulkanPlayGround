@@ -18,8 +18,8 @@
 #extension GL_EXT_buffer_reference2 : require
 #extension GL_EXT_debug_printf : enable
 #include "host_device.h"
-#include "random.h"
-#include "bsdf_functions.h"
+#include "bsdf_functions.h.slang"
+#include "random.h.slang"
 layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout(set = 0,binding = 1, rgba32f) uniform image2D RayTraceRT;
 layout(set = 0,binding = 2,scalar)  buffer MaterialBuffer{
@@ -52,7 +52,7 @@ layout(buffer_reference, scalar) buffer Indices
     uvec3 i[];
 };
 #include "common.glsl"
-#include "ray_util.h"
+#include "ray_util.h.slang"
 layout(location = 0) rayPayloadEXT PlayLoad rtPload;
 layout(location = 1) rayPayloadEXT ShadowPlayLoad shadowPload;
 #include "pathtrace.glsl"

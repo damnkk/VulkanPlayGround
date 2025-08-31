@@ -27,4 +27,36 @@ VkAttachmentStoreOp RTState::getVkStoreOp() const
     default: return VK_ATTACHMENT_STORE_OP_STORE;
     }
 }
+
+VkImageCreateInfo makeImage2DCreateInfo(
+    VkExtent2D extent,
+    VkFormat format,
+    VkImageUsageFlags usageFlags,
+    bool mipmap
+){
+    VkImageCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    createInfo.imageType = VK_IMAGE_TYPE_2D;
+    createInfo.extent = { extent.width, extent.height, 1 };
+    createInfo.format = format;
+    createInfo.usage = usageFlags;
+    createInfo.mipLevels = mipmap ? 0 : 1;
+    return createInfo;
+}
+
+VkImageCreateInfo makeImage3DCreateInfo(
+    VkExtent3D extent,
+    VkFormat format,
+    VkImageUsageFlags usageFlags,
+    bool mipmap
+){
+    VkImageCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    createInfo.imageType = VK_IMAGE_TYPE_3D;
+    createInfo.extent = extent;
+    createInfo.format = format;
+    createInfo.usage = usageFlags;
+    createInfo.mipLevels = mipmap ? 0 : 1;
+    return createInfo;
+}
 }// namespace Play

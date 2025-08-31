@@ -1,6 +1,6 @@
 #ifndef RDG_HANDLE_H
 #define RDG_HANDLE_H
-#include "nvp/NvFoundation.h"
+#include <cstdint>
 namespace Play::RDG{
 
 /* Numeric constants
@@ -100,7 +100,7 @@ public:
     using IndexType = LocalIndexType;
     RDGHandle() = default;
     RDGHandle(IndexType index) {
-        NV_ASSERT(index>=0&& index < InvalidIndex);
+        assert(index>=0&& index < InvalidIndex);
         this->index = (IndexType)index;
     }
     bool operator==(const RDGHandle& other) const {

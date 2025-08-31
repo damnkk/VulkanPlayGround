@@ -2,7 +2,7 @@
 namespace Play
 {
 
-DeferRenderer:: DeferRenderer(PlayApp& app)
+DeferRenderer:: DeferRenderer(PlayElement& app)
 {
     // add pass
     //graph compile(pass clip / parepare resource)

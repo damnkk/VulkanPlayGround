@@ -23,8 +23,7 @@ set(CMAKE_CXX_STANDARD 20)
 #
 
 FILE(GLOB_RECURSE SOURCE_FILES
-  # ${CMAKE_CURRENT_LIST_DIR}/code/*.cpp
-  ${CMAKE_CURRENT_LIST_DIR}/code/main.cpp
+  ${CMAKE_CURRENT_LIST_DIR}/code/*.cpp
 )
 
 source_group("Source Files" FILES ${SOURCE_FILES})
@@ -37,7 +36,9 @@ add_executable(${PROJECT_NAME} ${SOURCE_FILES})
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME})
 target_include_directories(${PROJECT_NAME} PRIVATE
   ${NVPRO_CORE2_DIR}
+  ${NVPRO_CORE2_DIR}/code/debugger
   ${CMAKE_CURRENT_LIST_DIR}/code/renderer
+  ${CMAKE_CURRENT_LIST_DIR}/code
   ${CMAKE_CURRENT_LIST_DIR}/code/resourceManagement
 
 )

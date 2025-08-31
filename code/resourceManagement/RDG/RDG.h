@@ -13,8 +13,6 @@ use resource handle as resource itself,to confirm the dependency, and specify th
 #include "array"
 #include "list"
 #include "RDGPreDefine.h"
-#include "vulkan/vulkan.h"
-#include "nvvk/images_vk.hpp"
 #include "PlayApp.h"
 #include "RDGResources.h"
 #include "RDGPasses.hpp"
@@ -72,7 +70,10 @@ struct BufferDesc{
     VkBufferUsageFlags _usageFlags= VK_BUFFER_USAGE_2_TRANSFER_DST_BIT | VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT;
     VkDeviceSize _size = 1;
     VkDeviceSize _range = VK_WHOLE_SIZE;
-    Buffer::BufferMetaData::BufferLocation _location= Buffer::BufferMetaData::BufferLocation::eDeviceOnly;
+    enum class MemoryLocation:uint8_t{
+        eDeviceLocal,
+        eHostVisible
+    } _location = MemoryLocation::eDeviceLocal;
     std::string _debugName;
 };
 
@@ -99,15 +100,15 @@ public:
 
     RDGTexture* createTexture(const TextureDesc& desc);
     RDGBuffer*  createBuffer(const BufferDesc& desc);
-    RDGTexture* allocRHITexture(RDGTexture* texture);
-    RDGBuffer*  allocRHIBuffer(RDGBuffer* buffer);
+    void allocRHITexture(RDGTexture* texture);
+    void allocRHIBuffer(RDGBuffer* buffer);
 
     void destroyTexture(TextureHandle handle);
     void destroyBuffer(BufferHandle handle);
     void destroyTexture(RDGTexture* texture);
     void destroyBuffer(RDGBuffer* buffer);
 
-    PlayApp* getApp() const{ return _app; }
+    PlayElement* getElement() const{ return _element; }
 
 protected:
     void onCreatePass(RDGPass* pass);
@@ -130,20 +131,12 @@ private:
     std::vector<RDGPass*>    _clippedPasses;
     std::vector<RDGTexture*> _externalTextures;
     std::vector<RDGBuffer*>  _externalBuffers;
-    PlayApp*                 _app = nullptr;
+    PlayElement*                 _element = nullptr;
     std::vector<int32_t> _passDepthLayout;
     std::optional<uint32_t> _passCounter = 0;
     friend class RDGRenderPass;
 };
 
-template<typename Pass>
-void RenderDependencyGraph::getOrCreatePipeline(Pass& pass){
-    if constexpr(std::is_same_v<Pass, RDGRenderPass>) {
-        _app->GetOrCreatePipeline(pass._pipelineState, pass.getRenderPass());
-    } else if constexpr(std::is_same_v<Pass, RDGComputePass>) {
-        // Create compute pipeline
-    }
-}
 }// namespace Play
 
 #endif // RDG_H

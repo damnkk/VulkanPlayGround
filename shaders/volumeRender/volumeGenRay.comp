@@ -3,8 +3,9 @@
 #version 450
 #extension GL_GOOGLE_include_directive : enable
 #extension GL_EXT_scalar_block_layout:enable
-#include "../common.glsl"
-#include "random.h"
+#include "common.glsl"
+#include "slang_types.h"
+#include "random.h.slang"
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 layout(set = 0,binding = 0) uniform sampler3D volumeTexture; // 3D texture for volume data
 layout(set = 0,binding = 1) uniform sampler3D gradientTexture; // 2D texture for depth information

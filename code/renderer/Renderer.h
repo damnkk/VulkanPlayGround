@@ -5,13 +5,13 @@ namespace Play
 {
 
 struct Scene;
-class PlayApp;
+class PlayElement;
 class Texture;
 class Renderer
 {
    public:
     Renderer(){};
-    Renderer(PlayApp& app): _app(&app)
+    Renderer(PlayElement& app): _app(&app)
     {
     };
     virtual ~Renderer() = default;
@@ -25,7 +25,7 @@ class Renderer
     virtual Texture* getOutputTexture()= 0;
     protected:
      Scene* _scene;
-     PlayApp* _app;
+     PlayElement* _app;
    private:
 };
 

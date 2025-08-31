@@ -2,12 +2,12 @@
 #define PLAYPROGRAM_H
 
 #include "PlayApp.h"
-#include "nvvk/descriptorsets_vk.hpp"
-#include "nvvk/shadermodulemanager_vk.hpp"
+#include <nvvk/descriptors.hpp>
+#include <ShaderManager.hpp>
 
 namespace Play
 {
-typedef nvvk::ShaderModuleID ShaderID;
+using ShaderID = uint32_t;
 
 struct BindInfo{
     uint32_t setIdx;
@@ -24,32 +24,17 @@ struct ConstantRange{
 /*
 Example:
 
-    VkDevice device;
-    DescriptorSetManager descriptorManager(device);
-    descriptorManager.addBinding(1, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-    descriptorManager.addBinding(1, 1, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-    descriptorManager.initLayout(1);
-    descriptorManager.addBinding(2, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-    descriptorManager.addBinding(2,0,3,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-    descriptorManager.initLayout(2);
-    descriptorManager.addConstantRange(64, 0, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-    descriptorManager.finish();
-    VkPipelineLayout layout1 = descriptorManager.getPipelineLayout();
-    descriptorManager.at(1).initPool(1);
-    descriptorManager.at(2).initPool(1);
-    VkDescriptorImageInfo tempImageInfo;
-    VkWriteDescriptorSet write =  descriptorManager.at(1).makeWrite(0,1,&tempImageInfo);
-    vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
+
 */
 
-class DescriptorSetManager : public nvvk::TDescriptorSetContainer<MAX_DESCRIPTOR_SETS::value,1>
+class DescriptorSetManager : public nvvk::WriteSetContainer
 {
 public:
     DescriptorSetManager(VkDevice device);
     ~DescriptorSetManager();
     DescriptorSetManager& addBinding(uint32_t setIdx, uint32_t bindingIdx, uint32_t descriptorCount, VkDescriptorType descriptorType, VkPipelineStageFlags2 pipelineStageFlags);
     DescriptorSetManager& addBinding(const BindInfo& bindingInfo);
-    DescriptorSetManager& initLayout(uint32_t setIdx);
+    DescriptorSetManager& initLayout();
     bool finish();
     DescriptorSetManager& addConstantRange(uint32_t size,uint32_t offset, VkPipelineStageFlags2 stage);
 
@@ -58,10 +43,14 @@ private:
     DescriptorSetManager(const DescriptorSetManager&);
     DescriptorSetManager& operator=(const DescriptorSetManager&);
 
-    VkDevice getDevice() const { return m_sets[0].getDevice(); }
+    VkDevice getDevice() const { return _vkDevice; }
     bool _recordState = false; //记录状态,保证binding有增改之后会调用finish,刷新管线布局
     std::vector<BindInfo> _bindingInfos;
     std::vector<VkPushConstantRange> _constantRanges;
+    std::array<nvvk::DescriptorBindings, MAX_DESCRIPTOR_SETS::value> _descBindSet;
+    std::array<VkDescriptorSetLayout, MAX_DESCRIPTOR_SETS::value> _descSetLayouts = {};
+    VkPipelineLayout _pipelineLayout = VK_NULL_HANDLE;
+    VkDevice _vkDevice;
     // Additional functionality for managing descriptor sets can be added here
 };
 
@@ -99,7 +88,7 @@ public:
     void setComputeModuleID(ShaderID computeModuleID) {_computeModuleID = computeModuleID;}
     VkPipeline getOrCreatePipeline() override;
 private:
-    nvvk::ShaderModuleID _computeModuleID;
+    ShaderID _computeModuleID;
 };
 
 class RTProgram:public PlayProgram{
@@ -114,11 +103,11 @@ public:
     void setRayIntersectModuleID(ShaderID rayIntersectModuleID) {_rayIntersectModuleID = rayIntersectModuleID;}
     VkPipeline getOrCreatePipeline() override;
 private:
-    nvvk::ShaderModuleID _rayGenModuleID;
-    nvvk::ShaderModuleID _rayCHitModuleID;
-    nvvk::ShaderModuleID _rayAHitModuleID;
-    nvvk::ShaderModuleID _rayMissModuleID;
-    nvvk::ShaderModuleID _rayIntersectModuleID;
+    ShaderID _rayGenModuleID;
+    ShaderID _rayCHitModuleID;
+    ShaderID _rayAHitModuleID;
+    ShaderID _rayMissModuleID;
+    ShaderID _rayIntersectModuleID;
 };
 
 class MeshRenderProgram:public PlayProgram{
@@ -131,9 +120,9 @@ public:
     void setFragModuleID(ShaderID fragModuleID) {_fragModuleID = fragModuleID;}
     VkPipeline getOrCreatePipeline() override;
 private:
-    nvvk::ShaderModuleID _taskModuleID;
-    nvvk::ShaderModuleID _meshModuleID;
-    nvvk::ShaderModuleID _fragModuleID; 
+    ShaderID _taskModuleID;
+    ShaderID _meshModuleID;
+    ShaderID _fragModuleID; 
 };
 } // namespace Play
 

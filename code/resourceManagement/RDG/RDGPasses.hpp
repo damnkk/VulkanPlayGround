@@ -3,9 +3,9 @@
 #include <set>
 #include <optional>
 #include "PlayProgram.h"
-#include "nvvk/descriptorsets_vk.hpp"
 #include "RDGResources.h"
 #include "RDGPreDefine.h"
+#include "utils.hpp"
 namespace Play::RDG{
 /*
 当前实现了全新的RDG pass, RDGpass的构建交给上层逻辑pass的Build函数,pass本身只维护资源依赖逻辑,渲染逻辑以及相关的管线资源都交给上层逻辑pass管理,
@@ -62,7 +62,7 @@ public:
     RDGRenderPass(std::optional<uint32_t> paddID, std::string name = "");
     RDGRenderPass(std::optional<uint32_t> passID, std::string name="",FLambdaFunction&& executeFunction = nullptr)
         :RDGPass(passID, std::move(name)),_executeFunction(std::forward<FLambdaFunction>(executeFunction)) {
-        _RTSlots.reserve(MAX_RT_NUM::value);
+        _RTSlots.reserve(::Play::MAX_RT_NUM::value);
     }
     ~RDGRenderPass() override;
     //setting func
@@ -108,7 +108,6 @@ public:
 
 private:
     friend class RenderDependencyGraph;
-    nvvk::DescriptorSetContainer _descriptorSetContainer;
     FLambdaFunction _executeFunction;
 };
 

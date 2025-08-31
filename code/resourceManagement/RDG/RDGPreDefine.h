@@ -2,9 +2,9 @@
 #define RDGPREDEFINE
 #include <type_traits>
 #include "RDGResources.h"
+#include <glm/glm.hpp>
 #include <cstdint>
 namespace Play{
-using MAX_RT_NUM = std::integral_constant<size_t, 16>;
 enum class AccessType{
     eReadOnly, //uniform buffer, sampled texture
     eReadWrite, //storage buffer, storage texture

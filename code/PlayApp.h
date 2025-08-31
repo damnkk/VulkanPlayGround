@@ -3,11 +3,10 @@
 #include "nvapp/application.hpp"
 // #include "resourceManagement/ModelLoader.h" // Ensure ModelLoader class is defined in this header
 #include <nvvk/profiler_vk.hpp>
+#include <nvvk/context.hpp>
 #include <nvutils/parameter_parser.hpp>
 #include "PlayAllocator.h"
 #include "resourceManagement/Resource.h"
-#include "resourceManagement/SceneNode.h"
-#include "renderer/Renderer.h"
 #include "utils.hpp"
 namespace Play
 {
@@ -21,7 +20,14 @@ class RenderDependencyGraph;
 
 class PlayElement : public nvapp::IAppElement{
 public:
+    struct Info
+    {
+        nvutils::ProfilerManager*   profilerManager{};
+        nvutils::ParameterRegistry* parameterRegistry{};
+    };
       // Interface
+    PlayElement(Info info):_info(info){}
+    virtual ~PlayElement() {};
     virtual void onAttach(nvapp::Application* app) override;                      // Called once at start
     virtual void onDetach() override;                                             // Called before destroying the application
     virtual void onResize(VkCommandBuffer cmd, const VkExtent2D& size) override;  // Called when the viewport size is changing
@@ -31,12 +37,11 @@ public:
     virtual void onRender(VkCommandBuffer cmd) override;                          // For anything to render within a frame
     virtual void onFileDrop(const std::filesystem::path& filename) override;      // For when a file is dragged on top of the window
     virtual void onLastHeadlessFrame() override;                                  // Called at the end of the last frame in headless mode
-    virtual ~PlayElement();
+    
+    nvapp::Application* getApp(){return _app;}
+    VkDevice getDevice(){return _app->getDevice();}
 
-    PlayAllocator& getAlloc()
-    {
-        return _alloc;
-    }
+
     inline Texture* CreateTexture(VkImageCreateInfo& info, VkCommandBuffer* cmd = nullptr);
     static inline Texture* AllocTexture();
     static inline void     FreeTexture(Texture* texture);
@@ -45,9 +50,8 @@ public:
     static inline void     FreeBuffer(Buffer* buffer);
     static inline void*    MapBuffer(Buffer& buffer);
     static inline void     UnmapBuffer(Buffer& buffer);
-    static PlayAllocator   _alloc;
-    static TexturePool         _texturePool;
-    static BufferPool          _bufferPool;
+
+    
 
     enum RenderMode
     {
@@ -57,17 +61,21 @@ public:
         eShadingRateRendering,
         eDeferRendering,
         eRCount
-    } _renderMode = eShadingRateRendering;
+    } _renderMode = eDeferRendering;
 protected:
     //SceneManager
     //RenderPassCache
     //FrameBufferCache
     //PipelineCache
-    std::unique_ptr<Renderer> _renderer;
-    Texture _uiTexture;
+    std::shared_ptr<Renderer> _renderer;
+    Texture* _uiTexture;
     VkDescriptorSet _uiTextureDescriptor;
+    VkDescriptorPool _descriptorPool;
+    void createGraphicsDescriptResource();
 
 private:
+
+    Info _info;
     friend class RTRenderer;
     friend class VolumeRenderer;
     friend class ShadingRateRenderer;
@@ -77,37 +85,7 @@ private:
     nvvk::ProfilerGpuTimer     m_profilerGpuTimer{};
 };
 
-
-
-inline Texture* PlayElement::AllocTexture()
-{
-    return _texturePool.alloc();
-}
-
-inline void PlayElement::FreeTexture(Texture* texture)
-{
-    _texturePool.free(texture);
-}
-
-inline Buffer* PlayElement::AllocBuffer()
-{
-    return _bufferPool.alloc();
-}
-
-inline void PlayElement::FreeBuffer(Buffer* buffer)
-{
-    _bufferPool.free(buffer);
-}
-
-inline void* PlayElement::MapBuffer(Buffer& buffer)
-{
-    return _alloc.map(buffer);
-}
-
-inline void PlayElement::UnmapBuffer(Buffer& buffer)
-{
-    _alloc.unmap(buffer);
-}
+std::filesystem::path getBaseFilePath();
 
 } //    namespace Play
 

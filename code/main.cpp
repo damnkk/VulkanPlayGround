@@ -17,6 +17,8 @@
 #include <nvvk/staging.hpp>
 #include <nvvk/profiler_vk.hpp>
 #include <nvutils/parameter_parser.hpp>
+#include "PlayApp.h"
+#include "debugger/debugger.h"
 
 class SampleElement : public nvapp::IAppElement
 {
@@ -197,6 +199,7 @@ private:
 
 int main(int argc, char** argv)
 {
+  auto afterMathExtList = Play::NsightDebugger::initInjection();
   nvutils::ProfilerManager   profilerManager;
   nvutils::ParameterRegistry parameterRegistry;
   nvutils::ParameterParser   parameterParser;
@@ -206,18 +209,31 @@ int main(int argc, char** argv)
       .profilerManager   = &profilerManager,
       .parameterRegistry = &parameterRegistry,
   };
+
+  Play::PlayElement::Info playInfo = {
+      .profilerManager   = &profilerManager,
+      .parameterRegistry = &parameterRegistry,
+  };
   std::shared_ptr<SampleElement> sampleElement = std::make_shared<SampleElement>(sampleInfo);
+  std::shared_ptr<Play::PlayElement> playElement = std::make_shared<Play::PlayElement>(playInfo);
   // setup logger element, `true` means shown by default
   // we add it early so outputs are captured early on, you might want to defer this to a later timer.
   std::shared_ptr<nvapp::ElementLogger> elementLogger = std::make_shared<nvapp::ElementLogger>(true);
   nvutils::Logger::getInstance().setLogCallback([&](nvutils::Logger::LogLevel logLevel, const std::string& text) {
     elementLogger->addLog(logLevel, "%s", text.c_str());
   });
+   VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures   = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR, nullptr, VK_TRUE};
 
   nvvk::ContextInitInfo vkSetup{
       .instanceExtensions = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME},
-      .deviceExtensions   = {{VK_KHR_SWAPCHAIN_EXTENSION_NAME}},
+     
+      .deviceExtensions   = {{VK_KHR_SWAPCHAIN_EXTENSION_NAME},{
+                                  VK_KHR_RAY_QUERY_EXTENSION_NAME,&rayQueryFeatures},
+                                {VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME},
+                                {VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME},
+                              },
   };
+  vkSetup.deviceExtensions.insert(vkSetup.deviceExtensions.end(), afterMathExtList.begin(), afterMathExtList.end());
 
   // let's add a command-line option to enable/disable validation layers
   parameterRegistry.add({"validation"}, &vkSetup.enableValidationLayers);
@@ -263,7 +279,8 @@ int main(int argc, char** argv)
   app.init(appInfo);
 
   // add the sample main element
-  app.addElement(sampleElement);
+  // app.addElement(sampleElement);
+  app.addElement(playElement);
   app.addElement(std::make_shared<nvapp::ElementDefaultWindowTitle>());
   // add profiler element
   app.addElement(std::make_shared<nvapp::ElementProfiler>(&profilerManager));

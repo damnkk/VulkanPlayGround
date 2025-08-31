@@ -1,14 +1,12 @@
 
 #include "PlayProgram.h"
-#include "nvh/nvprint.hpp"
+#include "nvvk/check_error.hpp"
 namespace Play{
-DescriptorSetManager::DescriptorSetManager(VkDevice device) :
-nvvk::TDescriptorSetContainer<MAX_DESCRIPTOR_SETS::value,1>(device){
+DescriptorSetManager::DescriptorSetManager(VkDevice device) :_vkDevice(device){
 
 }
 
 DescriptorSetManager::~DescriptorSetManager(){
-    deinit();
 }
 DescriptorSetManager& DescriptorSetManager::addBinding(const BindInfo& bindingInfo){
     _recordState = false;
@@ -34,11 +32,16 @@ DescriptorSetManager& DescriptorSetManager::addBinding(uint32_t setIdx, uint32_t
     return addBinding(bindingInfo);
 }
 
-DescriptorSetManager& DescriptorSetManager::initLayout(uint32_t setIdx){
-    _recordState = false;
-    if(setIdx < MAX_DESCRIPTOR_SETS::value){
-        at(setIdx).initLayout();
+DescriptorSetManager& DescriptorSetManager::initLayout(){
+    for(int i = 0; i < MAX_DESCRIPTOR_SETS::value; ++i){
+        _descBindSet[i].createDescriptorSetLayout(_vkDevice, 0, &_descSetLayouts[i]);
     }
+    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    pipelineLayoutCreateInfo.setLayoutCount = static_cast<uint32_t>(_descSetLayouts.size());
+    pipelineLayoutCreateInfo.pSetLayouts = _descSetLayouts.data();
+    pipelineLayoutCreateInfo.pushConstantRangeCount = static_cast<uint32_t>(_constantRanges.size());
+    pipelineLayoutCreateInfo.pPushConstantRanges = _constantRanges.data();
+    NVVK_CHECK(vkCreatePipelineLayout(_vkDevice, &pipelineLayoutCreateInfo, nullptr, &_pipelineLayout));
     return *this;
 }
 
@@ -51,12 +54,13 @@ DescriptorSetManager& DescriptorSetManager::addConstantRange(uint32_t size,uint3
 
 bool DescriptorSetManager::finish(){
     _recordState = true;
-    deinitLayouts();
-    for(size_t i = 0;i<this->_bindingInfos.size();++i){
-        NV_ASSERT(_bindingInfos[i].setIdx < MAX_DESCRIPTOR_SETS::value);
-        at(_bindingInfos[i].setIdx).addBinding(_bindingInfos[i].bindingIdx, _bindingInfos[i].descriptorType, _bindingInfos[i].descriptorCount, _bindingInfos[i].pipelineStageFlags);
+    for(auto& layout:_descSetLayouts){
+        if(layout != VK_NULL_HANDLE){
+            vkDestroyDescriptorSetLayout(_vkDevice, layout, nullptr);
+            layout = VK_NULL_HANDLE;
+        }
     }
-    initPipeLayout(0,_constantRanges.size(),_constantRanges.data());
+    initLayout();
     return _recordState;
 }
 
@@ -65,7 +69,10 @@ VkPipelineLayout DescriptorSetManager::getPipelineLayout()const{
         LOGE("Pipeline layout is not created, check finish() is called");
         return VK_NULL_HANDLE;
     }
-    return m_pipelayouts[0];
+    if(_pipelineLayout == VK_NULL_HANDLE){
+       LOGE("Pipeline layout is not created");
+    }
+    return _pipelineLayout;
 }
 
 

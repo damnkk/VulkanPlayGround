@@ -16,7 +16,7 @@ enum class DeferPasses{
 class DeferRenderer : public Renderer
 {
     public:
-        explicit DeferRenderer(PlayApp& app);
+        explicit DeferRenderer(PlayElement& element);
         ~DeferRenderer() override;
         void OnPreRender() override;
         void OnPostRender() override;
