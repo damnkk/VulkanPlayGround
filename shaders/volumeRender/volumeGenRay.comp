@@ -2,25 +2,27 @@
 // that generates rays for volume rendering
 #version 450
 #extension GL_GOOGLE_include_directive : enable
-#extension GL_EXT_scalar_block_layout:enable
+#extension GL_EXT_scalar_block_layout : enable
 #include "common.glsl"
 #include "slang_types.h"
 #include "random.h.slang"
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
-layout(set = 0,binding = 0) uniform sampler3D volumeTexture; // 3D texture for volume data
-layout(set = 0,binding = 1) uniform sampler3D gradientTexture; // 2D texture for depth information
+layout(set = 0, binding = 0) uniform sampler3D volumeTexture;   // 3D texture for volume data
+layout(set = 0, binding = 1) uniform sampler3D gradientTexture; // 2D texture for depth information
 layout(set = 0, binding = 2) uniform sampler1D diffuseLookupTexture;
 layout(set = 0, binding = 3) uniform sampler1D specularLookupTexture;
-layout(set = 0,binding = 4) uniform sampler1D roughnessLookupTexture; // 2D texture for roughness information
-layout(set = 0,binding = 5) uniform sampler1D opacityLookupTexture; // 2D texture for normal information
-layout(set = 0, binding = 6,scalar) uniform vUniform
+layout(set = 0, binding = 4) uniform sampler1D
+    roughnessLookupTexture; // 2D texture for roughness information
+layout(set     = 0,
+       binding = 5) uniform sampler1D opacityLookupTexture; // 2D texture for normal information
+layout(set = 0, binding = 6, scalar) uniform vUniform
 {
     VolumeUniform volumeUniform;
 };
 layout(set = 0, binding = 7, rgba16f) uniform image2D diffuseRT;
 layout(set = 0, binding = 8, rgba16f) uniform image2D specularRT;
 layout(set = 0, binding = 9, rgba16f) uniform image2D normalRT; // 2D texture for normal information
-layout(set = 0, binding = 10, r32f) uniform image2D depthRT; // 2D texture for normal information
+layout(set = 0, binding = 10, r32f) uniform image2D depthRT;    // 2D texture for normal information
 struct VolumeDesc
 {
     AABB  BoundingBox;
@@ -93,24 +95,24 @@ ScatterEvent RayMarching(VolumeRay ray, VolumeDesc desc, inout uint seed)
     while (sum < threshold)
     {
         position = ray.origin + t * ray.direction;
-        if(t>maxT)
+        if (t > maxT)
         {
             return event;
         }
-        sum += desc.DensityScale*GetOpacity(desc,position)*desc.StepSize;
-        t+= desc.StepSize;
+        sum += desc.DensityScale * GetOpacity(desc, position) * desc.StepSize;
+        t += desc.StepSize;
     }
-    vec3 gradient = GetGradient(desc, position);
-    float factor = 1.0/sqrt(dot(gradient, gradient)+0.00001f);
-    vec3 diffuse = GetDiffuse(desc, position);
-    vec3 specular = GetSpecular(desc, position);
+    vec3  gradient  = GetGradient(desc, position);
+    float factor    = 1.0 / sqrt(dot(gradient, gradient) + 0.00001f);
+    vec3  diffuse   = GetDiffuse(desc, position);
+    vec3  specular  = GetSpecular(desc, position);
     float roughness = GetRoughness(desc, position);
-    vec3 normal = dot(gradient,-ray.direction) > 0.0 ? gradient*factor : -gradient*factor;
-    event.IsValid = true;
-    event.Normal = normal;
-    event.Position = position+0.01*normal;
-    event.Diffuse = diffuse;
-    event.Specular = specular;
+    vec3  normal    = dot(gradient, -ray.direction) > 0.0 ? gradient * factor : -gradient * factor;
+    event.IsValid   = true;
+    event.Normal    = normal;
+    event.Position  = position + 0.01 * normal;
+    event.Diffuse   = diffuse;
+    event.Specular  = specular;
     event.Roughness = roughness;
     return event;
 }
@@ -118,55 +120,62 @@ ScatterEvent RayMarching(VolumeRay ray, VolumeDesc desc, inout uint seed)
 void main()
 {
     // Get the local work group ID
-    ivec2 localID = ivec2(gl_GlobalInvocationID.xy);
-    vec2 resolution = vec2(volumeUniform.RTDimensions);
-    vec2 uv = localID/resolution;
-    vec3 camSpaceUvPos = vec3(uv*2.0-1.0,1.0);
-    vec3 direct = (volumeUniform.InvViewMatrix*normalize(volumeUniform.InvProjectMatrix*vec4(camSpaceUvPos,1.0))).xyz;
-    vec4 origin = (volumeUniform.InvViewMatrix*vec4(vec3(0.0),1.0));
+    ivec2 localID       = ivec2(gl_GlobalInvocationID.xy);
+    vec2  resolution    = vec2(volumeUniform.RTDimensions);
+    vec2  uv            = localID / resolution;
+    vec3  camSpaceUvPos = vec3(uv * 2.0 - 1.0, 1.0);
+    vec3  direct        = (volumeUniform.InvViewMatrix *
+                   normalize(volumeUniform.InvProjectMatrix * vec4(camSpaceUvPos, 1.0)))
+                      .xyz;
+    vec4      origin = (volumeUniform.InvViewMatrix * vec4(vec3(0.0), 1.0));
     VolumeRay ray;
-    ray.origin = origin.xyz;
+    ray.origin    = origin.xyz;
     ray.direction = normalize(direct);
-    ray.Min = 0.0;
-    ray.Max = 100.0;
+    ray.Min       = 0.0;
+    ray.Max       = 100.0;
 
-    uint  seed        = xxhash32(uvec3(localID, volumeUniform.frameCount));
+    uint seed = xxhash32(uvec3(localID, volumeUniform.frameCount));
 
     VolumeDesc desc;
     desc.BoundingBox.Min = volumeUniform.BBoxMin;
     desc.BoundingBox.Max = volumeUniform.BBoxMax;
-    desc.StepSize = volumeUniform.StepSize;
-    desc.DensityScale = volumeUniform.Density;
-    ScatterEvent event = RayMarching(ray, desc, seed);
+    desc.StepSize        = volumeUniform.StepSize;
+    desc.DensityScale    = volumeUniform.Density;
+    ScatterEvent event   = RayMarching(ray, desc, seed);
 
     AABB aabb;
-    aabb.Min = volumeUniform.BBoxMin;
-    aabb.Max = volumeUniform.BBoxMax;
+    aabb.Min             = volumeUniform.BBoxMin;
+    aabb.Max             = volumeUniform.BBoxMax;
     Intersection intsect = IntersectAABB(ray, aabb);
-    if(intsect.Max < intsect.Min)
+    if (intsect.Max < intsect.Min)
     {
         event.IsValid = false;
-    }else{
-        imageStore(normalRT, localID, vec4(vec3(1.0,1.0,0.0), 1.0));
     }
-    if(event.IsValid){
-        vec3 normal = vec3(0.0);
+    else
+    {
+        imageStore(normalRT, localID, vec4(vec3(1.0, 1.0, 0.0), 1.0));
+    }
+    if (event.IsValid)
+    {
+        vec3 normal   = vec3(0.0);
         vec4 position = vec4(0.0);
-        normal = event.Normal;
-        position = volumeUniform.ProjectMatrix*volumeUniform.ViewMatrix*vec4(event.Position,1.0);
+        normal        = event.Normal;
+        position =
+            volumeUniform.ProjectMatrix * volumeUniform.ViewMatrix * vec4(event.Position, 1.0);
         position /= position.w;
         imageStore(diffuseRT, localID, vec4(event.Diffuse, 1.0));
         imageStore(specularRT, localID, vec4(event.Specular, 1.0));
         imageStore(normalRT, localID, vec4(event.Normal, event.Roughness));
         imageStore(depthRT, localID, vec4(position.z, 0.0, 0.0, 0.0));
     }
-    else{
-        vec4 position = volumeUniform.ProjectMatrix*volumeUniform.ViewMatrix*vec4(ray.origin,1.0);
+    else
+    {
+        vec4 position =
+            volumeUniform.ProjectMatrix * volumeUniform.ViewMatrix * vec4(ray.origin, 1.0);
         position /= position.w;
         imageStore(diffuseRT, localID, vec4(0.0, 0.0, 0.0, 1.0));
         imageStore(specularRT, localID, vec4(0.0, 0.0, 0.0, 1.0));
         imageStore(normalRT, localID, vec4(0.0, 0.0, 0.0, 1.0));
         imageStore(depthRT, localID, vec4(0.0, 0.0, 0.0, 0.0));
     }
-
 }

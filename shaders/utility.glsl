@@ -26,34 +26,37 @@ vec3 toNormalHemisphere(vec3 v, vec3 N)
 GeomInfo getGeomInfo(PlayLoad pl)
 {
     GeomInfo geomInfo;
-    Mesh mesh = meshes[pl.instanceCustomIndex];
+    Mesh     mesh     = meshes[pl.instanceCustomIndex];
     Vertices vertices = Vertices(mesh._vertexAddress);
-    Indices indices = Indices(mesh._indexAddress);
-    ivec3 idx = ivec3(indices.i[pl.primitiveID]);
-    Vertex v1 = vertices.v[idx.x];
-    Vertex v2 = vertices.v[idx.y];
-    Vertex v3 = vertices.v[idx.z];
-    
+    Indices  indices  = Indices(mesh._indexAddress);
+    ivec3    idx      = ivec3(indices.i[pl.primitiveID]);
+    Vertex   v1       = vertices.v[idx.x];
+    Vertex   v2       = vertices.v[idx.y];
+    Vertex   v3       = vertices.v[idx.z];
+
     float weight3 = 1.0 - pl.baryCoord.x - pl.baryCoord.y;
-    geomInfo.position = pl.baryCoord.x * v2._position + pl.baryCoord.y * v3._position + weight3 * v1._position;
+    geomInfo.position =
+        pl.baryCoord.x * v2._position + pl.baryCoord.y * v3._position + weight3 * v1._position;
     geomInfo.position = vec3(pl.objectToWorld * vec4(geomInfo.position, 1.0));
-    geomInfo.normal = pl.baryCoord.x * v2._normal + pl.baryCoord.y * v3._normal + weight3 * v1._normal;
-    geomInfo.normal   = normalize(vec3(pl.objectToWorld * vec4(geomInfo.normal, 0.0)));
-    vec3 helperVec    = normalize(vec3(1.0, 0.0, 0.0));
+    geomInfo.normal =
+        pl.baryCoord.x * v2._normal + pl.baryCoord.y * v3._normal + weight3 * v1._normal;
+    geomInfo.normal = normalize(vec3(pl.objectToWorld * vec4(geomInfo.normal, 0.0)));
+    vec3 helperVec  = normalize(vec3(1.0, 0.0, 0.0));
     if (abs(dot(helperVec, geomInfo.normal)) > 0.9999)
     {
         helperVec = normalize(vec3(0.0, 0.0, 1.0));
     }
     geomInfo.tangent   = normalize(cross(geomInfo.normal, helperVec));
     geomInfo.bitangent = normalize(cross(geomInfo.normal, geomInfo.tangent));
-    geomInfo.uv = pl.baryCoord.x * v2._texCoord + pl.baryCoord.y * v3._texCoord + weight3 * v1._texCoord;
+    geomInfo.uv =
+        pl.baryCoord.x * v2._texCoord + pl.baryCoord.y * v3._texCoord + weight3 * v1._texCoord;
     geomInfo.materialIdx = mesh._materialIndex;
     return geomInfo;
 }
 
 PbrMaterial getMaterialInfo(inout GeomInfo geomInfo)
 {
-    Material mat = materials[geomInfo.materialIdx];
+    Material    mat = materials[geomInfo.materialIdx];
     PbrMaterial materialInfo;
     materialInfo                           = defaultPbrMaterial();
     materialInfo.Ng                        = geomInfo.normal;
@@ -218,4 +221,3 @@ vec3 OffsetHitPos(in vec3 p, in vec3 n)
 }
 
 #endif // _utility_H_
-

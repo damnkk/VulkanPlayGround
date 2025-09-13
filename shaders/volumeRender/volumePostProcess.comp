@@ -5,12 +5,13 @@
 #extension GL_EXT_scalar_block_layout : enable
 #include "../common.glsl"
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
-layout(set = 0,binding = 0) uniform sampler2D accumulateRT; // 3D texture for volume data
-layout(set = 0, binding = 1,scalar) uniform vUniform
+layout(set = 0, binding = 0) uniform sampler2D accumulateRT; // 3D texture for volume data
+layout(set = 0, binding = 1, scalar) uniform vUniform
 {
     VolumeUniform volumeUniform;
 };
-layout(set = 0,binding = 2,rgba8) uniform image2D postProcessRT; // 2D texture for depth information
+layout(set = 0, binding = 2,
+       rgba8) uniform image2D postProcessRT; // 2D texture for depth information
 vec3 Uncharted2Function(float A, float B, float C, float D, float E, float F, vec3 x)
 {
     return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
@@ -26,30 +27,30 @@ vec3 ToneMapUncharted2Function(vec3 x, float exposure)
     const float F = 0.30;
     const float W = 11.2;
 
-    vec3 numerator = Uncharted2Function(A, B, C, D, E, F, x) * exposure;
+    vec3 numerator   = Uncharted2Function(A, B, C, D, E, F, x) * exposure;
     vec3 denominator = Uncharted2Function(A, B, C, D, E, F, vec3(W));
     return numerator / denominator;
 }
 
 vec3 LinearToSRGB(vec3 color)
 {
-    vec3 sRGBLo = color * 12.92;
+    vec3        sRGBLo = color * 12.92;
     const float powExp = 1.0 / 2.2f;
-    vec3 sRGBHi = (pow(abs(color), vec3(powExp, powExp, powExp)) * 1.055) - 0.055;
-    vec3 sRGB;
+    vec3        sRGBHi = (pow(abs(color), vec3(powExp, powExp, powExp)) * 1.055) - 0.055;
+    vec3        sRGB;
     sRGB.x = (color.x <= 0.0031308) ? sRGBLo.x : sRGBHi.x;
     sRGB.y = (color.y <= 0.0031308) ? sRGBLo.y : sRGBHi.y;
     sRGB.z = (color.z <= 0.0031308) ? sRGBLo.z : sRGBHi.z;
     return sRGB;
 }
 
-
-void main(){
+void main()
+{
     // Get the local work group ID
-    ivec2 localID = ivec2(gl_GlobalInvocationID.xy);
-    vec2 resolution = vec2(volumeUniform.RTDimensions);
-    vec2 uv = localID/resolution;
-    vec4 color =  texture(accumulateRT,uv);
-    vec3 mappedColor = ToneMapUncharted2Function(color.xyz, 1.5);
+    ivec2 localID     = ivec2(gl_GlobalInvocationID.xy);
+    vec2  resolution  = vec2(volumeUniform.RTDimensions);
+    vec2  uv          = localID / resolution;
+    vec4  color       = texture(accumulateRT, uv);
+    vec3  mappedColor = ToneMapUncharted2Function(color.xyz, 1.5);
     imageStore(postProcessRT, localID, vec4(mappedColor, 1.0));
 }

@@ -31,7 +31,8 @@ void PlayElement::onAttach(nvapp::Application* app)
     ShaderManager::Instance().init(this);
 
     m_profilerTimeline = _info.profilerManager->createTimeline({"graphics"});
-    m_profilerGpuTimer.init(m_profilerTimeline, app->getDevice(), app->getPhysicalDevice(), app->getQueue(0).familyIndex, true);
+    m_profilerGpuTimer.init(m_profilerTimeline, app->getDevice(), app->getPhysicalDevice(),
+                            app->getQueue(0).familyIndex, true);
     createGraphicsDescriptResource();
 
     switch (_renderMode)
@@ -49,7 +50,8 @@ void PlayElement::onAttach(nvapp::Application* app)
     }
 }
 
-void PlayElement::onDetach(){
+void PlayElement::onDetach()
+{
     vkQueueWaitIdle(_app->getQueue(0).queue);
     ImGui_ImplVulkan_RemoveTexture(_uiTextureDescriptor);
     TexturePool::Instance().deinit();
@@ -69,29 +71,30 @@ void PlayElement::onResize(VkCommandBuffer cmd, const VkExtent2D& size)
     createGraphicsDescriptResource();
 }
 
-void PlayElement::onUIRender(){
+void PlayElement::onUIRender()
+{
     ImGui::Begin("Viewport");
-    ImGui::Image((ImTextureID)_uiTextureDescriptor, ImGui::GetContentRegionAvail());
+    ImGui::Image((ImTextureID) _uiTextureDescriptor, ImGui::GetContentRegionAvail());
     ImGui::End();
 }
 
-void PlayElement::onUIMenu(){
+void PlayElement::onUIMenu() {}
 
-}
-
-void PlayElement::onPreRender(){
+void PlayElement::onPreRender()
+{
     _renderer->OnPreRender();
 }
 
 void PlayElement::onRender(VkCommandBuffer cmd)
 {
-    VkClearColorValue clearColor = {0.91,0.23,0.77,1.0};
-    VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-      nvvk::cmdImageMemoryBarrier(cmd, {_uiTexture->image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL});
-      vkCmdClearColorImage(cmd, _uiTexture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &range);
-      nvvk::cmdImageMemoryBarrier(cmd, {_uiTexture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
+    VkClearColorValue       clearColor = {0.91, 0.23, 0.77, 1.0};
+    VkImageSubresourceRange range      = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    nvvk::cmdImageMemoryBarrier(cmd, {_uiTexture->image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL});
+    vkCmdClearColorImage(cmd, _uiTexture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor,
+                         1, &range);
+    nvvk::cmdImageMemoryBarrier(cmd, {_uiTexture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
     _renderer->RenderFrame();
     _renderer->OnPostRender();
 }
@@ -108,17 +111,20 @@ void PlayElement::onLastHeadlessFrame()
     LOGI("Last headless frame");
 }
 
-
-void PlayElement::createGraphicsDescriptResource(){
-    _uiTexture = Texture::Create(_app->getWindowSize().width,_app->getWindowSize().height, VK_FORMAT_R8G8B8A8_UNORM,
-                                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-                                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
+void PlayElement::createGraphicsDescriptResource()
+{
+    _uiTexture = Texture::Create(_app->getWindowSize().width, _app->getWindowSize().height,
+                                 VK_FORMAT_R8G8B8A8_UNORM,
+                                 VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
     PlayResourceManager::Instance().acquireSampler(_uiTexture->descriptor.sampler);
-    _uiTextureDescriptor = ImGui_ImplVulkan_AddTexture(_uiTexture->descriptor.sampler, _uiTexture->descriptor.imageView,
-                                               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    _uiTextureDescriptor = ImGui_ImplVulkan_AddTexture(_uiTexture->descriptor.sampler,
+                                                       _uiTexture->descriptor.imageView,
+                                                       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }
 
-std::filesystem::path getBaseFilePath(){
+std::filesystem::path getBaseFilePath()
+{
     return "./";
 }
 
@@ -138,7 +144,8 @@ std::filesystem::path getBaseFilePath(){
 //     _bufferPool.init(65535, &_alloc);
 
 //     _modelLoader.loadModel(".\\resource\\models\\DamagedHelmet/DamagedHelmet.gltf");
-//     // _modelLoader.loadModel("D:\\repo\\DogEngine\\models\\MetalRoughSpheres\\MetalRoughSpheres.gltf");
+//     //
+//     _modelLoader.loadModel("D:\\repo\\DogEngine\\models\\MetalRoughSpheres\\MetalRoughSpheres.gltf");
 //     // _modelLoader.loadModel("D:\\repo\\glTF-Sample-Models\\2.0\\ToyCar\\glTF\\ToyCar.gltf");
 
 //     VkDescriptorPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
@@ -242,17 +249,19 @@ std::filesystem::path getBaseFilePath(){
 //     gpipelineState.rasterizationState.cullMode        = VK_CULL_MODE_NONE;
 //     gpipelineState.depthStencilState.depthTestEnable  = VK_TRUE;
 //     gpipelineState.depthStencilState.depthWriteEnable = VK_TRUE;
-//     VkViewport viewport{0.0f, 0.0f, (float) getSize().width, (float) getSize().height, 0.0f, 1.0f};
-//     std::vector<VkDynamicState> dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT,
+//     VkViewport viewport{0.0f, 0.0f, (float) getSize().width, (float) getSize().height,
+//     0.0f, 1.0f}; std::vector<VkDynamicState> dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT,
 //                                                  VK_DYNAMIC_STATE_SCISSOR};
 //     gpipelineState.setDynamicStateEnablesCount(dynamicStates.size());
 //     for (int i = 0; i < dynamicStates.size(); ++i)
 //     {
 //         gpipelineState.setDynamicStateEnable(i, dynamicStates[i]);
 //     }
-//     nvvk::ShaderModuleID vID = ShaderManager::registeShader(VK_SHADER_STAGE_VERTEX_BIT, "shaders/post.vert", "main", "");
-//     nvvk::ShaderModuleID fID = ShaderManager::registeShader(VK_SHADER_STAGE_FRAGMENT_BIT, "shaders/outputBlit.frag", "main", "");
-    
+//     nvvk::ShaderModuleID vID = ShaderManager::registeShader(VK_SHADER_STAGE_VERTEX_BIT,
+//     "shaders/post.vert", "main", ""); nvvk::ShaderModuleID fID =
+//     ShaderManager::registeShader(VK_SHADER_STAGE_FRAGMENT_BIT, "shaders/outputBlit.frag", "main",
+//     "");
+
 //     gpipelineState.addShader(ShaderManager::Instance().get(vID), VK_SHADER_STAGE_VERTEX_BIT,
 //                              "main");
 //     gpipelineState.addShader(ShaderManager::Instance().get(fID), VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -264,7 +273,8 @@ std::filesystem::path getBaseFilePath(){
 //     std::size_t key = 0;
 //     for(const auto& state : rtStates)
 //     {
-//         std::size_t tempKey = nvh::hashVal(state._loadOp,state._storeOp,state._texture->_metadata._format,state._resolveTexture->_metadata._format);
+//         std::size_t tempKey =
+//         nvh::hashVal(state._loadOp,state._storeOp,state._texture->_metadata._format,state._resolveTexture->_metadata._format);
 //         nvh::hashCombine(key, tempKey);
 //     }
 //     if(_renderPassesCache.find(key) != _renderPassesCache.end()) return _renderPassesCache[key];
@@ -273,7 +283,8 @@ std::filesystem::path getBaseFilePath(){
 //     VkAttachmentReference2 depthReference{VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2};
 //     for(int i = 0;i<rtStates.size();++i){
 //         const auto& state = rtStates[i];
-//         auto& attachmentDesc = renderAttachments.emplace_back(VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2);
+//         auto& attachmentDesc =
+//         renderAttachments.emplace_back(VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2);
 //         attachmentDesc.format = state._texture->getFormat();
 //         attachmentDesc.samples = VK_SAMPLE_COUNT_1_BIT;
 //         attachmentDesc.loadOp = state.getVkLoadOp();
@@ -284,7 +295,8 @@ std::filesystem::path getBaseFilePath(){
 //         attachmentDesc.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 //         if (state._resolveTexture)
 //         {
-//             auto& resolveAttachmentDesc = renderAttachments.emplace_back(VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2);
+//             auto& resolveAttachmentDesc =
+//             renderAttachments.emplace_back(VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2);
 //             resolveAttachmentDesc.format = state._resolveTexture->getFormat();
 //             resolveAttachmentDesc.samples = state._resolveTexture->getSampleCount();
 //             resolveAttachmentDesc.loadOp = state.getVkLoadOp();
@@ -307,16 +319,19 @@ std::filesystem::path getBaseFilePath(){
 //         if(state._texture->isDepth()){
 //             continue;
 //         }
-//        VkAttachmentReference2& attachmentRef = attachmentReferences.emplace_back(VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2);
+//        VkAttachmentReference2& attachmentRef =
+//        attachmentReferences.emplace_back(VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2);
 //        attachmentRef.attachment = attachmentReferences.size()-1;
 //        attachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 //        if(state._resolveTexture)
 //        {
-//             VkAttachmentReference2 resolveAttachmentRef = resolveAttachmentReferences.emplace_back(VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2);
+//             VkAttachmentReference2 resolveAttachmentRef =
+//             resolveAttachmentReferences.emplace_back(VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2);
 //            resolveAttachmentRef.attachment = resolveAttachmentReferences.size()-1;
 //            resolveAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 //        }else{
-//             VkAttachmentReference2& resolveAttachmentRef = resolveAttachmentReferences.emplace_back(VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2);
+//             VkAttachmentReference2& resolveAttachmentRef =
+//             resolveAttachmentReferences.emplace_back(VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2);
 //            resolveAttachmentRef.attachment = VK_ATTACHMENT_UNUSED;
 //            resolveAttachmentRef.layout = VK_IMAGE_LAYOUT_UNDEFINED;
 //        }
@@ -338,14 +353,16 @@ std::filesystem::path getBaseFilePath(){
 //     dependencies[0].srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
 //     dependencies[0].dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
 //     dependencies[0].srcAccessMask = VK_ACCESS_2_NONE;
-//     dependencies[0].dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+//     dependencies[0].dstAccessMask =
+//     VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
 //     dependencies[1].sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2;
 //     dependencies[1].srcSubpass = 1;
 //     dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
 //     dependencies[1].srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
 //     dependencies[1].dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
-//     dependencies[1].srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+//     dependencies[1].srcAccessMask =
+//     VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 //     dependencies[1].dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
 
 //     rpci.attachmentCount = renderAttachments.size();
@@ -360,8 +377,6 @@ std::filesystem::path getBaseFilePath(){
 //     _renderPassesCache.emplace(key,rp);
 //     return rp;
 // }
-
-
 
 // VkPipeline PlayApp::GetOrCreatePipeline(const ShaderInfo* computeShaderInfo){
 //     // std::size_t computePiplineHash = computeShaderInfo->getHash();
@@ -385,13 +400,13 @@ std::filesystem::path getBaseFilePath(){
 //     renderPassBeginInfo.renderArea      = VkRect2D({0, 0}, this->getSize());
 //     renderPassBeginInfo.clearValueCount = 2;
 //     renderPassBeginInfo.pClearValues    = clearValue;
-//     vkCmdBeginRenderPass(cmd, &renderPassBeginInfo, VkSubpassContents::VK_SUBPASS_CONTENTS_INLINE);
-//     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _graphicsPipeline);
-//     VkViewport viewport{0.0f, 0.0f, (float) getSize().width, (float) getSize().height, 0.0f, 1.0f};
-//     vkCmdSetViewport(cmd, 0, 1, &viewport);
-//     VkRect2D scissor = {{0, 0}, this->getSize()};
-//     vkCmdSetScissor(cmd, 0, 1, &scissor);
-//     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _graphicsPipelineLayout, 0, 1,
+//     vkCmdBeginRenderPass(cmd, &renderPassBeginInfo,
+//     VkSubpassContents::VK_SUBPASS_CONTENTS_INLINE); vkCmdBindPipeline(cmd,
+//     VK_PIPELINE_BIND_POINT_GRAPHICS, _graphicsPipeline); VkViewport viewport{0.0f, 0.0f, (float)
+//     getSize().width, (float) getSize().height, 0.0f, 1.0f}; vkCmdSetViewport(cmd, 0, 1,
+//     &viewport); VkRect2D scissor = {{0, 0}, this->getSize()}; vkCmdSetScissor(cmd, 0, 1,
+//     &scissor); vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+//     _graphicsPipelineLayout, 0, 1,
 //                             &_graphicDescriptorSet, 0, nullptr);
 //     vkCmdDraw(cmd, 3, 1, 0, 0);
 //     ImGui_ImplVulkan_NewFrame();

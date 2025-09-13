@@ -2,9 +2,11 @@
 #define DEFERRENDERING_H
 #include "Renderer.h"
 #include <bitset>
-namespace Play{
+namespace Play
+{
 
-enum class DeferPasses{
+enum class DeferPasses
+{
     ePreDepthPass,
     eBasePass,
     eLightPass,
@@ -15,23 +17,22 @@ enum class DeferPasses{
 
 class DeferRenderer : public Renderer
 {
-    public:
-        explicit DeferRenderer(PlayElement& element);
-        ~DeferRenderer() override;
-        void OnPreRender() override;
-        void OnPostRender() override;
-        void RenderFrame() override;
-        void SetScene(Scene* scene) override;
-        void OnResize(int width, int height) override;
-        void OnDestroy() override;
-        Texture* getOutputTexture() override
-        {
-            return _outputTexture;
-        }
+   public:
+    explicit DeferRenderer(PlayElement& element);
+    ~DeferRenderer() override;
+    void     OnPreRender() override;
+    void     OnPostRender() override;
+    void     RenderFrame() override;
+    void     SetScene(Scene* scene) override;
+    void     OnResize(int width, int height) override;
+    void     OnDestroy() override;
+    Texture* getOutputTexture() override
+    {
+        return _outputTexture;
+    }
 
-        Texture* _outputTexture = nullptr;
-        std::bitset<size_t(DeferPasses::eCount)> _renderPasses;
-
+    Texture*                                 _outputTexture = nullptr;
+    std::bitset<size_t(DeferPasses::eCount)> _renderPasses;
 };
-}// namespace Play
+} // namespace Play
 #endif // DEFERRENDERING_H

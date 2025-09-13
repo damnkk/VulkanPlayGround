@@ -17,7 +17,8 @@ struct ShadowPlayLoad
     bool isInShadow;
 };
 
-struct Ray{
+struct Ray
+{
     vec3 origin;
     vec3 direction;
 };
@@ -33,7 +34,8 @@ struct MaterialInfo
     int  emissiveTextureIdx;
     vec3 emissiveFactor;
 };
-struct GeomInfo{
+struct GeomInfo
+{
     vec3 normal;
     vec3 tangent;
     vec3 bitangent;
@@ -140,11 +142,10 @@ struct ShaderRateUniformStruct
     mat4 InvViewMatrix;
     vec3 CameraPos;
 };
-struct DynamicStruct{
+struct DynamicStruct
+{
     mat4 model;
-    int matIdx;
+    int  matIdx;
 };
-
-
 
 #endif // __COMMON_H__

@@ -5,67 +5,75 @@
 #include "../common.glsl"
 layout(local_size_x = 8, local_size_y = 8) in;
 #define MAX_RATES 16
-layout(set = 0,binding = 0,scalar) uniform  ComputeUniformStruct{
+layout(set = 0, binding = 0, scalar) uniform ComputeUniformStruct
+{
     uvec2 FrameSize;
     uvec2 ShadingRateSize;
     uvec2 maxRates;
-    uint n_rates;
+    uint  n_rates;
     uvec2 rates[MAX_RATES];
-}computeUniform;
-layout(set = 0,binding = 1,rg8ui) uniform uimage2D gradientTexture; 
+}
+computeUniform;
+layout(set = 0, binding = 1, rg8ui) uniform uimage2D gradientTexture;
 layout(set = 0, binding = 2, r8ui) uniform uimage2D shadingRateImage;
 
-void main(){
-    const uint x0 = gl_GlobalInvocationID.x;
-    const uint y0 = gl_GlobalInvocationID.y;
-    const uint frameWidth = computeUniform.FrameSize.x;
-    const uint frameHeight = computeUniform.FrameSize.y;
-    const uint shadingRateWidth = computeUniform.ShadingRateSize.x;
+void main()
+{
+    const uint x0                = gl_GlobalInvocationID.x;
+    const uint y0                = gl_GlobalInvocationID.y;
+    const uint frameWidth        = computeUniform.FrameSize.x;
+    const uint frameHeight       = computeUniform.FrameSize.y;
+    const uint shadingRateWidth  = computeUniform.ShadingRateSize.x;
     const uint shadingRateHeight = computeUniform.ShadingRateSize.y;
 
     const uint delta_x = max(1, uint(round(float(frameWidth) / float(shadingRateWidth)))),
-	           delta_y = max(1, uint(round(float(frameHeight) / float(shadingRateHeight))));
-    if(x0>shadingRateWidth||y0>shadingRateHeight) return;
+               delta_y = max(1, uint(round(float(frameHeight) / float(shadingRateHeight))));
+    if (x0 > shadingRateWidth || y0 > shadingRateHeight) return;
     ivec2 textureSize = imageSize(gradientTexture);
-    vec2 max_freqs = vec2(0, 0);
-    for(uint i = 0;i<delta_x;++i){
-        for(uint j = 0;j<delta_y;++j){
-            ivec2 coord = ivec2(delta_x*x0+i,delta_y*y0+j);
-           
-            ivec2 texCoord = ivec2((vec2(coord) / vec2(frameWidth, frameHeight)) * vec2(textureSize*0.25));
+    vec2  max_freqs   = vec2(0, 0);
+    for (uint i = 0; i < delta_x; ++i)
+    {
+        for (uint j = 0; j < delta_y; ++j)
+        {
+            ivec2 coord = ivec2(delta_x * x0 + i, delta_y * y0 + j);
+
+            ivec2 texCoord =
+                ivec2((vec2(coord) / vec2(frameWidth, frameHeight)) * vec2(textureSize * 0.25));
             vec2 freq = vec2(imageLoad(gradientTexture, texCoord).xy) / 255.0f;
-            max_freqs = max(max_freqs,freq);
+            max_freqs = max(max_freqs, freq);
         }
     }
-    vec2 freqs = min(1.25 * sqrt(max_freqs), vec2(1, 1));
+    vec2        freqs   = min(1.25 * sqrt(max_freqs), vec2(1, 1));
     const float minRate = 1.0;
     const float maxRate = max(computeUniform.maxRates.x, computeUniform.maxRates.y);
-    // When freqs is high, prefer smaller rates (higher resolution); when low, prefer larger rates (lower resolution)
+    // When freqs is high, prefer smaller rates (higher resolution); when low, prefer larger rates
+    // (lower resolution)
     const vec2 desired_rate = mix(vec2(maxRate, maxRate), vec2(minRate, minRate), freqs);
 
-    const uint n_rates = computeUniform.n_rates;
-    uint optimal_rate_index = 0;
-    float current_cost = 1e20;
-    for(uint i = 0; i < n_rates; ++i){
+    const uint n_rates            = computeUniform.n_rates;
+    uint       optimal_rate_index = 0;
+    float      current_cost       = 1e20;
+    for (uint i = 0; i < n_rates; ++i)
+    {
         uvec2 rate = computeUniform.rates[i];
         float cost = (float(rate.x) - desired_rate.x) * (float(rate.x) - desired_rate.x) +
                      (float(rate.y) - desired_rate.y) * (float(rate.y) - desired_rate.y);
-        if(cost < current_cost){
-            current_cost = cost;
+        if (cost < current_cost)
+        {
+            current_cost       = cost;
             optimal_rate_index = i;
         }
     }
 
     uint optimal_rate_x = computeUniform.rates[optimal_rate_index].x;
     uint optimal_rate_y = computeUniform.rates[optimal_rate_index].y;
-    uint rateCode = uint(optimal_rate_y>>1)|((optimal_rate_x<<1)&12);
+    uint rateCode       = uint(optimal_rate_y >> 1) | ((optimal_rate_x << 1) & 12);
 
-    imageStore(shadingRateImage, ivec2(x0,y0), uvec4(rateCode));
+    imageStore(shadingRateImage, ivec2(x0, y0), uvec4(rateCode));
     // if (x0>60){
     //     optimal_rate_x = computeUniform.rates[6].x;
     //     optimal_rate_y = computeUniform.rates[6].y;
     //     rateCode = uint(optimal_rate_y>>1)|((optimal_rate_x<<1)&12);
     //     imageStore(shadingRateImage, ivec2(x0,y0), uvec4(rateCode));
     // }
-    
 }

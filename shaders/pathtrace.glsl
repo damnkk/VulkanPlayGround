@@ -2,20 +2,11 @@
 #define __pathtrace_H__
 #extension GL_GOOGLE_include_directive : enable
 #include "utility.glsl"
-void closestTrace( Ray ray){
+void closestTrace(Ray ray)
+{
     uint rayFlags = gl_RayFlagsOpaqueEXT;
-    rtPload.hitT =INFINITY;
-    traceRayEXT(topLevelAS, 
-    rayFlags, 
-    0xFF, 
-    0, 
-    0, 
-    0, 
-    ray.origin, 
-    0.0, 
-    ray.direction, 
-    INFINITY, 
-    0);
+    rtPload.hitT  = INFINITY;
+    traceRayEXT(topLevelAS, rayFlags, 0xFF, 0, 0, 0, ray.origin, 0.0, ray.direction, INFINITY, 0);
 }
 
 float SchlickFresnel(float u)
@@ -190,7 +181,7 @@ float evaluatepdf(GeomInfo geomInfo, vec3 dir_in, vec3 dir_out, MaterialInfo mat
 
 vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
 {
-    vec3 camSpaceUvPos = vec3(uv * 2.0 - 1.0,1.0);
+    vec3 camSpaceUvPos = vec3(uv * 2.0 - 1.0, 1.0);
     vec3 direct        = (renderUniform.viewInverse *
                    normalize(inverse(renderUniform.project) * vec4(camSpaceUvPos.xyz, 1.0)))
                       .xyz;
@@ -202,7 +193,7 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
     rayDiff.spread = 0.25 / max(rtResolution.x, rtResolution.y);
 
     Ray ray;
-    ray.origin = origin.xyz;
+    ray.origin    = origin.xyz;
     ray.direction = normalize(direct.xyz);
     closestTrace(ray);
     if (rtPload.hitT == INFINITY)
@@ -224,8 +215,8 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
     vec3  throughput = vec3(1.0);
     float eta_scale  = 1.0;
 
-    GeomInfo     geomInfo = getGeomInfo(rtPload);
-    PbrMaterial  matInfo  = getMaterialInfo(geomInfo);
+    GeomInfo    geomInfo = getGeomInfo(rtPload);
+    PbrMaterial matInfo  = getMaterialInfo(geomInfo);
     if (length(matInfo.emissive) > 0.0)
     {
         radiance += matInfo.emissive;
@@ -240,7 +231,7 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
             geomInfo.tangent   = -geomInfo.tangent;
             geomInfo.bitangent = -geomInfo.bitangent;
         }
-        matInfo  = getMaterialInfo(geomInfo);
+        matInfo = getMaterialInfo(geomInfo);
 
         // In a complete raytracing renderer, we will choise a light source(mesh light & env
         // light)
@@ -284,7 +275,7 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
         float p1 = 1.0 * getEnvSamplePDF(2048, 1024, importanceUV);
         if (G > 0.0 && p1 > 0.0)
         {
-            vec3 dir_in   = normalize(-ray.direction);
+            vec3             dir_in = normalize(-ray.direction);
             BsdfEvaluateData bsdfEvaluateData;
             bsdfEvaluateData.k1 = dir_in;
             bsdfEvaluateData.k2 = lightDir;
@@ -300,9 +291,9 @@ vec3 traceRay(vec2 uv, vec2 resolution, int maxBounce)
 
         radiance += throughput * c1 * w1;
 
-        float rd1     = rand(rtPload.seed);
-        float rd2     = rand(rtPload.seed);
-        float rd3     = rand(rtPload.seed);
+        float          rd1 = rand(rtPload.seed);
+        float          rd2 = rand(rtPload.seed);
+        float          rd3 = rand(rtPload.seed);
         BsdfSampleData bsdfSampleData;
         bsdfSampleData.k1 = -ray.direction;
         bsdfSampleData.xi = vec3(rd1, rd2, rd3);

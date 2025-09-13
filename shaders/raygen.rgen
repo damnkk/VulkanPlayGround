@@ -21,22 +21,26 @@
 #include "bsdf_functions.h.slang"
 #include "random.h.slang"
 layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
-layout(set = 0,binding = 1, rgba32f) uniform image2D RayTraceRT;
-layout(set = 0,binding = 2,scalar)  buffer MaterialBuffer{
-Material materials[];
+layout(set = 0, binding = 1, rgba32f) uniform image2D RayTraceRT;
+layout(set = 0, binding = 2, scalar) buffer MaterialBuffer
+{
+    Material materials[];
 };
-layout(set = 0,binding = 3) uniform RenderUniformBlock{
-    RenderUniform  renderUniform;
+layout(set = 0, binding = 3) uniform RenderUniformBlock
+{
+    RenderUniform renderUniform;
 };
 
-layout(set = 0,binding = 4,scalar) buffer LightMeshIdxBufferBlock{
+layout(set = 0, binding = 4, scalar) buffer LightMeshIdxBufferBlock
+{
     uint lightMeshIdx[];
 };
 
-layout(set = 0,binding = 5,scalar) buffer InstanceBuffer{
+layout(set = 0, binding = 5, scalar) buffer InstanceBuffer
+{
     Mesh meshes[];
 };
-layout(set = 0,binding = 6) uniform sampler2D[] sceneTextures;
+layout(set = 0, binding = 6) uniform sampler2D[] sceneTextures;
 layout(set = 0, binding = 7) uniform sampler2D envTexture;
 layout(set = 0, binding = 8) uniform sampler2D envLookupTexture;
 // {
@@ -58,13 +62,13 @@ layout(location = 1) rayPayloadEXT ShadowPlayLoad shadowPload;
 #include "pathtrace.glsl"
 void main()
 {
-    ivec2 pixel       = ivec2(gl_LaunchIDEXT.x, gl_LaunchIDEXT.y);
-    vec2  resolution  = vec2(gl_LaunchSizeEXT.x, gl_LaunchSizeEXT.y);
-    uint  seed        = xxhash32(uvec3(gl_LaunchIDEXT.xy, renderUniform.frameCount));
+    ivec2 pixel        = ivec2(gl_LaunchIDEXT.x, gl_LaunchIDEXT.y);
+    vec2  resolution   = vec2(gl_LaunchSizeEXT.x, gl_LaunchSizeEXT.y);
+    uint  seed         = xxhash32(uvec3(gl_LaunchIDEXT.xy, renderUniform.frameCount));
     float r            = 0.5 * sqrt(-2.0 * log(max(rand(seed), 1e-8)));
     vec2  offset       = vec2(r * cos(2.0 * M_PI * rand(seed)), r * sin(2.0 * M_PI * rand(seed)));
     vec2  uv           = (pixel + 0.5 + offset) / resolution;
-    vec3  res         = vec3(0.0);
+    vec3  res          = vec3(0.0);
     int   maxSampleNum = 1;
     rtPload.seed       = seed;
     for (int simpl = 0; simpl < maxSampleNum; ++simpl)

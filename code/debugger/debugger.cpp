@@ -8,14 +8,15 @@
 namespace Play
 {
 
-
-    std::vector<nvvk::ExtensionInfo> NsightDebugger::initInjection(){
-        auto& afterMathTracker = AftermathCrashTracker::getInstance();
-        afterMathTracker.initialize();
-        std::vector<nvvk::ExtensionInfo> extensions;
-        afterMathTracker.addExtensions(extensions);
-        nvvk::CheckError::getInstance().setCallbackFunction([&](VkResult result) { afterMathTracker.errorCallback(result); });
-        return extensions;
-    }
-
+std::vector<nvvk::ExtensionInfo> NsightDebugger::initInjection()
+{
+    auto& afterMathTracker = AftermathCrashTracker::getInstance();
+    afterMathTracker.initialize();
+    std::vector<nvvk::ExtensionInfo> extensions;
+    afterMathTracker.addExtensions(extensions);
+    nvvk::CheckError::getInstance().setCallbackFunction(
+        [&](VkResult result) { afterMathTracker.errorCallback(result); });
+    return extensions;
 }
+
+} // namespace Play

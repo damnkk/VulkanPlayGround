@@ -4,7 +4,7 @@
 layout(set = 0, binding = 0) uniform sampler2D inputTexture;
 layout(location = 0) in vec2 outUV;
 
-layout(location = 0) out vec4 fragColor ;
+layout(location = 0) out vec4 fragColor;
 
 const float GAMMA     = 2.2;
 const float INV_GAMMA = 1.0 / GAMMA;
@@ -16,8 +16,9 @@ vec3 linearTosRGB(vec3 color)
     return pow(color, vec3(INV_GAMMA));
 }
 
-vec3 test(){
-    float a = fresnelCosineApproximation(1.0,1.0);
+vec3 test()
+{
+    float a = fresnelCosineApproximation(1.0, 1.0);
     return vec3(a);
 }
 
@@ -77,9 +78,11 @@ vec3 test(){
 //     const float C = 2.43;
 //     const float D = 0.59;
 //     const float E = 0.14;
-//     return linearTosRGB(clamp((color * (A * color + B)) / (color * (C * color + D) + E), 0.0, 1.0));
+//     return linearTosRGB(clamp((color * (A * color + B)) / (color * (C * color + D) + E),
+//     0.0, 1.0));
 // }
-void main(){
+void main()
+{
     test();
     // fragColor = texture(inputTexture,outUV);
     // // fragColor.xyz = toneMapACES(fragColor.xyz);

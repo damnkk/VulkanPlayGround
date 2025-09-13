@@ -10,9 +10,8 @@ struct Debugger
 struct NsightDebugger : public Debugger
 {
     static std::vector<nvvk::ExtensionInfo> initInjection();
-    static void capture();
+    static void                             capture();
 };
-}
-
+} // namespace Play
 
 #endif // DEBUGGER_H

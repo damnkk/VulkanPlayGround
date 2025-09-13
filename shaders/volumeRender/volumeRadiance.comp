@@ -2,178 +2,197 @@
 // that generates rays for volume rendering
 #version 450
 #extension GL_GOOGLE_include_directive : enable
-#extension GL_EXT_scalar_block_layout:enable
+#extension GL_EXT_scalar_block_layout : enable
 #include "../common.glsl"
 #include "random.h"
 #include "constants.h"
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
-layout(set = 0 ,binding = 0) uniform sampler3D volumeTexture; // 3D texture for volume data
-layout(set = 0 ,binding = 1) uniform sampler1D opacityLookupTexture; // 2D texture for the output image
-layout(set = 0 ,binding = 2) uniform sampler2D diffuseRT; // 2D texture for the output image
-layout(set = 0 ,binding = 3) uniform sampler2D specularRT; // 2D texture for the output image
-layout(set = 0 ,binding = 4) uniform sampler2D normalRT; // 2D texture for the output image
-layout(set = 0 ,binding = 5) uniform sampler2D depthRT; // 2D texture for the output image
-layout(set = 0,binding =  6) uniform sampler2D envTexture; // 2D texture for the output image
-layout(set = 0, binding = 7,scalar) uniform vUniform
+layout(set = 0, binding = 0) uniform sampler3D volumeTexture; // 3D texture for volume data
+layout(set     = 0,
+       binding = 1) uniform sampler1D opacityLookupTexture; // 2D texture for the output image
+layout(set = 0, binding = 2) uniform sampler2D diffuseRT;   // 2D texture for the output image
+layout(set = 0, binding = 3) uniform sampler2D specularRT;  // 2D texture for the output image
+layout(set = 0, binding = 4) uniform sampler2D normalRT;    // 2D texture for the output image
+layout(set = 0, binding = 5) uniform sampler2D depthRT;     // 2D texture for the output image
+layout(set = 0, binding = 6) uniform sampler2D envTexture;  // 2D texture for the output image
+layout(set = 0, binding = 7, scalar) uniform vUniform
 {
     VolumeUniform volumeUniform;
 };
 layout(set = 0, binding = 8, rgba16f) uniform image2D radianceRT; // 2D texture for the output image
 struct VolumeDesc
 {
-    AABB BoundingBox;
+    AABB  BoundingBox;
     float StepSize;
     float DensityScale;
 };
 
 struct GBuffer
 {
-    vec3 Position;
-    vec3 Normal;
-    vec3 View;
-    vec3 Diffuse;
-    vec3 Specular;
+    vec3  Position;
+    vec3  Normal;
+    vec3  View;
+    vec3  Diffuse;
+    vec3  Specular;
     float Roughness;
 };
-mat3 GetTangentSpace(vec3 normal){
-    vec3 helper = abs(normal.y)>0.999?vec3(0.0,0.0,1.0):vec3(0.0,1.0,0.0);
-    vec3 tangent = normalize(cross(normal, helper));
+mat3 GetTangentSpace(vec3 normal)
+{
+    vec3 helper    = abs(normal.y) > 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
+    vec3 tangent   = normalize(cross(normal, helper));
     vec3 bitangent = normalize(cross(normal, tangent));
     return mat3(tangent, bitangent, normal);
 }
 
-vec3 FresnelSchlick(vec3 F0, float VdotH){
+vec3 FresnelSchlick(vec3 F0, float VdotH)
+{
     return F0 + (1.0 - F0) * pow(1.0 - VdotH, 5.0);
 }
 
-float GGX_PartialGeometry(float NdotX,float alpha){
+float GGX_PartialGeometry(float NdotX, float alpha)
+{
     float aa = alpha * alpha;
-    return 2.0*NdotX/max((NdotX+sqrt(aa+(1.0-aa)*(NdotX*NdotX))),1e-6);
+    return 2.0 * NdotX / max((NdotX + sqrt(aa + (1.0 - aa) * (NdotX * NdotX))), 1e-6);
 }
 
-float GGX_Distribution(float NdotH, float alpha){
-    float aa = alpha * alpha;
-    float denom =(aa-1.0)*NdotH*NdotH+1.0;
-    return aa/(3.14159*denom*denom);
+float GGX_Distribution(float NdotH, float alpha)
+{
+    float aa    = alpha * alpha;
+    float denom = (aa - 1.0) * NdotH * NdotH + 1.0;
+    return aa / (3.14159 * denom * denom);
 }
 
-vec3 SampleGGXDir(vec3 normal,float alpha, inout uint seed){
-    vec2 xi = vec2(rand(seed), rand(seed));
-    float phi = 2.0*M_PI*xi.x;
-    float cosTheta = sqrt(max(0.0f,(1.0-xi.y)/(1.0+alpha*alpha*xi.y-xi.y)));
-    float sinTheta = sqrt(max(0.0f,1.0-cosTheta*cosTheta));
-    return GetTangentSpace(normal)*vec3(cos(phi)*sinTheta,sin(phi)*sinTheta,cosTheta);
+vec3 SampleGGXDir(vec3 normal, float alpha, inout uint seed)
+{
+    vec2  xi       = vec2(rand(seed), rand(seed));
+    float phi      = 2.0 * M_PI * xi.x;
+    float cosTheta = sqrt(max(0.0f, (1.0 - xi.y) / (1.0 + alpha * alpha * xi.y - xi.y)));
+    float sinTheta = sqrt(max(0.0f, 1.0 - cosTheta * cosTheta));
+    return GetTangentSpace(normal) * vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
 }
 
-float GetIntensity(VolumeDesc desc, vec3 position){
+float GetIntensity(VolumeDesc desc, vec3 position)
+{
     return texture(volumeTexture, GetNormalizedTexcoord(position, desc.BoundingBox)).r;
 }
 
-float GetOpacity(VolumeDesc desc, vec3 position){
-    return texture(opacityLookupTexture, GetIntensity(desc,position)).r;
+float GetOpacity(VolumeDesc desc, vec3 position)
+{
+    return texture(opacityLookupTexture, GetIntensity(desc, position)).r;
 }
 
-vec3 GetEnvironment(vec3 direction){
-    direction     = normalize(direction);
-    vec2 uv = vec2(atan(direction.z, direction.x), asin(direction.y));
+vec3 GetEnvironment(vec3 direction)
+{
+    direction = normalize(direction);
+    vec2 uv   = vec2(atan(direction.z, direction.x), asin(direction.y));
     uv /= vec2(2.0 * M_PI, M_PI);
     uv += 0.5;
     uv.y = 1.0 - uv.y;
     return texture(envTexture, uv).xyz;
 }
 
-GBuffer LoadGBuffer(ivec2 id,vec2 offset,vec2 Dimension,mat4 invMVP){
-    vec2 uv = 1.0*(id/Dimension);
-    vec4 rayStart = volumeUniform.InvViewMatrix*volumeUniform.InvProjectMatrix*vec4(uv*2.0-1.0,0.0,1.0);
-    vec4 rayEnd = volumeUniform.InvViewMatrix*volumeUniform.InvProjectMatrix*vec4(uv*2.0-1.0,texture(depthRT,uv).r,1.0);
+GBuffer LoadGBuffer(ivec2 id, vec2 offset, vec2 Dimension, mat4 invMVP)
+{
+    vec2 uv       = 1.0 * (id / Dimension);
+    vec4 rayStart = volumeUniform.InvViewMatrix * volumeUniform.InvProjectMatrix *
+                    vec4(uv * 2.0 - 1.0, 0.0, 1.0);
+    vec4 rayEnd = volumeUniform.InvViewMatrix * volumeUniform.InvProjectMatrix *
+                  vec4(uv * 2.0 - 1.0, texture(depthRT, uv).r, 1.0);
     rayStart /= rayStart.w;
     rayEnd /= rayEnd.w;
-    vec4 normal = texture(normalRT,uv);
+    vec4    normal = texture(normalRT, uv);
     GBuffer gbuffer;
-    gbuffer.Diffuse = texture(diffuseRT,uv).xyz;
-    gbuffer.Specular = texture(specularRT,uv).xyz;
+    gbuffer.Diffuse   = texture(diffuseRT, uv).xyz;
+    gbuffer.Specular  = texture(specularRT, uv).xyz;
     gbuffer.Roughness = normal.w;
-    gbuffer.Normal = normal.xyz;
-    gbuffer.View = normalize(rayStart.xyz-rayEnd.xyz);
-    gbuffer.Position = rayEnd.xyz;
+    gbuffer.Normal    = normal.xyz;
+    gbuffer.View      = normalize(rayStart.xyz - rayEnd.xyz);
+    gbuffer.Position  = rayEnd.xyz;
     return gbuffer;
 }
 
-bool Raymarching(VolumeRay ray, VolumeDesc desc, inout uint seed){
+bool Raymarching(VolumeRay ray, VolumeDesc desc, inout uint seed)
+{
     Intersection intersection = IntersectAABB(ray, desc.BoundingBox);
     if (intersection.Max < intersection.Min)
     {
         return false;
     }
-    float minT = max(intersection.Min, ray.Min);
-    float maxT = min(intersection.Max, ray.Max);
+    float minT      = max(intersection.Min, ray.Min);
+    float maxT      = min(intersection.Max, ray.Max);
     float threshold = -log(rand(seed)) / desc.DensityScale;
-    float sum = 0.0f;
-    float t = minT + rand(seed) * desc.StepSize;
-    vec3 position = vec3(0.0f);
-    while(sum<threshold){
+    float sum       = 0.0f;
+    float t         = minT + rand(seed) * desc.StepSize;
+    vec3  position  = vec3(0.0f);
+    while (sum < threshold)
+    {
         position = ray.origin + t * ray.direction;
-        if(t>=maxT){
+        if (t >= maxT)
+        {
             return false;
         }
-        sum += desc.DensityScale*GetOpacity(desc,position)*desc.StepSize;
-        t+= desc.StepSize;
+        sum += desc.DensityScale * GetOpacity(desc, position) * desc.StepSize;
+        t += desc.StepSize;
     }
     return true;
 }
 
-
-
-
-void main(){
+void main()
+{
     // Get the local work group ID
-    ivec2 localID = ivec2(gl_GlobalInvocationID.xy);
-    vec2 resolution = vec2(volumeUniform.RTDimensions);
-    uint  seed        = xxhash32(uvec3(localID, volumeUniform.frameCount));
+    ivec2   localID    = ivec2(gl_GlobalInvocationID.xy);
+    vec2    resolution = vec2(volumeUniform.RTDimensions);
+    uint    seed       = xxhash32(uvec3(localID, volumeUniform.frameCount));
     GBuffer gbuffer = LoadGBuffer(localID, vec2(0.0), resolution, volumeUniform.InvProjectMatrix);
-    if(length(gbuffer.Diffuse)>0.0){
+    if (length(gbuffer.Diffuse) > 0.0)
+    {
         VolumeDesc desc;
         desc.BoundingBox.Min = volumeUniform.BBoxMin;
         desc.BoundingBox.Max = volumeUniform.BBoxMax;
-        desc.StepSize = volumeUniform.StepSize;
-        desc.DensityScale = volumeUniform.Density;
+        desc.StepSize        = volumeUniform.StepSize;
+        desc.DensityScale    = volumeUniform.Density;
         VolumeRay ray;
         ray.Min = 0;
         ray.Max = FLT_MAX;
 
         vec3 throughput = vec3(0.0);
-        
-        const vec3 N = gbuffer.Normal;
-        const vec3 V = gbuffer.View;
-        const float alpha = gbuffer.Roughness * gbuffer.Roughness;
-        const vec3 H = SampleGGXDir(N,alpha,seed);
-        const vec3 F = FresnelSchlick(gbuffer.Specular,clamp(dot(V,H),0.001,1.0));
-        const float pd = length(1.0-F);
-        const float ps = length(F);
-        const float pdf = ps/(ps+pd);
 
-        if(rand(seed)<pdf){
-            const vec3 L = reflect(-V,H);
-            const float NdotL = clamp(dot(N,L),0.0,1.0);
-            const float NdotH = clamp(dot(N,H),0.0,1.0);
-            const float VdotH = clamp(dot(V,H),0.0,1.0);
-            const float NdotV = clamp(dot(N,V),0.0,1.0);
-            const float G = GGX_PartialGeometry(NdotL,alpha)*GGX_PartialGeometry(NdotV,alpha);
-            ray.origin = gbuffer.Position;
+        const vec3  N     = gbuffer.Normal;
+        const vec3  V     = gbuffer.View;
+        const float alpha = gbuffer.Roughness * gbuffer.Roughness;
+        const vec3  H     = SampleGGXDir(N, alpha, seed);
+        const vec3  F     = FresnelSchlick(gbuffer.Specular, clamp(dot(V, H), 0.001, 1.0));
+        const float pd    = length(1.0 - F);
+        const float ps    = length(F);
+        const float pdf   = ps / (ps + pd);
+
+        if (rand(seed) < pdf)
+        {
+            const vec3  L     = reflect(-V, H);
+            const float NdotL = clamp(dot(N, L), 0.0, 1.0);
+            const float NdotH = clamp(dot(N, H), 0.0, 1.0);
+            const float VdotH = clamp(dot(V, H), 0.0, 1.0);
+            const float NdotV = clamp(dot(N, V), 0.0, 1.0);
+            const float G = GGX_PartialGeometry(NdotL, alpha) * GGX_PartialGeometry(NdotV, alpha);
+            ray.origin    = gbuffer.Position;
             ray.direction = L;
-            throughput += (G*F*VdotH)/max(NdotV*NdotH,1e-6)/(pdf);
-        }else{
-            const vec3 L = SampleGGXDir(N,1.0,seed);
-            ray.origin = gbuffer.Position;
+            throughput += (G * F * VdotH) / max(NdotV * NdotH, 1e-6) / (pdf);
+        }
+        else
+        {
+            const vec3 L  = SampleGGXDir(N, 1.0, seed);
+            ray.origin    = gbuffer.Position;
             ray.direction = L;
-            throughput +=(1.0-F)*gbuffer.Diffuse/(1.0f-pdf);
+            throughput += (1.0 - F) * gbuffer.Diffuse / (1.0f - pdf);
         }
 
         bool isIntersect = Raymarching(ray, desc, seed);
-        vec3 Color =isIntersect?vec3(0.0): throughput*GetEnvironment(ray.direction)*2.0;
+        vec3 Color = isIntersect ? vec3(0.0) : throughput * GetEnvironment(ray.direction) * 2.0;
         // Color = ray.direction;
-        imageStore(radianceRT, localID, vec4(Color,1.0));
-    }else{
-        imageStore(radianceRT, localID, vec4(0.0,0.0,0.0,1.0));
+        imageStore(radianceRT, localID, vec4(Color, 1.0));
+    }
+    else
+    {
+        imageStore(radianceRT, localID, vec4(0.0, 0.0, 0.0, 1.0));
     }
 }
