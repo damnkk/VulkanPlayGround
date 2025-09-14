@@ -48,19 +48,57 @@ class PlayElement : public nvapp::IAppElement
     {
         return _app;
     }
-    VkDevice getDevice()
+    inline VkDevice getDevice()
     {
         return _app->getDevice();
+    }
+
+    inline VkPhysicalDevice getPhysicalDevice()
+    {
+        return _app->getPhysicalDevice();
+    }
+
+    inline const nvvk::QueueInfo& getQueue(uint32_t index)
+    {
+        return _app->getQueue(index);
+    }
+    inline VkCommandPool getCommandPool() const
+    {
+        return _app->getCommandPool();
+    }
+    inline VkDescriptorPool getTextureDescriptorPool() const
+    {
+        return _app->getTextureDescriptorPool();
+    }
+    inline const VkExtent2D& getViewportSize() const
+    {
+        return _app->getViewportSize();
+    }
+    inline const VkExtent2D& getWindowSize() const
+    {
+        return _app->getWindowSize();
+    }
+    inline GLFWwindow* getWindowHandle() const
+    {
+        return _app->getWindowHandle();
+    }
+    inline uint32_t getFrameCycleIndex() const
+    {
+        return _app->getFrameCycleIndex();
+    }
+    inline uint32_t getFrameCycleSize() const
+    {
+        return _app->getFrameCycleSize();
     }
 
     inline Texture*        CreateTexture(VkImageCreateInfo& info, VkCommandBuffer* cmd = nullptr);
     static inline Texture* AllocTexture();
     static inline void     FreeTexture(Texture* texture);
     inline Buffer* CreateBuffer(VkBufferCreateInfo& info, VkMemoryPropertyFlags memProperties);
-    static inline Buffer*  AllocBuffer();
-    static inline void     FreeBuffer(Buffer* buffer);
-    static inline void*    MapBuffer(Buffer& buffer);
-    static inline void     UnmapBuffer(Buffer& buffer);
+    static inline Buffer* AllocBuffer();
+    static inline void    FreeBuffer(Buffer* buffer);
+    static inline void*   MapBuffer(Buffer& buffer);
+    static inline void    UnmapBuffer(Buffer& buffer);
 
     enum RenderMode
     {
