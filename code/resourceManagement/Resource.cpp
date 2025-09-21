@@ -3,6 +3,18 @@
 #include "PlayAllocator.h"
 namespace Play
 {
+Texture* Texture::Create()
+{
+    Texture* res = TexturePool::Instance().alloc();
+    return res;
+}
+
+Texture* Texture::Create(std::string name)
+{
+    Texture* res     = TexturePool::Instance().alloc();
+    res->DebugName() = name;
+    return res;
+}
 Texture* Texture::Create(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage,
                          VkImageLayout layout, uint32_t mipLevels, VkSampleCountFlagBits samples)
 {
@@ -31,5 +43,23 @@ void Texture::Destroy(Texture* texture)
 {
     TexturePool::Instance().free(texture);
     texture = nullptr;
+}
+
+Buffer* Buffer::Create()
+{
+    return BufferPool::Instance().alloc();
+}
+
+Buffer* Buffer::Create(std::string name)
+{
+    Buffer* res      = BufferPool::Instance().alloc();
+    res->DebugName() = name;
+    return res;
+}
+
+void Buffer::Destroy(Buffer* buffer)
+{
+    BufferPool::Instance().free(buffer);
+    buffer = nullptr;
 }
 } // namespace Play

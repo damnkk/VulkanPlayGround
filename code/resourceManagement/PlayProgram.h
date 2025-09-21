@@ -31,7 +31,7 @@ Example:
 
 class DescriptorSetManager : public nvvk::WriteSetContainer
 {
-   public:
+public:
     DescriptorSetManager(VkDevice device);
     ~DescriptorSetManager();
     DescriptorSetManager& addBinding(uint32_t setIdx, uint32_t bindingIdx, uint32_t descriptorCount,
@@ -45,7 +45,7 @@ class DescriptorSetManager : public nvvk::WriteSetContainer
 
     VkPipelineLayout getPipelineLayout() const;
 
-   private:
+private:
     DescriptorSetManager(const DescriptorSetManager&);
     DescriptorSetManager& operator=(const DescriptorSetManager&);
 
@@ -59,26 +59,26 @@ class DescriptorSetManager : public nvvk::WriteSetContainer
     std::array<nvvk::DescriptorBindings, MAX_DESCRIPTOR_SETS::value> _descBindSet;
     std::array<VkDescriptorSetLayout, MAX_DESCRIPTOR_SETS::value>    _descSetLayouts = {};
     VkPipelineLayout _pipelineLayout = VK_NULL_HANDLE;
-    VkDevice                                                         _vkDevice;
+    VkDevice         _vkDevice;
     // Additional functionality for managing descriptor sets can be added here
 };
 
 class PlayProgram
 {
-   public:
+public:
     PlayProgram();
     ~PlayProgram();
     PlayProgram(const PlayProgram&);
     PlayProgram&       operator=(const PlayProgram&);
     virtual VkPipeline getOrCreatePipeline() = 0;
 
-   protected:
+protected:
     DescriptorSetManager _descriptorManager;
 };
 
 class RenderProgram : public PlayProgram
 {
-   public:
+public:
     RenderProgram() = default;
     RenderProgram(ShaderID vertexModuleID, ShaderID fragModuleID)
         : _vertexModuleID(vertexModuleID), _fragModuleID(fragModuleID)
@@ -94,14 +94,14 @@ class RenderProgram : public PlayProgram
     }
     VkPipeline getOrCreatePipeline() override;
 
-   private:
+private:
     ShaderID _vertexModuleID;
     ShaderID _fragModuleID;
 };
 
 class ComputeProgram : public PlayProgram
 {
-   public:
+public:
     ComputeProgram() = default;
     ComputeProgram(ShaderID computeModuleID) : _computeModuleID(computeModuleID) {}
     void setComputeModuleID(ShaderID computeModuleID)
@@ -110,13 +110,13 @@ class ComputeProgram : public PlayProgram
     }
     VkPipeline getOrCreatePipeline() override;
 
-   private:
+private:
     ShaderID _computeModuleID;
 };
 
 class RTProgram : public PlayProgram
 {
-   public:
+public:
     RTProgram() = default;
     RTProgram(ShaderID rayGenID, ShaderID rayCHitID, ShaderID rayMissID)
         : _rayGenModuleID(rayGenID), _rayCHitModuleID(rayCHitID), _rayMissModuleID(rayMissID)
@@ -144,7 +144,7 @@ class RTProgram : public PlayProgram
     }
     VkPipeline getOrCreatePipeline() override;
 
-   private:
+private:
     ShaderID _rayGenModuleID;
     ShaderID _rayCHitModuleID;
     ShaderID _rayAHitModuleID;
@@ -154,7 +154,7 @@ class RTProgram : public PlayProgram
 
 class MeshRenderProgram : public PlayProgram
 {
-   public:
+public:
     MeshRenderProgram() = default;
     MeshRenderProgram(ShaderID meshModuleID, ShaderID fragModuleID)
         : _meshModuleID(meshModuleID), _fragModuleID(fragModuleID)
@@ -174,7 +174,7 @@ class MeshRenderProgram : public PlayProgram
     }
     VkPipeline getOrCreatePipeline() override;
 
-   private:
+private:
     ShaderID _taskModuleID;
     ShaderID _meshModuleID;
     ShaderID _fragModuleID;

@@ -8,7 +8,7 @@
 #include "nvvk/shaders.hpp"
 #include "ShaderManager.hpp"
 #include <optional>
-
+#include "BaseDag.h"
 namespace Play::RDG
 {
 
@@ -23,106 +23,89 @@ class RDGPass;
 class RDGTexturePool;
 class RenderDependencyGraph;
 
-// 基类，提供通用的生产者/消费者追踪功能
-class RDGResourceBase
+class ResourceNode : public Node
 {
-   public:
-    virtual ~RDGResourceBase() = default;
-    std::vector<std::optional<uint32_t>>& getProducers()
-    {
-        return _producers;
-    }
-    std::vector<std::optional<uint32_t>>& getReaders()
-    {
-        return _readers;
-    }
-    std::optional<uint32_t> getLastProducer(uint32_t currentPassIdx) const;
-    std::optional<uint32_t> getLastReader(uint32_t currentPassIdx) const;
-    std::optional<uint32_t> getLastProducer() const;
-    std::optional<uint32_t> getLastReader() const;
-    bool                    isExternal = false;
-
-   protected:
-    std::vector<std::optional<uint32_t>> _producers;
-    std::vector<std::optional<uint32_t>> _readers;
-    friend class RenderDependencyGraph;
+public:
+    ResourceNode(size_t id) : Node(id) {}
 };
 
-class RDGTexture : public RDGResourceBase
+class TextureNode : public ResourceNode
 {
-   public:
-    RDGTexture() = default;
-    RDGTexture(TextureHandle handle) : _handle(handle) {}
-    RDGTexture(Texture* texture) : _rhi(texture) {}
-    RDGTexture(const RDGTexture&)            = delete;
-    RDGTexture& operator=(const RDGTexture&) = delete;
-    ~RDGTexture()                            = default;
-    void setMetaData(Texture::TexMetaData metadata)
-    {
-        this->_rhi->setMetaData(metadata);
-    }
-    Texture* RHI()
-    {
-        return _rhi;
-    }
-    TextureHandle _handle = TextureHandle::Null;
-
-   protected:
-    Texture* _rhi = nullptr;
-    friend class RDGTexturePool;
-    friend class RenderDependencyGraph;
-};
-
-class RDGBuffer : public RDGResourceBase
-{
-   public:
-    RDGBuffer() = default;
-    RDGBuffer(BufferHandle handle) : _handle(handle) {}
-    RDGBuffer(Buffer* buffer) : _rhi(buffer) {}
-    RDGBuffer(const RDGBuffer&)            = delete;
-    RDGBuffer& operator=(const RDGBuffer&) = delete;
-    ~RDGBuffer()                           = default;
-    BufferHandle _handle                   = BufferHandle::Null;
-    void         setMetaData(Buffer::BufferMetaData metadata)
-    {
-        this->_rhi->setMetaData(metadata);
-    }
-    Buffer* RHI()
+public:
+    TextureNode(size_t id, Texture* rhiHandle) : ResourceNode(id), _rhi(rhiHandle) {}
+    Texture* getRHI()
     {
         return _rhi;
     }
 
-   protected:
-    Buffer* _rhi = nullptr;
-    friend class RDGBufferPool;
-    friend class RenderDependencyGraph;
+private:
+    Texture* _rhi;
+};
+using TextureNodeRef = TextureNode*;
+class BufferNode : public ResourceNode
+{
+public:
+    BufferNode(size_t id, Buffer* rhiHandle) : ResourceNode(id), _rhi(rhiHandle) {}
+    Buffer* getRHI()
+    {
+        return _rhi;
+    }
+
+private:
+    Buffer* _rhi;
+};
+using BufferNodeRef = BufferNode*;
+class BindlessTextureNode : public ResourceNode
+{
 };
 
-class RDGGraphicPipelineState : public nvvk::GraphicsPipelineState
+class BindlessBufferNode : public ResourceNode
 {
-   public:
-    RDGGraphicPipelineState()                                     = default;
-    RDGGraphicPipelineState(const RDGGraphicPipelineState& other) = default;
-    ~RDGGraphicPipelineState()                                    = default;
-    RDGGraphicPipelineState& setVertexShaderInfo(uint32_t shaderId);
-    RDGGraphicPipelineState& setFragmentShaderInfo(uint32_t shaderId);
-    VkPipeline               _pipeline       = VK_NULL_HANDLE;
-    VkPipelineLayout         _pipelineLayout = VK_NULL_HANDLE;
-    uint32_t                 _vshaderId      = size_t(~0);
-    uint32_t                 _fshaderId      = size_t(~0);
-    void                     test() {}
 };
 
-class RDGComputePipelineState
+class TextureEdge : public Edge
 {
-   public:
-    RDGComputePipelineState()                                     = default;
-    RDGComputePipelineState(const RDGComputePipelineState& other) = default;
-    ~RDGComputePipelineState()                                    = default;
-    void             setShaderInfo(uint32_t shaderId);
-    VkPipeline       _pipeline;
-    VkPipelineLayout _pipelineLayout;
-    uint32_t         _cshaderId = size_t(~0);
+public:
+    TextureEdge(Node* from, Node* to, EdgeType type = EdgeType::eTexture) : Edge(from, to, type) {}
+    VkAccessFlags2        accessMask;
+    VkImageLayout         layout;
+    VkPipelineStageFlags2 stageMask;
+    uint32_t              queueFamilyIndex;
+
+    uint32_t set             = 0;
+    uint32_t binding         = 0;
+    uint32_t descriptorIndex = 0;
+};
+
+class AttachmentEdge : public Edge
+{
+public:
+    AttachmentEdge(Node* from, Node* to, EdgeType type = EdgeType::eRenderAttachment)
+        : Edge(from, to, type)
+    {
+    }
+    uint32_t slotIdx;
+    union attachOperation
+    {
+        VkAttachmentLoadOp  loadOp;
+        VkAttachmentStoreOp storeOp;
+    };
+    attachOperation attachmentOp;
+    VkImageLayout   layout;
+};
+
+class BufferEdge : public Edge
+{
+public:
+    BufferEdge(Node* from, Node* to, EdgeType type = EdgeType::eBuffer) : Edge(from, to, type) {}
+    VkAccessFlags2        accessMask;
+    VkPipelineStageFlags2 stageMask;
+    uint32_t              queueFamilyIndex;
+    VkDeviceSize          offset          = 0;
+    VkDeviceSize          size            = VK_WHOLE_SIZE;
+    uint32_t              set             = 0;
+    uint32_t              binding         = 0;
+    uint32_t              descriptorIndex = 0;
 };
 
 } // namespace Play::RDG

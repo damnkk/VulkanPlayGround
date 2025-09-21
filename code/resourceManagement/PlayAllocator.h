@@ -20,7 +20,7 @@ class PlayElement;
 template <typename T>
 class BasePool
 {
-   public:
+public:
     void init(uint32_t poolSize, PlayResourceManager* manager)
     {
         _manager = manager;
@@ -43,7 +43,7 @@ class BasePool
 
 class TexturePool : public BasePool<Texture>
 {
-   public:
+public:
     static TexturePool& Instance();
 
     // 释放纹理对象
@@ -88,15 +88,15 @@ class TexturePool : public BasePool<Texture>
 
     void deinit() override;
 
-   protected:
-    friend class RDG::RDGTexturePool;
+protected:
+    friend class Texture;
     // 分配一个空纹理对象
     Texture* alloc();
 };
 
 class BufferPool : public BasePool<Buffer>
 {
-   public:
+public:
     static BufferPool& Instance();
 
     // 按大小和用法分配Buffer
@@ -116,8 +116,8 @@ class BufferPool : public BasePool<Buffer>
 
     void deinit() override;
 
-   protected:
-    friend class RDG::RDGBufferPool;
+protected:
+    friend class Buffer;
     // 分配一个空Buffer对象
     Buffer* alloc();
 };
@@ -126,7 +126,7 @@ class PlayResourceManager : protected nvvk::ResourceAllocatorExport,
                             protected nvvk::StagingUploader,
                             public nvvk::SamplerPool
 {
-   public:
+public:
     static PlayResourceManager& Instance();
     PlayResourceManager() = default;
     ~PlayResourceManager() {}
@@ -135,7 +135,7 @@ class PlayResourceManager : protected nvvk::ResourceAllocatorExport,
     VkCommandBuffer getTempCommandBuffer();
     void            submitAndWaitTempCmdBuffer(VkCommandBuffer cmd);
 
-   private:
+private:
     friend class TexturePool;
     friend class BufferPool;
 

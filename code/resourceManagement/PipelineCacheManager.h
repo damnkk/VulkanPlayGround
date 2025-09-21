@@ -1,6 +1,5 @@
-#include <nvvk/pipeline.hpp>
-#include <nvvk/compute_pipeline.hpp>
-#include <nvvk/graphics_pipeline.hpp>
+#include "Resource.h"
+#include <nvvk/descriptors.hpp>
 #include <functional>
 #include "ShaderManager.hpp"
 
@@ -9,40 +8,41 @@ namespace Play
 
 class PlayElement;
 using PipelineKey = std::size_t;
-class GraphicsPipelineStateWithKey : public nvvk::GraphicsPipelineState
+
+class GraphicsPipelineStateWithKey : public GraphicsPipelineState
 {
-   public:
+public:
     PipelineKey getPipelineKey() const;
 
-   private:
+private:
     PipelineKey _pipelineKey = ~0U;
 };
 
 class ComputePipelineStateWithKey
 {
-   public:
+public:
     PipelineKey getPipelineKey() const;
     void        addShader(ShaderModule* shaderModule)
     {
         _shaderModule = shaderModule;
     }
 
-   private:
+private:
     ShaderModule* _shaderModule;
     PipelineKey   _pipelineKey = ~0U;
 };
 
 class PipelineCacheManager
 {
-   public:
+public:
     PipelineCacheManager(PlayElement* element);
-    virtual ~PipelineCacheManager();
+    virtual ~PipelineCacheManager() {};
     void getOrCreateComputePipeline(const ComputePipelineStateWithKey&   cState,
                                     std::function<void(VkPipelineCache)> createCPipelineFunc);
     void getOrCreateGraphicsPipeline(const GraphicsPipelineStateWithKey&  gState,
                                      std::function<void(VkPipelineCache)> createGfxPipelineFunc);
 
-   private:
+private:
 };
 
 } // namespace Play

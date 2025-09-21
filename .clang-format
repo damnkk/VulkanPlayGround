@@ -17,3 +17,4 @@ SpacesBeforeTrailingComments: 1
 SpaceBeforeParens: ControlStatements
 SpaceAfterCStyleCast: true
 Cpp11BracedListStyle: true
+AccessModifierOffset: -4

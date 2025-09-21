@@ -47,7 +47,7 @@ struct ShaderModule
 
 class ShaderPool : public BasePool<ShaderModule>
 {
-   public:
+public:
     ShaderModule* alloc();
     void          free(uint32_t id);
     ShaderModule* get(uint32_t id)
@@ -62,7 +62,7 @@ class ShaderPool : public BasePool<ShaderModule>
 
 class ShaderManager
 {
-   public:
+public:
     static ShaderManager& Instance();
     ShaderManager() = default;
     void init(PlayElement* element);
@@ -81,10 +81,10 @@ class ShaderManager
 
     void deInit();
 
-   protected:
+protected:
     bool checkShaderUpdate(std::filesystem::path shaderPath, std::filesystem::path spvPath);
 
-   private:
+private:
     PlayElement*                              _element;
     ShaderPool                                _shaderPool;
     nvslang::SlangCompiler                    _slangCompiler;

@@ -21,7 +21,7 @@ class RenderDependencyGraph;
 
 class PlayElement : public nvapp::IAppElement
 {
-   public:
+public:
     struct Info
     {
         nvutils::ProfilerManager*   profilerManager{};
@@ -110,7 +110,7 @@ class PlayElement : public nvapp::IAppElement
         eRCount
     } _renderMode = eDeferRendering;
 
-   protected:
+protected:
     // SceneManager
     // RenderPassCache
     // FrameBufferCache
@@ -121,7 +121,7 @@ class PlayElement : public nvapp::IAppElement
     VkDescriptorPool          _descriptorPool;
     void                      createGraphicsDescriptResource();
 
-   private:
+private:
     Info _info;
     friend class RTRenderer;
     friend class VolumeRenderer;

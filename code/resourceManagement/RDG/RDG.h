@@ -20,140 +20,136 @@ GPU resource when RDG compile.
 #include "RDGPasses.hpp"
 namespace Play::RDG
 {
-
-class RDGTexturePool : public BasePool<RDGTexture>
+// we can reuse some texture here, to save some gpu memory
+class RDGTextureCache
 {
-   public:
-    void        init(uint32_t poolSize);
-    void        deinit();
-    RDGTexture* alloc();
-    void        destroy(TextureHandle handle);
-    void        destroy(RDGTexture* texture);
-    RDGTexture* operator[](TextureHandle handle) const
+public:
+    RDGTextureCache()  = default;
+    ~RDGTextureCache() = default;
+    void        regist(Texture* texture);
+    RDGTexture* request(Texture* texture);
+
+private:
+    std::unordered_map<Texture::TexMetaData, nvvk::Image> _textureMap;
+};
+
+class RDGBuilder;
+class RDGTextureBuilder
+{
+public:
+    RDGTextureBuilder(RDGBuilder* builder, TextureNodeRef node)
+        : _builder(builder), _textureNode(node)
     {
-        if (!handle.isValid() || handle.index >= _objs.size())
+    }
+    RDGTextureBuilder& Format(VkFormat format);
+    RDGTextureBuilder& Type(VkImageType type);
+    RDGTextureBuilder& Extent(VkExtent3D extent);
+    RDGTextureBuilder& UsageFlags(VkImageUsageFlags usageFlags);
+    RDGTextureBuilder& AspectFlags(VkImageAspectFlags aspectFlags);
+    RDGTextureBuilder& SampleCount(VkSampleCountFlagBits sampleCount);
+    RDGTextureBuilder& MipmapLevel(uint32_t mipmapLevel);
+    RDGTextureBuilder& LayerCount(uint32_t layerCount);
+    TextureNodeRef     finish();
+
+private:
+    struct TextureDesc
+    {
+        VkFormat          _format = VK_FORMAT_UNDEFINED;
+        VkImageType       _type   = VK_IMAGE_TYPE_2D;
+        VkExtent3D        _extent = {1, 1, 1};
+        VkImageUsageFlags _usageFlags =
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        VkImageAspectFlags    _aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
+        VkSampleCountFlagBits _sampleCount = VK_SAMPLE_COUNT_1_BIT;
+        uint32_t              _mipmapLevel = 1;
+        uint32_t              _layerCount  = 1;
+        std::string           _debugName;
+    } _desc;
+    RDGBuilder*    _builder     = nullptr;
+    TextureNodeRef _textureNode = nullptr;
+};
+class RDGBufferBuilder
+{
+public:
+    RDGBufferBuilder(RDGBuilder* builder, BufferNodeRef node) : _builder(builder), _bufferNode(node)
+    {
+    }
+    RDGBufferBuilder& Size(VkDeviceSize size);
+    RDGBufferBuilder& Range(VkDeviceSize range);
+    RDGBufferBuilder& UsageFlags(VkBufferUsageFlags usageFlags);
+    RDGBufferBuilder& Location(bool isDeviceLocal);
+    BufferNodeRef     finish();
+
+private:
+    struct BufferDesc
+    {
+        VkBufferUsageFlags _usageFlags =
+            VK_BUFFER_USAGE_2_TRANSFER_DST_BIT | VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT;
+        VkDeviceSize _size  = 1;
+        VkDeviceSize _range = VK_WHOLE_SIZE;
+        enum class MemoryLocation : uint8_t
         {
-            throw std::runtime_error("RDGTexturePool: Invalid texture handle");
-        }
-        return _objs[handle.index];
+            eDeviceLocal,
+            eHostVisible
+        } _location = MemoryLocation::eDeviceLocal;
+        std::string _debugName;
+    } _desc;
+    RDGBuilder*   _builder    = nullptr;
+    BufferNodeRef _bufferNode = nullptr;
+};
+
+class BlackBoard
+{
+public:
+    BlackBoard()  = default;
+    ~BlackBoard() = default;
+    void           registTexture(std::string name, TextureNodeRef texture);
+    void           registBuffer(std::string name, BufferNodeRef buffer);
+    void           registPass(std::string name, PassNode* pass);
+    TextureNodeRef getTexture(std::string name);
+    BufferNodeRef  getBuffer(std::string name);
+    PassNode*      getPass(std::string name);
+
+private:
+    std::unordered_map<std::string, TextureNodeRef> _textureMap;
+    std::unordered_map<std::string, BufferNodeRef>  _bufferMap;
+    std::unordered_map<std::string, PassNode*>      _passMap;
+};
+
+class RDGBuilder
+{
+public:
+    RDGBuilder(PlayElement* element);
+    ~RDGBuilder();
+    RenderPassBuilder  createRenderPass(std::string name);
+    ComputePassBuilder createComputePass(std::string name);
+    RTPassBuilder      createRTPass(std::string name);
+
+    RDGTextureBuilder createTexture(std::string name);
+    RDGBufferBuilder  createBuffer(std::string name);
+
+    TextureNodeRef getTexture(std::string name);
+    BufferNodeRef  getBuffer(std::string name);
+
+    void execute(RenderPassNode* pass);
+    void execute(ComputePassNode* pass);
+    void execute(RTPassNode* pass);
+
+    Dag* getDag()
+    {
+        return _dag;
     }
 
-   private:
-    using BasePool<RDGTexture>::init;
-};
-
-class RDGBufferPool : public BasePool<RDGBuffer>
-{
-   public:
-    void       init(uint32_t poolSize);
-    void       deinit();
-    RDGBuffer* alloc();
-    void       destroy(BufferHandle handle);
-    void       destroy(RDGBuffer* buffer);
-    RDGBuffer* operator[](BufferHandle handle) const
-    {
-        if (!handle.isValid() || handle.index >= _objs.size())
-        {
-            throw std::runtime_error("RDGBufferPool: Invalid buffer handle");
-        }
-        return _objs[handle.index];
-    }
-
-   private:
-    using BasePool<RDGBuffer>::init;
-};
-
-struct TextureDesc
-{
-    VkFormat          _format = VK_FORMAT_UNDEFINED;
-    VkImageType       _type   = VK_IMAGE_TYPE_2D;
-    VkExtent3D        _extent = {1, 1, 1};
-    VkImageUsageFlags _usageFlags =
-        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    VkImageAspectFlags    _aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
-    VkSampleCountFlagBits _sampleCount = VK_SAMPLE_COUNT_1_BIT;
-    uint32_t              _mipmapLevel = 1;
-    uint32_t              _layerCount  = 1;
-    std::string           _debugName;
-};
-
-struct BufferDesc
-{
-    VkBufferUsageFlags _usageFlags =
-        VK_BUFFER_USAGE_2_TRANSFER_DST_BIT | VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT;
-    VkDeviceSize _size  = 1;
-    VkDeviceSize _range = VK_WHOLE_SIZE;
-    enum class MemoryLocation : uint8_t
-    {
-        eDeviceLocal,
-        eHostVisible
-    } _location = MemoryLocation::eDeviceLocal;
-    std::string _debugName;
-};
-
-class RenderDependencyGraph
-{
-   public:
-    RenderDependencyGraph();
-    ~RenderDependencyGraph();
-    /*
-      if the pass shader parameters have readAndWrite resource,that will flush the resource's
-      lastproducer, so if you have several passes need the same input resource, the adding order is
-      important. For instance, passX output a textureA, then you add passY to readAndWrite textureA,
-      then you add passZ to read textureA to do something. as this order, passZ will get passY's
-      output, if you want passX's "textureA" this will lead a mistake, so you should add passZ
-      before passY.
-    */
-
-    void addPass(PassType type, std::string name = "");
-    void addComputePass(std::optional<uint32_t> passID, std::string name = "");
-    void addRenderPass(std::optional<uint32_t> passID, std::string name = "");
-    void compile();
-    void execute();
-
-    RDGTexture* registExternalTexture(Texture* texture);
-    RDGBuffer*  registExternalBuffer(Buffer* buffer);
-
-    RDGTexture* createTexture(const TextureDesc& desc);
-    RDGBuffer*  createBuffer(const BufferDesc& desc);
-    void        allocRHITexture(RDGTexture* texture);
-    void        allocRHIBuffer(RDGBuffer* buffer);
-
-    void destroyTexture(TextureHandle handle);
-    void destroyBuffer(BufferHandle handle);
-    void destroyTexture(RDGTexture* texture);
-    void destroyBuffer(RDGBuffer* buffer);
-
-    PlayElement* getElement() const
-    {
-        return _element;
-    }
-
-   protected:
-    void onCreatePass(RDGPass* pass);
-    void clipPasses();
-    bool hasCircle();
-    void prepareResource();
-    void updatePassDependency();
-
-    VkRenderPass getOrCreateRenderPass(std::vector<RDGRTState>& rtStates);
-    template <typename Pass>
-    void getOrCreatePipeline(Pass& pass);
-
-   private:
-    bool             hasCircle(RDGPass* pass, std::unordered_set<RDGPass*>& visited, int currDepth);
-    RDGTexturePool   _rdgTexturePool;
-    RDGBufferPool    _rdgBufferPool;
-    std::vector<int> _rdgAvaliableTextureIndices;
-    std::vector<int> _rdgAvaliableBufferIndices;
-    std::vector<RDGPass*>    _rdgPasses;
-    std::vector<RDGPass*>    _clippedPasses;
-    std::vector<RDGTexture*> _externalTextures;
-    std::vector<RDGBuffer*>  _externalBuffers;
-    PlayElement*             _element = nullptr;
-    std::vector<int32_t>     _passDepthLayout;
-    std::optional<uint32_t>  _passCounter = 0;
-    friend class RDGRenderPass;
+private:
+    friend class RenderPassBuilder;
+    friend class ComputePassBuilder;
+    friend class RTPassBuilder;
+    PlayElement*                                 _element = nullptr;
+    Dag*                                         _dag     = nullptr;
+    std::vector<PassNode*>                       _passes;
+    BlackBoard                                   _blackBoard;
+    std::unordered_map<std::string, RDGTexture*> _textureMap;
+    std::unordered_map<std::string, RDGBuffer*>  _bufferMap;
 };
 
 } // namespace Play::RDG

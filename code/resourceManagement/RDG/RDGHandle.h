@@ -98,7 +98,7 @@ struct TNumericLimits<uint32_t>
 template <typename LocalObjectType, typename LocalIndexType>
 class RDGHandle
 {
-   public:
+public:
     using ObjectType = LocalObjectType;
     using IndexType  = LocalIndexType;
     RDGHandle()      = default;

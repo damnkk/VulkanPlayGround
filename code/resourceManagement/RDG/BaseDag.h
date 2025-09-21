@@ -1,0 +1,143 @@
+#ifndef RDG_BASE_DAG_H
+#define RDG_BASE_DAG_H
+
+#include <vector>
+#include <memory>
+#include <utility>
+
+namespace Play::RDG
+{
+
+// 前向声明
+class Dag;
+class Node;
+class Edge;
+
+// EdgeType可以保留，用于给边附加语义，但它不再影响图的拓扑结构
+enum class EdgeType
+{
+    eGeneral,
+    eTexture,
+    eBuffer,
+    eRenderAttachment
+};
+
+// Node: 非模板基类，保持不变
+class Node
+{
+public:
+    virtual ~Node() = default;
+
+    size_t getId() const
+    {
+        return m_id;
+    }
+    const std::vector<Edge*>& getIncomingEdges() const
+    {
+        return m_incoming_edges;
+    }
+    const std::vector<Edge*>& getOutgoingEdges() const
+    {
+        return m_outgoing_edges;
+    }
+
+protected:
+    Node(size_t id) : m_id(id) {}
+
+private:
+    friend class Dag;
+
+    size_t             m_id;
+    std::vector<Edge*> m_incoming_edges;
+    std::vector<Edge*> m_outgoing_edges;
+};
+
+// Edge: 非模板基类，移除了isVirtual逻辑
+class Edge
+{
+public:
+    virtual ~Edge() = default;
+
+    Node* getFrom() const
+    {
+        return m_from;
+    }
+    Node* getTo() const
+    {
+        return m_to;
+    }
+    EdgeType getType() const
+    {
+        return m_type;
+    }
+
+protected:
+    // 构造函数简化
+    Edge(Node* from, Node* to, EdgeType type = EdgeType::eGeneral)
+        : m_from(from), m_to(to), m_type(type)
+    {
+    }
+
+private:
+    friend class Dag;
+
+    Node*    m_from;
+    Node*    m_to;
+    EdgeType m_type;
+};
+
+// Dag: 非模板类，内部逻辑简化
+class Dag
+{
+public:
+    Dag() = default;
+    ~Dag();
+
+    Dag(const Dag&)            = delete;
+    Dag& operator=(const Dag&) = delete;
+
+    template <typename T, typename... Args>
+    T* addNode(Args&&... args)
+    {
+        static_assert(std::is_base_of<Node, T>::value, "T must be a subclass of Node");
+        size_t id       = m_nodes.size();
+        auto   node     = std::make_unique<T>(id, std::forward<Args>(args)...);
+        T*     node_ptr = node.get();
+        m_nodes.push_back(std::move(node));
+        return node_ptr;
+    }
+
+    template <typename T, typename... Args>
+    T* createEdge(Node* from, Node* to, Args&&... args)
+    {
+        static_assert(std::is_base_of<Edge, T>::value, "T must be a subclass of Edge");
+        auto edge     = std::make_unique<T>(from, to, std::forward<Args>(args)...);
+        T*   edge_ptr = edge.get();
+        m_edges.push_back(std::move(edge));
+        return edge_ptr;
+    }
+
+    // link函数简化，不再需要处理虚拟边
+    void link(Node* from, Node* to, Edge* edge);
+
+    const std::vector<std::unique_ptr<Node>>& getNodes() const
+    {
+        return m_nodes;
+    }
+
+    // topologicalSort简化，不再需要处理虚拟边
+    std::vector<Node*> topologicalSort();
+
+    void clear();
+
+private:
+    // pathExists简化，不再需要处理虚拟边
+    bool pathExists(Node* start, Node* end);
+
+    std::vector<std::unique_ptr<Node>> m_nodes;
+    std::vector<std::unique_ptr<Edge>> m_edges;
+};
+
+} // namespace Play::RDG
+
+#endif // RDG_BASE_DAG_H
