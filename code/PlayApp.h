@@ -27,6 +27,7 @@ class PlayApp : public nvvkhl::AppBaseVk
     void   RenderFrame();
     void   OnPreRender();
     void   OnPostRender();
+    bool   checkForDeviceLost();
     Scene& getScene()
     {
         return _scene;

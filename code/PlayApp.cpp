@@ -38,6 +38,9 @@ struct ScopeTimer
 
 void PlayApp::OnInit()
 {
+    // Initialize automated crash reporting BEFORE any Vulkan device creation
+    AftermathCrashReporter::initialize();
+    
     // NsightDebugger::initInjection();
     _modelLoader.init(this);
     CameraManip.setWindowSize(this->getSize().width, this->getSize().height);
@@ -343,12 +346,35 @@ void PlayApp::Run()
         {
             continue;
         }
+        
+        // Check for device lost condition and handle crashes
+        if (checkForDeviceLost())
+        {
+            std::wcout << L"Device lost detected! Waiting for crash dump collection..." << std::endl;
+            AftermathCrashReporter::waitForCrashDumpCollection();
+            break; // Exit the render loop
+        }
+        
         this->prepareFrame();
         this->OnPreRender();
         this->RenderFrame();
         this->OnPostRender();
         this->submitFrame();
     }
+}
+
+bool PlayApp::checkForDeviceLost()
+{
+    // Check if the Vulkan device is lost
+    VkResult deviceStatus = vkDeviceWaitIdle(m_device);
+    
+    if (deviceStatus == VK_ERROR_DEVICE_LOST)
+    {
+        std::wcout << L"Vulkan device lost detected!" << std::endl;
+        return AftermathCrashReporter::checkDeviceLost();
+    }
+    
+    return false;
 }
 
 void PlayApp::onDestroy()
@@ -359,5 +385,8 @@ void PlayApp::onDestroy()
     this->_bufferPool.deinit();
     vkDestroyDescriptorPool(m_device, this->_descriptorPool, nullptr);
     _alloc.deinit();
+    
+    // Shutdown automated crash reporting
+    AftermathCrashReporter::shutdown();
 }
 } // namespace Play

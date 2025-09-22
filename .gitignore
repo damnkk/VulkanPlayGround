@@ -38,3 +38,9 @@ cmake-build-debug-visual-studio/
 .idea/
 spv/
 .vs
+
+# Automated Crash Reporting outputs
+crash_dumps/*.nv-gpudmp
+crash_dumps/*.nvdbg
+test_crash_reporter
+test_crash_reporter.exe
