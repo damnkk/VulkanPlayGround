@@ -48,7 +48,6 @@ void PlayElement::onAttach(nvapp::Application* app)
             _renderer = std::make_shared<DeferRenderer>(*this);
         }
     }
-
 }
 
 void PlayElement::onDetach()

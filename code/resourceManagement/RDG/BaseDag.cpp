@@ -1,9 +1,9 @@
 #include "BaseDag.h"
 
+#include <cassert>
 #include <stdexcept>
 #include <list>
 #include <unordered_map>
-
 namespace Play::RDG
 {
 Dag::~Dag()
@@ -104,6 +104,259 @@ bool Dag::pathExists(Node* start, Node* end)
             }
         }
     }
+    return false;
+}
+
+bool Dag::detectCycles() const
+{
+    std::unordered_map<Node*, int> colors; // 0: 白色(未访问), 1: 灰色(正在处理), 2: 黑色(已完成)
+
+    // 初始化所有节点为白色
+    for (const auto& node_ptr : m_nodes)
+    {
+        colors[node_ptr.get()] = 0;
+    }
+
+    // 对每个白色节点进行DFS，但只检查Primary和Output节点
+    for (const auto& node_ptr : m_nodes)
+    {
+        Node* node = node_ptr.get();
+        if (colors[node] == 0 && (node->getPriority() == NodePriority::eOutput))
+        {
+            std::vector<Node*>              path;
+            std::vector<std::vector<Node*>> dummy_cycles;
+            if (hasCycleDFS(node, colors, path, dummy_cycles))
+            {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+std::vector<std::vector<Node*>> Dag::findAllCycles() const
+{
+    std::vector<std::vector<Node*>> cycles;
+    std::unordered_map<Node*, int>  colors; // 0: 白色, 1: 灰色, 2: 黑色
+
+    // 初始化所有节点为白色
+    for (const auto& node_ptr : m_nodes)
+    {
+        colors[node_ptr.get()] = 0;
+    }
+
+    // 对每个白色的Primary或Output节点进行DFS寻找环路
+    for (const auto& node_ptr : m_nodes)
+    {
+        Node* node = node_ptr.get();
+        if (colors[node] == 0 && (node->getPriority() == NodePriority::ePrimary ||
+                                  node->getPriority() == NodePriority::eOutput))
+        {
+            std::vector<Node*> path;
+            hasCycleDFS(node, colors, path, cycles);
+        }
+    }
+
+    return cycles;
+}
+
+bool Dag::validate() const
+{
+    // 检查基本完整性
+    for (const auto& node_ptr : m_nodes)
+    {
+        Node* node = node_ptr.get();
+
+        // 检查入边
+        for (Edge* edge : node->getIncomingEdges())
+        {
+            if (edge->getTo() != node)
+            {
+                return false; // 入边的目标节点不是当前节点
+            }
+        }
+
+        // 检查出边
+        for (Edge* edge : node->getOutgoingEdges())
+        {
+            if (edge->getFrom() != node)
+            {
+                return false; // 出边的源节点不是当前节点
+            }
+        }
+    }
+
+    // 检查是否有环路
+    if (detectCycles())
+    {
+        return false;
+    }
+
+    return true;
+}
+
+void Dag::culling(const std::vector<Node*>& outputNodes)
+{
+    // 所有节点默认为可剔除
+    //  从每个输出节点开始，标记需要保留的节点
+    std::unordered_map<Node*, bool> needed;
+    for (Node* outputNode : outputNodes)
+    {
+        markNeededNodesFromOutput(outputNode, needed);
+    }
+
+    // 将需要的节点标记为不可剔除
+    for (const auto& [node, isNeeded] : needed)
+    {
+        if (isNeeded)
+        {
+            node->setCull(false);
+        }
+    }
+}
+
+void Dag::markNeededNodesFromOutput(Node* outputNode, std::unordered_map<Node*, bool>& needed) const
+{
+    if (needed[outputNode]) return; // 已经处理过
+
+    needed[outputNode] = true;
+
+    // 如果是输出节点，查找连接的primary节点
+    if (outputNode->getPriority() == NodePriority::eOutput)
+    {
+        for (Edge* edge : outputNode->getIncomingEdges())
+        {
+            Node* connectedNode = edge->getFrom();
+            if (connectedNode->getPriority() == NodePriority::ePrimary)
+            {
+                markNeededNodesFromOutput(connectedNode, needed);
+            }
+        }
+    }
+    // 如果是primary节点，处理其输入
+    else if (outputNode->getPriority() == NodePriority::ePrimary)
+    {
+        for (Edge* edge : outputNode->getIncomingEdges())
+        {
+            Node* inputNode = edge->getFrom();
+            assert(inputNode->getPriority() == NodePriority::eSecondary);
+
+            {
+                // Secondary节点：找到最接近的primary输入
+                Node* closestPrimary = findClosestPrimaryInput(inputNode, outputNode);
+                if (closestPrimary)
+                {
+                    assert(closestPrimary->getPriority() == NodePriority::ePrimary);
+                    markNeededNodesFromOutput(closestPrimary, needed);
+                }
+                // Secondary节点本身也需要保留
+                needed[inputNode] = true;
+            }
+        }
+    }
+}
+
+Node* Dag::findClosestPrimaryInput(Node* secondaryNode, Node* outputNode) const
+{
+    Node*  closestPrimary = nullptr;
+    size_t maxId          = 0; // 找ID最大的（最近创建的）
+
+    for (Edge* edge : secondaryNode->getIncomingEdges())
+    {
+        Node* inputNode = edge->getFrom();
+        if (inputNode->getPriority() == NodePriority::ePrimary)
+        {
+            if (inputNode->getId() > maxId && inputNode->getId() < outputNode->getId())
+            {
+                maxId          = inputNode->getId();
+                closestPrimary = inputNode;
+            }
+        }
+    }
+
+    return closestPrimary;
+}
+
+std::vector<Node*> Dag::getLogicalDependencies(Node* node) const
+{
+    std::vector<Node*> dependencies;
+
+    if (node->getPriority() == NodePriority::eOutput)
+    {
+        // Output节点：返回连接的Primary节点
+        for (Edge* edge : node->getIncomingEdges())
+        {
+            Node* connectedNode = edge->getFrom();
+            if (connectedNode->getPriority() == NodePriority::ePrimary)
+            {
+                dependencies.push_back(connectedNode);
+            }
+        }
+    }
+    else if (node->getPriority() == NodePriority::ePrimary)
+    {
+        // Primary节点：返回通过Secondary节点连接的最近Primary节点
+        for (Edge* edge : node->getIncomingEdges())
+        {
+            Node* inputNode = edge->getFrom();
+            if (inputNode->getPriority() == NodePriority::eSecondary)
+            {
+                // 找到最接近的Primary输入
+                Node* closestPrimary = findClosestPrimaryInput(inputNode, node);
+                if (closestPrimary)
+                {
+                    dependencies.push_back(closestPrimary);
+                }
+            }
+        }
+    }
+    // Secondary节点不参与环路检测，返回空
+
+    return dependencies;
+}
+
+bool Dag::hasCycleDFS(Node* node, std::unordered_map<Node*, int>& colors, std::vector<Node*>& path,
+                      std::vector<std::vector<Node*>>& cycles) const
+{
+    colors[node] = 1; // 标记为灰色（正在处理）
+    path.push_back(node);
+
+    // 获取逻辑依赖的节点列表
+    std::vector<Node*> logicalDependencies = getLogicalDependencies(node);
+
+    for (Node* neighbor : logicalDependencies)
+    {
+        if (colors[neighbor] == 1) // 发现后向边，即环路
+        {
+            // 构造环路路径
+            std::vector<Node*> cycle;
+            bool               found = false;
+            for (auto it = path.rbegin(); it != path.rend(); ++it)
+            {
+                cycle.insert(cycle.begin(), *it);
+                if (*it == neighbor)
+                {
+                    found = true;
+                    break;
+                }
+            }
+            if (found)
+            {
+                cycles.push_back(cycle);
+            }
+            return true; // 找到环路就返回
+        }
+        else if (colors[neighbor] == 0) // 白色节点，继续DFS
+        {
+            if (hasCycleDFS(neighbor, colors, path, cycles))
+            {
+                return true; // 在子树中找到环路
+            }
+        }
+    }
+
+    path.pop_back();
+    colors[node] = 2; // 标记为黑色（已完成）
     return false;
 }
 } // namespace Play::RDG

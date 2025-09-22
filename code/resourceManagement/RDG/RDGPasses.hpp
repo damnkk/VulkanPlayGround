@@ -44,7 +44,10 @@ private:
 class PassNode : public Node
 {
 public:
-    PassNode(size_t id, std::string name) : Node(id), _name(std::move(name)) {}
+    PassNode(size_t id, std::string name) : Node(id), _name(std::move(name))
+    {
+        m_priority = NodePriority::ePrimary;
+    }
     void setRootSignature(const RootSignature& rootSignature)
     {
         _rootSignature = rootSignature;

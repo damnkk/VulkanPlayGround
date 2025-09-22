@@ -16,123 +16,93 @@ RDGTexture* RDGTextureCache::request(Texture* texture)
 
 RDGTextureBuilder& RDGTextureBuilder::Format(VkFormat format)
 {
-    _desc._format = format;
+    _textureNode->_info._format = format;
     return *this;
 }
 
 RDGTextureBuilder& RDGTextureBuilder::Type(VkImageType type)
 {
-    _desc._type = type;
+    _textureNode->_info._type = type;
     return *this;
 }
 
 RDGTextureBuilder& RDGTextureBuilder::Extent(VkExtent3D extent)
 {
-    _desc._extent = extent;
+    _textureNode->_info._extent = extent;
     return *this;
 }
 
 RDGTextureBuilder& RDGTextureBuilder::UsageFlags(VkImageUsageFlags usageFlags)
 {
-    _desc._usageFlags = usageFlags;
+    _textureNode->_info._usageFlags = usageFlags;
     return *this;
 }
 
 RDGTextureBuilder& RDGTextureBuilder::AspectFlags(VkImageAspectFlags aspectFlags)
 {
-    _desc._aspectFlags = aspectFlags;
+    _textureNode->_info._aspectFlags = aspectFlags;
     return *this;
 }
 
 RDGTextureBuilder& RDGTextureBuilder::SampleCount(VkSampleCountFlagBits sampleCount)
 {
-    _desc._sampleCount = sampleCount;
+    _textureNode->_info._sampleCount = sampleCount;
     return *this;
 }
 
 RDGTextureBuilder& RDGTextureBuilder::MipmapLevel(uint32_t mipmapLevel)
 {
-    _desc._mipmapLevel = mipmapLevel;
+    _textureNode->_info._mipmapLevel = mipmapLevel;
     return *this;
 }
 
 RDGTextureBuilder& RDGTextureBuilder::LayerCount(uint32_t layerCount)
 {
-    _desc._layerCount = layerCount;
+    _textureNode->_info._layerCount = layerCount;
     return *this;
 }
 
 TextureNodeRef RDGTextureBuilder::finish()
 {
-    auto* _texture = _textureNode->getRHI();
-    if (!_texture)
-    {
-        throw std::runtime_error("Texture pointer is null.");
-    }
-    _texture->Format()      = _desc._format;
-    _texture->Type()        = _desc._type;
-    _texture->Extent()      = _desc._extent;
-    _texture->UsageFlags()  = _desc._usageFlags;
-    _texture->AspectFlags() = _desc._aspectFlags;
-    _texture->SampleCount() = _desc._sampleCount;
-    _texture->MipLevel()    = _desc._mipmapLevel;
-    _texture->LayerCount()  = _desc._layerCount;
     return _textureNode;
 }
 
 RDGBufferBuilder& RDGBufferBuilder::Size(VkDeviceSize size)
 {
-    _desc._size = size;
+    _bufferNode->_info._size = size;
     return *this;
 }
 
 RDGBufferBuilder& RDGBufferBuilder::Range(VkDeviceSize range)
 {
-    _desc._range = range;
+    _bufferNode->_info._range = range;
     return *this;
 }
 
 RDGBufferBuilder& RDGBufferBuilder::UsageFlags(VkBufferUsageFlags usageFlags)
 {
-    _desc._usageFlags = usageFlags;
+    _bufferNode->_info._usageFlags = usageFlags;
     return *this;
 }
 
 RDGBufferBuilder& RDGBufferBuilder::Location(bool isDeviceLocal)
 {
-    _desc._location = isDeviceLocal ? BufferDesc::MemoryLocation::eDeviceLocal
-                                    : BufferDesc::MemoryLocation::eHostVisible;
+    _bufferNode->_info._location = isDeviceLocal
+                                       ? BufferNode::BufferDesc::MemoryLocation::eDeviceLocal
+                                       : BufferNode::BufferDesc::MemoryLocation::eHostVisible;
     return *this;
 }
 
 BufferNodeRef RDGBufferBuilder::finish()
 {
-    auto* _buffer = _bufferNode->getRHI();
-    if (!_buffer)
-    {
-        throw std::runtime_error("Buffer pointer is null.");
-    }
-    _buffer->UsageFlags()  = _desc._usageFlags;
-    _buffer->BufferSize()  = _desc._size;
-    _buffer->BufferRange() = _desc._range;
-    _buffer->BufferProperty() =
-        _desc._location == BufferDesc::MemoryLocation::eDeviceLocal
-            ? VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-            : VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
     return _bufferNode;
 }
 
-void BlackBoard::registTexture(std::string name, TextureNodeRef texture)
-{
-}
+void BlackBoard::registTexture(std::string name, TextureNodeRef texture) {}
 
-void BlackBoard::registBuffer(std::string name, BufferNodeRef buffer)
-{
-}
+void BlackBoard::registBuffer(std::string name, BufferNodeRef buffer) {}
 
-void BlackBoard::registPass(std::string name, PassNode* pass)
-{
-}
+void BlackBoard::registPass(std::string name, PassNode* pass) {}
 
 TextureNodeRef BlackBoard::getTexture(std::string name)
 {
@@ -179,7 +149,7 @@ RTPassBuilder RDGBuilder::createRTPass(std::string name)
 
 RDGTextureBuilder RDGBuilder::createTexture(std::string name)
 {
-    TextureNodeRef    node = _dag->addNode<TextureNode>(Texture::Create(name));
+    TextureNodeRef    node = _dag->addNode<TextureNode>(name);
     RDGTextureBuilder builder(this, node);
     _blackBoard.registTexture(name, node);
     return builder;
@@ -187,7 +157,7 @@ RDGTextureBuilder RDGBuilder::createTexture(std::string name)
 
 RDGBufferBuilder RDGBuilder::createBuffer(std::string name)
 {
-    BufferNodeRef    node = _dag->addNode<BufferNode>(Buffer::Create(name));
+    BufferNodeRef    node = _dag->addNode<BufferNode>(name);
     RDGBufferBuilder builder(this, node);
     _blackBoard.registBuffer(name, node);
     return builder;

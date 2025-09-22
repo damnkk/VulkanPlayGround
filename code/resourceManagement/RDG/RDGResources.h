@@ -26,33 +26,66 @@ class RenderDependencyGraph;
 class ResourceNode : public Node
 {
 public:
-    ResourceNode(size_t id) : Node(id) {}
+    ResourceNode(size_t id) : Node(id)
+    {
+        m_priority = NodePriority::eSecondary;
+    }
 };
 
 class TextureNode : public ResourceNode
 {
 public:
-    TextureNode(size_t id, Texture* rhiHandle) : ResourceNode(id), _rhi(rhiHandle) {}
+    TextureNode(size_t id, std::string name) : ResourceNode(id), _name(std::move(name)) {}
     Texture* getRHI()
     {
         return _rhi;
     }
 
+    struct TextureDesc
+    {
+        VkFormat          _format = VK_FORMAT_UNDEFINED;
+        VkImageType       _type   = VK_IMAGE_TYPE_2D;
+        VkExtent3D        _extent = {1, 1, 1};
+        VkImageUsageFlags _usageFlags =
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        VkImageAspectFlags    _aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
+        VkSampleCountFlagBits _sampleCount = VK_SAMPLE_COUNT_1_BIT;
+        uint32_t              _mipmapLevel = 1;
+        uint32_t              _layerCount  = 1;
+        std::string           _debugName;
+    } _info;
+
 private:
-    Texture* _rhi;
+    Texture*    _rhi;
+    std::string _name;
 };
 using TextureNodeRef = TextureNode*;
 class BufferNode : public ResourceNode
 {
 public:
-    BufferNode(size_t id, Buffer* rhiHandle) : ResourceNode(id), _rhi(rhiHandle) {}
+    BufferNode(size_t i, std::string name) : ResourceNode(i), _name(std::move(name)) {}
     Buffer* getRHI()
     {
         return _rhi;
     }
 
+    struct BufferDesc
+    {
+        VkBufferUsageFlags _usageFlags =
+            VK_BUFFER_USAGE_2_TRANSFER_DST_BIT | VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT;
+        VkDeviceSize _size  = 8;
+        VkDeviceSize _range = VK_WHOLE_SIZE;
+        enum class MemoryLocation : uint8_t
+        {
+            eDeviceLocal,
+            eHostVisible
+        } _location = MemoryLocation::eDeviceLocal;
+        std::string _debugName;
+    } _info;
+
 private:
-    Buffer* _rhi;
+    Buffer*     _rhi;
+    std::string _name;
 };
 using BufferNodeRef = BufferNode*;
 class BindlessTextureNode : public ResourceNode

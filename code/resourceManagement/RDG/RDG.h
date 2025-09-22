@@ -30,7 +30,7 @@ public:
     RDGTexture* request(Texture* texture);
 
 private:
-    std::unordered_map<Texture::TexMetaData, nvvk::Image> _textureMap;
+    std::unordered_map<TextureNode::TextureDesc, std::list<RDGTexture*>> _textureMap;
 };
 
 class RDGBuilder;
@@ -52,19 +52,7 @@ public:
     TextureNodeRef     finish();
 
 private:
-    struct TextureDesc
-    {
-        VkFormat          _format = VK_FORMAT_UNDEFINED;
-        VkImageType       _type   = VK_IMAGE_TYPE_2D;
-        VkExtent3D        _extent = {1, 1, 1};
-        VkImageUsageFlags _usageFlags =
-            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-        VkImageAspectFlags    _aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
-        VkSampleCountFlagBits _sampleCount = VK_SAMPLE_COUNT_1_BIT;
-        uint32_t              _mipmapLevel = 1;
-        uint32_t              _layerCount  = 1;
-        std::string           _debugName;
-    } _desc;
+    ;
     RDGBuilder*    _builder     = nullptr;
     TextureNodeRef _textureNode = nullptr;
 };
@@ -81,19 +69,6 @@ public:
     BufferNodeRef     finish();
 
 private:
-    struct BufferDesc
-    {
-        VkBufferUsageFlags _usageFlags =
-            VK_BUFFER_USAGE_2_TRANSFER_DST_BIT | VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT;
-        VkDeviceSize _size  = 1;
-        VkDeviceSize _range = VK_WHOLE_SIZE;
-        enum class MemoryLocation : uint8_t
-        {
-            eDeviceLocal,
-            eHostVisible
-        } _location = MemoryLocation::eDeviceLocal;
-        std::string _debugName;
-    } _desc;
     RDGBuilder*   _builder    = nullptr;
     BufferNodeRef _bufferNode = nullptr;
 };
@@ -130,10 +105,8 @@ public:
 
     TextureNodeRef getTexture(std::string name);
     BufferNodeRef  getBuffer(std::string name);
-
-    void execute(RenderPassNode* pass);
-    void execute(ComputePassNode* pass);
-    void execute(RTPassNode* pass);
+    void           compile();
+    void           execute();
 
     Dag* getDag()
     {
@@ -141,6 +114,9 @@ public:
     }
 
 private:
+    void execute(RenderPassNode* pass);
+    void execute(ComputePassNode* pass);
+    void execute(RTPassNode* pass);
     friend class RenderPassBuilder;
     friend class ComputePassBuilder;
     friend class RTPassBuilder;

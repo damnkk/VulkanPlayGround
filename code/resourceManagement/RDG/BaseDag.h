@@ -4,13 +4,13 @@
 #include <vector>
 #include <memory>
 #include <utility>
+#include <unordered_map>
 
 namespace Play::RDG
 {
 
 // 前向声明
 class Dag;
-class Node;
 class Edge;
 
 // EdgeType可以保留，用于给边附加语义，但它不再影响图的拓扑结构
@@ -22,7 +22,14 @@ enum class EdgeType
     eRenderAttachment
 };
 
-// Node: 非模板基类，保持不变
+enum class NodePriority
+{
+    ePrimary,
+    eSecondary,
+    eOutput
+};
+
+// template <NodePriority P = NodePriority::eSecondary>
 class Node
 {
 public:
@@ -41,13 +48,34 @@ public:
         return m_outgoing_edges;
     }
 
+    bool isCull() const
+    {
+        return m_is_cull;
+    }
+
+    void setCull(bool cull)
+    {
+        m_is_cull = cull;
+    }
+
+    NodePriority getPriority() const
+    {
+        return m_priority;
+    }
+
+    void setPriority(NodePriority priority)
+    {
+        m_priority = priority;
+    }
+
 protected:
-    Node(size_t id) : m_id(id) {}
+    Node(size_t id) : m_id(id), m_is_cull(true) {}
+    NodePriority m_priority = NodePriority::ePrimary;
 
 private:
     friend class Dag;
-
     size_t             m_id;
+    bool               m_is_cull = true; // 默认可以被剔除
     std::vector<Edge*> m_incoming_edges;
     std::vector<Edge*> m_outgoing_edges;
 };
@@ -84,6 +112,15 @@ private:
     Node*    m_from;
     Node*    m_to;
     EdgeType m_type;
+};
+
+class OutputNode : public Node
+{
+public:
+    OutputNode(size_t id) : Node(id)
+    {
+        m_priority = NodePriority::eOutput;
+    }
 };
 
 // Dag: 非模板类，内部逻辑简化
@@ -130,9 +167,28 @@ public:
 
     void clear();
 
+    // 环路检测接口
+    bool                            detectCycles() const;
+    std::vector<std::vector<Node*>> findAllCycles() const;
+    bool                            validate() const;
+
+    // 节点剔除接口 - 基于优先级和依赖关系分析
+    void culling(const std::vector<Node*>& outputNodes);
+
 private:
     // pathExists简化，不再需要处理虚拟边
     bool pathExists(Node* start, Node* end);
+
+    // 环路检测辅助函数
+    bool hasCycleDFS(Node* node, std::unordered_map<Node*, int>& colors, std::vector<Node*>& path,
+                     std::vector<std::vector<Node*>>& cycles) const;
+
+    // 剔除分析辅助函数
+    void markNeededNodesFromOutput(Node* outputNode, std::unordered_map<Node*, bool>& needed) const;
+    Node* findClosestPrimaryInput(Node* secondaryNode, Node* outputNode) const;
+
+    // 获取节点的逻辑依赖关系（用于环路检测）
+    std::vector<Node*> getLogicalDependencies(Node* node) const;
 
     std::vector<std::unique_ptr<Node>> m_nodes;
     std::vector<std::unique_ptr<Edge>> m_edges;
