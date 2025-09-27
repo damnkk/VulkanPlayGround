@@ -1,5 +1,6 @@
 #include "PlayApp.h"
 #include "nvvk/debug_util.hpp"
+#include "nvvk/check_error.hpp"
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include <backends/imgui_impl_vulkan.h>
 #include "stb_image.h"
@@ -29,10 +30,31 @@ void PlayElement::onAttach(nvapp::Application* app)
     TexturePool::Instance().init(65535, &PlayResourceManager::Instance());
     BufferPool::Instance().init(65535, &PlayResourceManager::Instance());
     ShaderManager::Instance().init(this);
+    _frameData.resize(_app->getFrameCycleSize());
+    for (size_t i = 0; i < _frameData.size(); ++i)
+    {
+        VkCommandPoolCreateInfo cmdPoolCI{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+        cmdPoolCI.queueFamilyIndex = _app->getQueue(0).familyIndex;
+        NVVK_CHECK(vkCreateCommandPool(_app->getDevice(), &cmdPoolCI, nullptr,
+                                       &_frameData[i].graphicsCmdPool));
+        cmdPoolCI.queueFamilyIndex = _app->getQueue(1).familyIndex;
+        NVVK_CHECK(vkCreateCommandPool(_app->getDevice(), &cmdPoolCI, nullptr,
+                                       &_frameData[i].computeCmdPool));
+        VkSemaphoreTypeCreateInfo timelineCreateInfo{VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO};
+        timelineCreateInfo.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+        timelineCreateInfo.initialValue  = 0;
 
-    m_profilerTimeline = _info.profilerManager->createTimeline({"graphics"});
-    m_profilerGpuTimer.init(m_profilerTimeline, app->getDevice(), app->getPhysicalDevice(),
-                            app->getQueue(0).familyIndex, true);
+        VkSemaphoreCreateInfo semaphoreCreateInfo{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+        semaphoreCreateInfo.flags = 0;
+        semaphoreCreateInfo.pNext = &timelineCreateInfo;
+
+        NVVK_CHECK(vkCreateSemaphore(_app->getDevice(), &semaphoreCreateInfo, nullptr,
+                                     &_frameData[i].semaphore));
+    }
+
+    _profilerTimeline = _info.profilerManager->createTimeline({"graphics"});
+    _profilerGpuTimer.init(_profilerTimeline, app->getDevice(), app->getPhysicalDevice(),
+                           app->getQueue(0).familyIndex, true);
     createGraphicsDescriptResource();
 
     switch (_renderMode)
@@ -58,8 +80,14 @@ void PlayElement::onDetach()
     BufferPool::Instance().deinit();
     PlayResourceManager::Instance().deInit();
     ShaderManager::Instance().deInit();
-    m_profilerGpuTimer.deinit();
-    _info.profilerManager->destroyTimeline(m_profilerTimeline);
+    _profilerGpuTimer.deinit();
+    _info.profilerManager->destroyTimeline(_profilerTimeline);
+    for (auto& frame : _frameData)
+    {
+        vkDestroySemaphore(_app->getDevice(), frame.semaphore, nullptr);
+        vkDestroyCommandPool(_app->getDevice(), frame.graphicsCmdPool, nullptr);
+        vkDestroyCommandPool(_app->getDevice(), frame.computeCmdPool, nullptr);
+    }
 }
 
 void PlayElement::onResize(VkCommandBuffer cmd, const VkExtent2D& size)
@@ -87,7 +115,7 @@ void PlayElement::onPreRender()
 
 void PlayElement::onRender(VkCommandBuffer cmd)
 {
-    VkClearColorValue       clearColor = {0.91, 0.23, 0.77, 1.0};
+    VkClearColorValue       clearColor = {{0.91f, 0.23f, 0.77f, 1.0f}};
     VkImageSubresourceRange range      = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
     nvvk::cmdImageMemoryBarrier(cmd, {_uiTexture->image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL});
@@ -95,6 +123,9 @@ void PlayElement::onRender(VkCommandBuffer cmd)
                          1, &range);
     nvvk::cmdImageMemoryBarrier(cmd, {_uiTexture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
+    PlayFrameData& frameData = _frameData[_app->getFrameCycleIndex()];
+    frameData.reset(getDevice());
+
     _renderer->RenderFrame();
     _renderer->OnPostRender();
 }

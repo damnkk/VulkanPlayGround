@@ -14,6 +14,29 @@ RDGTexture* RDGTextureCache::request(Texture* texture)
     return nullptr;
 }
 
+RDGTextureBuilder& RDGTextureBuilder::Import(Texture* texture, VkAccessFlags2 accessMask,
+                                             VkImageLayout layout, VkPipelineStageFlags2 stageMask,
+                                             uint32_t queueFamilyIndex)
+{
+    this->_textureNode->setRHI(texture);
+    this->_textureNode->_info._format      = texture->Format();
+    this->_textureNode->_info._type        = texture->Type();
+    this->_textureNode->_info._extent      = texture->Extent();
+    this->_textureNode->_info._usageFlags  = texture->UsageFlags();
+    this->_textureNode->_info._aspectFlags = texture->AspectFlags();
+    this->_textureNode->_info._sampleCount = texture->SampleCount();
+    this->_textureNode->_info._mipmapLevel = texture->MipLevel();
+    this->_textureNode->_info._layerCount  = texture->LayerCount();
+    InputPassNodeRef inputNode = this->_builder->createInputPass(texture->DebugName() + "_import");
+    TextureEdge*     edge =
+        this->_builder->getDag()->createEdge<TextureEdge>(inputNode, this->_textureNode);
+    edge->accessMask       = accessMask;
+    edge->layout           = layout;
+    edge->stageMask        = stageMask;
+    edge->queueFamilyIndex = queueFamilyIndex;
+    return *this;
+}
+
 RDGTextureBuilder& RDGTextureBuilder::Format(VkFormat format)
 {
     _textureNode->_info._format = format;
@@ -147,6 +170,12 @@ RTPassBuilder RDGBuilder::createRTPass(std::string name)
     return RTPassBuilder(this, nodeRef);
 }
 
+InputPassNodeRef RDGBuilder::createInputPass(std::string name)
+{
+    InputPassNodeRef nodeRef = _dag->addNode<InputPassNode>(std::move(name));
+    return nodeRef;
+}
+
 RDGTextureBuilder RDGBuilder::createTexture(std::string name)
 {
     TextureNodeRef    node = _dag->addNode<TextureNode>(name);
@@ -178,4 +207,9 @@ void RDGBuilder::execute(RenderPassNode* pass) {}
 void RDGBuilder::execute(ComputePassNode* pass) {}
 
 void RDGBuilder::execute(RTPassNode* pass) {}
+
+VkCommandBuffer RenderContext::acquireCmdBuffer()
+{
+    return VK_NULL_HANDLE;
+}
 } // namespace Play::RDG

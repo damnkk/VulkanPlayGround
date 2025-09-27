@@ -19,6 +19,7 @@ namespace RDG
 class RenderDependencyGraph;
 }
 
+// as same as "view"
 class PlayElement : public nvapp::IAppElement
 {
 public:
@@ -110,6 +111,21 @@ public:
         eRCount
     } _renderMode = eDeferRendering;
 
+    struct PlayFrameData
+    {
+        VkCommandPool                graphicsCmdPool;
+        VkCommandPool                computeCmdPool;
+        std::vector<VkCommandBuffer> cmdBuffers;
+        VkSemaphore                  semaphore;
+        uint64_t                     timelineValue = 0;
+        void                         reset(VkDevice device)
+        {
+            vkResetCommandPool(device, graphicsCmdPool, 0);
+            vkResetCommandPool(device, computeCmdPool, 0);
+            cmdBuffers.clear();
+        }
+    };
+
 protected:
     // SceneManager
     // RenderPassCache
@@ -128,8 +144,9 @@ private:
     friend class ShadingRateRenderer;
     friend class RDG::RenderDependencyGraph;
     nvapp::Application*        _app{};
-    nvutils::ProfilerTimeline* m_profilerTimeline{};
-    nvvk::ProfilerGpuTimer     m_profilerGpuTimer{};
+    nvutils::ProfilerTimeline* _profilerTimeline{};
+    nvvk::ProfilerGpuTimer     _profilerGpuTimer{};
+    std::vector<PlayFrameData> _frameData;
 };
 
 std::filesystem::path getBaseFilePath();

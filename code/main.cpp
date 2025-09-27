@@ -22,7 +22,7 @@
 
 class SampleElement : public nvapp::IAppElement
 {
-   public:
+public:
     struct Info
     {
         nvutils::ProfilerManager*   profilerManager{};
@@ -189,7 +189,7 @@ class SampleElement : public nvapp::IAppElement
         }
     }
 
-   private:
+private:
     Info m_info;
     bool m_animate = false;
 
@@ -246,6 +246,7 @@ int main(int argc, char** argv)
                 {VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME},
                 {VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME},
             },
+        .queues = {VK_QUEUE_GRAPHICS_BIT, VK_QUEUE_COMPUTE_BIT, VK_QUEUE_TRANSFER_BIT},
     };
     vkSetup.deviceExtensions.insert(vkSetup.deviceExtensions.end(), afterMathExtList.begin(),
                                     afterMathExtList.end());

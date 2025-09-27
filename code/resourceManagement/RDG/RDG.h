@@ -14,7 +14,6 @@ GPU resource when RDG compile.
 #include "functional"
 #include "array"
 #include "list"
-#include "RDGPreDefine.h"
 #include "PlayApp.h"
 #include "RDGResources.h"
 #include "RDGPasses.hpp"
@@ -41,6 +40,8 @@ public:
         : _builder(builder), _textureNode(node)
     {
     }
+    RDGTextureBuilder& Import(Texture* texture, VkAccessFlags2 accessMask, VkImageLayout layout,
+                              VkPipelineStageFlags2 stageMask, uint32_t queueFamilyIndex);
     RDGTextureBuilder& Format(VkFormat format);
     RDGTextureBuilder& Type(VkImageType type);
     RDGTextureBuilder& Extent(VkExtent3D extent);
@@ -52,7 +53,6 @@ public:
     TextureNodeRef     finish();
 
 private:
-    ;
     RDGBuilder*    _builder     = nullptr;
     TextureNodeRef _textureNode = nullptr;
 };
@@ -114,9 +114,12 @@ public:
     }
 
 private:
-    void execute(RenderPassNode* pass);
-    void execute(ComputePassNode* pass);
-    void execute(RTPassNode* pass);
+    friend class RDGTextureBuilder;
+    friend class RDGBufferBuilder;
+    InputPassNodeRef createInputPass(std::string name);
+    void             execute(RenderPassNode* pass);
+    void             execute(ComputePassNode* pass);
+    void             execute(RTPassNode* pass);
     friend class RenderPassBuilder;
     friend class ComputePassBuilder;
     friend class RTPassBuilder;
@@ -126,6 +129,20 @@ private:
     BlackBoard                                   _blackBoard;
     std::unordered_map<std::string, RDGTexture*> _textureMap;
     std::unordered_map<std::string, RDGBuffer*>  _bufferMap;
+};
+
+struct RenderContext
+{
+    PlayElement*                _element;
+    PlayElement::PlayFrameData* _frameData;
+    uint32_t                    _frameInFlightIndex;
+    VkCommandBuffer             acquireCmdBuffer();
+
+    std::vector<std::pair<VkSubmitInfo2, uint32_t>> _submitInfos;
+
+private:
+    VkCommandBuffer _currComputeCmdBuffer  = VK_NULL_HANDLE;
+    VkCommandBuffer _currGraphicsCmdBuffer = VK_NULL_HANDLE;
 };
 
 } // namespace Play::RDG

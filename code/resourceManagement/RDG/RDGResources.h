@@ -41,6 +41,11 @@ public:
         return _rhi;
     }
 
+    void setRHI(Texture* rhi)
+    {
+        _rhi = rhi;
+    }
+
     struct TextureDesc
     {
         VkFormat          _format = VK_FORMAT_UNDEFINED;

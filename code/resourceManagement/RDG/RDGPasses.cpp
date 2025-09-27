@@ -47,7 +47,10 @@ nvvk::DescriptorBindings& RootSignature::getBinding(uint32_t set)
 }
 
 const uint32_t ATTACHMENT_DEPTH_STENCIL = 0xFFFFFFFF;
-RenderPassBuilder::RenderPassBuilder(RDGBuilder* builder, RenderPassNodeRef node) {}
+RenderPassBuilder::RenderPassBuilder(RDGBuilder* builder, RenderPassNodeRef node)
+    : _builder(builder), _node(node), _dag(builder->getDag())
+{
+}
 
 RenderPassBuilder& RenderPassBuilder::color(uint32_t binding, TextureNodeRef texHandle,
                                             VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp,
@@ -110,8 +113,7 @@ RenderPassBuilder& RenderPassBuilder::read(uint32_t set, uint32_t binding, Textu
 
 RenderPassBuilder& RenderPassBuilder::read(uint32_t set, uint32_t binding, BufferNodeRef buffer,
                                            VkPipelineStageFlagBits2 stage,
-                                           uint32_t queueFamilyIndex, uint32_t offset,
-                                           uint32_t size)
+                                           uint32_t queueFamilyIndex, uint32_t offset, size_t size)
 {
     assert(buffer && buffer->getRHI()->isValid());
     BufferEdge* inputEdge = _dag->createEdge<BufferEdge>(buffer, this->_node, EdgeType::eBuffer);
@@ -161,7 +163,7 @@ RenderPassBuilder& RenderPassBuilder::readWrite(uint32_t set, uint32_t binding,
                                                 BufferNodeRef            buffer,
                                                 VkPipelineStageFlagBits2 stage,
                                                 uint32_t queueFamilyIndex, uint32_t offset,
-                                                uint32_t size)
+                                                size_t size)
 {
     assert(buffer && buffer->getRHI()->isValid());
     BufferEdge* inputEdge = _dag->createEdge<BufferEdge>(buffer, this->_node, EdgeType::eBuffer);
@@ -185,6 +187,11 @@ RenderPassBuilder& RenderPassBuilder::readWrite(uint32_t set, uint32_t binding,
     outputEdge->descriptorIndex = 0;
     outputEdge->offset          = offset;
     outputEdge->size            = size;
+    return *this;
+}
+
+RenderPassBuilder& RenderPassBuilder::execute(std::function<void(RenderContext& context)> func)
+{
     return *this;
 }
 
@@ -214,7 +221,7 @@ ComputePassBuilder& ComputePassBuilder::read(uint32_t set, uint32_t binding, Tex
 ComputePassBuilder& ComputePassBuilder::read(uint32_t set, uint32_t binding, BufferNodeRef buffer,
                                              VkPipelineStageFlagBits2 stage,
                                              uint32_t queueFamilyIndex, uint32_t offset,
-                                             uint32_t size)
+                                             size_t size)
 {
     assert(buffer && buffer->getRHI()->isValid());
     BufferEdge* inputEdge = _dag->createEdge<BufferEdge>(buffer, this->_node, EdgeType::eBuffer);
@@ -264,7 +271,7 @@ ComputePassBuilder& ComputePassBuilder::readWrite(uint32_t set, uint32_t binding
                                                   BufferNodeRef            buffer,
                                                   VkPipelineStageFlagBits2 stage,
                                                   uint32_t queueFamilyIndex, uint32_t offset,
-                                                  uint32_t size)
+                                                  size_t size)
 {
     assert(buffer && buffer->getRHI()->isValid());
     BufferEdge* inputEdge = _dag->createEdge<BufferEdge>(buffer, this->_node, EdgeType::eBuffer);
@@ -288,6 +295,11 @@ ComputePassBuilder& ComputePassBuilder::readWrite(uint32_t set, uint32_t binding
     outputEdge->descriptorIndex = 0;
     outputEdge->offset          = offset;
     outputEdge->size            = size;
+    return *this;
+}
+
+ComputePassBuilder& ComputePassBuilder::execute(std::function<void(RenderContext& context)> func)
+{
     return *this;
 }
 
@@ -315,7 +327,7 @@ RTPassBuilder& RTPassBuilder::read(uint32_t set, uint32_t binding, TextureNodeRe
 
 RTPassBuilder& RTPassBuilder::read(uint32_t set, uint32_t binding, BufferNodeRef buffer,
                                    VkPipelineStageFlagBits2 stage, uint32_t queueFamilyIndex,
-                                   uint32_t offset, uint32_t size)
+                                   uint32_t offset, size_t size)
 {
     assert(buffer && buffer->getRHI()->isValid());
     BufferEdge* inputEdge = _dag->createEdge<BufferEdge>(buffer, this->_node, EdgeType::eBuffer);
@@ -361,7 +373,7 @@ RTPassBuilder& RTPassBuilder::readWrite(uint32_t set, uint32_t binding, TextureN
 
 RTPassBuilder& RTPassBuilder::readWrite(uint32_t set, uint32_t binding, BufferNodeRef buffer,
                                         VkPipelineStageFlagBits2 stage, uint32_t queueFamilyIndex,
-                                        uint32_t offset, uint32_t size)
+                                        uint32_t offset, size_t size)
 {
     assert(buffer && buffer->getRHI()->isValid());
     BufferEdge* inputEdge = _dag->createEdge<BufferEdge>(buffer, this->_node, EdgeType::eBuffer);
@@ -385,6 +397,11 @@ RTPassBuilder& RTPassBuilder::readWrite(uint32_t set, uint32_t binding, BufferNo
     outputEdge->descriptorIndex = 0;
     outputEdge->offset          = offset;
     outputEdge->size            = size;
+    return *this;
+}
+
+RTPassBuilder& RTPassBuilder::execute(std::function<void(RenderContext& context)> func)
+{
     return *this;
 }
 } // namespace Play::RDG
