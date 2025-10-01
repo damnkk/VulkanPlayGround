@@ -112,14 +112,25 @@ public:
     {
         return _dag;
     }
+    struct RenderContext
+    {
+        PlayElement*                _element;
+        PlayElement::PlayFrameData* _frameData;
+        uint32_t                    _frameInFlightIndex;
+        PassNode*                   _prevPassNode;
+        VkCommandBuffer             _currCmdBuffer = VK_NULL_HANDLE;
+    };
 
-private:
+protected:
     friend class RDGTextureBuilder;
     friend class RDGBufferBuilder;
     InputPassNodeRef createInputPass(std::string name);
+    void             beforePassExecute();
     void             execute(RenderPassNode* pass);
     void             execute(ComputePassNode* pass);
     void             execute(RTPassNode* pass);
+    void             afterPassExecute();
+    RenderContext    prepareRenderContext(PassNode* pass);
     friend class RenderPassBuilder;
     friend class ComputePassBuilder;
     friend class RTPassBuilder;
@@ -129,22 +140,12 @@ private:
     BlackBoard                                   _blackBoard;
     std::unordered_map<std::string, RDGTexture*> _textureMap;
     std::unordered_map<std::string, RDGBuffer*>  _bufferMap;
-};
-
-struct RenderContext
-{
-    PlayElement*                _element;
-    PlayElement::PlayFrameData* _frameData;
-    uint32_t                    _frameInFlightIndex;
-    VkCommandBuffer             acquireCmdBuffer();
-
-    std::vector<std::pair<VkSubmitInfo2, uint32_t>> _submitInfos;
 
 private:
-    VkCommandBuffer _currComputeCmdBuffer  = VK_NULL_HANDLE;
-    VkCommandBuffer _currGraphicsCmdBuffer = VK_NULL_HANDLE;
+    RenderContext _renderContext;
+    std::vector<std::pair<VkSubmitInfo2, uint32_t>>
+        _submitInfos; // pairs of submit info and frame index
 };
-
 } // namespace Play::RDG
 
 #endif // RDG_H

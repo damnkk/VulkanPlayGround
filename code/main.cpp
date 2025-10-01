@@ -213,17 +213,10 @@ int main(int argc, char** argv)
     nvutils::ParameterRegistry parameterRegistry;
     nvutils::ParameterParser   parameterParser;
 
-    // setup sample element
-    SampleElement::Info sampleInfo = {
-        .profilerManager   = &profilerManager,
-        .parameterRegistry = &parameterRegistry,
-    };
-
     Play::PlayElement::Info playInfo = {
         .profilerManager   = &profilerManager,
         .parameterRegistry = &parameterRegistry,
     };
-    std::shared_ptr<SampleElement>     sampleElement = std::make_shared<SampleElement>(sampleInfo);
     std::shared_ptr<Play::PlayElement> playElement = std::make_shared<Play::PlayElement>(playInfo);
     // setup logger element, `true` means shown by default
     // we add it early so outputs are captured early on, you might want to defer this to a later

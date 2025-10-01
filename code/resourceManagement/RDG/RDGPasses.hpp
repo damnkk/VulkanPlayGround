@@ -52,17 +52,30 @@ public:
     {
         _rootSignature = rootSignature;
     }
+    enum Type
+    {
+        Render,
+        Compute,
+        RayTracing,
+        Input
+    };
+    virtual Type type() const = 0;
 
 private:
     RootSignature                _rootSignature;
     std::vector<VkDescriptorSet> _descSets;
     std::string                  _name;
+    Type                         _type;
 };
 
 class RenderPassNode : public PassNode
 {
 public:
     RenderPassNode(uint32_t id, std::string name) : PassNode(id, std::move(name)) {}
+    Type type() const override
+    {
+        return Type::Render;
+    }
 };
 
 using RenderPassNodeRef = RenderPassNode*;
@@ -71,6 +84,22 @@ class ComputePassNode : public PassNode
 {
 public:
     ComputePassNode(uint32_t id, std::string name) : PassNode(id, std::move(name)) {}
+    void setAsyncState(bool isAsync)
+    {
+        _isAsync = isAsync;
+    }
+    [[nodiscard]]
+    bool getAsyncState() const
+    {
+        return _isAsync;
+    }
+    Type type() const override
+    {
+        return Type::Compute;
+    }
+
+private:
+    bool _isAsync = false;
 };
 using ComputePassNodeRef = ComputePassNode*;
 
@@ -78,6 +107,10 @@ class RTPassNode : public PassNode
 {
 public:
     RTPassNode(uint32_t id, std::string name) : PassNode(id, std::move(name)) {}
+    Type type() const override
+    {
+        return Type::RayTracing;
+    }
 };
 using RTPassNodeRef = RTPassNode*;
 
@@ -85,6 +118,10 @@ class InputPassNode : public PassNode
 {
 public:
     InputPassNode(uint32_t id, std::string name) : PassNode(id, std::move(name)) {}
+    Type type() const override
+    {
+        return Type::Input;
+    }
 };
 using InputPassNodeRef = InputPassNode*;
 
@@ -149,6 +186,7 @@ public:
                                   uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                                   uint32_t offset = 0, size_t size = VK_WHOLE_SIZE);
     ComputePassBuilder& execute(std::function<void(RenderContext& context)> func);
+    ComputePassBuilder& async(bool isAsync = false);
     [[nodiscard]] ComputePassNodeRef finish() const
     {
         return _node;

@@ -92,6 +92,27 @@ public:
         return _app->getFrameCycleSize();
     }
 
+    struct PlayFrameData
+    {
+        VkCommandPool                graphicsCmdPool;
+        VkCommandPool                computeCmdPool;
+        std::vector<VkCommandBuffer> cmdBuffers;
+        VkSemaphore                  semaphore;
+        uint64_t                     timelineValue = 0;
+        void                         reset(VkDevice device)
+        {
+            vkResetCommandPool(device, graphicsCmdPool, 0);
+            vkResetCommandPool(device, computeCmdPool, 0);
+            cmdBuffers.clear();
+        }
+    };
+
+    inline PlayFrameData& getFrameData(uint32_t index)
+    {
+        assert(index < _frameData.size());
+        return _frameData[index];
+    }
+
     inline Texture*        CreateTexture(VkImageCreateInfo& info, VkCommandBuffer* cmd = nullptr);
     static inline Texture* AllocTexture();
     static inline void     FreeTexture(Texture* texture);
@@ -110,21 +131,6 @@ public:
         eDeferRendering,
         eRCount
     } _renderMode = eDeferRendering;
-
-    struct PlayFrameData
-    {
-        VkCommandPool                graphicsCmdPool;
-        VkCommandPool                computeCmdPool;
-        std::vector<VkCommandBuffer> cmdBuffers;
-        VkSemaphore                  semaphore;
-        uint64_t                     timelineValue = 0;
-        void                         reset(VkDevice device)
-        {
-            vkResetCommandPool(device, graphicsCmdPool, 0);
-            vkResetCommandPool(device, computeCmdPool, 0);
-            cmdBuffers.clear();
-        }
-    };
 
 protected:
     // SceneManager

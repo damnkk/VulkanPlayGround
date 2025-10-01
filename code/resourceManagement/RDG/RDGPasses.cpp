@@ -303,6 +303,12 @@ ComputePassBuilder& ComputePassBuilder::execute(std::function<void(RenderContext
     return *this;
 }
 
+ComputePassBuilder& ComputePassBuilder::async(bool isAsync)
+{
+    _node->setAsyncState(isAsync);
+    return *this;
+}
+
 RTPassBuilder::RTPassBuilder(RDGBuilder* builder, RTPassNodeRef node)
     : _builder(builder), _node(node), _dag(builder->getDag())
 {
