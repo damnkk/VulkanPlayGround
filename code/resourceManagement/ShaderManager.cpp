@@ -365,6 +365,7 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
             // TODO
         }
     }
+    return ~0U;
 }
 void                ShaderManager::eraseShaderByName(std::string name) {}
 void                ShaderManager::eraseShaderById(uint32_t id) {}

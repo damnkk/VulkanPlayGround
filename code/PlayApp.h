@@ -8,6 +8,9 @@
 #include "PlayAllocator.h"
 #include "resourceManagement/Resource.h"
 #include "utils.hpp"
+#include "DescriptorManager.h"
+#include "SceneManager.h"
+#include "nvvk/staging.hpp"
 namespace Play
 {
 class Renderer;
@@ -53,7 +56,6 @@ public:
     {
         return _app->getDevice();
     }
-
     inline VkPhysicalDevice getPhysicalDevice()
     {
         return _app->getPhysicalDevice();
@@ -90,6 +92,17 @@ public:
     inline uint32_t getFrameCycleSize() const
     {
         return _app->getFrameCycleSize();
+    }
+    inline bool isAsyncQueue() const
+    {
+        try
+        {
+            return _app->getQueue(2).queue != VK_NULL_HANDLE;
+        }
+        catch (const std::out_of_range&)
+        {
+            return false;
+        }
     }
 
     struct PlayFrameData
@@ -149,10 +162,13 @@ private:
     friend class VolumeRenderer;
     friend class ShadingRateRenderer;
     friend class RDG::RenderDependencyGraph;
+    friend class SceneManager;
     nvapp::Application*        _app{};
     nvutils::ProfilerTimeline* _profilerTimeline{};
     nvvk::ProfilerGpuTimer     _profilerGpuTimer{};
     std::vector<PlayFrameData> _frameData;
+    DescriptorManager          _descManager;
+    SceneManager               _sceneManager;
 };
 
 std::filesystem::path getBaseFilePath();

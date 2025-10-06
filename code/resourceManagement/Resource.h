@@ -131,6 +131,8 @@ class Buffer : public nvvk::Buffer
 public:
     static Buffer* Create();
     static Buffer* Create(std::string name);
+    static Buffer* Create(std::string name, VkBufferUsageFlags2 usage, VkDeviceSize size,
+                          VkMemoryPropertyFlags property);
     static void    Destroy(Buffer* buffer);
 
     struct BufferMetaData

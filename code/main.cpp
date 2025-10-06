@@ -228,18 +228,22 @@ int main(int argc, char** argv)
         { elementLogger->addLog(logLevel, "%s", text.c_str()); });
     VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures = {
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR, nullptr, VK_TRUE};
-
+    VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptorBufferFeatures = {
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
+        nullptr,
+        VK_TRUE,
+        VK_TRUE,
+        VK_TRUE,
+        VK_TRUE};
     nvvk::ContextInitInfo vkSetup{
         .instanceExtensions = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME},
 
-        .deviceExtensions =
-            {
-                {VK_KHR_SWAPCHAIN_EXTENSION_NAME},
-                {VK_KHR_RAY_QUERY_EXTENSION_NAME, &rayQueryFeatures},
-                {VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME},
-                {VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME},
-            },
-        .queues = {VK_QUEUE_GRAPHICS_BIT, VK_QUEUE_COMPUTE_BIT, VK_QUEUE_TRANSFER_BIT},
+        .deviceExtensions = {{VK_KHR_SWAPCHAIN_EXTENSION_NAME},
+                             {VK_KHR_RAY_QUERY_EXTENSION_NAME, &rayQueryFeatures},
+                             {VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME},
+                             {VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME},
+                             {VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME, &descriptorBufferFeatures}},
+        .queues           = {VK_QUEUE_GRAPHICS_BIT, VK_QUEUE_COMPUTE_BIT, VK_QUEUE_TRANSFER_BIT},
     };
     vkSetup.deviceExtensions.insert(vkSetup.deviceExtensions.end(), afterMathExtList.begin(),
                                     afterMathExtList.end());

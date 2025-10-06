@@ -57,6 +57,14 @@ Buffer* Buffer::Create(std::string name)
     return res;
 }
 
+Buffer* Buffer::Create(std::string name, VkBufferUsageFlags2 usage, VkDeviceSize size,
+                       VkMemoryPropertyFlags property)
+{
+    Buffer* res      = BufferPool::Instance().alloc(size, usage, property);
+    res->DebugName() = name;
+    return res;
+}
+
 void Buffer::Destroy(Buffer* buffer)
 {
     BufferPool::Instance().free(buffer);

@@ -100,7 +100,7 @@ Texture* TexturePool::alloc(uint32_t width, uint32_t height, VkFormat format,
         VkDependencyInfo info{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
         info.imageMemoryBarrierCount = 1;
         info.pImageMemoryBarriers    = &imageBarrier;
-        auto cmd                     = _manager->_element->getApp()->createTempCmdBuffer();
+        auto cmd                     = _manager->getTempCommandBuffer();
         vkCmdPipelineBarrier2(cmd, &info);
         _manager->submitAndWaitTempCmdBuffer(cmd);
     }
@@ -379,12 +379,17 @@ void PlayResourceManager::initialize(PlayElement* element)
     ::nvvk::ResourceAllocator::init(allocatorInfo);
     ::nvvk::StagingUploader::init(this);
     ::nvvk::SamplerPool::init(allocatorInfo.device);
+    VkCommandPoolCreateInfo cmdPoolInfo{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+    cmdPoolInfo.flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    cmdPoolInfo.queueFamilyIndex = element->getApp()->getQueue(2).familyIndex;
+    vkCreateCommandPool(element->getDevice(), &cmdPoolInfo, nullptr, &_tempCmdPool);
 }
 void PlayResourceManager::deInit()
 {
     ::nvvk::ResourceAllocator::deinit();
     ::nvvk::StagingUploader::deinit();
     ::nvvk::SamplerPool::deinit();
+    vkDestroyCommandPool(_element->getDevice(), _tempCmdPool, nullptr);
 }
 
 VkCommandBuffer PlayResourceManager::getTempCommandBuffer()
@@ -394,7 +399,22 @@ VkCommandBuffer PlayResourceManager::getTempCommandBuffer()
         LOGE("PlayResourceManager not initialized!");
         return VK_NULL_HANDLE;
     }
-    return _element->getApp()->createTempCmdBuffer();
+    if (_element->isAsyncQueue())
+    {
+        VkCommandBufferAllocateInfo allocInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+        allocInfo.commandPool        = _tempCmdPool;
+        allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandBufferCount = 1;
+        VkCommandBuffer cmd;
+        NVVK_CHECK(vkAllocateCommandBuffers(_element->getDevice(), &allocInfo, &cmd));
+        const VkCommandBufferBeginInfo beginInfo{
+            VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, nullptr,
+            VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, nullptr};
+        NVVK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
+        return cmd;
+    }
+    else
+        return _element->getApp()->createTempCmdBuffer();
 }
 void PlayResourceManager::submitAndWaitTempCmdBuffer(VkCommandBuffer cmd)
 {
@@ -403,7 +423,36 @@ void PlayResourceManager::submitAndWaitTempCmdBuffer(VkCommandBuffer cmd)
         LOGE("PlayResourceManager not initialized!");
         return;
     }
-    _element->getApp()->submitAndWaitTempCmdBuffer(cmd);
+    if (_element->isAsyncQueue())
+    {
+        NVVK_CHECK(vkEndCommandBuffer(cmd));
+        VkSubmitInfo submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers    = &cmd;
+        VkFenceCreateInfo fenceInfo{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+        VkFence           fence;
+        NVVK_CHECK(vkCreateFence(_element->getDevice(), &fenceInfo, nullptr, &fence));
+        NVVK_CHECK(vkQueueSubmit(_element->getApp()->getQueue(2).queue, 1, &submitInfo, fence));
+        NVVK_CHECK(vkWaitForFences(_element->getDevice(), 1, &fence, VK_TRUE, UINT64_MAX));
+        vkDestroyFence(_element->getDevice(), fence, nullptr);
+        vkFreeCommandBuffers(_element->getDevice(), _tempCmdPool, 1, &cmd);
+        return;
+    }
+    else
+        _element->getApp()->submitAndWaitTempCmdBuffer(cmd);
+}
+
+nvvk::ResourceAllocatorExport* PlayResourceManager::GetAsAllocator()
+{
+    return static_cast<nvvk::ResourceAllocatorExport*>(&Instance());
+}
+nvvk::StagingUploader* PlayResourceManager::GetAsStagingUploader()
+{
+    return static_cast<nvvk::StagingUploader*>(&Instance());
+}
+nvvk::SamplerPool* PlayResourceManager::GetAsSamplerPool()
+{
+    return static_cast<nvvk::SamplerPool*>(&Instance());
 }
 
 } // namespace Play

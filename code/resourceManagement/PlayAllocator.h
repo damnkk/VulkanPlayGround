@@ -122,12 +122,15 @@ protected:
     Buffer* alloc();
 };
 
-class PlayResourceManager : protected nvvk::ResourceAllocatorExport,
-                            protected nvvk::StagingUploader,
+class PlayResourceManager : public nvvk::ResourceAllocatorExport,
+                            public nvvk::StagingUploader,
                             public nvvk::SamplerPool
 {
 public:
-    static PlayResourceManager& Instance();
+    static PlayResourceManager&           Instance();
+    static nvvk::ResourceAllocatorExport* GetAsAllocator();
+    static nvvk::StagingUploader*         GetAsStagingUploader();
+    static nvvk::SamplerPool*             GetAsSamplerPool();
     PlayResourceManager() = default;
     ~PlayResourceManager() {}
     void            initialize(PlayElement* element);
@@ -138,6 +141,7 @@ public:
 private:
     friend class TexturePool;
     friend class BufferPool;
+    VkCommandPool _tempCmdPool{VK_NULL_HANDLE};
 
     PlayElement* _element{nullptr};
 };

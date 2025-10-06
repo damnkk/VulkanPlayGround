@@ -75,7 +75,16 @@ bool DescriptorSetManager::finish()
             layout = VK_NULL_HANDLE;
         }
     }
+    for(const auto& bindings:_bindingInfos){
+        assert(bindings.setIdx>=MAX_DESCRIPTOR_SETS::value);
+        auto& set = _descBindSet[bindings.setIdx];
+        set.addBinding(bindings.bindingIdx, bindings.descriptorType,
+                       bindings.descriptorCount, bindings.pipelineStageFlags);
+    }
     initLayout();
+    for(auto& set:_descBindSet){
+        set.clear();
+    }
     return _recordState;
 }
 
