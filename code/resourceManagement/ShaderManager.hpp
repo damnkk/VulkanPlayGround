@@ -4,6 +4,7 @@
 #include "nvvkglsl/glsl.hpp"
 #include "nvutils/file_mapping.hpp"
 #include "PlayAllocator.h"
+#include "spirv_reflect.h"
 
 namespace Play
 {
@@ -32,17 +33,19 @@ enum class ShaderType
     eCount
 };
 
+VkDescriptorType      spvToDescriptorType(SpvReflectDescriptorType type);
+VkPipelineStageFlags2 spvToVkStageFlags(SpvReflectShaderStageFlagBits flags);
+
 class PlayElement;
 struct ShaderModule
 {
     ShaderModule(uint32_t id) : _poolId(id) {}
 
-    VkShaderModule  _shaderModule;
-    uint32_t        _poolId;
-    ShaderType      _type;
-    const uint32_t* _spvCode;
-    uint32_t        _spvSize;
-    std::string     _name;
+    VkShaderModule       _shaderModule;
+    uint32_t             _poolId;
+    ShaderType           _type;
+    std::vector<uint8_t> _spvCode;
+    std::string          _name;
 };
 
 class ShaderPool : public BasePool<ShaderModule>
@@ -78,6 +81,7 @@ public:
     void                eraseShaderByModule(const ShaderModule& module);
     const ShaderModule* getShaderById(uint32_t id);
     const ShaderModule* getShaderByName(std::string name);
+    uint32_t            getShaderIdByName(std::string name);
 
     void deInit();
 

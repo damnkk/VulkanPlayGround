@@ -1,20 +1,38 @@
 #include "DeferRendering.h"
+#include "PlayApp.h"
+#include "renderpasses/PostProcessPass.h"
 namespace Play
 {
 
-DeferRenderer::DeferRenderer(PlayElement& app)
+DeferRenderer::DeferRenderer(PlayElement& view) : _rdgBuilder(&view)
 {
+    _outputTexture = view.getUITexture();
     // add pass
-    // graph compile(pass clip / parepare resource)
+    _passes.push_back(std::make_unique<PostProcessPass>(&view));
+    for (auto& pass : _passes)
+    {
+        pass->init();
+    }
+    for (auto& pass : _passes)
+    {
+        pass->build(&_rdgBuilder);
+    }
+    _rdgBuilder.compile();
 }
 DeferRenderer::~DeferRenderer() {}
 void DeferRenderer::OnPreRender() {}
 void DeferRenderer::OnPostRender() {}
 void DeferRenderer::RenderFrame()
 {
-    // invoke lambda function in RDGPass
+    _rdgBuilder.execute();
 }
 void DeferRenderer::SetScene(Scene* scene) {}
 void DeferRenderer::OnResize(int width, int height) {}
-void DeferRenderer::OnDestroy() {}
+void DeferRenderer::OnDestroy()
+{
+    for (auto& pass : _passes)
+    {
+        pass->deinit();
+    }
+}
 } // namespace Play

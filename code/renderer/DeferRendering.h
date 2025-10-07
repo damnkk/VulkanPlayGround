@@ -2,6 +2,7 @@
 #define DEFERRENDERING_H
 #include "Renderer.h"
 #include <bitset>
+#include "RDG/RDG.h"
 namespace Play
 {
 
@@ -14,10 +15,10 @@ enum class DeferPasses
     ePostProcessPass,
     eCount
 };
-
+class RenderPass;
 class DeferRenderer : public Renderer
 {
-   public:
+public:
     explicit DeferRenderer(PlayElement& element);
     ~DeferRenderer() override;
     void     OnPreRender() override;
@@ -31,8 +32,10 @@ class DeferRenderer : public Renderer
         return _outputTexture;
     }
 
+    RDG::RDGBuilder                          _rdgBuilder;
     Texture*                                 _outputTexture = nullptr;
     std::bitset<size_t(DeferPasses::eCount)> _renderPasses;
+    std::vector<std::unique_ptr<RenderPass>> _passes;
 };
 } // namespace Play
 #endif // DEFERRENDERING_H

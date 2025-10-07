@@ -88,6 +88,7 @@ void PlayElement::onDetach()
     _info.profilerManager->destroyTimeline(_profilerTimeline);
     _descManager.deinit();
     _sceneManager.deinit();
+    _renderer->OnDestroy();
     for (auto& frame : _frameData)
     {
         vkDestroySemaphore(_app->getDevice(), frame.semaphore, nullptr);
@@ -121,14 +122,16 @@ void PlayElement::onPreRender()
 
 void PlayElement::onRender(VkCommandBuffer cmd)
 {
-    VkClearColorValue       clearColor = {{0.91f, 0.23f, 0.77f, 1.0f}};
-    VkImageSubresourceRange range      = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-    nvvk::cmdImageMemoryBarrier(cmd, {_uiTexture->image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL});
-    vkCmdClearColorImage(cmd, _uiTexture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor,
-                         1, &range);
-    nvvk::cmdImageMemoryBarrier(cmd, {_uiTexture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
+    // VkClearColorValue       clearColor = {{0.91f, 0.23f, 0.77f, 1.0f}};
+    // VkImageSubresourceRange range      = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    // nvvk::cmdImageMemoryBarrier(cmd, {_uiTexture->image,
+    // VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    //                                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL});
+    // vkCmdClearColorImage(cmd, _uiTexture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    // &clearColor,
+    //                      1, &range);
+    // nvvk::cmdImageMemoryBarrier(cmd, {_uiTexture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    //                                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
     PlayFrameData& frameData = _frameData[_app->getFrameCycleIndex()];
     frameData.reset(getDevice());
 

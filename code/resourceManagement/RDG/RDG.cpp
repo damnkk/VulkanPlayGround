@@ -202,6 +202,9 @@ BufferNodeRef RDGBuilder::getBuffer(std::string name)
     return _blackBoard.getBuffer(name);
 }
 
+void RDGBuilder::compile() {}
+void RDGBuilder::execute() {}
+
 void RDGBuilder::execute(RenderPassNode* pass) {}
 
 void RDGBuilder::execute(ComputePassNode* pass) {}

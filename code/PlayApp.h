@@ -105,6 +105,11 @@ public:
         }
     }
 
+    inline Texture* getUITexture() const
+    {
+        return _uiTexture;
+    }
+
     struct PlayFrameData
     {
         VkCommandPool                graphicsCmdPool;
