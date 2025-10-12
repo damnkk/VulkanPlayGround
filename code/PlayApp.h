@@ -110,6 +110,11 @@ public:
         return _uiTexture;
     }
 
+    inline DescriptorManager& getDescriptorManager()
+    {
+        return _descManager;
+    }
+
     struct PlayFrameData
     {
         VkCommandPool                graphicsCmdPool;

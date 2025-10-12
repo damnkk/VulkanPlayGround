@@ -101,14 +101,15 @@ size_t DescriptorManager::getDescriptorSize(VkDescriptorType descriptorType)
     }
 }
 
-void DescriptorManager::updateDescriptor(DescriptorEnum setEnum, uint32_t bindingIdx,
+void DescriptorManager::updateDescriptor(uint32_t setIdx, uint32_t bindingIdx,
                                          VkDescriptorType descriptorType, uint32_t descriptorCount,
                                          Buffer* buffers)
 {
-    assert(_descriptorOffsetInfo[static_cast<size_t>(setEnum)].find(bindingIdx) !=
-           _descriptorOffsetInfo[static_cast<size_t>(setEnum)].end()); // ensure the binding exists
-    uint8_t* descBufferPtr = _descBuffer->mapping + DescriptorSetOffsetMap[setEnum] +
-                             _descriptorOffsetInfo[static_cast<size_t>(setEnum)][bindingIdx];
+    assert(_descriptorOffsetInfo[setIdx].find(bindingIdx) !=
+           _descriptorOffsetInfo[setIdx].end()); // ensure the binding exists
+    uint8_t* descBufferPtr = _descBuffer->mapping +
+                             DescriptorSetOffsetMap[static_cast<DescriptorEnum>(setIdx)] +
+                             _descriptorOffsetInfo[setIdx][bindingIdx];
     size_t descSize = getDescriptorSize(descriptorType);
     for (int i = 0; i < descriptorCount; ++i)
     {
@@ -125,16 +126,15 @@ void DescriptorManager::updateDescriptor(DescriptorEnum setEnum, uint32_t bindin
     }
 }
 
-void DescriptorManager::updateDescriptor(DescriptorEnum setEnum, uint32_t bindingIdx,
+void DescriptorManager::updateDescriptor(uint32_t setEnum, uint32_t bindingIdx,
                                          VkDescriptorType descriptorType, uint32_t descriptorCount,
                                          nvvk::Image* images)
 {
-    assert(
-        _descriptorOffsetInfo[static_cast<uint32_t>(setEnum)].find(bindingIdx) !=
-        _descriptorOffsetInfo[static_cast<uint32_t>(setEnum)].end()); // ensure the binding exists
+    assert(_descriptorOffsetInfo[setEnum].find(bindingIdx) !=
+           _descriptorOffsetInfo[setEnum].end()); // ensure the binding exists
     uint8_t* descBufferPtr = _descBuffer->mapping +
                              DescriptorSetOffsetMap[static_cast<DescriptorEnum>(setEnum)] +
-                             _descriptorOffsetInfo[static_cast<size_t>(setEnum)][bindingIdx];
+                             _descriptorOffsetInfo[setEnum][bindingIdx];
     size_t descSize = getDescriptorSize(descriptorType);
     for (uint32_t i = 0; i < descriptorCount; ++i)
     {
@@ -163,23 +163,22 @@ void DescriptorManager::updateDescriptor(DescriptorEnum setEnum, uint32_t bindin
     }
 }
 
-void DescriptorManager::updateDescriptor(DescriptorEnum setEnum, uint32_t bindingIdx,
+void DescriptorManager::updateDescriptor(uint32_t setEnum, uint32_t bindingIdx,
                                          VkDescriptorType descriptorType, uint32_t descriptorCount,
                                          const VkBufferView* bufferViews)
 {
     LOGW("Not implemented yet\n");
 }
 
-void DescriptorManager::updateDescriptor(DescriptorEnum setEnum, uint32_t bindingIdx,
+void DescriptorManager::updateDescriptor(uint32_t setEnum, uint32_t bindingIdx,
                                          VkDescriptorType descriptorType, uint32_t descriptorCount,
                                          nvvk::AccelerationStructure* accels)
 {
-    assert(
-        _descriptorOffsetInfo[static_cast<uint32_t>(setEnum)].find(bindingIdx) !=
-        _descriptorOffsetInfo[static_cast<uint32_t>(setEnum)].end()); // ensure the binding exists
+    assert(_descriptorOffsetInfo[setEnum].find(bindingIdx) !=
+           _descriptorOffsetInfo[setEnum].end()); // ensure the binding exists
     uint8_t* descBufferPtr = _descBuffer->mapping +
                              DescriptorSetOffsetMap[static_cast<DescriptorEnum>(setEnum)] +
-                             _descriptorOffsetInfo[static_cast<size_t>(setEnum)][bindingIdx];
+                             _descriptorOffsetInfo[setEnum][bindingIdx];
     size_t descSize = getDescriptorSize(descriptorType);
     for (uint32_t i = 0; i < descriptorCount; ++i)
     {

@@ -8,6 +8,7 @@
 #include "resourceManagement/Resource.h"
 #include "ShaderManager.hpp"
 #include "PlayAllocator.h"
+#include "PipelineCacheManager.h"
 namespace Play
 {
 struct ScopeTimer
@@ -32,6 +33,7 @@ void PlayElement::onAttach(nvapp::Application* app)
     BufferPool::Instance().init(65535, &PlayResourceManager::Instance());
     ShaderManager::Instance().init(this);
     _descManager.init(_app->getPhysicalDevice(), _app->getDevice());
+    PipelineCacheManager::Instance().init(this);
     _frameData.resize(_app->getFrameCycleSize());
     for (size_t i = 0; i < _frameData.size(); ++i)
     {
@@ -89,6 +91,7 @@ void PlayElement::onDetach()
     _descManager.deinit();
     _sceneManager.deinit();
     _renderer->OnDestroy();
+    PipelineCacheManager::Instance().deinit();
     for (auto& frame : _frameData)
     {
         vkDestroySemaphore(_app->getDevice(), frame.semaphore, nullptr);

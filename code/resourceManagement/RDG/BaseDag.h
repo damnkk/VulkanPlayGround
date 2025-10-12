@@ -22,6 +22,18 @@ enum class EdgeType
     eRenderAttachment
 };
 
+enum class NodeType
+{
+    eGeneral,
+    eRenderPass,
+    eComputePass,
+    eRTPass,
+    eTexture,
+    eBuffer,
+    eInput,
+    eOutput
+};
+
 enum class NodePriority
 {
     ePrimary,
@@ -69,12 +81,13 @@ public:
     }
 
 protected:
-    Node(size_t id) : m_id(id), m_is_cull(true) {}
+    Node(size_t id, NodeType type = NodeType::eGeneral) : m_id(id), m_type(type), m_is_cull(true) {}
     NodePriority m_priority = NodePriority::ePrimary;
 
 private:
     friend class Dag;
     size_t             m_id;
+    NodeType           m_type;
     bool               m_is_cull = true; // 默认可以被剔除
     std::vector<Edge*> m_incoming_edges;
     std::vector<Edge*> m_outgoing_edges;

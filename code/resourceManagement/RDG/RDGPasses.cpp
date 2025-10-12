@@ -3,48 +3,6 @@
 
 namespace Play::RDG
 {
-RootSignature::RootSignature() {}
-
-RootSignature::~RootSignature() {}
-
-void RootSignature::addBinding(uint32_t set, uint32_t binding, VkDescriptorType descriptorType,
-                               uint32_t descriptorCount, VkShaderStageFlags stageFlags,
-                               const VkSampler*         pImmutableSamplers,
-                               VkDescriptorBindingFlags bindingFlags)
-{
-    if (set >= _descritorBindings.size())
-    {
-        _descritorBindings.resize(set + 1);
-    }
-    auto& bindings = _descritorBindings[set];
-    bindings.addBinding(binding, descriptorType, descriptorCount, stageFlags, pImmutableSamplers,
-                        bindingFlags);
-}
-
-void RootSignature::clear()
-{
-    for (auto& bindings : _descritorBindings)
-    {
-        bindings.clear();
-    }
-}
-
-void RootSignature::clear(uint32_t set)
-{
-    if (set < _descritorBindings.size())
-    {
-        _descritorBindings[set].clear();
-    }
-}
-
-nvvk::DescriptorBindings& RootSignature::getBinding(uint32_t set)
-{
-    if (set >= _descritorBindings.size())
-    {
-        _descritorBindings.resize(set + 1);
-    }
-    return _descritorBindings[set];
-}
 
 const uint32_t ATTACHMENT_DEPTH_STENCIL = 0xFFFFFFFF;
 RenderPassBuilder::RenderPassBuilder(RDGBuilder* builder, RenderPassNodeRef node)
@@ -52,23 +10,21 @@ RenderPassBuilder::RenderPassBuilder(RDGBuilder* builder, RenderPassNodeRef node
 {
 }
 
-RenderPassBuilder& RenderPassBuilder::color(uint32_t binding, TextureNodeRef texHandle,
+RenderPassBuilder& RenderPassBuilder::color(uint32_t slotIdx, TextureNodeRef texHandle,
                                             VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp,
                                             VkImageLayout initLayout, VkImageLayout finalLayout)
 {
-    assert(texHandle && texHandle->getRHI()->isValid());
-
     AttachmentEdge* inputEdge =
         _dag->createEdge<AttachmentEdge>(texHandle, this->_node, EdgeType::eRenderAttachment);
     inputEdge->layout              = initLayout;
     inputEdge->attachmentOp.loadOp = loadOp;
-    inputEdge->slotIdx             = binding;
+    inputEdge->slotIdx             = slotIdx;
 
     AttachmentEdge* outputEdge =
         _dag->createEdge<AttachmentEdge>(this->_node, texHandle, EdgeType::eRenderAttachment);
     outputEdge->layout               = finalLayout;
     outputEdge->attachmentOp.storeOp = storeOp;
-    outputEdge->slotIdx              = binding;
+    outputEdge->slotIdx              = slotIdx;
     return *this;
 }
 
@@ -78,7 +34,6 @@ RenderPassBuilder& RenderPassBuilder::depthStencil(TextureNodeRef      texHandle
                                                    VkImageLayout       initLayout,
                                                    VkImageLayout       finalLayout)
 {
-    assert(texHandle && texHandle->getRHI()->isValid());
     AttachmentEdge* inputEdge =
         _dag->createEdge<AttachmentEdge>(texHandle, this->_node, EdgeType::eRenderAttachment);
     inputEdge->layout              = initLayout;
@@ -97,7 +52,6 @@ RenderPassBuilder& RenderPassBuilder::read(uint32_t set, uint32_t binding, Textu
                                            VkPipelineStageFlagBits2 stage,
                                            uint32_t                 queueFamilyIndex)
 {
-    assert(texture && texture->getRHI()->isValid());
     TextureEdge* inputEdge =
         _dag->createEdge<TextureEdge>(texture, this->_node, EdgeType::eTexture);
     inputEdge->layout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -115,7 +69,6 @@ RenderPassBuilder& RenderPassBuilder::read(uint32_t set, uint32_t binding, Buffe
                                            VkPipelineStageFlagBits2 stage,
                                            uint32_t queueFamilyIndex, uint32_t offset, size_t size)
 {
-    assert(buffer && buffer->getRHI()->isValid());
     BufferEdge* inputEdge = _dag->createEdge<BufferEdge>(buffer, this->_node, EdgeType::eBuffer);
     inputEdge->accessMask = VK_ACCESS_2_SHADER_READ_BIT;
     inputEdge->stageMask  = stage;
@@ -134,7 +87,6 @@ RenderPassBuilder& RenderPassBuilder::readWrite(uint32_t set, uint32_t binding,
                                                 VkPipelineStageFlagBits2 stage,
                                                 uint32_t                 queueFamilyIndex)
 {
-    assert(texture && texture->getRHI()->isValid());
     TextureEdge* inputEdge =
         _dag->createEdge<TextureEdge>(texture, this->_node, EdgeType::eTexture);
     inputEdge->layout           = VK_IMAGE_LAYOUT_GENERAL;
@@ -165,7 +117,6 @@ RenderPassBuilder& RenderPassBuilder::readWrite(uint32_t set, uint32_t binding,
                                                 uint32_t queueFamilyIndex, uint32_t offset,
                                                 size_t size)
 {
-    assert(buffer && buffer->getRHI()->isValid());
     BufferEdge* inputEdge = _dag->createEdge<BufferEdge>(buffer, this->_node, EdgeType::eBuffer);
     inputEdge->accessMask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
     inputEdge->stageMask  = stage;
@@ -192,6 +143,7 @@ RenderPassBuilder& RenderPassBuilder::readWrite(uint32_t set, uint32_t binding,
 
 RenderPassBuilder& RenderPassBuilder::execute(std::function<void(RenderContext& context)> func)
 {
+    _node->setFunc(func);
     return *this;
 }
 
@@ -204,7 +156,6 @@ ComputePassBuilder& ComputePassBuilder::read(uint32_t set, uint32_t binding, Tex
                                              VkPipelineStageFlagBits2 stage,
                                              uint32_t                 queueFamilyIndex)
 {
-    assert(texture && texture->getRHI()->isValid());
     TextureEdge* inputEdge =
         _dag->createEdge<TextureEdge>(texture, this->_node, EdgeType::eTexture);
     inputEdge->layout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -223,7 +174,6 @@ ComputePassBuilder& ComputePassBuilder::read(uint32_t set, uint32_t binding, Buf
                                              uint32_t queueFamilyIndex, uint32_t offset,
                                              size_t size)
 {
-    assert(buffer && buffer->getRHI()->isValid());
     BufferEdge* inputEdge = _dag->createEdge<BufferEdge>(buffer, this->_node, EdgeType::eBuffer);
     inputEdge->accessMask = VK_ACCESS_2_SHADER_READ_BIT;
     inputEdge->stageMask  = stage;
@@ -242,7 +192,6 @@ ComputePassBuilder& ComputePassBuilder::readWrite(uint32_t set, uint32_t binding
                                                   VkPipelineStageFlagBits2 stage,
                                                   uint32_t                 queueFamilyIndex)
 {
-    assert(texture && texture->getRHI()->isValid());
     TextureEdge* inputEdge =
         _dag->createEdge<TextureEdge>(texture, this->_node, EdgeType::eTexture);
     inputEdge->layout           = VK_IMAGE_LAYOUT_GENERAL;
@@ -273,7 +222,6 @@ ComputePassBuilder& ComputePassBuilder::readWrite(uint32_t set, uint32_t binding
                                                   uint32_t queueFamilyIndex, uint32_t offset,
                                                   size_t size)
 {
-    assert(buffer && buffer->getRHI()->isValid());
     BufferEdge* inputEdge = _dag->createEdge<BufferEdge>(buffer, this->_node, EdgeType::eBuffer);
     inputEdge->accessMask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
     inputEdge->stageMask  = stage;
@@ -300,6 +248,7 @@ ComputePassBuilder& ComputePassBuilder::readWrite(uint32_t set, uint32_t binding
 
 ComputePassBuilder& ComputePassBuilder::execute(std::function<void(RenderContext& context)> func)
 {
+    _node->setFunc(func);
     return *this;
 }
 
@@ -317,7 +266,6 @@ RTPassBuilder::RTPassBuilder(RDGBuilder* builder, RTPassNodeRef node)
 RTPassBuilder& RTPassBuilder::read(uint32_t set, uint32_t binding, TextureNodeRef texture,
                                    VkPipelineStageFlagBits2 stage, uint32_t queueFamilyIndex)
 {
-    assert(texture && texture->getRHI()->isValid());
     TextureEdge* inputEdge =
         _dag->createEdge<TextureEdge>(texture, this->_node, EdgeType::eTexture);
     inputEdge->layout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -335,7 +283,6 @@ RTPassBuilder& RTPassBuilder::read(uint32_t set, uint32_t binding, BufferNodeRef
                                    VkPipelineStageFlagBits2 stage, uint32_t queueFamilyIndex,
                                    uint32_t offset, size_t size)
 {
-    assert(buffer && buffer->getRHI()->isValid());
     BufferEdge* inputEdge = _dag->createEdge<BufferEdge>(buffer, this->_node, EdgeType::eBuffer);
     inputEdge->accessMask = VK_ACCESS_2_SHADER_READ_BIT;
     inputEdge->stageMask  = stage;
@@ -352,7 +299,6 @@ RTPassBuilder& RTPassBuilder::read(uint32_t set, uint32_t binding, BufferNodeRef
 RTPassBuilder& RTPassBuilder::readWrite(uint32_t set, uint32_t binding, TextureNodeRef texture,
                                         VkPipelineStageFlagBits2 stage, uint32_t queueFamilyIndex)
 {
-    assert(texture && texture->getRHI()->isValid());
     TextureEdge* inputEdge =
         _dag->createEdge<TextureEdge>(texture, this->_node, EdgeType::eTexture);
     inputEdge->layout           = VK_IMAGE_LAYOUT_GENERAL;
@@ -381,7 +327,6 @@ RTPassBuilder& RTPassBuilder::readWrite(uint32_t set, uint32_t binding, BufferNo
                                         VkPipelineStageFlagBits2 stage, uint32_t queueFamilyIndex,
                                         uint32_t offset, size_t size)
 {
-    assert(buffer && buffer->getRHI()->isValid());
     BufferEdge* inputEdge = _dag->createEdge<BufferEdge>(buffer, this->_node, EdgeType::eBuffer);
     inputEdge->accessMask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
     inputEdge->stageMask  = stage;
@@ -408,6 +353,7 @@ RTPassBuilder& RTPassBuilder::readWrite(uint32_t set, uint32_t binding, BufferNo
 
 RTPassBuilder& RTPassBuilder::execute(std::function<void(RenderContext& context)> func)
 {
+    _node->setFunc(func);
     return *this;
 }
 } // namespace Play::RDG

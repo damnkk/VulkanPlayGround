@@ -26,7 +26,7 @@ class RenderDependencyGraph;
 class ResourceNode : public Node
 {
 public:
-    ResourceNode(size_t id) : Node(id)
+    ResourceNode(size_t id, NodeType type) : Node(id, type)
     {
         m_priority = NodePriority::eSecondary;
     }
@@ -35,7 +35,10 @@ public:
 class TextureNode : public ResourceNode
 {
 public:
-    TextureNode(size_t id, std::string name) : ResourceNode(id), _name(std::move(name)) {}
+    TextureNode(size_t id, std::string name)
+        : ResourceNode(id, NodeType::eTexture), _name(std::move(name))
+    {
+    }
     Texture* getRHI()
     {
         return _rhi;
@@ -68,10 +71,18 @@ using TextureNodeRef = TextureNode*;
 class BufferNode : public ResourceNode
 {
 public:
-    BufferNode(size_t i, std::string name) : ResourceNode(i), _name(std::move(name)) {}
+    BufferNode(size_t i, std::string name)
+        : ResourceNode(i, NodeType::eBuffer), _name(std::move(name))
+    {
+    }
     Buffer* getRHI()
     {
         return _rhi;
+    }
+
+    void setRHI(Buffer* rhi)
+    {
+        _rhi = rhi;
     }
 
     struct BufferDesc

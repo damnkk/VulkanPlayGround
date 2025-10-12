@@ -4,6 +4,7 @@
 #include "nvvk/check_error.hpp"
 #include "nvvk/debug_util.hpp"
 #include "nvvk/mipmaps.hpp"
+#include "stb_image.h"
 namespace Play
 {
 TexturePool& TexturePool::Instance()
@@ -242,17 +243,101 @@ Texture* TexturePool::allocCube(uint32_t size, VkFormat format, VkImageUsageFlag
 }
 
 Texture* TexturePool::alloc(const void* data, size_t dataSize, uint32_t width, uint32_t height,
-                            VkFormat format, VkImageUsageFlags usage, uint32_t mipLevels)
+                            VkFormat format, VkImageUsageFlags usage, uint32_t mipLevels,
+                            VkImageLayout layout)
 {
-    std::lock_guard<std::mutex> lock(_mutex);
-    Texture* texture = alloc(width, height, format, usage, VK_IMAGE_LAYOUT_UNDEFINED, mipLevels);
-    auto     cmd     = _manager->getTempCommandBuffer();
-    _manager->appendImage(*texture, dataSize, data, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    Texture* texture =
+        alloc(width, height, format, usage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels);
+    auto cmd = _manager->getTempCommandBuffer();
+    _manager->appendImage(*texture, dataSize, data, layout);
     _manager->cmdUploadAppended(cmd);
-    nvvk::cmdGenerateMipmaps(cmd, texture->image, {width, height}, mipLevels);
+    nvvk::cmdGenerateMipmaps(cmd, texture->image, {width, height}, mipLevels, 1,
+                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     _manager->submitAndWaitTempCmdBuffer(cmd);
     _manager->acquireSampler(texture->descriptor.sampler);
     return texture;
+}
+
+Texture* TexturePool::alloc(const std::filesystem::path& imagePath, VkImageLayout finalLayout,
+                            uint32_t mipLevels, bool isSrgb)
+{
+    const std::string imageFileContents = nvutils::loadFile(imagePath);
+    if (imageFileContents.empty())
+    {
+        LOGW("File was empty or could not be opened: %s\n",
+             nvutils::utf8FromPath(imagePath).c_str());
+        return nullptr;
+    }
+    const stbi_uc* imageFileData = reinterpret_cast<const stbi_uc*>(imageFileContents.data());
+    if (imageFileContents.size() > std::numeric_limits<int>::max())
+    {
+        LOGW("File too large for stb_image to read: %s\n",
+             nvutils::utf8FromPath(imagePath).c_str());
+        return nullptr;
+    }
+    const int imageFileSize = static_cast<int>(imageFileContents.size());
+
+    // Read the header once to check how many channels it has. We can't trivially use
+    // RGB/VK_FORMAT_R8G8B8_UNORM and need to set requiredComponents=4 in such cases.
+    int w = 0, h = 0, comp = 0;
+    if (!stbi_info_from_memory(imageFileData, imageFileSize, &w, &h, &comp))
+    {
+        LOGW("Failed to get info for %s\n", nvutils::utf8FromPath(imagePath).c_str());
+        return nullptr;
+    }
+
+    // Read the header again to check if it has 16 bit data, e.g. for a heightmap.
+    const bool is16Bit = stbi_is_16_bit_from_memory(imageFileData, imageFileSize);
+
+    // Load the image
+    stbi_uc* data = nullptr;
+    size_t   bytes_per_pixel;
+    int      requiredComponents = comp == 1 ? 1 : 4;
+    if (is16Bit)
+    {
+        stbi_us* data16 = stbi_load_16_from_memory(imageFileData, imageFileSize, &w, &h, &comp,
+                                                   requiredComponents);
+        bytes_per_pixel = sizeof(*data16) * requiredComponents;
+        data            = reinterpret_cast<stbi_uc*>(data16);
+    }
+    else
+    {
+        data =
+            stbi_load_from_memory(imageFileData, imageFileSize, &w, &h, &comp, requiredComponents);
+        bytes_per_pixel = sizeof(*data) * requiredComponents;
+    }
+
+    // Make a copy of the image data to be uploaded to vulkan later
+    if (data && w > 0 && h > 0)
+    {
+        VkFormat format = VK_FORMAT_UNDEFINED;
+        switch (requiredComponents)
+        {
+            case 1:
+                format = is16Bit ? VK_FORMAT_R16_UNORM : VK_FORMAT_R8_UNORM;
+                break;
+            case 4:
+                format = is16Bit  ? VK_FORMAT_R16G16B16A16_UNORM
+                         : isSrgb ? VK_FORMAT_R8G8B8A8_SRGB
+                                  : VK_FORMAT_R8G8B8A8_UNORM;
+
+                break;
+        }
+
+        VkDeviceSize buffer_size = static_cast<VkDeviceSize>(w) * h * bytes_per_pixel;
+        Texture*     texture     = alloc(data, buffer_size, (uint32_t) w, (uint32_t) h, format,
+                                         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                                             VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                                         mipLevels, finalLayout);
+
+        texture->DebugName() = nvutils::utf8FromPath(imagePath);
+        stbi_image_free(data);
+        return texture;
+    }
+    VkImageViewCreateInfo test;
+    VkDescriptorImageInfo testt;
+    stbi_image_free(data);
+    return nullptr;
 }
 
 void TexturePool::deinit()
@@ -386,9 +471,9 @@ void PlayResourceManager::initialize(PlayElement* element)
 }
 void PlayResourceManager::deInit()
 {
-    ::nvvk::ResourceAllocator::deinit();
     ::nvvk::StagingUploader::deinit();
     ::nvvk::SamplerPool::deinit();
+    ::nvvk::ResourceAllocator::deinit();
     vkDestroyCommandPool(_element->getDevice(), _tempCmdPool, nullptr);
 }
 
@@ -399,22 +484,22 @@ VkCommandBuffer PlayResourceManager::getTempCommandBuffer()
         LOGE("PlayResourceManager not initialized!");
         return VK_NULL_HANDLE;
     }
-    if (_element->isAsyncQueue())
-    {
-        VkCommandBufferAllocateInfo allocInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
-        allocInfo.commandPool        = _tempCmdPool;
-        allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocInfo.commandBufferCount = 1;
-        VkCommandBuffer cmd;
-        NVVK_CHECK(vkAllocateCommandBuffers(_element->getDevice(), &allocInfo, &cmd));
-        const VkCommandBufferBeginInfo beginInfo{
-            VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, nullptr,
-            VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, nullptr};
-        NVVK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
-        return cmd;
-    }
-    else
-        return _element->getApp()->createTempCmdBuffer();
+    // if (_element->isAsyncQueue())
+    // {
+    //     VkCommandBufferAllocateInfo allocInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+    //     allocInfo.commandPool        = _tempCmdPool;
+    //     allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    //     allocInfo.commandBufferCount = 1;
+    //     VkCommandBuffer cmd;
+    //     NVVK_CHECK(vkAllocateCommandBuffers(_element->getDevice(), &allocInfo, &cmd));
+    //     const VkCommandBufferBeginInfo beginInfo{
+    //         VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, nullptr,
+    //         VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, nullptr};
+    //     NVVK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
+    //     return cmd;
+    // }
+    // else
+    return _element->getApp()->createTempCmdBuffer();
 }
 void PlayResourceManager::submitAndWaitTempCmdBuffer(VkCommandBuffer cmd)
 {
@@ -423,23 +508,23 @@ void PlayResourceManager::submitAndWaitTempCmdBuffer(VkCommandBuffer cmd)
         LOGE("PlayResourceManager not initialized!");
         return;
     }
-    if (_element->isAsyncQueue())
-    {
-        NVVK_CHECK(vkEndCommandBuffer(cmd));
-        VkSubmitInfo submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO};
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers    = &cmd;
-        VkFenceCreateInfo fenceInfo{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-        VkFence           fence;
-        NVVK_CHECK(vkCreateFence(_element->getDevice(), &fenceInfo, nullptr, &fence));
-        NVVK_CHECK(vkQueueSubmit(_element->getApp()->getQueue(2).queue, 1, &submitInfo, fence));
-        NVVK_CHECK(vkWaitForFences(_element->getDevice(), 1, &fence, VK_TRUE, UINT64_MAX));
-        vkDestroyFence(_element->getDevice(), fence, nullptr);
-        vkFreeCommandBuffers(_element->getDevice(), _tempCmdPool, 1, &cmd);
-        return;
-    }
-    else
-        _element->getApp()->submitAndWaitTempCmdBuffer(cmd);
+    // if (_element->isAsyncQueue())
+    // {
+    //     NVVK_CHECK(vkEndCommandBuffer(cmd));
+    //     VkSubmitInfo submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+    //     submitInfo.commandBufferCount = 1;
+    //     submitInfo.pCommandBuffers    = &cmd;
+    //     VkFenceCreateInfo fenceInfo{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+    //     VkFence           fence;
+    //     NVVK_CHECK(vkCreateFence(_element->getDevice(), &fenceInfo, nullptr, &fence));
+    //     NVVK_CHECK(vkQueueSubmit(_element->getApp()->getQueue(2).queue, 1, &submitInfo, fence));
+    //     NVVK_CHECK(vkWaitForFences(_element->getDevice(), 1, &fence, VK_TRUE, UINT64_MAX));
+    //     vkDestroyFence(_element->getDevice(), fence, nullptr);
+    //     vkFreeCommandBuffers(_element->getDevice(), _tempCmdPool, 1, &cmd);
+    //     return;
+    // }
+    // else
+    _element->getApp()->submitAndWaitTempCmdBuffer(cmd);
 }
 
 nvvk::ResourceAllocatorExport* PlayResourceManager::GetAsAllocator()

@@ -25,7 +25,7 @@ PlayElement*          RHIContext                        = nullptr;
 
 class CacheFileManager
 {
-   public:
+public:
     static CacheFileManager& instance()
     {
         static CacheFileManager cacheFileManager;
@@ -37,7 +37,7 @@ class CacheFileManager
 
 class PplCacheBlock
 {
-   public:
+public:
     PplCacheBlock(BlockKey key) : _blockKey(key) {}
     bool loadFromDisk(std::filesystem::path filePath)
     {
@@ -49,7 +49,7 @@ class PplCacheBlock
         _lruNode = node;
     }
 
-   private:
+private:
     std::filesystem::path getCacheFilePath()
     {
         return CacheBasePath / (std::to_string(_blockKey) + ".bin");
@@ -76,7 +76,7 @@ class PplCacheBlock
 
 class PplCacheBlockManager
 {
-   public:
+public:
     static PplCacheBlockManager& instance()
     {
         static PplCacheBlockManager pipelineBlockManager;
@@ -90,12 +90,6 @@ class PplCacheBlockManager
 
     void deinit() {}
 
-    void createGraphicsPipeline(const GraphicsPipelineStateWithKey&  gState,
-                                std::function<void(VkPipelineCache)> createGfxPipelineFunc)
-    {
-        return;
-    }
-
     void createComputePipeline(ComputePipelineStateWithKey          cState,
                                std::function<void(VkPipelineCache)> createCPipelineFunc)
     {
@@ -106,7 +100,7 @@ class PplCacheBlockManager
 
     void tryToUnloadBlock() {}
 
-   private:
+private:
     std::filesystem::path getRootInfoPath()
     {
         return CacheBasePath / "rootInfo.bin";
@@ -190,10 +184,7 @@ class PplCacheBlockManager
     uint32_t                                                        _nextBlockKey = 0;
 };
 
-PipelineCacheManager::PipelineCacheManager(PlayElement* rhiElement)
-{
-    RHIContext = rhiElement;
-}
+PipelineCacheManager::PipelineCacheManager() {}
 
 void PipelineCacheManager::getOrCreateComputePipeline(
     const ComputePipelineStateWithKey&   cState,
@@ -202,11 +193,15 @@ void PipelineCacheManager::getOrCreateComputePipeline(
     PplCacheBlockManager::instance().createComputePipeline(cState, createCPipelineFunc);
 }
 
-void PipelineCacheManager::getOrCreateGraphicsPipeline(
-    const GraphicsPipelineStateWithKey&  gState,
-    std::function<void(VkPipelineCache)> createGfxPipelineFunc)
+PipelineCacheManager& PipelineCacheManager::Instance()
 {
-    PplCacheBlockManager::instance().createGraphicsPipeline(gState, createGfxPipelineFunc);
+    static PipelineCacheManager instance;
+    return instance;
 }
+void PipelineCacheManager::init(PlayElement* view)
+{
+    RHIContext = view;
+}
+void PipelineCacheManager::deinit() {}
 
 } // namespace Play

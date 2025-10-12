@@ -142,7 +142,10 @@ PassNode* BlackBoard::getPass(std::string name)
     return _passMap[name];
 }
 
-RDGBuilder::RDGBuilder(PlayElement* element) {}
+RDGBuilder::RDGBuilder(PlayElement* element) : _element(element)
+{
+    _dag = std::make_unique<Dag>();
+}
 
 RDGBuilder::~RDGBuilder() {}
 
@@ -176,6 +179,84 @@ InputPassNodeRef RDGBuilder::createInputPass(std::string name)
     return nodeRef;
 }
 
+void RDGBuilder::beforePassExecute() {}
+
+void RDGBuilder::prepareRenderTargets(PassNode* pass)
+{
+    if (pass->type() != PassNode::Type::Render) return;
+    auto                         inputEdge = pass->getIncomingEdges();
+    std::vector<AttachmentEdge*> attachments;
+    for (auto& edge : inputEdge)
+    {
+        if (edge->getType() == EdgeType::eRenderAttachment)
+        {
+            AttachmentEdge* attEdge = static_cast<AttachmentEdge*>(edge);
+            attachments.push_back(attEdge);
+            TextureNode* textureNode = static_cast<TextureNode*>(attEdge->getFrom());
+            if (!textureNode->getRHI())
+            {
+                TextureNode::TextureDesc& info = textureNode->_info;
+                textureNode->setRHI(Texture::Create(
+                    info._extent.width, info._extent.height, info._extent.depth, info._format,
+                    info._usageFlags, attEdge->layout, info._mipmapLevel));
+            }
+        }
+    }
+}
+
+void RDGBuilder::prepareDescriptorSets(PassNode* pass)
+{
+    auto               inputEdges  = pass->getIncomingEdges();
+    DescriptorManager& descManager = _element->getDescriptorManager();
+    descManager.updateDescSetBindingOffset(&pass->getProgram()->getDescriptorManager());
+    auto bindingInfo = pass->getProgram()->getDescriptorManager().getSetBindingInfo();
+    for (auto& edge : inputEdges)
+    {
+        if (edge->getType() == EdgeType::eTexture)
+        {
+            TextureEdge* texEdge     = static_cast<TextureEdge*>(edge);
+            TextureNode* textureNode = static_cast<TextureNode*>(texEdge->getFrom());
+            if (!textureNode->getRHI())
+            {
+                TextureNode::TextureDesc& info = textureNode->_info;
+                textureNode->setRHI(Texture::Create(
+                    info._extent.width, info._extent.height, info._extent.depth, info._format,
+                    info._usageFlags, texEdge->layout, info._mipmapLevel));
+                descManager.updateDescriptor(
+                    texEdge->set, texEdge->binding,
+                    bindingInfo[texEdge->set].getBindings()[texEdge->binding].descriptorType,
+                    bindingInfo[texEdge->set].getBindings()[texEdge->binding].descriptorCount,
+                    textureNode->getRHI());
+            }
+        }
+        else if (edge->getType() == EdgeType::eBuffer)
+        {
+            BufferEdge* bufEdge    = static_cast<BufferEdge*>(edge);
+            BufferNode* bufferNode = static_cast<BufferNode*>(bufEdge->getFrom());
+            if (!bufferNode->getRHI())
+            {
+                BufferNode::BufferDesc& info = bufferNode->_info;
+                bufferNode->setRHI(Buffer::Create(
+                    info._debugName, info._size, info._usageFlags,
+                    info._location == BufferNode::BufferDesc::MemoryLocation::eDeviceLocal
+                        ? VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+                        : VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                              VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
+                descManager.updateDescriptor(
+                    bufEdge->set, bufEdge->binding,
+                    bindingInfo[bufEdge->set].getBindings()[bufEdge->binding].descriptorType,
+                    bindingInfo[bufEdge->set].getBindings()[bufEdge->binding].descriptorCount,
+                    bufferNode->getRHI());
+            }
+        }
+    }
+}
+
+void RDGBuilder::prepareRenderPass(PassNode* pass)
+{
+    if (pass->type() != PassNode::Type::Render) return;
+}
+
 RDGTextureBuilder RDGBuilder::createTexture(std::string name)
 {
     TextureNodeRef    node = _dag->addNode<TextureNode>(name);
@@ -203,13 +284,50 @@ BufferNodeRef RDGBuilder::getBuffer(std::string name)
 }
 
 void RDGBuilder::compile() {}
-void RDGBuilder::execute() {}
+void RDGBuilder::execute()
+{
+    for (auto& pass : _passes)
+    {
+        if (pass->isCull() || !pass) continue;
+        switch (pass->type())
+        {
+            case PassNode::Type::Render:
+                executePass(static_cast<RenderPassNode*>(pass));
+                break;
+            case PassNode::Type::Compute:
+                executePass(static_cast<ComputePassNode*>(pass));
+                break;
+            case PassNode::Type::RayTracing:
+                executePass(static_cast<RTPassNode*>(pass));
+                break;
+            default:
+                break;
+        }
+    }
+}
 
-void RDGBuilder::execute(RenderPassNode* pass) {}
+void RDGBuilder::executePass(RenderPassNode* pass)
+{
+    prepareRenderTargets(pass);
+    prepareDescriptorSets(pass);
+    prepareRenderPass(pass);
+    auto renderContext = prepareRenderContext(pass);
+    pass->execute(renderContext);
+}
 
-void RDGBuilder::execute(ComputePassNode* pass) {}
+void RDGBuilder::executePass(ComputePassNode* pass)
+{
+    prepareDescriptorSets(pass);
+    auto renderContext = prepareRenderContext(pass);
+    pass->execute(renderContext);
+}
 
-void RDGBuilder::execute(RTPassNode* pass) {}
+void RDGBuilder::executePass(RTPassNode* pass)
+{
+    prepareDescriptorSets(pass);
+    auto renderContext = prepareRenderContext(pass);
+    pass->execute(renderContext);
+}
 
 bool isAsyncCompute(PassNode* pass)
 {
@@ -298,14 +416,14 @@ void RDGBuilder::afterPassExecute()
 
 // reference passNode is AsyncCompute or not to determine the submit package. This func would
 // make passNode's execute func more cleaner, without caring about the submit details.
-RDGBuilder::RenderContext RDGBuilder::prepareRenderContext(PassNode* pass)
+RenderContext RDGBuilder::prepareRenderContext(PassNode* pass)
 {
-    RDGBuilder::RenderContext context;
+    RenderContext context;
     context._element            = _element;
     context._frameInFlightIndex = _element->getApp()->getFrameCycleIndex();
     context._frameData          = &_element->getFrameData(context._frameInFlightIndex);
-    // if the first pass in the frame, we directly allocate a command buffer from the pool,and begin
-    // it.
+    // if the first pass in the frame, we directly allocate a command buffer from the pool,and
+    // begin it.
     [[unlikely]]
     if (!context._prevPassNode)
     {

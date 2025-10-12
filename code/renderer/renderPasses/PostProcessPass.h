@@ -2,6 +2,7 @@
 #define POSTPROCESSPASS_H
 #include "RenderPass.h"
 #include <memory>
+#include <nvvk/graphics_pipeline.hpp>
 namespace Play
 {
 class RenderProgram;
@@ -18,6 +19,7 @@ public:
 
 private:
     std::unique_ptr<RenderProgram> _postProgram;
+    nvvk::GraphicsPipelineState    _postPipelineState;
     PlayElement*                   _element = nullptr;
 };
 

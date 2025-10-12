@@ -8,6 +8,7 @@
 #include "BaseDag.h"
 namespace Play::RDG
 {
+
 /*
 当前实现了全新的RDG pass,
 RDGpass的构建交给上层逻辑pass的Build函数,pass本身只维护资源依赖逻辑,渲染逻辑以及相关的管线资源都交给上层逻辑pass管理,
@@ -19,39 +20,38 @@ class RenderDependencyGraph;
 class RDGBuilder;
 struct RenderContext;
 
-class RootSignature
-{
-public:
-    RootSignature();
-    ~RootSignature();
-    void addBinding(uint32_t set, uint32_t binding, VkDescriptorType descriptorType,
-                    uint32_t descriptorCount, VkShaderStageFlags stageFlags,
-                    const VkSampler*         pImmutableSamplers = nullptr,
-                    VkDescriptorBindingFlags bindingFlags       = 0);
-    void clear();
-    void clear(uint32_t set);
-    nvvk::DescriptorBindings& getBinding(uint32_t set);
-    VkPushConstantRange&      PushConstantRange()
-    {
-        return _pushConstantRange;
-    }
-
-private:
-    std::vector<nvvk::DescriptorBindings> _descritorBindings;
-    VkPushConstantRange                   _pushConstantRange;
-};
-
 class PassNode : public Node
 {
 public:
-    PassNode(size_t id, std::string name) : Node(id), _name(std::move(name))
+    PassNode(size_t id, std::string name, NodeType type) : Node(id, type), _name(std::move(name))
     {
         m_priority = NodePriority::ePrimary;
     }
-    void setRootSignature(const RootSignature& rootSignature)
+    void setProgram(PlayProgram* program)
     {
-        _rootSignature = rootSignature;
+        _program = program;
     }
+
+    PlayProgram* getProgram()
+    {
+        return _program;
+    }
+
+    void setFunc(std::function<void(RenderContext& context)> func)
+    {
+        _func = std::move(func);
+    }
+
+    void execute(RenderContext& context)
+    {
+        if (_func) _func(context);
+    }
+
+    [[nodiscard]] const std::string& name() const
+    {
+        return _name;
+    }
+
     enum Type
     {
         Render,
@@ -62,16 +62,20 @@ public:
     virtual Type type() const = 0;
 
 private:
-    RootSignature                _rootSignature;
-    std::vector<VkDescriptorSet> _descSets;
-    std::string                  _name;
-    Type                         _type;
+    PlayProgram*                                _program = nullptr;
+    std::function<void(RenderContext& context)> _func;
+    std::vector<VkDescriptorSet>                _descSets;
+    std::string                                 _name;
+    Type                                        _type;
 };
 
 class RenderPassNode : public PassNode
 {
 public:
-    RenderPassNode(uint32_t id, std::string name) : PassNode(id, std::move(name)) {}
+    RenderPassNode(uint32_t id, std::string name)
+        : PassNode(id, std::move(name), NodeType::eRenderPass)
+    {
+    }
     Type type() const override
     {
         return Type::Render;
@@ -83,7 +87,10 @@ using RenderPassNodeRef = RenderPassNode*;
 class ComputePassNode : public PassNode
 {
 public:
-    ComputePassNode(uint32_t id, std::string name) : PassNode(id, std::move(name)) {}
+    ComputePassNode(uint32_t id, std::string name)
+        : PassNode(id, std::move(name), NodeType::eComputePass)
+    {
+    }
     void setAsyncState(bool isAsync)
     {
         _isAsync = isAsync;
@@ -106,7 +113,7 @@ using ComputePassNodeRef = ComputePassNode*;
 class RTPassNode : public PassNode
 {
 public:
-    RTPassNode(uint32_t id, std::string name) : PassNode(id, std::move(name)) {}
+    RTPassNode(uint32_t id, std::string name) : PassNode(id, std::move(name), NodeType::eRTPass) {}
     Type type() const override
     {
         return Type::RayTracing;
@@ -117,7 +124,9 @@ using RTPassNodeRef = RTPassNode*;
 class InputPassNode : public PassNode
 {
 public:
-    InputPassNode(uint32_t id, std::string name) : PassNode(id, std::move(name)) {}
+    InputPassNode(uint32_t id, std::string name) : PassNode(id, std::move(name), NodeType::eInput)
+    {
+    }
     Type type() const override
     {
         return Type::Input;
@@ -130,7 +139,11 @@ class RenderPassBuilder
 public:
     RenderPassBuilder(RDGBuilder* builder, RenderPassNodeRef node);
     ~RenderPassBuilder() = default;
-    RenderPassBuilder& color(uint32_t binding, TextureNodeRef texHandle,
+    void program(PlayProgram* program)
+    {
+        _node->setProgram(program);
+    }
+    RenderPassBuilder& color(uint32_t slotIdx, TextureNodeRef texHandle,
                              VkAttachmentLoadOp  loadOp     = VK_ATTACHMENT_LOAD_OP_CLEAR,
                              VkAttachmentStoreOp storeOp    = VK_ATTACHMENT_STORE_OP_STORE,
                              VkImageLayout       initLayout = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -171,6 +184,10 @@ class ComputePassBuilder
 public:
     ComputePassBuilder(RDGBuilder* builder, ComputePassNodeRef node);
     ~ComputePassBuilder() = default;
+    void program(PlayProgram* program)
+    {
+        _node->setProgram(program);
+    }
     ComputePassBuilder& read(uint32_t set, uint32_t binding, TextureNodeRef texture,
                              VkPipelineStageFlagBits2 stage,
                              uint32_t                 queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
@@ -203,6 +220,10 @@ class RTPassBuilder
 public:
     RTPassBuilder(RDGBuilder* builder, RTPassNodeRef node);
     ~RTPassBuilder() = default;
+    void program(PlayProgram* program)
+    {
+        _node->setProgram(program);
+    }
     RTPassBuilder&              read(uint32_t set, uint32_t binding, TextureNodeRef texture,
                                      VkPipelineStageFlagBits2 stage,
                                      uint32_t                 queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);

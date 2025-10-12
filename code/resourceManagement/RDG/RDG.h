@@ -91,6 +91,15 @@ private:
     std::unordered_map<std::string, PassNode*>      _passMap;
 };
 
+struct RenderContext
+{
+    PlayElement*                _element;
+    PlayElement::PlayFrameData* _frameData;
+    uint32_t                    _frameInFlightIndex;
+    PassNode*                   _prevPassNode;
+    VkCommandBuffer             _currCmdBuffer = VK_NULL_HANDLE;
+};
+
 class RDGBuilder
 {
 public:
@@ -110,32 +119,27 @@ public:
 
     Dag* getDag()
     {
-        return _dag;
+        return _dag.get();
     }
-    struct RenderContext
-    {
-        PlayElement*                _element;
-        PlayElement::PlayFrameData* _frameData;
-        uint32_t                    _frameInFlightIndex;
-        PassNode*                   _prevPassNode;
-        VkCommandBuffer             _currCmdBuffer = VK_NULL_HANDLE;
-    };
 
 protected:
     friend class RDGTextureBuilder;
     friend class RDGBufferBuilder;
     InputPassNodeRef createInputPass(std::string name);
     void             beforePassExecute();
-    void             execute(RenderPassNode* pass);
-    void             execute(ComputePassNode* pass);
-    void             execute(RTPassNode* pass);
+    void             executePass(RenderPassNode* pass);
+    void             executePass(ComputePassNode* pass);
+    void             executePass(RTPassNode* pass);
     void             afterPassExecute();
     RenderContext    prepareRenderContext(PassNode* pass);
+    void             prepareRenderTargets(PassNode* pass);
+    void             prepareDescriptorSets(PassNode* pass);
+    void             prepareRenderPass(PassNode* pass);
     friend class RenderPassBuilder;
     friend class ComputePassBuilder;
     friend class RTPassBuilder;
     PlayElement*                                 _element = nullptr;
-    Dag*                                         _dag     = nullptr;
+    std::unique_ptr<Dag>                         _dag     = nullptr;
     std::vector<PassNode*>                       _passes;
     BlackBoard                                   _blackBoard;
     std::unordered_map<std::string, RDGTexture*> _textureMap;

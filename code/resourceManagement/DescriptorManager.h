@@ -35,21 +35,17 @@ public:
     void deinit();
     void updateDescSetBindingOffset(DescriptorSetManager* manager);
 
-    void updateDescriptor(DescriptorEnum setEnum, uint32_t bindingIdx,
-                          VkDescriptorType descriptorType, uint32_t descriptorCount,
-                          Buffer* buffers);
+    void updateDescriptor(uint32_t setIdx, uint32_t bindingIdx, VkDescriptorType descriptorType,
+                          uint32_t descriptorCount, Buffer* buffers);
 
-    void updateDescriptor(DescriptorEnum setIdx, uint32_t bindingIdx,
-                          VkDescriptorType descriptorType, uint32_t descriptorCount,
-                          nvvk::Image* imageInfos);
+    void updateDescriptor(uint32_t setIdx, uint32_t bindingIdx, VkDescriptorType descriptorType,
+                          uint32_t descriptorCount, nvvk::Image* imageInfos);
 
-    void updateDescriptor(DescriptorEnum setIdx, uint32_t bindingIdx,
-                          VkDescriptorType descriptorType, uint32_t descriptorCount,
-                          const VkBufferView* bufferViews);
+    void updateDescriptor(uint32_t setIdx, uint32_t bindingIdx, VkDescriptorType descriptorType,
+                          uint32_t descriptorCount, const VkBufferView* bufferViews);
 
-    void updateDescriptor(DescriptorEnum setEnum, uint32_t bindingIdx,
-                          VkDescriptorType descriptorType, uint32_t descriptorCount,
-                          nvvk::AccelerationStructure* accels);
+    void updateDescriptor(uint32_t setIdx, uint32_t bindingIdx, VkDescriptorType descriptorType,
+                          uint32_t descriptorCount, nvvk::AccelerationStructure* accels);
 
     void cmdBindDescriptorBuffers(VkCommandBuffer cmdBuf, PlayProgram* program);
 

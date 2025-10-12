@@ -69,7 +69,8 @@ public:
 
     // 从像素数据分配2D纹理
     [[nodiscard]] Texture* alloc(const void* data, size_t dataSize, uint32_t width, uint32_t height,
-                                 VkFormat format, VkImageUsageFlags usage, uint32_t mipLevels = 1);
+                                 VkFormat format, VkImageUsageFlags usage, uint32_t mipLevels = 1,
+                                 VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     // 分配带采样器的2D纹理
     [[nodiscard]] Texture* alloc(uint32_t width, uint32_t height, VkFormat format,
@@ -77,14 +78,11 @@ public:
                                  VkFilter filter, VkSamplerAddressMode addressMode,
                                  uint32_t mipLevels = 1);
 
-    // 通过文件路径创建2D纹理
+    // just for png or jpg image
     [[nodiscard]] Texture* alloc(
         const std::filesystem::path& imagePath,
         VkImageLayout                finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        uint32_t                     mipLevels   = 1)
-    {
-        return nullptr;
-    }
+        uint32_t mipLevels = 1, bool isSrgb = true);
 
     void deinit() override;
 
