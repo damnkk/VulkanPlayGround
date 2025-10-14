@@ -78,9 +78,9 @@ class BlackBoard
 public:
     BlackBoard()  = default;
     ~BlackBoard() = default;
-    void           registTexture(std::string name, TextureNodeRef texture);
-    void           registBuffer(std::string name, BufferNodeRef buffer);
-    void           registPass(std::string name, PassNode* pass);
+    void           registTexture(TextureNodeRef texture);
+    void           registBuffer(BufferNodeRef buffer);
+    void           registPass(PassNode* pass);
     TextureNodeRef getTexture(std::string name);
     BufferNodeRef  getBuffer(std::string name);
     PassNode*      getPass(std::string name);
@@ -112,6 +112,15 @@ public:
     RDGTextureBuilder createTexture(std::string name);
     RDGBufferBuilder  createBuffer(std::string name);
 
+    void setOutput(Texture* texture)
+    {
+        _outputTexture = texture;
+    }
+    Texture* getOutput()
+    {
+        return _outputTexture;
+    }
+
     TextureNodeRef getTexture(std::string name);
     BufferNodeRef  getBuffer(std::string name);
     void           compile();
@@ -138,6 +147,7 @@ protected:
     friend class RenderPassBuilder;
     friend class ComputePassBuilder;
     friend class RTPassBuilder;
+    Texture*                                     _outputTexture;
     PlayElement*                                 _element = nullptr;
     std::unique_ptr<Dag>                         _dag     = nullptr;
     std::vector<PassNode*>                       _passes;

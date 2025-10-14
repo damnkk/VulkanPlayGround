@@ -121,11 +121,20 @@ BufferNodeRef RDGBufferBuilder::finish()
     return _bufferNode;
 }
 
-void BlackBoard::registTexture(std::string name, TextureNodeRef texture) {}
+void BlackBoard::registTexture(TextureNodeRef texture)
+{
+    _textureMap[texture->name()] = texture;
+}
 
-void BlackBoard::registBuffer(std::string name, BufferNodeRef buffer) {}
+void BlackBoard::registBuffer(BufferNodeRef buffer)
+{
+    _bufferMap[buffer->name()] = buffer;
+}
 
-void BlackBoard::registPass(std::string name, PassNode* pass) {}
+void BlackBoard::registPass(PassNode* pass)
+{
+    _passMap[pass->name()] = pass;
+}
 
 TextureNodeRef BlackBoard::getTexture(std::string name)
 {
@@ -153,7 +162,7 @@ RenderPassBuilder RDGBuilder::createRenderPass(std::string name)
 {
     RenderPassNodeRef nodeRef = _dag->addNode<RenderPassNode>(std::move(name));
     _passes.push_back(nodeRef);
-    _blackBoard.registPass(name, nodeRef);
+    _blackBoard.registPass(nodeRef);
     return RenderPassBuilder(this, nodeRef);
 }
 
@@ -161,7 +170,7 @@ ComputePassBuilder RDGBuilder::createComputePass(std::string name)
 {
     ComputePassNodeRef nodeRef = _dag->addNode<ComputePassNode>(std::move(name));
     _passes.push_back(nodeRef);
-    _blackBoard.registPass(name, nodeRef);
+    _blackBoard.registPass(nodeRef);
     return ComputePassBuilder(this, nodeRef);
 }
 
@@ -169,7 +178,7 @@ RTPassBuilder RDGBuilder::createRTPass(std::string name)
 {
     RTPassNodeRef nodeRef = _dag->addNode<RTPassNode>(std::move(name));
     _passes.push_back(nodeRef);
-    _blackBoard.registPass(name, nodeRef);
+    _blackBoard.registPass(nodeRef);
     return RTPassBuilder(this, nodeRef);
 }
 
@@ -261,7 +270,6 @@ RDGTextureBuilder RDGBuilder::createTexture(std::string name)
 {
     TextureNodeRef    node = _dag->addNode<TextureNode>(name);
     RDGTextureBuilder builder(this, node);
-    _blackBoard.registTexture(name, node);
     return builder;
 }
 
@@ -269,7 +277,7 @@ RDGBufferBuilder RDGBuilder::createBuffer(std::string name)
 {
     BufferNodeRef    node = _dag->addNode<BufferNode>(name);
     RDGBufferBuilder builder(this, node);
-    _blackBoard.registBuffer(name, node);
+    _blackBoard.registBuffer(node);
     return builder;
 }
 
@@ -283,7 +291,10 @@ BufferNodeRef RDGBuilder::getBuffer(std::string name)
     return _blackBoard.getBuffer(name);
 }
 
-void RDGBuilder::compile() {}
+void RDGBuilder::compile()
+{
+    // _dag->culling(const std::vector<Node*>& outputNodes);
+}
 void RDGBuilder::execute()
 {
     for (auto& pass : _passes)

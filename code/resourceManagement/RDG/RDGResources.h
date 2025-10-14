@@ -49,6 +49,11 @@ public:
         _rhi = rhi;
     }
 
+    inline std::string name() const
+    {
+        return _name;
+    }
+
     struct TextureDesc
     {
         VkFormat          _format = VK_FORMAT_UNDEFINED;
@@ -83,6 +88,11 @@ public:
     void setRHI(Buffer* rhi)
     {
         _rhi = rhi;
+    }
+
+    inline std::string name() const
+    {
+        return _name;
     }
 
     struct BufferDesc
