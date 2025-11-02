@@ -110,11 +110,6 @@ public:
         return _uiTexture;
     }
 
-    inline DescriptorManager& getDescriptorManager()
-    {
-        return _descManager;
-    }
-
     struct PlayFrameData
     {
         VkCommandPool                graphicsCmdPool;
@@ -144,6 +139,7 @@ public:
     static inline void    FreeBuffer(Buffer* buffer);
     static inline void*   MapBuffer(Buffer& buffer);
     static inline void    UnmapBuffer(Buffer& buffer);
+    uint64_t              _frameNum = 0;
 
     enum RenderMode
     {
@@ -177,7 +173,6 @@ private:
     nvutils::ProfilerTimeline* _profilerTimeline{};
     nvvk::ProfilerGpuTimer     _profilerGpuTimer{};
     std::vector<PlayFrameData> _frameData;
-    DescriptorManager          _descManager;
     SceneManager               _sceneManager;
 };
 

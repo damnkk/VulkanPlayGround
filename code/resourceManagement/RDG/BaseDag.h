@@ -28,16 +28,7 @@ enum class NodeType
     eRenderPass,
     eComputePass,
     eRTPass,
-    eTexture,
-    eBuffer,
     eInput,
-    eOutput
-};
-
-enum class NodePriority
-{
-    ePrimary,
-    eSecondary,
     eOutput
 };
 
@@ -70,22 +61,12 @@ public:
         m_is_cull = cull;
     }
 
-    NodePriority getPriority() const
-    {
-        return m_priority;
-    }
-
-    void setPriority(NodePriority priority)
-    {
-        m_priority = priority;
-    }
-
 protected:
     Node(size_t id, NodeType type = NodeType::eGeneral) : m_id(id), m_type(type), m_is_cull(true) {}
-    NodePriority m_priority = NodePriority::ePrimary;
 
 private:
     friend class Dag;
+    friend class Edge;
     size_t             m_id;
     NodeType           m_type;
     bool               m_is_cull = true; // 默认可以被剔除
@@ -112,7 +93,6 @@ public:
         return m_type;
     }
 
-protected:
     // 构造函数简化
     Edge(Node* from, Node* to, EdgeType type = EdgeType::eGeneral)
         : m_from(from), m_to(to), m_type(type)
@@ -121,7 +101,6 @@ protected:
 
 private:
     friend class Dag;
-
     Node*    m_from;
     Node*    m_to;
     EdgeType m_type;
@@ -130,10 +109,7 @@ private:
 class OutputNode : public Node
 {
 public:
-    OutputNode(size_t id) : Node(id)
-    {
-        m_priority = NodePriority::eOutput;
-    }
+    OutputNode(size_t id) : Node(id) {}
 };
 
 // Dag: 非模板类，内部逻辑简化
@@ -157,13 +133,13 @@ public:
         return node_ptr;
     }
 
-    template <typename T, typename... Args>
-    T* createEdge(Node* from, Node* to, Args&&... args)
+    // template <typename... Args>
+    Edge* createEdge(Node* from, Node* to)
     {
-        static_assert(std::is_base_of<Edge, T>::value, "T must be a subclass of Edge");
-        auto edge     = std::make_unique<T>(from, to, std::forward<Args>(args)...);
-        T*   edge_ptr = edge.get();
+        auto  edge     = std::make_unique<Edge>(from, to);
+        Edge* edge_ptr = edge.get();
         m_edges.push_back(std::move(edge));
+        link(from, to, edge_ptr);
         return edge_ptr;
     }
 

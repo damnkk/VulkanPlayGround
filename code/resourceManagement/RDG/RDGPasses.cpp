@@ -10,134 +10,122 @@ RenderPassBuilder::RenderPassBuilder(RDGBuilder* builder, RenderPassNodeRef node
 {
 }
 
-RenderPassBuilder& RenderPassBuilder::color(uint32_t slotIdx, TextureNodeRef texHandle,
+std::atomic_int PresentPassNode::creationCount{0};
+PresentPassNode::PresentPassNode(uint32_t id, std::string name)
+    : PassNode(id, std::move(name), NodeType::eRenderPass)
+{
+    if (creationCount != 0)
+    {
+        LOGW("PresentPassNode should only be created once!");
+        assert(false);
+        return;
+    }
+    creationCount.fetch_add(1);
+}
+
+RenderPassBuilder& RenderPassBuilder::color(uint32_t slotIdx, RDGTextureRef texHandle,
                                             VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp,
                                             VkImageLayout initLayout, VkImageLayout finalLayout)
 {
-    AttachmentEdge* inputEdge =
-        _dag->createEdge<AttachmentEdge>(texHandle, this->_node, EdgeType::eRenderAttachment);
-    inputEdge->layout              = initLayout;
-    inputEdge->attachmentOp.loadOp = loadOp;
-    inputEdge->slotIdx             = slotIdx;
+    TextureSubresourceAccessInfo subResource;
+    TextureAccessInfo&           accessInfo = subResource.emplace_back();
+    accessInfo.isAttachment                 = true;
+    accessInfo.accessMask =
+        VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    accessInfo.loadOp                = loadOp;
+    accessInfo.storeOp               = storeOp;
+    accessInfo.attachSlotIdx         = slotIdx;
+    accessInfo.layout                = initLayout;
+    accessInfo.attachFinalLayout     = finalLayout;
+    _node->_textureStates[texHandle] = {subResource, {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2}};
 
-    AttachmentEdge* outputEdge =
-        _dag->createEdge<AttachmentEdge>(this->_node, texHandle, EdgeType::eRenderAttachment);
-    outputEdge->layout               = finalLayout;
-    outputEdge->attachmentOp.storeOp = storeOp;
-    outputEdge->slotIdx              = slotIdx;
     return *this;
 }
 
-RenderPassBuilder& RenderPassBuilder::depthStencil(TextureNodeRef      texHandle,
+RenderPassBuilder& RenderPassBuilder::depthStencil(RDGTextureRef       texHandle,
                                                    VkAttachmentLoadOp  loadOp,
                                                    VkAttachmentStoreOp storeOp,
                                                    VkImageLayout       initLayout,
                                                    VkImageLayout       finalLayout)
 {
-    AttachmentEdge* inputEdge =
-        _dag->createEdge<AttachmentEdge>(texHandle, this->_node, EdgeType::eRenderAttachment);
-    inputEdge->layout              = initLayout;
-    inputEdge->attachmentOp.loadOp = loadOp;
-    inputEdge->slotIdx             = ATTACHMENT_DEPTH_STENCIL;
-
-    AttachmentEdge* outputEdge =
-        _dag->createEdge<AttachmentEdge>(this->_node, texHandle, EdgeType::eRenderAttachment);
-    outputEdge->layout               = finalLayout;
-    outputEdge->attachmentOp.storeOp = storeOp;
-    outputEdge->slotIdx              = ATTACHMENT_DEPTH_STENCIL;
+    TextureSubresourceAccessInfo subResources;
+    TextureAccessInfo&           accessInfo = subResources.emplace_back();
+    accessInfo.isAttachment                 = true;
+    accessInfo.accessMask                   = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                            VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    accessInfo.loadOp                = loadOp;
+    accessInfo.storeOp               = storeOp;
+    accessInfo.attachSlotIdx         = ATTACHMENT_DEPTH_STENCIL;
+    accessInfo.layout                = initLayout;
+    accessInfo.attachFinalLayout     = finalLayout;
+    _node->_textureStates[texHandle] = {subResources, {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2}};
     return *this;
 }
 
-RenderPassBuilder& RenderPassBuilder::read(uint32_t set, uint32_t binding, TextureNodeRef texture,
+RenderPassBuilder& RenderPassBuilder::read(uint32_t set, uint32_t binding, RDGTextureRef texture,
                                            VkPipelineStageFlagBits2 stage,
                                            uint32_t                 queueFamilyIndex)
 {
-    TextureEdge* inputEdge =
-        _dag->createEdge<TextureEdge>(texture, this->_node, EdgeType::eTexture);
-    inputEdge->layout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    inputEdge->accessMask       = VK_ACCESS_2_SHADER_READ_BIT;
-    inputEdge->stageMask        = stage;
-    inputEdge->queueFamilyIndex = queueFamilyIndex;
-
-    inputEdge->set             = set;
-    inputEdge->binding         = binding;
-    inputEdge->descriptorIndex = 0;
+    TextureSubresourceAccessInfo subResource;
+    TextureAccessInfo&           accessInfo = subResource.emplace_back();
+    accessInfo.set                          = set;
+    accessInfo.binding                      = binding;
+    accessInfo.isAttachment                 = false;
+    accessInfo.layout                       = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    accessInfo.accessMask                   = VK_ACCESS_2_SHADER_READ_BIT;
+    accessInfo.stageMask                    = stage;
+    accessInfo.queueFamilyIndex             = queueFamilyIndex;
+    _node->_textureStates[texture] = {subResource, {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2}};
     return *this;
 }
 
-RenderPassBuilder& RenderPassBuilder::read(uint32_t set, uint32_t binding, BufferNodeRef buffer,
+RenderPassBuilder& RenderPassBuilder::read(uint32_t set, uint32_t binding, RDGBufferRef buffer,
                                            VkPipelineStageFlagBits2 stage,
                                            uint32_t queueFamilyIndex, uint32_t offset, size_t size)
 {
-    BufferEdge* inputEdge = _dag->createEdge<BufferEdge>(buffer, this->_node, EdgeType::eBuffer);
-    inputEdge->accessMask = VK_ACCESS_2_SHADER_READ_BIT;
-    inputEdge->stageMask  = stage;
-    inputEdge->queueFamilyIndex = queueFamilyIndex;
-
-    inputEdge->set             = set;
-    inputEdge->binding         = binding;
-    inputEdge->descriptorIndex = 0;
-    inputEdge->offset          = offset;
-    inputEdge->size            = size;
+    BufferAccessInfo accessInfo;
+    accessInfo.accessMask        = VK_ACCESS_2_UNIFORM_READ_BIT;
+    accessInfo.stageMask         = stage;
+    accessInfo.set               = set;
+    accessInfo.binding           = binding;
+    accessInfo.queueFamilyIndex  = queueFamilyIndex;
+    accessInfo.offset            = offset;
+    accessInfo.size              = size;
+    _node->_bufferStates[buffer] = {accessInfo, {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2}};
     return *this;
 }
 
 RenderPassBuilder& RenderPassBuilder::readWrite(uint32_t set, uint32_t binding,
-                                                TextureNodeRef           texture,
+                                                RDGTextureRef            texture,
                                                 VkPipelineStageFlagBits2 stage,
                                                 uint32_t                 queueFamilyIndex)
 {
-    TextureEdge* inputEdge =
-        _dag->createEdge<TextureEdge>(texture, this->_node, EdgeType::eTexture);
-    inputEdge->layout           = VK_IMAGE_LAYOUT_GENERAL;
-    inputEdge->accessMask       = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
-    inputEdge->stageMask        = stage;
-    inputEdge->queueFamilyIndex = queueFamilyIndex;
-
-    inputEdge->set             = set;
-    inputEdge->binding         = binding;
-    inputEdge->descriptorIndex = 0;
-
-    TextureEdge* outputEdge =
-        _dag->createEdge<TextureEdge>(this->_node, texture, EdgeType::eTexture);
-    outputEdge->layout           = VK_IMAGE_LAYOUT_GENERAL;
-    outputEdge->accessMask       = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
-    outputEdge->stageMask        = stage;
-    outputEdge->queueFamilyIndex = queueFamilyIndex;
-
-    outputEdge->set             = set;
-    outputEdge->binding         = binding;
-    outputEdge->descriptorIndex = 0;
+    TextureSubresourceAccessInfo subResource;
+    TextureAccessInfo&           accessInfo = subResource.emplace_back();
+    accessInfo.set                          = 0;
+    accessInfo.binding                      = binding;
+    accessInfo.isAttachment                 = false;
+    accessInfo.accessMask          = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    accessInfo.layout              = VK_IMAGE_LAYOUT_GENERAL;
+    accessInfo.queueFamilyIndex    = queueFamilyIndex;
+    _node->_textureStates[texture] = {subResource, {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2}};
     return *this;
 }
 
-RenderPassBuilder& RenderPassBuilder::readWrite(uint32_t set, uint32_t binding,
-                                                BufferNodeRef            buffer,
+RenderPassBuilder& RenderPassBuilder::readWrite(uint32_t set, uint32_t binding, RDGBufferRef buffer,
                                                 VkPipelineStageFlagBits2 stage,
                                                 uint32_t queueFamilyIndex, uint32_t offset,
                                                 size_t size)
 {
-    BufferEdge* inputEdge = _dag->createEdge<BufferEdge>(buffer, this->_node, EdgeType::eBuffer);
-    inputEdge->accessMask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
-    inputEdge->stageMask  = stage;
-    inputEdge->queueFamilyIndex = queueFamilyIndex;
-
-    inputEdge->set             = set;
-    inputEdge->binding         = binding;
-    inputEdge->descriptorIndex = 0;
-    inputEdge->offset          = offset;
-    inputEdge->size            = size;
-
-    BufferEdge* outputEdge = _dag->createEdge<BufferEdge>(this->_node, buffer, EdgeType::eBuffer);
-    outputEdge->accessMask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
-    outputEdge->stageMask  = stage;
-    outputEdge->queueFamilyIndex = queueFamilyIndex;
-
-    outputEdge->set             = set;
-    outputEdge->binding         = binding;
-    outputEdge->descriptorIndex = 0;
-    outputEdge->offset          = offset;
-    outputEdge->size            = size;
+    BufferAccessInfo bufferAccess;
+    bufferAccess.accessMask       = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
+    bufferAccess.stageMask        = stage;
+    bufferAccess.set              = set;
+    bufferAccess.binding          = binding;
+    bufferAccess.queueFamilyIndex = queueFamilyIndex;
+    bufferAccess.offset           = offset;
+    bufferAccess.size             = size;
+    _node->_bufferStates[buffer]  = {bufferAccess, {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2}};
     return *this;
 }
 
@@ -152,97 +140,73 @@ ComputePassBuilder::ComputePassBuilder(RDGBuilder* builder, ComputePassNodeRef n
 {
 }
 
-ComputePassBuilder& ComputePassBuilder::read(uint32_t set, uint32_t binding, TextureNodeRef texture,
+ComputePassBuilder& ComputePassBuilder::read(uint32_t set, uint32_t binding, RDGTextureRef texture,
                                              VkPipelineStageFlagBits2 stage,
                                              uint32_t                 queueFamilyIndex)
 {
-    TextureEdge* inputEdge =
-        _dag->createEdge<TextureEdge>(texture, this->_node, EdgeType::eTexture);
-    inputEdge->layout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    inputEdge->accessMask       = VK_ACCESS_2_SHADER_READ_BIT;
-    inputEdge->stageMask        = stage;
-    inputEdge->queueFamilyIndex = queueFamilyIndex;
-
-    inputEdge->set             = set;
-    inputEdge->binding         = binding;
-    inputEdge->descriptorIndex = 0;
+    TextureSubresourceAccessInfo subResource;
+    TextureAccessInfo&           accessInfo = subResource.emplace_back();
+    accessInfo.set                          = set;
+    accessInfo.binding                      = binding;
+    accessInfo.isAttachment                 = false;
+    accessInfo.layout                       = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    accessInfo.accessMask                   = VK_ACCESS_2_SHADER_READ_BIT;
+    accessInfo.stageMask                    = stage;
+    accessInfo.queueFamilyIndex             = queueFamilyIndex;
+    _node->_textureStates[texture] = {subResource, {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2}};
     return *this;
 }
 
-ComputePassBuilder& ComputePassBuilder::read(uint32_t set, uint32_t binding, BufferNodeRef buffer,
+ComputePassBuilder& ComputePassBuilder::read(uint32_t set, uint32_t binding, RDGBufferRef buffer,
                                              VkPipelineStageFlagBits2 stage,
                                              uint32_t queueFamilyIndex, uint32_t offset,
                                              size_t size)
 {
-    BufferEdge* inputEdge = _dag->createEdge<BufferEdge>(buffer, this->_node, EdgeType::eBuffer);
-    inputEdge->accessMask = VK_ACCESS_2_SHADER_READ_BIT;
-    inputEdge->stageMask  = stage;
-    inputEdge->queueFamilyIndex = queueFamilyIndex;
-
-    inputEdge->set             = set;
-    inputEdge->binding         = binding;
-    inputEdge->descriptorIndex = 0;
-    inputEdge->offset          = offset;
-    inputEdge->size            = size;
+    BufferAccessInfo accessInfo;
+    accessInfo.accessMask        = buffer->_info._usageFlags & VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT
+                                       ? VK_ACCESS_2_UNIFORM_READ_BIT
+                                       : VK_ACCESS_2_SHADER_READ_BIT;
+    accessInfo.stageMask         = stage;
+    accessInfo.queueFamilyIndex  = queueFamilyIndex;
+    accessInfo.offset            = offset;
+    accessInfo.size              = size;
+    _node->_bufferStates[buffer] = {accessInfo, {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2}};
     return *this;
 }
 
 ComputePassBuilder& ComputePassBuilder::readWrite(uint32_t set, uint32_t binding,
-                                                  TextureNodeRef           texture,
+                                                  RDGTextureRef            texture,
                                                   VkPipelineStageFlagBits2 stage,
                                                   uint32_t                 queueFamilyIndex)
 {
-    TextureEdge* inputEdge =
-        _dag->createEdge<TextureEdge>(texture, this->_node, EdgeType::eTexture);
-    inputEdge->layout           = VK_IMAGE_LAYOUT_GENERAL;
-    inputEdge->accessMask       = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
-    inputEdge->stageMask        = stage;
-    inputEdge->queueFamilyIndex = queueFamilyIndex;
-
-    inputEdge->set             = set;
-    inputEdge->binding         = binding;
-    inputEdge->descriptorIndex = 0;
-
-    TextureEdge* outputEdge =
-        _dag->createEdge<TextureEdge>(this->_node, texture, EdgeType::eTexture);
-    outputEdge->layout           = VK_IMAGE_LAYOUT_GENERAL;
-    outputEdge->accessMask       = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
-    outputEdge->stageMask        = stage;
-    outputEdge->queueFamilyIndex = queueFamilyIndex;
-
-    outputEdge->set             = set;
-    outputEdge->binding         = binding;
-    outputEdge->descriptorIndex = 0;
+    TextureSubresourceAccessInfo subResource;
+    TextureAccessInfo&           accessInfo = subResource.emplace_back();
+    accessInfo.set                          = set;
+    accessInfo.binding                      = binding;
+    accessInfo.isAttachment                 = false;
+    accessInfo.layout                       = VK_IMAGE_LAYOUT_GENERAL;
+    accessInfo.accessMask          = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
+    accessInfo.stageMask           = stage;
+    accessInfo.queueFamilyIndex    = queueFamilyIndex;
+    _node->_textureStates[texture] = {subResource, {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2}};
     return *this;
 }
 
 ComputePassBuilder& ComputePassBuilder::readWrite(uint32_t set, uint32_t binding,
-                                                  BufferNodeRef            buffer,
+                                                  RDGBufferRef             buffer,
                                                   VkPipelineStageFlagBits2 stage,
                                                   uint32_t queueFamilyIndex, uint32_t offset,
                                                   size_t size)
 {
-    BufferEdge* inputEdge = _dag->createEdge<BufferEdge>(buffer, this->_node, EdgeType::eBuffer);
-    inputEdge->accessMask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
-    inputEdge->stageMask  = stage;
-    inputEdge->queueFamilyIndex = queueFamilyIndex;
-
-    inputEdge->set             = set;
-    inputEdge->binding         = binding;
-    inputEdge->descriptorIndex = 0;
-    inputEdge->offset          = offset;
-    inputEdge->size            = size;
-
-    BufferEdge* outputEdge = _dag->createEdge<BufferEdge>(this->_node, buffer, EdgeType::eBuffer);
-    outputEdge->accessMask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
-    outputEdge->stageMask  = stage;
-    outputEdge->queueFamilyIndex = queueFamilyIndex;
-
-    outputEdge->set             = set;
-    outputEdge->binding         = binding;
-    outputEdge->descriptorIndex = 0;
-    outputEdge->offset          = offset;
-    outputEdge->size            = size;
+    BufferAccessInfo bufferAccess;
+    bufferAccess.accessMask       = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
+    bufferAccess.stageMask        = stage;
+    bufferAccess.set              = set;
+    bufferAccess.binding          = binding;
+    bufferAccess.queueFamilyIndex = queueFamilyIndex;
+    bufferAccess.offset           = offset;
+    bufferAccess.size             = size;
+    _node->_bufferStates[buffer]  = {bufferAccess, {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2}};
     return *this;
 }
 
@@ -263,91 +227,67 @@ RTPassBuilder::RTPassBuilder(RDGBuilder* builder, RTPassNodeRef node)
 {
 }
 
-RTPassBuilder& RTPassBuilder::read(uint32_t set, uint32_t binding, TextureNodeRef texture,
+RTPassBuilder& RTPassBuilder::read(uint32_t set, uint32_t binding, RDGTextureRef texture,
                                    VkPipelineStageFlagBits2 stage, uint32_t queueFamilyIndex)
 {
-    TextureEdge* inputEdge =
-        _dag->createEdge<TextureEdge>(texture, this->_node, EdgeType::eTexture);
-    inputEdge->layout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    inputEdge->accessMask       = VK_ACCESS_2_SHADER_READ_BIT;
-    inputEdge->stageMask        = stage;
-    inputEdge->queueFamilyIndex = queueFamilyIndex;
-
-    inputEdge->set             = set;
-    inputEdge->binding         = binding;
-    inputEdge->descriptorIndex = 0;
+    TextureSubresourceAccessInfo subResource;
+    TextureAccessInfo&           accessInfo = subResource.emplace_back();
+    accessInfo.set                          = set;
+    accessInfo.binding                      = binding;
+    accessInfo.isAttachment                 = false;
+    accessInfo.layout                       = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    accessInfo.accessMask                   = VK_ACCESS_2_SHADER_READ_BIT;
+    accessInfo.stageMask                    = stage;
+    accessInfo.queueFamilyIndex             = queueFamilyIndex;
+    _node->_textureStates[texture] = {subResource, {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2}};
     return *this;
 }
 
-RTPassBuilder& RTPassBuilder::read(uint32_t set, uint32_t binding, BufferNodeRef buffer,
+RTPassBuilder& RTPassBuilder::read(uint32_t set, uint32_t binding, RDGBufferRef buffer,
                                    VkPipelineStageFlagBits2 stage, uint32_t queueFamilyIndex,
                                    uint32_t offset, size_t size)
 {
-    BufferEdge* inputEdge = _dag->createEdge<BufferEdge>(buffer, this->_node, EdgeType::eBuffer);
-    inputEdge->accessMask = VK_ACCESS_2_SHADER_READ_BIT;
-    inputEdge->stageMask  = stage;
-    inputEdge->queueFamilyIndex = queueFamilyIndex;
-
-    inputEdge->set             = set;
-    inputEdge->binding         = binding;
-    inputEdge->descriptorIndex = 0;
-    inputEdge->offset          = offset;
-    inputEdge->size            = size;
+    BufferAccessInfo accessInfo;
+    accessInfo.accessMask        = VK_ACCESS_2_UNIFORM_READ_BIT;
+    accessInfo.stageMask         = stage;
+    accessInfo.set               = set;
+    accessInfo.binding           = binding;
+    accessInfo.queueFamilyIndex  = queueFamilyIndex;
+    accessInfo.offset            = offset;
+    accessInfo.size              = size;
+    _node->_bufferStates[buffer] = {accessInfo, {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2}};
     return *this;
 }
 
-RTPassBuilder& RTPassBuilder::readWrite(uint32_t set, uint32_t binding, TextureNodeRef texture,
+RTPassBuilder& RTPassBuilder::readWrite(uint32_t set, uint32_t binding, RDGTextureRef texture,
                                         VkPipelineStageFlagBits2 stage, uint32_t queueFamilyIndex)
 {
-    TextureEdge* inputEdge =
-        _dag->createEdge<TextureEdge>(texture, this->_node, EdgeType::eTexture);
-    inputEdge->layout           = VK_IMAGE_LAYOUT_GENERAL;
-    inputEdge->accessMask       = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
-    inputEdge->stageMask        = stage;
-    inputEdge->queueFamilyIndex = queueFamilyIndex;
-
-    inputEdge->set             = set;
-    inputEdge->binding         = binding;
-    inputEdge->descriptorIndex = 0;
-
-    TextureEdge* outputEdge =
-        _dag->createEdge<TextureEdge>(this->_node, texture, EdgeType::eTexture);
-    outputEdge->layout           = VK_IMAGE_LAYOUT_GENERAL;
-    outputEdge->accessMask       = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
-    outputEdge->stageMask        = stage;
-    outputEdge->queueFamilyIndex = queueFamilyIndex;
-
-    outputEdge->set             = set;
-    outputEdge->binding         = binding;
-    outputEdge->descriptorIndex = 0;
+    TextureSubresourceAccessInfo subResource;
+    TextureAccessInfo&           accessInfo = subResource.emplace_back();
+    accessInfo.set                          = set;
+    accessInfo.binding                      = binding;
+    accessInfo.isAttachment                 = false;
+    accessInfo.layout                       = VK_IMAGE_LAYOUT_GENERAL;
+    accessInfo.accessMask          = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
+    accessInfo.stageMask           = stage;
+    accessInfo.queueFamilyIndex    = queueFamilyIndex;
+    _node->_textureStates[texture] = {subResource, {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2}};
     return *this;
 }
 
-RTPassBuilder& RTPassBuilder::readWrite(uint32_t set, uint32_t binding, BufferNodeRef buffer,
+RTPassBuilder& RTPassBuilder::readWrite(uint32_t set, uint32_t binding, RDGBufferRef buffer,
                                         VkPipelineStageFlagBits2 stage, uint32_t queueFamilyIndex,
                                         uint32_t offset, size_t size)
 {
-    BufferEdge* inputEdge = _dag->createEdge<BufferEdge>(buffer, this->_node, EdgeType::eBuffer);
-    inputEdge->accessMask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
-    inputEdge->stageMask  = stage;
-    inputEdge->queueFamilyIndex = queueFamilyIndex;
-
-    inputEdge->set             = set;
-    inputEdge->binding         = binding;
-    inputEdge->descriptorIndex = 0;
-    inputEdge->offset          = offset;
-    inputEdge->size            = size;
-
-    BufferEdge* outputEdge = _dag->createEdge<BufferEdge>(this->_node, buffer, EdgeType::eBuffer);
-    outputEdge->accessMask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
-    outputEdge->stageMask  = stage;
-    outputEdge->queueFamilyIndex = queueFamilyIndex;
-
-    outputEdge->set             = set;
-    outputEdge->binding         = binding;
-    outputEdge->descriptorIndex = 0;
-    outputEdge->offset          = offset;
-    outputEdge->size            = size;
+    BufferAccessInfo bufferAccess;
+    bufferAccess.accessMask       = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
+    bufferAccess.stageMask        = stage;
+    bufferAccess.set              = set;
+    bufferAccess.binding          = binding;
+    bufferAccess.queueFamilyIndex = queueFamilyIndex;
+    bufferAccess.offset           = offset;
+    bufferAccess.size             = size;
+    _node->_bufferStates[buffer]  = {bufferAccess, {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2}};
     return *this;
 }
 
@@ -355,5 +295,53 @@ RTPassBuilder& RTPassBuilder::execute(std::function<void(RenderContext& context)
 {
     _node->setFunc(func);
     return *this;
+}
+
+PresentPassBuilder::PresentPassBuilder(RDGBuilder* builder, PresentPassNode* node)
+    : _builder(builder), _node(node), _dag(builder->getDag())
+{
+    std::unique_ptr<RenderProgram> presentProgram =
+        std::make_unique<RenderProgram>(_builder->_element->getDevice());
+
+    presentProgram->setFragModuleID(ShaderManager::Instance().getShaderIdByName("postProcessf"))
+        .setVertexModuleID(ShaderManager::Instance().getShaderIdByName("postProcessv"))
+        .finish();
+    _node->setProgram(presentProgram.get());
+
+    return;
+}
+PresentPassBuilder& PresentPassBuilder::color(RDGTextureRef texHandle)
+{
+    TextureSubresourceAccessInfo subResource;
+    TextureAccessInfo&           accessInfo = subResource.emplace_back();
+    accessInfo.isAttachment                 = true;
+    accessInfo.accessMask =
+        VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    accessInfo.loadOp                = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    accessInfo.storeOp               = VK_ATTACHMENT_STORE_OP_STORE;
+    accessInfo.attachSlotIdx         = 0;
+    accessInfo.layout                = VK_IMAGE_LAYOUT_UNDEFINED;
+    accessInfo.attachFinalLayout     = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    _node->_textureStates[texHandle] = {subResource, {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2}};
+    return *this;
+}
+
+PresentPassBuilder& PresentPassBuilder::read(RDGTextureRef texHandle)
+{
+    TextureSubresourceAccessInfo subResource;
+    TextureAccessInfo&           accessInfo = subResource.emplace_back();
+    accessInfo.isAttachment                 = false;
+    accessInfo.accessMask                   = VK_ACCESS_2_SHADER_READ_BIT;
+    accessInfo.layout                       = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    accessInfo.set                   = static_cast<uint32_t>(DescriptorEnum::ePerPassDescriptorSet);
+    accessInfo.binding               = 0;
+    accessInfo.stageMask             = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    _node->_textureStates[texHandle] = {subResource, {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2}};
+    return *this;
+}
+PresentPassNode* PresentPassBuilder::finish()
+{
+    _node->setFunc([](RenderContext& context) { vkCmdDraw(context._currCmdBuffer, 3, 1, 0, 0); });
+    return _node;
 }
 } // namespace Play::RDG

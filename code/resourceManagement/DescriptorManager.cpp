@@ -1,5 +1,6 @@
 #include "DescriptorManager.h"
 #include "PlayProgram.h"
+#include "nvvk/check_error.hpp"
 
 namespace Play
 {
@@ -10,9 +11,9 @@ std::unordered_map<DescriptorEnum, size_t> DescriptorSetOffsetMap = {
     {DescriptorEnum::ePerPassDescriptorSet, PER_PASS_DESCRIPTOR_SET_OFFSET},
     {DescriptorEnum::eDrawObjectDescriptorSet, PER_DRAW_OBJECT_DESCRIPTOR_SET_OFFSET}};
 
-DescriptorManager::~DescriptorManager() {}
+DescriptorBufferManagerExt::~DescriptorBufferManagerExt() {}
 
-void DescriptorManager::init(VkPhysicalDevice physicalDevice, VkDevice device)
+void DescriptorBufferManagerExt::init(VkPhysicalDevice physicalDevice, VkDevice device)
 {
     _device         = device;
     _physicalDevice = physicalDevice;
@@ -34,12 +35,12 @@ void DescriptorManager::init(VkPhysicalDevice physicalDevice, VkDevice device)
         4096 * 32, (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
 }
 
-void DescriptorManager::deinit()
+void DescriptorBufferManagerExt::deinit()
 {
     Buffer::Destroy(_descBuffer);
 }
 
-void DescriptorManager::updateDescSetBindingOffset(DescriptorSetManager* manager)
+void DescriptorBufferManagerExt::updateDescSetBindingOffset(DescriptorSetManager* manager)
 {
     // a series of descriptor sets' binding info
     const auto& setBindingInfo = manager->getSetBindingInfo();
@@ -57,7 +58,7 @@ void DescriptorManager::updateDescSetBindingOffset(DescriptorSetManager* manager
     }
 }
 
-size_t DescriptorManager::getDescriptorSize(VkDescriptorType descriptorType)
+size_t DescriptorBufferManagerExt::getDescriptorSize(VkDescriptorType descriptorType)
 {
     if (descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
     {
@@ -101,9 +102,189 @@ size_t DescriptorManager::getDescriptorSize(VkDescriptorType descriptorType)
     }
 }
 
-void DescriptorManager::updateDescriptor(uint32_t setIdx, uint32_t bindingIdx,
-                                         VkDescriptorType descriptorType, uint32_t descriptorCount,
-                                         Buffer* buffers)
+DescriptorSetCache::~DescriptorSetCache() {}
+
+VkDescriptorSet DescriptorSetCache::requestDescriptorSet(DescriptorSetManager& setManager,
+                                                         uint32_t              setIdx)
+{
+    // if the set is global set(engine/perScene/perFrame), return the cached set directly
+    if (setIdx < static_cast<uint32_t>(DescriptorEnum::ePerPassDescriptorSet))
+    {
+        switch (setIdx)
+        {
+            case static_cast<uint32_t>(DescriptorEnum::eGlobalDescriptorSet):
+                return _globalDescriptorSet;
+            case static_cast<uint32_t>(DescriptorEnum::eSceneDescriptorSet):
+                return _sceneDescriptorSet;
+            case static_cast<uint32_t>(DescriptorEnum::eFrameDescriptorSet):
+                return _frameDescriptorSet;
+        }
+    }
+    if (setIdx >= static_cast<uint32_t>(DescriptorEnum::ePerPassDescriptorSet))
+    {
+        uint64_t BindingsHash = setManager.getBindingsHash(setIdx);
+        uint64_t layoutHash   = setManager.getDescsetLayoutHash(setIdx);
+        auto     res          = _descriptorPoolMap.find(layoutHash);
+        // for perpass/perobject sets, we cache them , one layout one poolArray
+        if (res != _descriptorPoolMap.end())
+        {
+            auto& cacheNode = res->second;
+            auto  setRes    = cacheNode.descriptorSetMap.find(BindingsHash);
+            // we find the descriptor with the same descriptor info
+            if (setRes != cacheNode.descriptorSetMap.end())
+            {
+                return setRes->second.descriptorSet;
+            }
+            else
+            { // if same layout but different binding info, create new set from pool
+                createDescriptorSet(cacheNode, setManager, setIdx);
+            }
+        }
+        else
+        { // damn new layout, create new pool array
+            auto cacheNode                 = DescriptorSetCache::CacheNode();
+            _descriptorPoolMap[layoutHash] = cacheNode;
+            createDescriptorSet(cacheNode, setManager, setIdx);
+        }
+    }
+}
+
+VkDescriptorSet DescriptorSetCache::createDescriptorSet(DescriptorSetCache::CacheNode& cacheNode,
+                                                        DescriptorSetManager&          setManager,
+                                                        uint32_t                       setIdx)
+{
+    // without free native vulkan pool, we create new pool
+    [[unlikely]]
+    if (cacheNode.pools.empty() || cacheNode.pools.back().availableCount == 0)
+    {
+        // create new pool;
+        auto                              bindings = setManager.getSetBindingInfo()[setIdx];
+        std::vector<VkDescriptorPoolSize> poolSizes =
+            bindings.calculatePoolSizes(CacheNode::PoolNode::maxSetPerPool);
+        VkDescriptorPoolCreateInfo poolCreateInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+        poolCreateInfo.maxSets       = CacheNode::PoolNode::maxSetPerPool;
+        poolCreateInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+        poolCreateInfo.pPoolSizes    = poolSizes.data();
+        CacheNode::PoolNode newPoolNode;
+        NVVK_CHECK(vkCreateDescriptorPool(_element->getDevice(), &poolCreateInfo, nullptr,
+                                          &newPoolNode.pool));
+        cacheNode.pools.push_back(newPoolNode);
+        CacheNode::CachedSet newSet = createDescriptorSetImplement(cacheNode, setManager, setIdx);
+        return newSet.descriptorSet;
+    }
+    else
+    {
+        CacheNode::CachedSet newSet = createDescriptorSetImplement(cacheNode, setManager, setIdx);
+        return newSet.descriptorSet;
+    }
+}
+
+DescriptorSetCache::CacheNode::CachedSet DescriptorSetCache::createDescriptorSetImplement(
+    CacheNode& cacheNode, DescriptorSetManager& setManager, uint32_t setIdx)
+{
+    auto                        newSet = cacheNode.createCachedSet();
+    VkDescriptorSetAllocateInfo allocInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+    allocInfo.descriptorPool     = cacheNode.pools.back().pool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts        = &setManager.getDescriptorSetLayouts()[setIdx];
+
+    NVVK_CHECK(vkAllocateDescriptorSets(_element->getDevice(), &allocInfo, &newSet.descriptorSet));
+    uint64_t BindingsHash                    = setManager.getBindingsHash(setIdx);
+    cacheNode.descriptorSetMap[BindingsHash] = newSet;
+    // currently new descriptor set allocated success, decrease the available count
+    cacheNode.pools.back().availableCount--;
+    // now prepare the write descriptor sets info
+    auto bindings = setManager.getSetBindingInfo()[setIdx];
+
+    auto                              nativeBindings = bindings.getBindings();
+    std::vector<VkWriteDescriptorSet> writeSets;
+    for (auto& binding : nativeBindings)
+    {
+        // binding info is general, easy to fill
+        VkWriteDescriptorSet writeSet{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+        writeSet.dstSet          = newSet.descriptorSet;
+        writeSet.dstBinding      = binding.binding;
+        writeSet.descriptorCount = binding.descriptorCount;
+        writeSet.descriptorType  = binding.descriptorType;
+        writeSet.dstArrayElement = 0;
+        auto descriptorInfo      = setManager.getDescriptorInfo(setIdx);
+        switch (binding.descriptorType)
+        {
+            // if the resource is image type, we give image info
+            case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+            case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+            case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+            case VK_DESCRIPTOR_TYPE_SAMPLER:
+            {
+                uint32_t offset = setManager.descriptorOffset(setIdx, binding.binding);
+                std::vector<VkDescriptorImageInfo> imageInfos(binding.descriptorCount);
+                for (int i = offset; i < binding.descriptorCount; ++i)
+                {
+                    imageInfos[i] = descriptorInfo[i].image;
+                }
+
+                writeSet.pImageInfo = imageInfos.data();
+                break;
+            }
+            // if the resource is buffer type, we give buffer info
+            case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+            case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+            {
+                uint32_t offset = setManager.descriptorOffset(setIdx, binding.binding);
+                std::vector<VkDescriptorBufferInfo> bufferInfos(binding.descriptorCount);
+                for (int i = offset; i < binding.descriptorCount; ++i)
+                {
+                    bufferInfos[i] = descriptorInfo[i].buffer;
+                }
+
+                writeSet.pBufferInfo = bufferInfos.data();
+                break;
+            }
+            // case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+            // case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+            // {
+            //     uint32_t offset =
+            //         setManager.descriptorOffset(setIdx, binding.binding);
+            //     std::vector<VkBufferView> bufferViews(binding.descriptorCount);
+            //     for (int i = offset; i < binding.descriptorCount; ++i)
+            //     {
+            //         bufferViews[i] = descriptorInfo[i].bufferView;
+            //     }
+            //     writeSet.pTexelBufferView = bufferViews.data();
+            //     break;
+            // }
+
+            // if the resource is acceleration structure type, we give accel info
+            case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+            {
+                uint32_t offset = setManager.descriptorOffset(setIdx, binding.binding);
+                std::vector<VkAccelerationStructureKHR> accelInfos(binding.descriptorCount);
+                for (int i = offset; i < binding.descriptorCount; ++i)
+                {
+                    accelInfos[i] = descriptorInfo[i].accel;
+                }
+                VkWriteDescriptorSetAccelerationStructureKHR accelInfo{
+                    VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR};
+                accelInfo.accelerationStructureCount = binding.descriptorCount;
+                accelInfo.pAccelerationStructures    = accelInfos.data();
+                writeSet.pNext                       = &accelInfo;
+                break;
+            }
+            default:
+                LOGE("Unsupported descriptor type in descriptor set cache\n");
+                break;
+        }
+        writeSets.push_back(writeSet);
+    }
+    // Update the descriptor set with the new binding information
+    vkUpdateDescriptorSets(_element->getDevice(), static_cast<uint32_t>(writeSets.size()),
+                           writeSets.data(), 0, nullptr);
+    return newSet;
+}
+
+void DescriptorBufferManagerExt::updateDescriptor(uint32_t setIdx, uint32_t bindingIdx,
+                                                  VkDescriptorType descriptorType,
+                                                  uint32_t descriptorCount, Buffer* buffers)
 {
     assert(_descriptorOffsetInfo[setIdx].find(bindingIdx) !=
            _descriptorOffsetInfo[setIdx].end()); // ensure the binding exists
@@ -126,11 +307,11 @@ void DescriptorManager::updateDescriptor(uint32_t setIdx, uint32_t bindingIdx,
     }
 }
 
-void DescriptorManager::updateDescriptor(uint32_t setEnum, uint32_t bindingIdx,
-                                         VkDescriptorType descriptorType, uint32_t descriptorCount,
-                                         nvvk::Image* images)
+void DescriptorBufferManagerExt::updateDescriptor(uint32_t setEnum, uint32_t bindingIdx,
+                                                  VkDescriptorType descriptorType,
+                                                  uint32_t descriptorCount, nvvk::Image* images)
 {
-    assert(_descriptorOffsetInfo[setEnum].find(bindingIdx) !=
+    assert(_descriptorOffsetInfo[setEnum].find(bindingIdx) ==
            _descriptorOffsetInfo[setEnum].end()); // ensure the binding exists
     uint8_t* descBufferPtr = _descBuffer->mapping +
                              DescriptorSetOffsetMap[static_cast<DescriptorEnum>(setEnum)] +
@@ -163,16 +344,18 @@ void DescriptorManager::updateDescriptor(uint32_t setEnum, uint32_t bindingIdx,
     }
 }
 
-void DescriptorManager::updateDescriptor(uint32_t setEnum, uint32_t bindingIdx,
-                                         VkDescriptorType descriptorType, uint32_t descriptorCount,
-                                         const VkBufferView* bufferViews)
+void DescriptorBufferManagerExt::updateDescriptor(uint32_t setEnum, uint32_t bindingIdx,
+                                                  VkDescriptorType    descriptorType,
+                                                  uint32_t            descriptorCount,
+                                                  const VkBufferView* bufferViews)
 {
     LOGW("Not implemented yet\n");
 }
 
-void DescriptorManager::updateDescriptor(uint32_t setEnum, uint32_t bindingIdx,
-                                         VkDescriptorType descriptorType, uint32_t descriptorCount,
-                                         nvvk::AccelerationStructure* accels)
+void DescriptorBufferManagerExt::updateDescriptor(uint32_t setEnum, uint32_t bindingIdx,
+                                                  VkDescriptorType             descriptorType,
+                                                  uint32_t                     descriptorCount,
+                                                  nvvk::AccelerationStructure* accels)
 {
     assert(_descriptorOffsetInfo[setEnum].find(bindingIdx) !=
            _descriptorOffsetInfo[setEnum].end()); // ensure the binding exists
@@ -191,7 +374,8 @@ void DescriptorManager::updateDescriptor(uint32_t setEnum, uint32_t bindingIdx,
     }
 }
 
-void DescriptorManager::cmdBindDescriptorBuffers(VkCommandBuffer cmdBuf, PlayProgram* program)
+void DescriptorBufferManagerExt::cmdBindDescriptorBuffers(VkCommandBuffer cmdBuf,
+                                                          PlayProgram*    program)
 {
     VkDescriptorBufferBindingInfoEXT descriptorBufferBindingInfo[2] = {
         {VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT}};
@@ -199,10 +383,10 @@ void DescriptorManager::cmdBindDescriptorBuffers(VkCommandBuffer cmdBuf, PlayPro
     descriptorBufferBindingInfo[0].usage   = VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT;
 
     vkCmdBindDescriptorBuffersEXT(cmdBuf, 2, descriptorBufferBindingInfo);
-    VkPipelineLayout    layout    = program->getDescriptorManager().getPipelineLayout();
+    VkPipelineLayout    layout    = program->getDescriptorSetManager().getPipelineLayout();
     VkPipelineBindPoint bindPoint = program->getPipelineBindPoint();
     // a series of descriptor sets' binding info
-    const auto& setBindingInfo = program->getDescriptorManager().getSetBindingInfo();
+    const auto& setBindingInfo = program->getDescriptorSetManager().getSetBindingInfo();
     // for each set
     uint32_t bufferInfoIdx = 0;
     for (int setIdx = 0; setIdx < setBindingInfo.size(); ++setIdx)

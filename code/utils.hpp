@@ -1,7 +1,11 @@
 #ifndef UTILS_HPP
 #define UTILS_HPP
+#include <array>
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include <type_traits>
+#include <vector>
 #include "vulkan/vulkan.h"
 
 #define CUSTOM_NAME_VK(DEBUGER, _x)                                          \
@@ -47,5 +51,13 @@ VkImageCreateInfo makeImage2DCreateInfo(VkExtent2D extent, VkFormat format,
 
 VkImageCreateInfo makeImage3DCreateInfo(VkExtent3D extent, VkFormat format,
                                         VkImageUsageFlags usageFlags, bool mipmap);
+uint64_t          memoryHash(void* data, size_t size);
+
+template <typename T>
+uint64_t memoryHash(const std::vector<T>& data)
+{
+    return memoryHash((void*) data.data(), data.size() * sizeof(T));
+}
+
 } // namespace Play
 #endif // UTILS_HPP

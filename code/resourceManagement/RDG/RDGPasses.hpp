@@ -2,6 +2,7 @@
 #define RDGPASSES_HPP
 #include <set>
 #include <optional>
+#include "nvvk/check_error.hpp"
 #include "PlayProgram.h"
 #include "RDGResources.h"
 #include "utils.hpp"
@@ -19,14 +20,26 @@ struct Scene;
 class RenderDependencyGraph;
 class RDGBuilder;
 struct RenderContext;
+class RenderPassBuilder;
+class ComputePassBuilder;
+class RTPassBuilder;
+
+struct RDGTextureState
+{
+    TextureSubresourceAccessInfo textureStates;
+    VkImageMemoryBarrier2        barrierInfo{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
+};
+
+struct RDGBufferState
+{
+    BufferAccessInfo       bufferState;
+    VkBufferMemoryBarrier2 barrierInfo{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2};
+};
 
 class PassNode : public Node
 {
 public:
-    PassNode(size_t id, std::string name, NodeType type) : Node(id, type), _name(std::move(name))
-    {
-        m_priority = NodePriority::ePrimary;
-    }
+    PassNode(size_t id, std::string name, NodeType type) : Node(id, type), _name(std::move(name)) {}
     void setProgram(PlayProgram* program)
     {
         _program = program;
@@ -57,16 +70,19 @@ public:
         Render,
         Compute,
         RayTracing,
-        Input
+        Present
     };
     virtual Type type() const = 0;
 
-private:
-    PlayProgram*                                _program = nullptr;
-    std::function<void(RenderContext& context)> _func;
-    std::vector<VkDescriptorSet>                _descSets;
-    std::string                                 _name;
-    Type                                        _type;
+protected:
+    friend class RDGBuilder;
+    PlayProgram*                                     _program = nullptr;
+    std::function<void(RenderContext& context)>      _func;
+    std::vector<VkDescriptorSet>                     _descSets;
+    std::string                                      _name;
+    Type                                             _type;
+    std::unordered_map<RDGTexture*, RDGTextureState> _textureStates;
+    std::unordered_map<RDGBuffer*, RDGBufferState>   _bufferStates;
 };
 
 class RenderPassNode : public PassNode
@@ -80,6 +96,10 @@ public:
     {
         return Type::Render;
     }
+
+private:
+    friend class RenderPassBuilder;
+    friend class RDGBuilder;
 };
 
 using RenderPassNodeRef = RenderPassNode*;
@@ -107,6 +127,8 @@ public:
 
 private:
     bool _isAsync = false;
+    friend class ComputePassBuilder;
+    friend class RDGBuilder;
 };
 using ComputePassNodeRef = ComputePassNode*;
 
@@ -118,56 +140,78 @@ public:
     {
         return Type::RayTracing;
     }
+
+private:
+    friend class RTPassBuilder;
+    friend class RDGBuilder;
 };
 using RTPassNodeRef = RTPassNode*;
 
-class InputPassNode : public PassNode
+// class InputPassNode : public PassNode
+// {
+// public:
+//     InputPassNode(uint32_t id, std::string name) : PassNode(id, std::move(name),
+//     NodeType::eInput)
+//     {
+//     }
+//     Type type() const override
+//     {
+//         return Type::Input;
+//     }
+// };
+// using InputPassNodeRef = InputPassNode*;
+
+class PresentPassNode : public PassNode
 {
 public:
-    InputPassNode(uint32_t id, std::string name) : PassNode(id, std::move(name), NodeType::eInput)
-    {
-    }
+    PresentPassNode(uint32_t id, std::string name);
+
     Type type() const override
     {
-        return Type::Input;
+        return Type::Present;
     }
+    static std::atomic_int creationCount;
+
+private:
+    friend class PresentPassBuilder;
+    friend class RDGBuilder;
 };
-using InputPassNodeRef = InputPassNode*;
 
 class RenderPassBuilder
 {
 public:
     RenderPassBuilder(RDGBuilder* builder, RenderPassNodeRef node);
     ~RenderPassBuilder() = default;
-    void program(PlayProgram* program)
+    RenderPassBuilder& program(PlayProgram* program)
     {
         _node->setProgram(program);
+        return *this;
     }
-    RenderPassBuilder& color(uint32_t slotIdx, TextureNodeRef texHandle,
+    RenderPassBuilder& color(uint32_t slotIdx, RDGTextureRef texHandle,
                              VkAttachmentLoadOp  loadOp     = VK_ATTACHMENT_LOAD_OP_CLEAR,
                              VkAttachmentStoreOp storeOp    = VK_ATTACHMENT_STORE_OP_STORE,
                              VkImageLayout       initLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                              VkImageLayout finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     RenderPassBuilder& depthStencil(
-        TextureNodeRef texHandle, VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        RDGTextureRef texHandle, VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         VkAttachmentStoreOp storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
         VkImageLayout       initLayout  = VK_IMAGE_LAYOUT_UNDEFINED,
         VkImageLayout       finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-    RenderPassBuilder& read(uint32_t set, uint32_t binding, TextureNodeRef texture,
-                            VkPipelineStageFlagBits2 stage,
-                            uint32_t                 queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
-    RenderPassBuilder& read(uint32_t set, uint32_t binding, BufferNodeRef buffer,
-                            VkPipelineStageFlagBits2 stage,
-                            uint32_t                 queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                            uint32_t offset = 0, size_t size = VK_WHOLE_SIZE);
-    RenderPassBuilder& readWrite(uint32_t set, uint32_t binding, TextureNodeRef texture,
-                                 VkPipelineStageFlagBits2 stage,
-                                 uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
-    RenderPassBuilder& readWrite(uint32_t set, uint32_t binding, BufferNodeRef buffer,
-                                 VkPipelineStageFlagBits2 stage,
-                                 uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                                 uint32_t offset = 0, size_t size = VK_WHOLE_SIZE);
-    RenderPassBuilder& execute(std::function<void(RenderContext& context)> func);
+    RenderPassBuilder&              read(uint32_t set, uint32_t binding, RDGTextureRef texture,
+                                         VkPipelineStageFlagBits2 stage,
+                                         uint32_t                 queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
+    RenderPassBuilder&              read(uint32_t set, uint32_t binding, RDGBufferRef buffer,
+                                         VkPipelineStageFlagBits2 stage,
+                                         uint32_t                 queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                         uint32_t offset = 0, size_t size = VK_WHOLE_SIZE);
+    RenderPassBuilder&              readWrite(uint32_t set, uint32_t binding, RDGTextureRef texture,
+                                              VkPipelineStageFlagBits2 stage,
+                                              uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
+    RenderPassBuilder&              readWrite(uint32_t set, uint32_t binding, RDGBufferRef buffer,
+                                              VkPipelineStageFlagBits2 stage,
+                                              uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                              uint32_t offset = 0, size_t size = VK_WHOLE_SIZE);
+    RenderPassBuilder&              execute(std::function<void(RenderContext& context)> func);
     [[nodiscard]] RenderPassNodeRef finish() const
     {
         return _node;
@@ -184,21 +228,22 @@ class ComputePassBuilder
 public:
     ComputePassBuilder(RDGBuilder* builder, ComputePassNodeRef node);
     ~ComputePassBuilder() = default;
-    void program(PlayProgram* program)
+    ComputePassBuilder& program(PlayProgram* program)
     {
         _node->setProgram(program);
+        return *this;
     }
-    ComputePassBuilder& read(uint32_t set, uint32_t binding, TextureNodeRef texture,
+    ComputePassBuilder& read(uint32_t set, uint32_t binding, RDGTextureRef texture,
                              VkPipelineStageFlagBits2 stage,
                              uint32_t                 queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
-    ComputePassBuilder& read(uint32_t set, uint32_t binding, BufferNodeRef buffer,
+    ComputePassBuilder& read(uint32_t set, uint32_t binding, RDGBufferRef buffer,
                              VkPipelineStageFlagBits2 stage,
                              uint32_t                 queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                              uint32_t offset = 0, size_t size = VK_WHOLE_SIZE);
-    ComputePassBuilder& readWrite(uint32_t set, uint32_t binding, TextureNodeRef texture,
+    ComputePassBuilder& readWrite(uint32_t set, uint32_t binding, RDGTextureRef texture,
                                   VkPipelineStageFlagBits2 stage,
                                   uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
-    ComputePassBuilder& readWrite(uint32_t set, uint32_t binding, BufferNodeRef buffer,
+    ComputePassBuilder& readWrite(uint32_t set, uint32_t binding, RDGBufferRef buffer,
                                   VkPipelineStageFlagBits2 stage,
                                   uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                                   uint32_t offset = 0, size_t size = VK_WHOLE_SIZE);
@@ -220,21 +265,22 @@ class RTPassBuilder
 public:
     RTPassBuilder(RDGBuilder* builder, RTPassNodeRef node);
     ~RTPassBuilder() = default;
-    void program(PlayProgram* program)
+    RTPassBuilder& program(PlayProgram* program)
     {
         _node->setProgram(program);
+        return *this;
     }
-    RTPassBuilder&              read(uint32_t set, uint32_t binding, TextureNodeRef texture,
+    RTPassBuilder&              read(uint32_t set, uint32_t binding, RDGTextureRef texture,
                                      VkPipelineStageFlagBits2 stage,
                                      uint32_t                 queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
-    RTPassBuilder&              read(uint32_t set, uint32_t binding, BufferNodeRef buffer,
+    RTPassBuilder&              read(uint32_t set, uint32_t binding, RDGBufferRef buffer,
                                      VkPipelineStageFlagBits2 stage,
                                      uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, uint32_t offset = 0,
                                      size_t size = VK_WHOLE_SIZE);
-    RTPassBuilder&              readWrite(uint32_t set, uint32_t binding, TextureNodeRef texture,
+    RTPassBuilder&              readWrite(uint32_t set, uint32_t binding, RDGTextureRef texture,
                                           VkPipelineStageFlagBits2 stage,
                                           uint32_t                 queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
-    RTPassBuilder&              readWrite(uint32_t set, uint32_t binding, BufferNodeRef buffer,
+    RTPassBuilder&              readWrite(uint32_t set, uint32_t binding, RDGBufferRef buffer,
                                           VkPipelineStageFlagBits2 stage,
                                           uint32_t                 queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                                           uint32_t offset = 0, size_t size = VK_WHOLE_SIZE);
@@ -248,6 +294,21 @@ private:
     RDGBuilder*   _builder = nullptr;
     RTPassNodeRef _node    = nullptr;
     Dag*          _dag     = nullptr;
+};
+
+class PresentPassBuilder
+{
+public:
+    PresentPassBuilder(RDGBuilder* builder, PresentPassNode* node);
+    ~PresentPassBuilder() = default;
+    PresentPassBuilder& color(RDGTextureRef texHandle);
+    PresentPassBuilder& read(RDGTextureRef texHandle);
+    PresentPassNode*    finish();
+
+private:
+    RDGBuilder*      _builder = nullptr;
+    PresentPassNode* _node    = nullptr;
+    Dag*             _dag     = nullptr;
 };
 
 } // namespace Play::RDG

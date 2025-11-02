@@ -13,3 +13,6 @@
 [submodule "External/spv_reflect"]
 	path = External/spv_reflect
 	url = https://github.com/KhronosGroup/SPIRV-Reflect.git
+[submodule "External/Crc32"]
+	path = External/Crc32
+	url = https://github.com/google/crc32c.git

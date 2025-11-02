@@ -29,6 +29,13 @@ FILE(GLOB_RECURSE SOURCE_FILES
 )
 
 source_group("Source Files" FILES ${SOURCE_FILES})
+#####################################################################################
+# Crc32c
+option (CRC32C_BUILD_TESTS OFF)
+option (CRC32C_BUILD_BENCHMARKS OFF)
+option (CRC32C_USE_GLOG OFF)
+
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/External/Crc32)
 
 #####################################################################################
 # Executable
@@ -42,6 +49,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/code
   ${CMAKE_CURRENT_LIST_DIR}/code/resourceManagement
   ${CMAKE_CURRENT_LIST_DIR}/External/spv_reflect/include
+  ${CMAKE_CURRENT_LIST_DIR}/External/Crc32/include
 
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE
@@ -57,6 +65,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   nvpro2::nvvkglsl
   nvpro2::nvvkgltf
   spirv-reflect-static
+  crc32c
 )
 
 add_project_definitions(${PROJECT_NAME})

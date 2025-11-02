@@ -40,7 +40,7 @@ void ShaderManager::init(PlayElement* element)
     _element = element;
     _shaderPool.init(MaxShaderModules, &PlayResourceManager::Instance());
     std::filesystem::path shaderBasePath = std::filesystem::path(getBaseFilePath()) / "shaders";
-    _searchPaths                         = {shaderBasePath,
+    _searchPaths                         = {shaderBasePath, shaderBasePath / "newShaders",
                                             std::filesystem::path(getBaseFilePath()) / "External/nvpro_core2/nvshaders"};
     _glslCCompiler.addSearchPaths(_searchPaths);
     _glslCCompiler.defaultOptions();
@@ -75,12 +75,6 @@ void ShaderManager::registBuiltInShader()
                                            ShaderType::eSLANG, "main");
     uint32_t CompGenRayId = loadShaderFromFile("volumeGenRay", "volumeRender/volumeGenRay.comp",
                                                ShaderStage::eCompute, ShaderType::eGLSL, "main");
-    uint32_t PostProcessvId =
-        loadShaderFromFile("postProcessv", "newShaders/postProcess.vert.slang",
-                           ShaderStage::eVertex, ShaderType::eSLANG, "main");
-    uint32_t PostProcessfId =
-        loadShaderFromFile("postProcessf", "newShaders/postProcess.frag.slang",
-                           ShaderStage::eFragment, ShaderType::eSLANG, "main");
 }
 
 VkDescriptorType spvToDescriptorType(SpvReflectDescriptorType type)

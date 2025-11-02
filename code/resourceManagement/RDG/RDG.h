@@ -29,19 +29,18 @@ public:
     RDGTexture* request(Texture* texture);
 
 private:
-    std::unordered_map<TextureNode::TextureDesc, std::list<RDGTexture*>> _textureMap;
+    std::unordered_map<RDGTexture::TextureDesc, std::list<RDGTexture*>> _textureMap;
 };
 
 class RDGBuilder;
 class RDGTextureBuilder
 {
 public:
-    RDGTextureBuilder(RDGBuilder* builder, TextureNodeRef node)
+    RDGTextureBuilder(RDGBuilder* builder, RDGTextureRef node)
         : _builder(builder), _textureNode(node)
     {
     }
-    RDGTextureBuilder& Import(Texture* texture, VkAccessFlags2 accessMask, VkImageLayout layout,
-                              VkPipelineStageFlags2 stageMask, uint32_t queueFamilyIndex);
+    RDGTextureBuilder& Import(Texture* texture);
     RDGTextureBuilder& Format(VkFormat format);
     RDGTextureBuilder& Type(VkImageType type);
     RDGTextureBuilder& Extent(VkExtent3D extent);
@@ -50,27 +49,27 @@ public:
     RDGTextureBuilder& SampleCount(VkSampleCountFlagBits sampleCount);
     RDGTextureBuilder& MipmapLevel(uint32_t mipmapLevel);
     RDGTextureBuilder& LayerCount(uint32_t layerCount);
-    TextureNodeRef     finish();
+    RDGTextureRef      finish();
 
 private:
-    RDGBuilder*    _builder     = nullptr;
-    TextureNodeRef _textureNode = nullptr;
+    RDGBuilder*   _builder     = nullptr;
+    RDGTextureRef _textureNode = nullptr;
 };
 class RDGBufferBuilder
 {
 public:
-    RDGBufferBuilder(RDGBuilder* builder, BufferNodeRef node) : _builder(builder), _bufferNode(node)
+    RDGBufferBuilder(RDGBuilder* builder, RDGBufferRef node) : _builder(builder), _bufferNode(node)
     {
     }
     RDGBufferBuilder& Size(VkDeviceSize size);
     RDGBufferBuilder& Range(VkDeviceSize range);
     RDGBufferBuilder& UsageFlags(VkBufferUsageFlags usageFlags);
     RDGBufferBuilder& Location(bool isDeviceLocal);
-    BufferNodeRef     finish();
+    RDGBufferRef      finish();
 
 private:
-    RDGBuilder*   _builder    = nullptr;
-    BufferNodeRef _bufferNode = nullptr;
+    RDGBuilder*  _builder    = nullptr;
+    RDGBufferRef _bufferNode = nullptr;
 };
 
 class BlackBoard
@@ -78,26 +77,46 @@ class BlackBoard
 public:
     BlackBoard()  = default;
     ~BlackBoard() = default;
-    void           registTexture(TextureNodeRef texture);
-    void           registBuffer(BufferNodeRef buffer);
-    void           registPass(PassNode* pass);
-    TextureNodeRef getTexture(std::string name);
-    BufferNodeRef  getBuffer(std::string name);
-    PassNode*      getPass(std::string name);
+    void          registTexture(RDGTextureRef texture);
+    void          registBuffer(RDGBufferRef buffer);
+    void          registPass(PassNode* pass);
+    RDGTextureRef getTexture(std::string name);
+    RDGBufferRef  getBuffer(std::string name);
+    PassNode*     getPass(std::string name);
 
 private:
-    std::unordered_map<std::string, TextureNodeRef> _textureMap;
-    std::unordered_map<std::string, BufferNodeRef>  _bufferMap;
-    std::unordered_map<std::string, PassNode*>      _passMap;
+    std::unordered_map<std::string, RDGTextureRef> _textureMap;
+    std::unordered_map<std::string, RDGBufferRef>  _bufferMap;
+    std::unordered_map<std::string, PassNode*>     _passMap;
+};
+
+struct PendingGfxState
+{
+    PendingGfxState(RenderContext* renderContext) : _renderContext(renderContext) {}
+    const RenderContext* _renderContext = nullptr;
+};
+
+struct PendingComputeState
+{
+    PendingComputeState(RenderContext* renderContext) : _renderContext(renderContext) {}
+    const RenderContext* _renderContext = nullptr;
 };
 
 struct RenderContext
 {
-    PlayElement*                _element;
-    PlayElement::PlayFrameData* _frameData;
-    uint32_t                    _frameInFlightIndex;
-    PassNode*                   _prevPassNode;
-    VkCommandBuffer             _currCmdBuffer = VK_NULL_HANDLE;
+    RenderContext(PlayElement* element) : _element(element)
+    {
+        _pendingComputeState = std::make_shared<PendingComputeState>(this);
+        _pendingGfxState     = std::make_shared<PendingGfxState>(this);
+    }
+    ~RenderContext() {}
+    PlayElement*                         _element;
+    PlayElement::PlayFrameData*          _frameData;
+    uint32_t                             _frameInFlightIndex;
+    PassNode*                            _prevPassNode;
+    VkCommandBuffer                      _currCmdBuffer       = VK_NULL_HANDLE;
+    std::shared_ptr<PendingComputeState> _pendingComputeState = nullptr;
+    std::shared_ptr<PendingGfxState>     _pendingGfxState     = nullptr;
 };
 
 class RDGBuilder
@@ -108,23 +127,15 @@ public:
     RenderPassBuilder  createRenderPass(std::string name);
     ComputePassBuilder createComputePass(std::string name);
     RTPassBuilder      createRTPass(std::string name);
+    PresentPassBuilder createPresentPass();
 
     RDGTextureBuilder createTexture(std::string name);
     RDGBufferBuilder  createBuffer(std::string name);
 
-    void setOutput(Texture* texture)
-    {
-        _outputTexture = texture;
-    }
-    Texture* getOutput()
-    {
-        return _outputTexture;
-    }
-
-    TextureNodeRef getTexture(std::string name);
-    BufferNodeRef  getBuffer(std::string name);
-    void           compile();
-    void           execute();
+    RDGTextureRef getTexture(std::string name);
+    RDGBufferRef  getBuffer(std::string name);
+    void          compile();
+    void          execute();
 
     Dag* getDag()
     {
@@ -134,20 +145,18 @@ public:
 protected:
     friend class RDGTextureBuilder;
     friend class RDGBufferBuilder;
-    InputPassNodeRef createInputPass(std::string name);
-    void             beforePassExecute();
-    void             executePass(RenderPassNode* pass);
-    void             executePass(ComputePassNode* pass);
-    void             executePass(RTPassNode* pass);
-    void             afterPassExecute();
-    RenderContext    prepareRenderContext(PassNode* pass);
-    void             prepareRenderTargets(PassNode* pass);
-    void             prepareDescriptorSets(PassNode* pass);
-    void             prepareRenderPass(PassNode* pass);
+    // InputPassNodeRef createInputPass(std::string name);
+    void           beforePassExecute();
+    void           executePass(PassNode* pass);
+    void           afterPassExecute();
+    RenderContext* prepareRenderContext(PassNode* pass);
+    void           prepareRenderTargets(PassNode* pass);
+    void           prepareDescriptorSets(RenderContext& context, PassNode* pass);
+    void           prepareRenderPass(PassNode* pass);
     friend class RenderPassBuilder;
     friend class ComputePassBuilder;
     friend class RTPassBuilder;
-    Texture*                                     _outputTexture;
+    friend class PresentPassBuilder;
     PlayElement*                                 _element = nullptr;
     std::unique_ptr<Dag>                         _dag     = nullptr;
     std::vector<PassNode*>                       _passes;
@@ -156,7 +165,7 @@ protected:
     std::unordered_map<std::string, RDGBuffer*>  _bufferMap;
 
 private:
-    RenderContext _renderContext;
+    std::shared_ptr<RenderContext> _renderContext;
     std::vector<std::pair<VkSubmitInfo2, uint32_t>>
         _submitInfos; // pairs of submit info and frame index
 };

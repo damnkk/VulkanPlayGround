@@ -14,26 +14,9 @@ RDGTexture* RDGTextureCache::request(Texture* texture)
     return nullptr;
 }
 
-RDGTextureBuilder& RDGTextureBuilder::Import(Texture* texture, VkAccessFlags2 accessMask,
-                                             VkImageLayout layout, VkPipelineStageFlags2 stageMask,
-                                             uint32_t queueFamilyIndex)
+RDGTextureBuilder& RDGTextureBuilder::Import(Texture* texture)
 {
-    this->_textureNode->setRHI(texture);
-    this->_textureNode->_info._format      = texture->Format();
-    this->_textureNode->_info._type        = texture->Type();
-    this->_textureNode->_info._extent      = texture->Extent();
-    this->_textureNode->_info._usageFlags  = texture->UsageFlags();
-    this->_textureNode->_info._aspectFlags = texture->AspectFlags();
-    this->_textureNode->_info._sampleCount = texture->SampleCount();
-    this->_textureNode->_info._mipmapLevel = texture->MipLevel();
-    this->_textureNode->_info._layerCount  = texture->LayerCount();
-    InputPassNodeRef inputNode = this->_builder->createInputPass(texture->DebugName() + "_import");
-    TextureEdge*     edge =
-        this->_builder->getDag()->createEdge<TextureEdge>(inputNode, this->_textureNode);
-    edge->accessMask       = accessMask;
-    edge->layout           = layout;
-    edge->stageMask        = stageMask;
-    edge->queueFamilyIndex = queueFamilyIndex;
+    _textureNode->setRHI(texture);
     return *this;
 }
 
@@ -57,13 +40,13 @@ RDGTextureBuilder& RDGTextureBuilder::Extent(VkExtent3D extent)
 
 RDGTextureBuilder& RDGTextureBuilder::UsageFlags(VkImageUsageFlags usageFlags)
 {
-    _textureNode->_info._usageFlags = usageFlags;
+    _textureNode->_info._usageFlags |= usageFlags;
     return *this;
 }
 
 RDGTextureBuilder& RDGTextureBuilder::AspectFlags(VkImageAspectFlags aspectFlags)
 {
-    _textureNode->_info._aspectFlags = aspectFlags;
+    _textureNode->_info._aspectFlags |= aspectFlags;
     return *this;
 }
 
@@ -85,7 +68,7 @@ RDGTextureBuilder& RDGTextureBuilder::LayerCount(uint32_t layerCount)
     return *this;
 }
 
-TextureNodeRef RDGTextureBuilder::finish()
+RDGTextureRef RDGTextureBuilder::finish()
 {
     return _textureNode;
 }
@@ -111,22 +94,22 @@ RDGBufferBuilder& RDGBufferBuilder::UsageFlags(VkBufferUsageFlags usageFlags)
 RDGBufferBuilder& RDGBufferBuilder::Location(bool isDeviceLocal)
 {
     _bufferNode->_info._location = isDeviceLocal
-                                       ? BufferNode::BufferDesc::MemoryLocation::eDeviceLocal
-                                       : BufferNode::BufferDesc::MemoryLocation::eHostVisible;
+                                       ? RDGBuffer::BufferDesc::MemoryLocation::eDeviceLocal
+                                       : RDGBuffer::BufferDesc::MemoryLocation::eHostVisible;
     return *this;
 }
 
-BufferNodeRef RDGBufferBuilder::finish()
+RDGBufferRef RDGBufferBuilder::finish()
 {
     return _bufferNode;
 }
 
-void BlackBoard::registTexture(TextureNodeRef texture)
+void BlackBoard::registTexture(RDGTextureRef texture)
 {
     _textureMap[texture->name()] = texture;
 }
 
-void BlackBoard::registBuffer(BufferNodeRef buffer)
+void BlackBoard::registBuffer(RDGBufferRef buffer)
 {
     _bufferMap[buffer->name()] = buffer;
 }
@@ -136,12 +119,12 @@ void BlackBoard::registPass(PassNode* pass)
     _passMap[pass->name()] = pass;
 }
 
-TextureNodeRef BlackBoard::getTexture(std::string name)
+RDGTextureRef BlackBoard::getTexture(std::string name)
 {
     return _textureMap[name];
 }
 
-BufferNodeRef BlackBoard::getBuffer(std::string name)
+RDGBufferRef BlackBoard::getBuffer(std::string name)
 {
     return _bufferMap[name];
 }
@@ -153,7 +136,8 @@ PassNode* BlackBoard::getPass(std::string name)
 
 RDGBuilder::RDGBuilder(PlayElement* element) : _element(element)
 {
-    _dag = std::make_unique<Dag>();
+    _dag           = std::make_unique<Dag>();
+    _renderContext = std::make_shared<RenderContext>(element);
 }
 
 RDGBuilder::~RDGBuilder() {}
@@ -182,82 +166,79 @@ RTPassBuilder RDGBuilder::createRTPass(std::string name)
     return RTPassBuilder(this, nodeRef);
 }
 
-InputPassNodeRef RDGBuilder::createInputPass(std::string name)
+PresentPassBuilder RDGBuilder::createPresentPass()
 {
-    InputPassNodeRef nodeRef = _dag->addNode<InputPassNode>(std::move(name));
-    return nodeRef;
+    PresentPassNode* nodeRef = _dag->addNode<PresentPassNode>("PresentPass");
+    _passes.push_back(nodeRef);
+    _blackBoard.registPass(nodeRef);
+    return PresentPassBuilder(this, nodeRef);
 }
+
+// InputPassNodeRef RDGBuilder::createInputPass(std::string name)
+// {
+//     InputPassNodeRef nodeRef = _dag->addNode<InputPassNode>(std::move(name));
+//     return nodeRef;
+// }
 
 void RDGBuilder::beforePassExecute() {}
 
 void RDGBuilder::prepareRenderTargets(PassNode* pass)
 {
+    RenderPassNode* renderPass = static_cast<RenderPassNode*>(pass);
     if (pass->type() != PassNode::Type::Render) return;
-    auto                         inputEdge = pass->getIncomingEdges();
-    std::vector<AttachmentEdge*> attachments;
-    for (auto& edge : inputEdge)
+    for (auto& [rdgTexture, colorAttachmentState] : renderPass->_textureStates)
     {
-        if (edge->getType() == EdgeType::eRenderAttachment)
-        {
-            AttachmentEdge* attEdge = static_cast<AttachmentEdge*>(edge);
-            attachments.push_back(attEdge);
-            TextureNode* textureNode = static_cast<TextureNode*>(attEdge->getFrom());
-            if (!textureNode->getRHI())
-            {
-                TextureNode::TextureDesc& info = textureNode->_info;
-                textureNode->setRHI(Texture::Create(
-                    info._extent.width, info._extent.height, info._extent.depth, info._format,
-                    info._usageFlags, attEdge->layout, info._mipmapLevel));
-            }
-        }
+        if (!colorAttachmentState.textureStates.front().isAttachment) continue;
+        rdgTexture->setRHI(Texture::Create(
+            rdgTexture->_info._extent.width, rdgTexture->_info._extent.height,
+            rdgTexture->_info._format, rdgTexture->_info._usageFlags, VK_IMAGE_LAYOUT_UNDEFINED,
+            rdgTexture->_info._mipmapLevel, rdgTexture->_info._sampleCount));
     }
 }
 
-void RDGBuilder::prepareDescriptorSets(PassNode* pass)
+void RDGBuilder::prepareDescriptorSets(RenderContext& context, PassNode* pass)
 {
     auto               inputEdges  = pass->getIncomingEdges();
     DescriptorManager& descManager = _element->getDescriptorManager();
-    descManager.updateDescSetBindingOffset(&pass->getProgram()->getDescriptorManager());
-    auto bindingInfo = pass->getProgram()->getDescriptorManager().getSetBindingInfo();
-    for (auto& edge : inputEdges)
+    descManager.updateDescSetBindingOffset(&pass->getProgram()->getDescriptorSetManager());
+    auto bindingInfo = pass->getProgram()->getDescriptorSetManager().getSetBindingInfo();
+    auto test        = pass->getProgram()->getDescriptorSetManager();
+
+    for (auto& [texture, state] : pass->_textureStates)
     {
-        if (edge->getType() == EdgeType::eTexture)
+        if (state.textureStates.front().isAttachment) continue;
+        if (!texture->getRHI())
         {
-            TextureEdge* texEdge     = static_cast<TextureEdge*>(edge);
-            TextureNode* textureNode = static_cast<TextureNode*>(texEdge->getFrom());
-            if (!textureNode->getRHI())
-            {
-                TextureNode::TextureDesc& info = textureNode->_info;
-                textureNode->setRHI(Texture::Create(
-                    info._extent.width, info._extent.height, info._extent.depth, info._format,
-                    info._usageFlags, texEdge->layout, info._mipmapLevel));
-                descManager.updateDescriptor(
-                    texEdge->set, texEdge->binding,
-                    bindingInfo[texEdge->set].getBindings()[texEdge->binding].descriptorType,
-                    bindingInfo[texEdge->set].getBindings()[texEdge->binding].descriptorCount,
-                    textureNode->getRHI());
-            }
+            RDGTexture::TextureDesc& info = texture->_info;
+            texture->setRHI(Texture::Create(info._extent.width, info._extent.height,
+                                            info._extent.depth, info._format, info._usageFlags,
+                                            VK_IMAGE_LAYOUT_UNDEFINED, info._mipmapLevel));
         }
-        else if (edge->getType() == EdgeType::eBuffer)
-        {
-            BufferEdge* bufEdge    = static_cast<BufferEdge*>(edge);
-            BufferNode* bufferNode = static_cast<BufferNode*>(bufEdge->getFrom());
-            if (!bufferNode->getRHI())
-            {
-                BufferNode::BufferDesc& info = bufferNode->_info;
-                bufferNode->setRHI(Buffer::Create(
-                    info._debugName, info._size, info._usageFlags,
-                    info._location == BufferNode::BufferDesc::MemoryLocation::eDeviceLocal
-                        ? VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-                        : VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                              VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
-                descManager.updateDescriptor(
-                    bufEdge->set, bufEdge->binding,
-                    bindingInfo[bufEdge->set].getBindings()[bufEdge->binding].descriptorType,
-                    bindingInfo[bufEdge->set].getBindings()[bufEdge->binding].descriptorCount,
-                    bufferNode->getRHI());
-            }
-        }
+
+        TextureAccessInfo accessInfo = state.textureStates[0];
+        descManager.updateDescriptor(
+            accessInfo.set, accessInfo.binding,
+            bindingInfo[accessInfo.set].getBindings()[accessInfo.binding].descriptorType,
+            bindingInfo[accessInfo.set].getBindings()[accessInfo.binding].descriptorCount,
+            texture->getRHI());
+    }
+
+    for (auto& [buffer, state] : pass->_bufferStates)
+    {
+        if (buffer->getRHI()) continue;
+
+        RDGBuffer::BufferDesc& info = buffer->_info;
+        buffer->setRHI(Buffer::Create(
+            info._debugName, info._size, info._usageFlags,
+            info._location == RDGBuffer::BufferDesc::MemoryLocation::eDeviceLocal
+                ? VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+                : VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
+        BufferAccessInfo bufferInfo = state.bufferState;
+        descManager.updateDescriptor(
+            bufferInfo.set, bufferInfo.binding,
+            bindingInfo[bufferInfo.set].getBindings()[bufferInfo.binding].descriptorType,
+            bindingInfo[bufferInfo.set].getBindings()[bufferInfo.binding].descriptorCount,
+            buffer->getRHI());
     }
 }
 
@@ -268,76 +249,178 @@ void RDGBuilder::prepareRenderPass(PassNode* pass)
 
 RDGTextureBuilder RDGBuilder::createTexture(std::string name)
 {
-    TextureNodeRef    node = _dag->addNode<TextureNode>(name);
+    RDGTextureRef     node = new RDGTexture(name);
     RDGTextureBuilder builder(this, node);
     return builder;
 }
 
 RDGBufferBuilder RDGBuilder::createBuffer(std::string name)
 {
-    BufferNodeRef    node = _dag->addNode<BufferNode>(name);
+    RDGBufferRef     node = new RDGBuffer(name);
     RDGBufferBuilder builder(this, node);
-    _blackBoard.registBuffer(node);
     return builder;
 }
 
-TextureNodeRef RDGBuilder::getTexture(std::string name)
+RDGTextureRef RDGBuilder::getTexture(std::string name)
 {
     return _blackBoard.getTexture(name);
 }
 
-BufferNodeRef RDGBuilder::getBuffer(std::string name)
+RDGBufferRef RDGBuilder::getBuffer(std::string name)
 {
     return _blackBoard.getBuffer(name);
 }
 
 void RDGBuilder::compile()
 {
-    // _dag->culling(const std::vector<Node*>& outputNodes);
+    // dependency update
+    for (auto passNode : _passes)
+    {
+        for (auto& [texture, state] : passNode->_textureStates)
+        {
+            auto& producerInfo = texture->_producerInfo;
+            if (producerInfo.accessMask != VK_ACCESS_2_NONE)
+            {
+                TextureAccessInfo* lastAccessInfo = nullptr;
+
+                if (producerInfo.lastReadOnlyAccesser == nullptr)
+                {
+                    // this is rdg connection, but not equivalent to a barrier relationship,
+                    Edge* edge = _dag->createEdge(producerInfo.lastProducer, passNode);
+                    lastAccessInfo =
+                        &producerInfo.lastProducer->_textureStates[texture].textureStates.front();
+                }
+                else
+                {
+                    lastAccessInfo = &producerInfo.lastReadOnlyAccesser->_textureStates[texture]
+                                          .textureStates.front();
+                }
+
+                TextureAccessInfo& currAccessInfo = state.textureStates.front();
+                if (*lastAccessInfo == currAccessInfo) continue;
+                VkImageMemoryBarrier2& imageBarrier = state.barrierInfo;
+                imageBarrier.srcAccessMask          = lastAccessInfo->accessMask;
+                imageBarrier.dstAccessMask          = currAccessInfo.accessMask;
+                imageBarrier.srcStageMask           = lastAccessInfo->stageMask;
+                imageBarrier.dstStageMask           = currAccessInfo.stageMask;
+                imageBarrier.oldLayout              = lastAccessInfo->layout;
+                imageBarrier.newLayout              = currAccessInfo.layout;
+                imageBarrier.srcQueueFamilyIndex    = lastAccessInfo->queueFamilyIndex;
+                imageBarrier.dstQueueFamilyIndex    = currAccessInfo.queueFamilyIndex;
+                imageBarrier.subresourceRange       = {texture->_info._aspectFlags, 0,
+                                                       texture->_info._mipmapLevel, 0,
+                                                       texture->_info._layerCount};
+            }
+
+            if (state.textureStates.front().accessMask &
+                (VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT |
+                 VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT))
+            {
+                producerInfo.lastProducer         = passNode;
+                producerInfo.lastReadOnlyAccesser = nullptr;
+                producerInfo.accessMask           = state.textureStates.front().accessMask;
+            }
+            else
+            {
+                producerInfo.lastReadOnlyAccesser = passNode;
+                producerInfo.accessMask           = state.textureStates.front().accessMask;
+            }
+        }
+        for (auto& [buffer, state] : passNode->_bufferStates)
+        {
+            auto& producerInfo = buffer->_producerInfo;
+            if (producerInfo.accessMask != VK_ACCESS_2_NONE)
+            {
+                BufferAccessInfo* lastAccessInfo = nullptr;
+                [[likely]]
+                if (producerInfo.lastReadOnlyAccesser == nullptr)
+
+                // this is rdg connection, but not equivalent to a barrier relationship,
+                {
+                    Edge* edge     = _dag->createEdge(producerInfo.lastProducer, passNode);
+                    lastAccessInfo = &producerInfo.lastProducer->_bufferStates[buffer].bufferState;
+                }
+                else
+                {
+                    lastAccessInfo =
+                        &producerInfo.lastReadOnlyAccesser->_bufferStates[buffer].bufferState;
+                }
+
+                BufferAccessInfo& currAccessInfo = state.bufferState;
+                if (*lastAccessInfo == currAccessInfo) continue;
+                VkBufferMemoryBarrier2& bufferBarrier = state.barrierInfo;
+                bufferBarrier.srcAccessMask           = lastAccessInfo->accessMask;
+                bufferBarrier.dstAccessMask           = currAccessInfo.accessMask;
+                bufferBarrier.srcStageMask            = lastAccessInfo->stageMask;
+                bufferBarrier.dstStageMask            = currAccessInfo.stageMask;
+                bufferBarrier.srcQueueFamilyIndex     = lastAccessInfo->queueFamilyIndex;
+                bufferBarrier.dstQueueFamilyIndex     = currAccessInfo.queueFamilyIndex;
+                bufferBarrier.offset                  = state.bufferState.offset;
+                bufferBarrier.size                    = state.bufferState.size;
+            }
+
+            if (state.bufferState.accessMask &
+                (VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT))
+            {
+                producerInfo.lastProducer         = passNode;
+                producerInfo.lastReadOnlyAccesser = nullptr;
+                producerInfo.accessMask           = state.bufferState.accessMask;
+            }
+            else
+            {
+                producerInfo.lastReadOnlyAccesser = passNode;
+                producerInfo.accessMask           = state.bufferState.accessMask;
+            }
+        }
+    }
+    // culling
+    std::queue<PassNode*>              processQueue;
+    std::unordered_map<PassNode*, int> inDegreeMap;
+    for (auto passNode : _passes)
+    {
+        if (passNode->getIncomingEdges().empty())
+        {
+            processQueue.push(passNode);
+        }
+        inDegreeMap[passNode] = passNode->getIncomingEdges().size();
+    }
+
+    while (!processQueue.empty())
+    {
+        PassNode* currNode = processQueue.front();
+        processQueue.pop();
+        currNode->setCull(false);
+        for (auto edge : currNode->getOutgoingEdges())
+        {
+            PassNode* toNode = static_cast<PassNode*>(edge->getTo());
+            inDegreeMap[toNode]--;
+            if (inDegreeMap[toNode] == 0)
+            {
+                processQueue.push(toNode);
+            }
+        }
+    }
 }
+
 void RDGBuilder::execute()
 {
     for (auto& pass : _passes)
     {
         if (pass->isCull() || !pass) continue;
-        switch (pass->type())
-        {
-            case PassNode::Type::Render:
-                executePass(static_cast<RenderPassNode*>(pass));
-                break;
-            case PassNode::Type::Compute:
-                executePass(static_cast<ComputePassNode*>(pass));
-                break;
-            case PassNode::Type::RayTracing:
-                executePass(static_cast<RTPassNode*>(pass));
-                break;
-            default:
-                break;
-        }
+        executePass(pass);
     }
 }
 
-void RDGBuilder::executePass(RenderPassNode* pass)
+void RDGBuilder::executePass(PassNode* pass)
 {
-    prepareRenderTargets(pass);
-    prepareDescriptorSets(pass);
-    prepareRenderPass(pass);
     auto renderContext = prepareRenderContext(pass);
-    pass->execute(renderContext);
-}
-
-void RDGBuilder::executePass(ComputePassNode* pass)
-{
-    prepareDescriptorSets(pass);
-    auto renderContext = prepareRenderContext(pass);
-    pass->execute(renderContext);
-}
-
-void RDGBuilder::executePass(RTPassNode* pass)
-{
-    prepareDescriptorSets(pass);
-    auto renderContext = prepareRenderContext(pass);
-    pass->execute(renderContext);
+    if (pass->type() == PassNode::Type::Render)
+    {
+        prepareRenderTargets(pass);
+        prepareRenderPass(pass);
+    }
+    prepareDescriptorSets(*renderContext, pass);
+    pass->execute(*renderContext);
 }
 
 bool isAsyncCompute(PassNode* pass)
@@ -353,14 +436,14 @@ bool isAsyncCompute(PassNode* pass)
 void RDGBuilder::afterPassExecute()
 {
     // after the last pass in the frame, we need to submit the command buffer if exists.
-    NVVK_CHECK(vkEndCommandBuffer(_renderContext._currCmdBuffer));
+    NVVK_CHECK(vkEndCommandBuffer(_renderContext->_currCmdBuffer));
     VkCommandBufferSubmitInfo cmdInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
-    cmdInfo.commandBuffer = _renderContext._currCmdBuffer;
+    cmdInfo.commandBuffer = _renderContext->_currCmdBuffer;
     cmdInfo.deviceMask    = 0;
     VkSemaphoreSubmitInfo waitInfo{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
-    waitInfo.semaphore = _renderContext._frameData->semaphore;
-    waitInfo.value     = _renderContext._frameData->timelineValue;
-    switch (_renderContext._prevPassNode->type())
+    waitInfo.semaphore = _renderContext->_frameData->semaphore;
+    waitInfo.value     = _renderContext->_frameData->timelineValue;
+    switch (_renderContext->_prevPassNode->type())
     {
         case PassNode::Type::Render:
         {
@@ -384,9 +467,9 @@ void RDGBuilder::afterPassExecute()
         }
     }
     VkSemaphoreSubmitInfo signalInfo{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
-    signalInfo.semaphore = _renderContext._frameData->semaphore;
-    signalInfo.value     = ++_renderContext._frameData->timelineValue;
-    switch (_renderContext._prevPassNode->type())
+    signalInfo.semaphore = _renderContext->_frameData->semaphore;
+    signalInfo.value     = ++_renderContext->_frameData->timelineValue;
+    switch (_renderContext->_prevPassNode->type())
     {
         case PassNode::Type::Render:
         {
@@ -416,7 +499,7 @@ void RDGBuilder::afterPassExecute()
     submitInfo.pWaitSemaphoreInfos      = &waitInfo;
     submitInfo.signalSemaphoreInfoCount = 1;
     submitInfo.pSignalSemaphoreInfos    = &signalInfo;
-    _submitInfos.push_back({submitInfo, isAsyncCompute(_renderContext._prevPassNode) ? 1 : 0});
+    _submitInfos.push_back({submitInfo, isAsyncCompute(_renderContext->_prevPassNode) ? 1 : 0});
     for (auto& [submit, queueIndex] : _submitInfos)
     {
         vkQueueSubmit2(_element->getApp()->getQueue(queueIndex).queue, 1, &submit, nullptr);
@@ -427,27 +510,26 @@ void RDGBuilder::afterPassExecute()
 
 // reference passNode is AsyncCompute or not to determine the submit package. This func would
 // make passNode's execute func more cleaner, without caring about the submit details.
-RenderContext RDGBuilder::prepareRenderContext(PassNode* pass)
+RenderContext* RDGBuilder::prepareRenderContext(PassNode* pass)
 {
-    RenderContext context;
-    context._element            = _element;
-    context._frameInFlightIndex = _element->getApp()->getFrameCycleIndex();
-    context._frameData          = &_element->getFrameData(context._frameInFlightIndex);
+    _renderContext                      = std::make_shared<RenderContext>(_element);
+    _renderContext->_frameInFlightIndex = _element->getApp()->getFrameCycleIndex();
+    _renderContext->_frameData = &_element->getFrameData(_renderContext->_frameInFlightIndex);
     // if the first pass in the frame, we directly allocate a command buffer from the pool,and
     // begin it.
     [[unlikely]]
-    if (!context._prevPassNode)
+    if (!_renderContext->_prevPassNode)
     {
-        VkCommandPool cmdPool = isAsyncCompute(pass) ? context._frameData->computeCmdPool
-                                                     : context._frameData->graphicsCmdPool;
+        VkCommandPool cmdPool = isAsyncCompute(pass) ? _renderContext->_frameData->computeCmdPool
+                                                     : _renderContext->_frameData->graphicsCmdPool;
         VkCommandBufferAllocateInfo allocInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
         allocInfo.commandPool        = cmdPool;
         allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocInfo.commandBufferCount = 1;
         NVVK_CHECK(vkAllocateCommandBuffers(_element->getApp()->getDevice(), &allocInfo,
-                                            &context._currCmdBuffer));
+                                            &_renderContext->_currCmdBuffer));
         VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-        vkBeginCommandBuffer(context._currCmdBuffer, &beginInfo);
+        vkBeginCommandBuffer(_renderContext->_currCmdBuffer, &beginInfo);
     }
     else
     {
@@ -456,18 +538,18 @@ RenderContext RDGBuilder::prepareRenderContext(PassNode* pass)
         //  we pack the submit info, and allocate a new command buffer for current pass.
         // if they are the same, we just continue using the current command buffer.
         bool isCurrPassAsync = isAsyncCompute(pass);
-        bool isPrevPassAsync = isAsyncCompute(context._prevPassNode);
+        bool isPrevPassAsync = isAsyncCompute(_renderContext->_prevPassNode);
         if (isCurrPassAsync ^ isPrevPassAsync)
         {
-            NVVK_CHECK(vkEndCommandBuffer(context._currCmdBuffer));
+            NVVK_CHECK(vkEndCommandBuffer(_renderContext->_currCmdBuffer));
             VkCommandBufferSubmitInfo cmdInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
-            cmdInfo.commandBuffer = context._currCmdBuffer;
+            cmdInfo.commandBuffer = _renderContext->_currCmdBuffer;
             cmdInfo.deviceMask    = 0;
 
             VkSemaphoreSubmitInfo waitInfo{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
-            waitInfo.semaphore = context._frameData->semaphore;
-            waitInfo.value     = context._frameData->timelineValue;
-            switch (context._prevPassNode->type())
+            waitInfo.semaphore = _renderContext->_frameData->semaphore;
+            waitInfo.value     = _renderContext->_frameData->timelineValue;
+            switch (_renderContext->_prevPassNode->type())
             {
                 case PassNode::Type::Render:
                 {
@@ -492,8 +574,8 @@ RenderContext RDGBuilder::prepareRenderContext(PassNode* pass)
             }
 
             VkSemaphoreSubmitInfo signalInfo{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
-            signalInfo.semaphore = context._frameData->semaphore;
-            signalInfo.value     = ++context._frameData->timelineValue;
+            signalInfo.semaphore = _renderContext->_frameData->semaphore;
+            signalInfo.value     = ++_renderContext->_frameData->timelineValue;
             switch (pass->type())
             {
                 case PassNode::Type::Render:
@@ -526,20 +608,20 @@ RenderContext RDGBuilder::prepareRenderContext(PassNode* pass)
             submitInfo.pSignalSemaphoreInfos    = &signalInfo;
 
             _submitInfos.push_back({submitInfo, isPrevPassAsync ? 1 : 0});
-            VkCommandPool cmdPool = isCurrPassAsync ? context._frameData->computeCmdPool
-                                                    : context._frameData->graphicsCmdPool;
+            VkCommandPool cmdPool = isCurrPassAsync ? _renderContext->_frameData->computeCmdPool
+                                                    : _renderContext->_frameData->graphicsCmdPool;
             VkCommandBufferAllocateInfo allocInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
             allocInfo.commandPool        = cmdPool;
             allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
             allocInfo.commandBufferCount = 1;
             NVVK_CHECK(vkAllocateCommandBuffers(_element->getApp()->getDevice(), &allocInfo,
-                                                &context._currCmdBuffer));
+                                                &_renderContext->_currCmdBuffer));
             VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-            vkBeginCommandBuffer(context._currCmdBuffer, &beginInfo);
+            vkBeginCommandBuffer(_renderContext->_currCmdBuffer, &beginInfo);
         }
     }
 
-    context._prevPassNode = pass;
-    return context;
+    _renderContext->_prevPassNode = pass;
+    return _renderContext.get();
 }
 } // namespace Play::RDG

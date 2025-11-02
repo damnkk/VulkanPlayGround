@@ -32,7 +32,6 @@ void PlayElement::onAttach(nvapp::Application* app)
     TexturePool::Instance().init(65535, &PlayResourceManager::Instance());
     BufferPool::Instance().init(65535, &PlayResourceManager::Instance());
     ShaderManager::Instance().init(this);
-    _descManager.init(_app->getPhysicalDevice(), _app->getDevice());
     PipelineCacheManager::Instance().init(this);
     _frameData.resize(_app->getFrameCycleSize());
     for (size_t i = 0; i < _frameData.size(); ++i)
@@ -88,7 +87,6 @@ void PlayElement::onDetach()
     ShaderManager::Instance().deInit();
     _profilerGpuTimer.deinit();
     _info.profilerManager->destroyTimeline(_profilerTimeline);
-    _descManager.deinit();
     _sceneManager.deinit();
     _renderer->OnDestroy();
     PipelineCacheManager::Instance().deinit();
@@ -135,6 +133,7 @@ void PlayElement::onRender(VkCommandBuffer cmd)
     //                      1, &range);
     // nvvk::cmdImageMemoryBarrier(cmd, {_uiTexture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
     //                                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
+    _frameNum++;
     PlayFrameData& frameData = _frameData[_app->getFrameCycleIndex()];
     frameData.reset(getDevice());
 

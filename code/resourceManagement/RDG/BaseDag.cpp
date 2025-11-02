@@ -109,19 +109,16 @@ bool Dag::pathExists(Node* start, Node* end)
 
 bool Dag::detectCycles() const
 {
-    std::unordered_map<Node*, int> colors; // 0: 白色(未访问), 1: 灰色(正在处理), 2: 黑色(已完成)
-
-    // 初始化所有节点为白色
+    std::unordered_map<Node*, int> colors; // 0: 白色, 1: 灰色, 2: 黑色
     for (const auto& node_ptr : m_nodes)
     {
         colors[node_ptr.get()] = 0;
     }
 
-    // 对每个白色节点进行DFS，但只检查Primary和Output节点
     for (const auto& node_ptr : m_nodes)
     {
         Node* node = node_ptr.get();
-        if (colors[node] == 0 && (node->getPriority() == NodePriority::eOutput))
+        if (colors[node] == 0)
         {
             std::vector<Node*>              path;
             std::vector<std::vector<Node*>> dummy_cycles;
@@ -139,18 +136,15 @@ std::vector<std::vector<Node*>> Dag::findAllCycles() const
     std::vector<std::vector<Node*>> cycles;
     std::unordered_map<Node*, int>  colors; // 0: 白色, 1: 灰色, 2: 黑色
 
-    // 初始化所有节点为白色
     for (const auto& node_ptr : m_nodes)
     {
         colors[node_ptr.get()] = 0;
     }
 
-    // 对每个白色的Primary或Output节点进行DFS寻找环路
     for (const auto& node_ptr : m_nodes)
     {
         Node* node = node_ptr.get();
-        if (colors[node] == 0 && (node->getPriority() == NodePriority::ePrimary ||
-                                  node->getPriority() == NodePriority::eOutput))
+        if (colors[node] == 0)
         {
             std::vector<Node*> path;
             hasCycleDFS(node, colors, path, cycles);
@@ -220,97 +214,28 @@ void Dag::markNeededNodesFromOutput(Node* outputNode, std::unordered_map<Node*, 
     if (needed[outputNode]) return; // 已经处理过
 
     needed[outputNode] = true;
-
-    // 如果是输出节点，查找连接的primary节点
-    if (outputNode->getPriority() == NodePriority::eOutput)
+    for (Edge* edge : outputNode->getIncomingEdges())
     {
-        for (Edge* edge : outputNode->getIncomingEdges())
-        {
-            Node* connectedNode = edge->getFrom();
-            if (connectedNode->getPriority() == NodePriority::ePrimary)
-            {
-                markNeededNodesFromOutput(connectedNode, needed);
-            }
-        }
-    }
-    // 如果是primary节点，处理其输入
-    else if (outputNode->getPriority() == NodePriority::ePrimary)
-    {
-        for (Edge* edge : outputNode->getIncomingEdges())
-        {
-            Node* inputNode = edge->getFrom();
-            assert(inputNode->getPriority() == NodePriority::eSecondary);
-
-            {
-                // Secondary节点：找到最接近的primary输入
-                Node* closestPrimary = findClosestPrimaryInput(inputNode, outputNode);
-                if (closestPrimary)
-                {
-                    assert(closestPrimary->getPriority() == NodePriority::ePrimary);
-                    markNeededNodesFromOutput(closestPrimary, needed);
-                }
-                // Secondary节点本身也需要保留
-                needed[inputNode] = true;
-            }
-        }
+        Node* connectedNode = edge->getFrom();
+        markNeededNodesFromOutput(connectedNode, needed);
     }
 }
 
 Node* Dag::findClosestPrimaryInput(Node* secondaryNode, Node* outputNode) const
 {
-    Node*  closestPrimary = nullptr;
-    size_t maxId          = 0; // 找ID最大的（最近创建的）
-
-    for (Edge* edge : secondaryNode->getIncomingEdges())
-    {
-        Node* inputNode = edge->getFrom();
-        if (inputNode->getPriority() == NodePriority::ePrimary)
-        {
-            if (inputNode->getId() > maxId && inputNode->getId() < outputNode->getId())
-            {
-                maxId          = inputNode->getId();
-                closestPrimary = inputNode;
-            }
-        }
-    }
-
-    return closestPrimary;
+    (void) secondaryNode;
+    (void) outputNode;
+    return nullptr;
 }
 
 std::vector<Node*> Dag::getLogicalDependencies(Node* node) const
 {
     std::vector<Node*> dependencies;
 
-    if (node->getPriority() == NodePriority::eOutput)
+    for (Edge* edge : node->getOutgoingEdges())
     {
-        // Output节点：返回连接的Primary节点
-        for (Edge* edge : node->getIncomingEdges())
-        {
-            Node* connectedNode = edge->getFrom();
-            if (connectedNode->getPriority() == NodePriority::ePrimary)
-            {
-                dependencies.push_back(connectedNode);
-            }
-        }
+        dependencies.push_back(edge->getTo());
     }
-    else if (node->getPriority() == NodePriority::ePrimary)
-    {
-        // Primary节点：返回通过Secondary节点连接的最近Primary节点
-        for (Edge* edge : node->getIncomingEdges())
-        {
-            Node* inputNode = edge->getFrom();
-            if (inputNode->getPriority() == NodePriority::eSecondary)
-            {
-                // 找到最接近的Primary输入
-                Node* closestPrimary = findClosestPrimaryInput(inputNode, node);
-                if (closestPrimary)
-                {
-                    dependencies.push_back(closestPrimary);
-                }
-            }
-        }
-    }
-    // Secondary节点不参与环路检测，返回空
 
     return dependencies;
 }

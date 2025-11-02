@@ -27,7 +27,7 @@ struct ConstantRange
 Example:
 */
 
-class DescriptorSetManager : public nvvk::WriteSetContainer
+class DescriptorSetManager
 {
 public:
     DescriptorSetManager(VkDevice device);
@@ -52,6 +52,48 @@ public:
         return _descSetLayouts;
     }
 
+    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::Buffer& buffer,
+                     VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE);
+    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
+                     const nvvk::AccelerationStructure& accel);
+    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::Image& image);
+    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, VkBuffer buffer, VkDeviceSize offset = 0,
+                     VkDeviceSize range = VK_WHOLE_SIZE);
+    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
+                     const VkDescriptorBufferInfo& bufferInfo);
+    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, VkImageView imageView,
+                     VkImageLayout imageLayout, VkSampler sampler = nullptr);
+    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const VkDescriptorImageInfo& imageInfo);
+    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, VkAccelerationStructureKHR accel);
+
+    // writeSet.descriptorCount many elements
+    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::Buffer* buffers,
+                     uint32_t count); // offset 0 and VK_WHOLE_SIZE
+    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
+                     const nvvk::AccelerationStructure* accels, uint32_t count);
+    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::Image* images,
+                     uint32_t count);
+
+    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
+                     const VkDescriptorBufferInfo* bufferInfos, uint32_t count);
+    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const VkDescriptorImageInfo* imageInfos,
+                     uint32_t count);
+    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const VkAccelerationStructureKHR* accels,
+                     uint32_t count);
+
+    uint64_t getBindingsHash(uint32_t setIdx);
+    uint64_t getDescsetLayoutHash(uint32_t setIdx);
+    union DescriptorInfo
+    {
+        VkDescriptorBufferInfo     buffer;
+        VkDescriptorImageInfo      image;
+        VkAccelerationStructureKHR accel;
+    };
+
+    std::vector<DescriptorInfo> getDescriptorInfo(uint32_t setIdx);
+
+    int descriptorOffset(uint32_t setIdx, uint32_t bindingIdx) const;
+
 private:
     DescriptorSetManager& initLayout();
     DescriptorSetManager(const DescriptorSetManager&);
@@ -68,7 +110,10 @@ private:
     std::array<VkDescriptorSetLayout, MAX_DESCRIPTOR_SETS::value>    _descSetLayouts = {};
     VkPipelineLayout _pipelineLayout = VK_NULL_HANDLE;
     VkDevice         _vkDevice;
-    // Additional functionality for managing descriptor sets can be added here
+    uint8_t          _dirtyFlags = 0; // bit0: binding changed, bit1: constant range changed
+
+    std::array<std::vector<DescriptorInfo>, 2> _descInfos;
+    std::array<uint64_t, 2>                    _setBindingHashs = {0, 0};
 };
 
 enum class ProgramType
@@ -83,19 +128,19 @@ enum class ProgramType
 class PlayProgram
 {
 public:
-    PlayProgram(VkDevice device) : _descriptorManager(device) {}
+    PlayProgram(VkDevice device) : _descriptorSetManager(device) {}
     virtual ~PlayProgram() {}
     virtual void deinit()
     {
-        _descriptorManager.deinit();
+        _descriptorSetManager.deinit();
     }
     PlayProgram(const PlayProgram&);
     PlayProgram&          operator=(const PlayProgram&);
     virtual VkPipeline    getOrCreatePipeline()  = 0;
     virtual ProgramType   getProgramType() const = 0;
-    DescriptorSetManager& getDescriptorManager()
+    DescriptorSetManager& getDescriptorSetManager()
     {
-        return _descriptorManager;
+        return _descriptorSetManager;
     }
     VkPipelineBindPoint getPipelineBindPoint() const
     {
@@ -117,7 +162,7 @@ public:
     }
 
 protected:
-    DescriptorSetManager _descriptorManager;
+    DescriptorSetManager _descriptorSetManager;
     ProgramType          _programType = ProgramType::eUndefined;
 };
 

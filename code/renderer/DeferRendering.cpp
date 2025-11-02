@@ -7,8 +7,7 @@ namespace Play
 DeferRenderer::DeferRenderer(PlayElement& view) : _rdgBuilder(&view)
 {
     _outputTexture = view.getUITexture();
-    _rdgBuilder.setOutput(_outputTexture);
-    // add pass
+    // add logic pass
     _passes.push_back(std::make_unique<PostProcessPass>(&view));
     for (auto& pass : _passes)
     {
