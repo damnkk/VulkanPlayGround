@@ -17,6 +17,7 @@ class Renderer;
 class RTRenderer;
 class VolumeRenderer;
 class ShaderInfo;
+class DescriptorSetCache;
 namespace RDG
 {
 class RenderDependencyGraph;
@@ -60,7 +61,6 @@ public:
     {
         return _app->getPhysicalDevice();
     }
-
     inline const nvvk::QueueInfo& getQueue(uint32_t index)
     {
         return _app->getQueue(index);
@@ -130,6 +130,10 @@ public:
         assert(index < _frameData.size());
         return _frameData[index];
     }
+    DescriptorSetCache* getDescriptorSetCache()
+    {
+        return _descriptorSetCache.get();
+    }
 
     inline Texture*        CreateTexture(VkImageCreateInfo& info, VkCommandBuffer* cmd = nullptr);
     static inline Texture* AllocTexture();
@@ -169,11 +173,12 @@ private:
     friend class ShadingRateRenderer;
     friend class RDG::RenderDependencyGraph;
     friend class SceneManager;
-    nvapp::Application*        _app{};
-    nvutils::ProfilerTimeline* _profilerTimeline{};
-    nvvk::ProfilerGpuTimer     _profilerGpuTimer{};
-    std::vector<PlayFrameData> _frameData;
-    SceneManager               _sceneManager;
+    nvapp::Application*                 _app{};
+    nvutils::ProfilerTimeline*          _profilerTimeline{};
+    nvvk::ProfilerGpuTimer              _profilerGpuTimer{};
+    std::vector<PlayFrameData>          _frameData;
+    std::unique_ptr<DescriptorSetCache> _descriptorSetCache;
+    SceneManager                        _sceneManager;
 };
 
 std::filesystem::path getBaseFilePath();

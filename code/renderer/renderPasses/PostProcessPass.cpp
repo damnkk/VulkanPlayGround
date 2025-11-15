@@ -20,7 +20,7 @@ void PostProcessPass::init()
 
 void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
 {
-    std::filesystem::path inputTexturePath = "C:\\Users\\Amin\\Desktop\\DSC_0175.jpg";
+    std::filesystem::path inputTexturePath = "C:\\Users\\Amin\\Desktop\\newCreated\\cici.jpg";
     Texture*              inputTex         = Texture::Create(inputTexturePath);
     auto colorTexId = rdgBuilder->createTexture("inputTexture").Import(inputTex).finish();
     auto outputTexRef =
@@ -40,7 +40,7 @@ void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
         rdgBuilder->createRenderPass("postProcessPass")
             .color(0, outputTexRef, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE,
                    VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-            .read(0, 0, colorTexId, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            .read(0, colorTexId, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                   _element->getApp()->getQueue(0).familyIndex)
             .program(_postProgram.get())
             .execute(

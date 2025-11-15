@@ -197,21 +197,19 @@ public:
         VkAttachmentStoreOp storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
         VkImageLayout       initLayout  = VK_IMAGE_LAYOUT_UNDEFINED,
         VkImageLayout       finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-    RenderPassBuilder&              read(uint32_t set, uint32_t binding, RDGTextureRef texture,
-                                         VkPipelineStageFlagBits2 stage,
-                                         uint32_t                 queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
-    RenderPassBuilder&              read(uint32_t set, uint32_t binding, RDGBufferRef buffer,
-                                         VkPipelineStageFlagBits2 stage,
-                                         uint32_t                 queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                                         uint32_t offset = 0, size_t size = VK_WHOLE_SIZE);
-    RenderPassBuilder&              readWrite(uint32_t set, uint32_t binding, RDGTextureRef texture,
-                                              VkPipelineStageFlagBits2 stage,
-                                              uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
-    RenderPassBuilder&              readWrite(uint32_t set, uint32_t binding, RDGBufferRef buffer,
-                                              VkPipelineStageFlagBits2 stage,
-                                              uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                                              uint32_t offset = 0, size_t size = VK_WHOLE_SIZE);
-    RenderPassBuilder&              execute(std::function<void(RenderContext& context)> func);
+    RenderPassBuilder& read(uint32_t binding, RDGTextureRef texture, VkPipelineStageFlagBits2 stage,
+                            uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
+    RenderPassBuilder& read(uint32_t binding, RDGBufferRef buffer, VkPipelineStageFlagBits2 stage,
+                            uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                            uint32_t offset = 0, size_t size = VK_WHOLE_SIZE);
+    RenderPassBuilder& readWrite(uint32_t binding, RDGTextureRef texture,
+                                 VkPipelineStageFlagBits2 stage,
+                                 uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
+    RenderPassBuilder& readWrite(uint32_t binding, RDGBufferRef buffer,
+                                 VkPipelineStageFlagBits2 stage,
+                                 uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                 uint32_t offset = 0, size_t size = VK_WHOLE_SIZE);
+    RenderPassBuilder& execute(std::function<void(RenderContext& context)> func);
     [[nodiscard]] RenderPassNodeRef finish() const
     {
         return _node;
@@ -233,17 +231,16 @@ public:
         _node->setProgram(program);
         return *this;
     }
-    ComputePassBuilder& read(uint32_t set, uint32_t binding, RDGTextureRef texture,
+    ComputePassBuilder& read(uint32_t binding, RDGTextureRef texture,
                              VkPipelineStageFlagBits2 stage,
                              uint32_t                 queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
-    ComputePassBuilder& read(uint32_t set, uint32_t binding, RDGBufferRef buffer,
-                             VkPipelineStageFlagBits2 stage,
-                             uint32_t                 queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+    ComputePassBuilder& read(uint32_t binding, RDGBufferRef buffer, VkPipelineStageFlagBits2 stage,
+                             uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                              uint32_t offset = 0, size_t size = VK_WHOLE_SIZE);
-    ComputePassBuilder& readWrite(uint32_t set, uint32_t binding, RDGTextureRef texture,
+    ComputePassBuilder& readWrite(uint32_t binding, RDGTextureRef texture,
                                   VkPipelineStageFlagBits2 stage,
                                   uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
-    ComputePassBuilder& readWrite(uint32_t set, uint32_t binding, RDGBufferRef buffer,
+    ComputePassBuilder& readWrite(uint32_t binding, RDGBufferRef buffer,
                                   VkPipelineStageFlagBits2 stage,
                                   uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                                   uint32_t offset = 0, size_t size = VK_WHOLE_SIZE);
@@ -270,21 +267,18 @@ public:
         _node->setProgram(program);
         return *this;
     }
-    RTPassBuilder&              read(uint32_t set, uint32_t binding, RDGTextureRef texture,
-                                     VkPipelineStageFlagBits2 stage,
-                                     uint32_t                 queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
-    RTPassBuilder&              read(uint32_t set, uint32_t binding, RDGBufferRef buffer,
-                                     VkPipelineStageFlagBits2 stage,
-                                     uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, uint32_t offset = 0,
-                                     size_t size = VK_WHOLE_SIZE);
-    RTPassBuilder&              readWrite(uint32_t set, uint32_t binding, RDGTextureRef texture,
-                                          VkPipelineStageFlagBits2 stage,
-                                          uint32_t                 queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
-    RTPassBuilder&              readWrite(uint32_t set, uint32_t binding, RDGBufferRef buffer,
-                                          VkPipelineStageFlagBits2 stage,
-                                          uint32_t                 queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                                          uint32_t offset = 0, size_t size = VK_WHOLE_SIZE);
-    RTPassBuilder&              execute(std::function<void(RenderContext& context)> func);
+    RTPassBuilder& read(uint32_t binding, RDGTextureRef texture, VkPipelineStageFlagBits2 stage,
+                        uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
+    RTPassBuilder& read(uint32_t binding, RDGBufferRef buffer, VkPipelineStageFlagBits2 stage,
+                        uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, uint32_t offset = 0,
+                        size_t size = VK_WHOLE_SIZE);
+    RTPassBuilder& readWrite(uint32_t binding, RDGTextureRef texture,
+                             VkPipelineStageFlagBits2 stage,
+                             uint32_t                 queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
+    RTPassBuilder& readWrite(uint32_t binding, RDGBufferRef buffer, VkPipelineStageFlagBits2 stage,
+                             uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                             uint32_t offset = 0, size_t size = VK_WHOLE_SIZE);
+    RTPassBuilder& execute(std::function<void(RenderContext& context)> func);
     [[nodiscard]] RTPassNodeRef finish() const
     {
         return _node;

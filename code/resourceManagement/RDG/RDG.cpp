@@ -17,6 +17,15 @@ RDGTexture* RDGTextureCache::request(Texture* texture)
 RDGTextureBuilder& RDGTextureBuilder::Import(Texture* texture)
 {
     _textureNode->setRHI(texture);
+    _textureNode->_info._aspectFlags = texture->AspectFlags();
+    _textureNode->_info._format      = texture->Format();
+    _textureNode->_info._extent      = texture->Extent();
+    _textureNode->_info._type        = texture->Type();
+    _textureNode->_info._usageFlags  = texture->UsageFlags();
+    _textureNode->_info._sampleCount = texture->SampleCount();
+    _textureNode->_info._mipmapLevel = texture->MipLevel();
+    _textureNode->_info._layerCount  = texture->LayerCount();
+    _textureNode->_info._debugName   = texture->DebugName();
     return *this;
 }
 
@@ -198,11 +207,10 @@ void RDGBuilder::prepareRenderTargets(PassNode* pass)
 
 void RDGBuilder::prepareDescriptorSets(RenderContext& context, PassNode* pass)
 {
-    auto               inputEdges  = pass->getIncomingEdges();
-    DescriptorManager& descManager = _element->getDescriptorManager();
-    descManager.updateDescSetBindingOffset(&pass->getProgram()->getDescriptorSetManager());
+    auto                inputEdges         = pass->getIncomingEdges();
+    DescriptorSetCache* descCache          = _element->getDescriptorSetCache();
+    auto&               programDescManager = pass->getProgram()->getDescriptorSetManager();
     auto bindingInfo = pass->getProgram()->getDescriptorSetManager().getSetBindingInfo();
-    auto test        = pass->getProgram()->getDescriptorSetManager();
 
     for (auto& [texture, state] : pass->_textureStates)
     {
@@ -214,13 +222,10 @@ void RDGBuilder::prepareDescriptorSets(RenderContext& context, PassNode* pass)
                                             info._extent.depth, info._format, info._usageFlags,
                                             VK_IMAGE_LAYOUT_UNDEFINED, info._mipmapLevel));
         }
-
         TextureAccessInfo accessInfo = state.textureStates[0];
-        descManager.updateDescriptor(
-            accessInfo.set, accessInfo.binding,
-            bindingInfo[accessInfo.set].getBindings()[accessInfo.binding].descriptorType,
-            bindingInfo[accessInfo.set].getBindings()[accessInfo.binding].descriptorCount,
-            texture->getRHI());
+        if (accessInfo.isAttachment) continue;
+        programDescManager.setDescInfo(uint32_t(DescriptorEnum::ePerPassDescriptorSet),
+                                       accessInfo.binding, *texture->_rhi);
     }
 
     for (auto& [buffer, state] : pass->_bufferStates)
@@ -234,12 +239,18 @@ void RDGBuilder::prepareDescriptorSets(RenderContext& context, PassNode* pass)
                 ? VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
                 : VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
         BufferAccessInfo bufferInfo = state.bufferState;
-        descManager.updateDescriptor(
-            bufferInfo.set, bufferInfo.binding,
-            bindingInfo[bufferInfo.set].getBindings()[bufferInfo.binding].descriptorType,
-            bindingInfo[bufferInfo.set].getBindings()[bufferInfo.binding].descriptorCount,
-            buffer->getRHI());
+        programDescManager.setDescInfo(uint32_t(DescriptorEnum::ePerPassDescriptorSet),
+                                       bufferInfo.binding, *buffer->_rhi);
     }
+    VkDescriptorSet currPassSet = descCache->requestDescriptorSet(
+        programDescManager, (uint32_t) DescriptorEnum::ePerPassDescriptorSet);
+    VkBindDescriptorSetsInfo bindDescInfo{VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO};
+    bindDescInfo.layout             = programDescManager.getPipelineLayout();
+    bindDescInfo.firstSet           = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
+    bindDescInfo.descriptorSetCount = 1;
+    bindDescInfo.pDescriptorSets    = &currPassSet;
+    programDescManager.getDescriptorSetLayout(DescriptorEnum::ePerPassDescriptorSet);
+    vkCmdBindDescriptorSets2(context._currCmdBuffer, &bindDescInfo);
 }
 
 void RDGBuilder::prepareRenderPass(PassNode* pass)
@@ -297,7 +308,7 @@ void RDGBuilder::compile()
                 }
 
                 TextureAccessInfo& currAccessInfo = state.textureStates.front();
-                if (*lastAccessInfo == currAccessInfo) continue;
+                if (lastAccessInfo->isAttachment || *lastAccessInfo == currAccessInfo) continue;
                 VkImageMemoryBarrier2& imageBarrier = state.barrierInfo;
                 imageBarrier.srcAccessMask          = lastAccessInfo->accessMask;
                 imageBarrier.dstAccessMask          = currAccessInfo.accessMask;
@@ -393,6 +404,7 @@ void RDGBuilder::compile()
         for (auto edge : currNode->getOutgoingEdges())
         {
             PassNode* toNode = static_cast<PassNode*>(edge->getTo());
+            assert(inDegreeMap.find(toNode) != inDegreeMap.end());
             inDegreeMap[toNode]--;
             if (inDegreeMap[toNode] == 0)
             {

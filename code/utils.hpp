@@ -14,8 +14,7 @@
                                   .c_str())
 namespace Play
 {
-using MAX_RT_NUM          = std::integral_constant<size_t, 16>;
-using MAX_DESCRIPTOR_SETS = std::integral_constant<size_t, 5>;
+using MAX_RT_NUM = std::integral_constant<size_t, 16>;
 class Texture;
 std::string GetUniqueName();
 

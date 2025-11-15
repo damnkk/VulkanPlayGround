@@ -104,6 +104,17 @@ size_t DescriptorBufferManagerExt::getDescriptorSize(VkDescriptorType descriptor
 
 DescriptorSetCache::~DescriptorSetCache() {}
 
+void DescriptorSetCache::deInit()
+{
+    for (auto& [layoutHash, cacheNode] : _descriptorPoolMap)
+    {
+        for (auto& poolNode : cacheNode.pools)
+        {
+            vkDestroyDescriptorPool(_element->getDevice(), poolNode.pool, nullptr);
+        }
+    }
+}
+
 VkDescriptorSet DescriptorSetCache::requestDescriptorSet(DescriptorSetManager& setManager,
                                                          uint32_t              setIdx)
 {

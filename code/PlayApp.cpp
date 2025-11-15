@@ -33,6 +33,7 @@ void PlayElement::onAttach(nvapp::Application* app)
     BufferPool::Instance().init(65535, &PlayResourceManager::Instance());
     ShaderManager::Instance().init(this);
     PipelineCacheManager::Instance().init(this);
+    _descriptorSetCache = std::make_unique<DescriptorSetCache>(this);
     _frameData.resize(_app->getFrameCycleSize());
     for (size_t i = 0; i < _frameData.size(); ++i)
     {
@@ -90,6 +91,7 @@ void PlayElement::onDetach()
     _sceneManager.deinit();
     _renderer->OnDestroy();
     PipelineCacheManager::Instance().deinit();
+    _descriptorSetCache->deInit();
     for (auto& frame : _frameData)
     {
         vkDestroySemaphore(_app->getDevice(), frame.semaphore, nullptr);

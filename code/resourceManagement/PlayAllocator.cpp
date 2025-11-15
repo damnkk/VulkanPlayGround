@@ -334,8 +334,6 @@ Texture* TexturePool::alloc(const std::filesystem::path& imagePath, VkImageLayou
         stbi_image_free(data);
         return texture;
     }
-    VkImageViewCreateInfo test;
-    VkDescriptorImageInfo testt;
     stbi_image_free(data);
     return nullptr;
 }

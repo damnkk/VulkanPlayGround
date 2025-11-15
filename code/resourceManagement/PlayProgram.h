@@ -41,15 +41,23 @@ public:
     DescriptorSetManager& addConstantRange(uint32_t size, uint32_t offset,
                                            VkPipelineStageFlags2 stage);
 
-    VkPipelineLayout                                                  getPipelineLayout() const;
-    std::array<nvvk::DescriptorBindings, MAX_DESCRIPTOR_SETS::value>& getSetBindingInfo()
+    VkPipelineLayout getPipelineLayout() const;
+    std::array<nvvk::DescriptorBindings, static_cast<size_t>(DescriptorEnum::eCount)>&
+    getSetBindingInfo()
     {
         return _descBindSet;
     }
 
-    std::array<VkDescriptorSetLayout, MAX_DESCRIPTOR_SETS::value>& getDescriptorSetLayouts()
+    std::array<VkDescriptorSetLayout, static_cast<size_t>(DescriptorEnum::eCount)>&
+    getDescriptorSetLayouts()
     {
         return _descSetLayouts;
+    }
+
+    VkDescriptorSetLayout getDescriptorSetLayout(DescriptorEnum setEnum)
+    {
+        assert(setEnum != DescriptorEnum::eCount);
+        return _descSetLayouts[uint32_t(setEnum)];
     }
 
     void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::Buffer& buffer,
@@ -104,16 +112,19 @@ private:
         return _vkDevice;
     }
     bool _recordState = false; // 记录状态,保证binding有增改之后会调用finish,刷新管线布局
-    std::vector<BindInfo>                                            _bindingInfos;
-    std::vector<VkPushConstantRange>                                 _constantRanges;
-    std::array<nvvk::DescriptorBindings, MAX_DESCRIPTOR_SETS::value> _descBindSet;
-    std::array<VkDescriptorSetLayout, MAX_DESCRIPTOR_SETS::value>    _descSetLayouts = {};
+    std::vector<BindInfo>            _bindingInfos;
+    std::vector<VkPushConstantRange> _constantRanges;
+    std::array<nvvk::DescriptorBindings, static_cast<size_t>(DescriptorEnum::eCount)> _descBindSet;
+    std::array<VkDescriptorSetLayout, static_cast<size_t>(DescriptorEnum::eCount)> _descSetLayouts =
+        {};
     VkPipelineLayout _pipelineLayout = VK_NULL_HANDLE;
     VkDevice         _vkDevice;
     uint8_t          _dirtyFlags = 0; // bit0: binding changed, bit1: constant range changed
 
-    std::array<std::vector<DescriptorInfo>, 2> _descInfos;
-    std::array<uint64_t, 2>                    _setBindingHashs = {0, 0};
+    std::array<std::vector<DescriptorInfo>, static_cast<size_t>(DescriptorEnum::eCount)> _descInfos;
+    std::array<uint64_t, static_cast<size_t>(DescriptorEnum::eCount) -
+                             static_cast<size_t>(DescriptorEnum::ePerPassDescriptorSet)>
+        _setBindingHashs = {};
 };
 
 enum class ProgramType

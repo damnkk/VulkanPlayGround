@@ -57,7 +57,7 @@ private:
     VkDevice                                      _device;
     VkPhysicalDevice                              _physicalDevice;
     VkPhysicalDeviceDescriptorBufferPropertiesEXT _descriptorBufferProperties;
-    std::array<std::unordered_map<uint32_t, size_t>, MAX_DESCRIPTOR_SETS::value>
+    std::array<std::unordered_map<uint32_t, size_t>, static_cast<uint32_t>(DescriptorEnum::eCount)>
         _descriptorOffsetInfo;
 };
 

@@ -60,7 +60,7 @@ DescriptorSetManager& DescriptorSetManager::addBinding(uint32_t setIdx, uint32_t
 
 DescriptorSetManager& DescriptorSetManager::initLayout()
 {
-    for (int i = 0; i < MAX_DESCRIPTOR_SETS::value; ++i)
+    for (int i = 0; i < uint32_t(DescriptorEnum::eCount); ++i)
     {
         _descBindSet[i].createDescriptorSetLayout(
             _vkDevice, VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
@@ -98,7 +98,7 @@ bool DescriptorSetManager::finish()
     }
     for (const auto& bindings : _bindingInfos)
     {
-        assert(bindings.setIdx <= MAX_DESCRIPTOR_SETS::value);
+        assert(bindings.setIdx <= uint32_t(DescriptorEnum::eCount));
         auto& set = _descBindSet[bindings.setIdx];
         set.addBinding(bindings.bindingIdx, bindings.descriptorType, bindings.descriptorCount,
                        bindings.pipelineStageFlags);
@@ -398,9 +398,11 @@ uint64_t DescriptorSetManager::getBindingsHash(uint32_t setIdx)
     assert(setIdx >= 3);
     if (_dirtyFlags)
     {
-        _setBindingHashs[0] = memoryHash(_descInfos[0]);
-        _setBindingHashs[1] = memoryHash(_descInfos[1]);
-        _dirtyFlags         = 0;
+        for (int i = 0; i < _setBindingHashs.size(); ++i)
+        {
+            _setBindingHashs[i] = memoryHash(_descInfos[i]);
+        }
+        _dirtyFlags = 0;
     }
     return _setBindingHashs[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)];
 }
@@ -420,7 +422,7 @@ std::vector<DescriptorSetManager::DescriptorInfo> DescriptorSetManager::getDescr
 
 DescriptorSetManager::DescriptorSetManager(const DescriptorSetManager&) {}
 
-DescriptorSetManager& DescriptorSetManager::operator=(const DescriptorSetManager&) {}
+// DescriptorSetManager& DescriptorSetManager::operator=(const DescriptorSetManager&) {}
 
 RenderProgram& RenderProgram::setVertexModuleID(ShaderID vertexModuleID)
 {

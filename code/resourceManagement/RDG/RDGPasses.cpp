@@ -62,13 +62,13 @@ RenderPassBuilder& RenderPassBuilder::depthStencil(RDGTextureRef       texHandle
     return *this;
 }
 
-RenderPassBuilder& RenderPassBuilder::read(uint32_t set, uint32_t binding, RDGTextureRef texture,
+RenderPassBuilder& RenderPassBuilder::read(uint32_t binding, RDGTextureRef texture,
                                            VkPipelineStageFlagBits2 stage,
                                            uint32_t                 queueFamilyIndex)
 {
     TextureSubresourceAccessInfo subResource;
     TextureAccessInfo&           accessInfo = subResource.emplace_back();
-    accessInfo.set                          = set;
+    accessInfo.set                          = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
     accessInfo.binding                      = binding;
     accessInfo.isAttachment                 = false;
     accessInfo.layout                       = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -79,14 +79,14 @@ RenderPassBuilder& RenderPassBuilder::read(uint32_t set, uint32_t binding, RDGTe
     return *this;
 }
 
-RenderPassBuilder& RenderPassBuilder::read(uint32_t set, uint32_t binding, RDGBufferRef buffer,
+RenderPassBuilder& RenderPassBuilder::read(uint32_t binding, RDGBufferRef buffer,
                                            VkPipelineStageFlagBits2 stage,
                                            uint32_t queueFamilyIndex, uint32_t offset, size_t size)
 {
     BufferAccessInfo accessInfo;
     accessInfo.accessMask        = VK_ACCESS_2_UNIFORM_READ_BIT;
     accessInfo.stageMask         = stage;
-    accessInfo.set               = set;
+    accessInfo.set               = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
     accessInfo.binding           = binding;
     accessInfo.queueFamilyIndex  = queueFamilyIndex;
     accessInfo.offset            = offset;
@@ -95,14 +95,13 @@ RenderPassBuilder& RenderPassBuilder::read(uint32_t set, uint32_t binding, RDGBu
     return *this;
 }
 
-RenderPassBuilder& RenderPassBuilder::readWrite(uint32_t set, uint32_t binding,
-                                                RDGTextureRef            texture,
+RenderPassBuilder& RenderPassBuilder::readWrite(uint32_t binding, RDGTextureRef texture,
                                                 VkPipelineStageFlagBits2 stage,
                                                 uint32_t                 queueFamilyIndex)
 {
     TextureSubresourceAccessInfo subResource;
     TextureAccessInfo&           accessInfo = subResource.emplace_back();
-    accessInfo.set                          = 0;
+    accessInfo.set                          = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
     accessInfo.binding                      = binding;
     accessInfo.isAttachment                 = false;
     accessInfo.accessMask          = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
@@ -112,7 +111,7 @@ RenderPassBuilder& RenderPassBuilder::readWrite(uint32_t set, uint32_t binding,
     return *this;
 }
 
-RenderPassBuilder& RenderPassBuilder::readWrite(uint32_t set, uint32_t binding, RDGBufferRef buffer,
+RenderPassBuilder& RenderPassBuilder::readWrite(uint32_t binding, RDGBufferRef buffer,
                                                 VkPipelineStageFlagBits2 stage,
                                                 uint32_t queueFamilyIndex, uint32_t offset,
                                                 size_t size)
@@ -120,7 +119,7 @@ RenderPassBuilder& RenderPassBuilder::readWrite(uint32_t set, uint32_t binding, 
     BufferAccessInfo bufferAccess;
     bufferAccess.accessMask       = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
     bufferAccess.stageMask        = stage;
-    bufferAccess.set              = set;
+    bufferAccess.set              = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
     bufferAccess.binding          = binding;
     bufferAccess.queueFamilyIndex = queueFamilyIndex;
     bufferAccess.offset           = offset;
@@ -140,13 +139,13 @@ ComputePassBuilder::ComputePassBuilder(RDGBuilder* builder, ComputePassNodeRef n
 {
 }
 
-ComputePassBuilder& ComputePassBuilder::read(uint32_t set, uint32_t binding, RDGTextureRef texture,
+ComputePassBuilder& ComputePassBuilder::read(uint32_t binding, RDGTextureRef texture,
                                              VkPipelineStageFlagBits2 stage,
                                              uint32_t                 queueFamilyIndex)
 {
     TextureSubresourceAccessInfo subResource;
     TextureAccessInfo&           accessInfo = subResource.emplace_back();
-    accessInfo.set                          = set;
+    accessInfo.set                          = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
     accessInfo.binding                      = binding;
     accessInfo.isAttachment                 = false;
     accessInfo.layout                       = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -157,12 +156,14 @@ ComputePassBuilder& ComputePassBuilder::read(uint32_t set, uint32_t binding, RDG
     return *this;
 }
 
-ComputePassBuilder& ComputePassBuilder::read(uint32_t set, uint32_t binding, RDGBufferRef buffer,
+ComputePassBuilder& ComputePassBuilder::read(uint32_t binding, RDGBufferRef buffer,
                                              VkPipelineStageFlagBits2 stage,
                                              uint32_t queueFamilyIndex, uint32_t offset,
                                              size_t size)
 {
     BufferAccessInfo accessInfo;
+    accessInfo.set               = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
+    accessInfo.binding           = binding;
     accessInfo.accessMask        = buffer->_info._usageFlags & VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT
                                        ? VK_ACCESS_2_UNIFORM_READ_BIT
                                        : VK_ACCESS_2_SHADER_READ_BIT;
@@ -174,14 +175,13 @@ ComputePassBuilder& ComputePassBuilder::read(uint32_t set, uint32_t binding, RDG
     return *this;
 }
 
-ComputePassBuilder& ComputePassBuilder::readWrite(uint32_t set, uint32_t binding,
-                                                  RDGTextureRef            texture,
+ComputePassBuilder& ComputePassBuilder::readWrite(uint32_t binding, RDGTextureRef texture,
                                                   VkPipelineStageFlagBits2 stage,
                                                   uint32_t                 queueFamilyIndex)
 {
     TextureSubresourceAccessInfo subResource;
     TextureAccessInfo&           accessInfo = subResource.emplace_back();
-    accessInfo.set                          = set;
+    accessInfo.set                          = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
     accessInfo.binding                      = binding;
     accessInfo.isAttachment                 = false;
     accessInfo.layout                       = VK_IMAGE_LAYOUT_GENERAL;
@@ -192,8 +192,7 @@ ComputePassBuilder& ComputePassBuilder::readWrite(uint32_t set, uint32_t binding
     return *this;
 }
 
-ComputePassBuilder& ComputePassBuilder::readWrite(uint32_t set, uint32_t binding,
-                                                  RDGBufferRef             buffer,
+ComputePassBuilder& ComputePassBuilder::readWrite(uint32_t binding, RDGBufferRef buffer,
                                                   VkPipelineStageFlagBits2 stage,
                                                   uint32_t queueFamilyIndex, uint32_t offset,
                                                   size_t size)
@@ -201,7 +200,7 @@ ComputePassBuilder& ComputePassBuilder::readWrite(uint32_t set, uint32_t binding
     BufferAccessInfo bufferAccess;
     bufferAccess.accessMask       = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
     bufferAccess.stageMask        = stage;
-    bufferAccess.set              = set;
+    bufferAccess.set              = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
     bufferAccess.binding          = binding;
     bufferAccess.queueFamilyIndex = queueFamilyIndex;
     bufferAccess.offset           = offset;
@@ -227,12 +226,12 @@ RTPassBuilder::RTPassBuilder(RDGBuilder* builder, RTPassNodeRef node)
 {
 }
 
-RTPassBuilder& RTPassBuilder::read(uint32_t set, uint32_t binding, RDGTextureRef texture,
+RTPassBuilder& RTPassBuilder::read(uint32_t binding, RDGTextureRef texture,
                                    VkPipelineStageFlagBits2 stage, uint32_t queueFamilyIndex)
 {
     TextureSubresourceAccessInfo subResource;
     TextureAccessInfo&           accessInfo = subResource.emplace_back();
-    accessInfo.set                          = set;
+    accessInfo.set                          = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
     accessInfo.binding                      = binding;
     accessInfo.isAttachment                 = false;
     accessInfo.layout                       = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -243,14 +242,14 @@ RTPassBuilder& RTPassBuilder::read(uint32_t set, uint32_t binding, RDGTextureRef
     return *this;
 }
 
-RTPassBuilder& RTPassBuilder::read(uint32_t set, uint32_t binding, RDGBufferRef buffer,
+RTPassBuilder& RTPassBuilder::read(uint32_t binding, RDGBufferRef buffer,
                                    VkPipelineStageFlagBits2 stage, uint32_t queueFamilyIndex,
                                    uint32_t offset, size_t size)
 {
     BufferAccessInfo accessInfo;
     accessInfo.accessMask        = VK_ACCESS_2_UNIFORM_READ_BIT;
     accessInfo.stageMask         = stage;
-    accessInfo.set               = set;
+    accessInfo.set               = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
     accessInfo.binding           = binding;
     accessInfo.queueFamilyIndex  = queueFamilyIndex;
     accessInfo.offset            = offset;
@@ -259,12 +258,12 @@ RTPassBuilder& RTPassBuilder::read(uint32_t set, uint32_t binding, RDGBufferRef 
     return *this;
 }
 
-RTPassBuilder& RTPassBuilder::readWrite(uint32_t set, uint32_t binding, RDGTextureRef texture,
+RTPassBuilder& RTPassBuilder::readWrite(uint32_t binding, RDGTextureRef texture,
                                         VkPipelineStageFlagBits2 stage, uint32_t queueFamilyIndex)
 {
     TextureSubresourceAccessInfo subResource;
     TextureAccessInfo&           accessInfo = subResource.emplace_back();
-    accessInfo.set                          = set;
+    accessInfo.set                          = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
     accessInfo.binding                      = binding;
     accessInfo.isAttachment                 = false;
     accessInfo.layout                       = VK_IMAGE_LAYOUT_GENERAL;
@@ -275,14 +274,14 @@ RTPassBuilder& RTPassBuilder::readWrite(uint32_t set, uint32_t binding, RDGTextu
     return *this;
 }
 
-RTPassBuilder& RTPassBuilder::readWrite(uint32_t set, uint32_t binding, RDGBufferRef buffer,
+RTPassBuilder& RTPassBuilder::readWrite(uint32_t binding, RDGBufferRef buffer,
                                         VkPipelineStageFlagBits2 stage, uint32_t queueFamilyIndex,
                                         uint32_t offset, size_t size)
 {
     BufferAccessInfo bufferAccess;
     bufferAccess.accessMask       = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
     bufferAccess.stageMask        = stage;
-    bufferAccess.set              = set;
+    bufferAccess.set              = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
     bufferAccess.binding          = binding;
     bufferAccess.queueFamilyIndex = queueFamilyIndex;
     bufferAccess.offset           = offset;
