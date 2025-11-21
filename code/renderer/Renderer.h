@@ -9,7 +9,7 @@ class PlayElement;
 class Texture;
 class Renderer
 {
-   public:
+public:
     Renderer() {};
     Renderer(PlayElement& app) : _app(&app) {};
     virtual ~Renderer() = default;
@@ -19,14 +19,13 @@ class Renderer
     virtual void     RenderFrame()                   = 0;
     virtual void     SetScene(Scene* scene)          = 0;
     virtual void     OnResize(int width, int height) = 0;
-    virtual void     OnDestroy()                     = 0;
     virtual Texture* getOutputTexture()              = 0;
 
-   protected:
+protected:
     Scene*       _scene;
     PlayElement* _app;
 
-   private:
+private:
 };
 
 } // namespace Play

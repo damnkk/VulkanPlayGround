@@ -17,7 +17,6 @@ public:
         _view = element;
     }
     ~SceneManager();
-    void deinit();
 
 protected:
 private:

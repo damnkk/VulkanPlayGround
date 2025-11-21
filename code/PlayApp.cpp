@@ -22,6 +22,18 @@ struct ScopeTimer
         std::cout << "Scene traversal time: " << elapsed.count() << " ms" << std::endl;
     }
 };
+PlayElement::PlayElement(Info info) : _info(info) {}
+
+PlayElement::~PlayElement()
+{
+    _descriptorSetCache.reset();
+    for (auto& frame : _frameData)
+    {
+        vkDestroySemaphore(_app->getDevice(), frame.semaphore, nullptr);
+        vkDestroyCommandPool(_app->getDevice(), frame.graphicsCmdPool, nullptr);
+        vkDestroyCommandPool(_app->getDevice(), frame.computeCmdPool, nullptr);
+    }
+}
 
 void PlayElement::onAttach(nvapp::Application* app)
 {
@@ -39,11 +51,9 @@ void PlayElement::onAttach(nvapp::Application* app)
     {
         VkCommandPoolCreateInfo cmdPoolCI{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
         cmdPoolCI.queueFamilyIndex = _app->getQueue(0).familyIndex;
-        NVVK_CHECK(vkCreateCommandPool(_app->getDevice(), &cmdPoolCI, nullptr,
-                                       &_frameData[i].graphicsCmdPool));
+        NVVK_CHECK(vkCreateCommandPool(_app->getDevice(), &cmdPoolCI, nullptr, &_frameData[i].graphicsCmdPool));
         cmdPoolCI.queueFamilyIndex = _app->getQueue(1).familyIndex;
-        NVVK_CHECK(vkCreateCommandPool(_app->getDevice(), &cmdPoolCI, nullptr,
-                                       &_frameData[i].computeCmdPool));
+        NVVK_CHECK(vkCreateCommandPool(_app->getDevice(), &cmdPoolCI, nullptr, &_frameData[i].computeCmdPool));
         VkSemaphoreTypeCreateInfo timelineCreateInfo{VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO};
         timelineCreateInfo.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
         timelineCreateInfo.initialValue  = 0;
@@ -52,13 +62,11 @@ void PlayElement::onAttach(nvapp::Application* app)
         semaphoreCreateInfo.flags = 0;
         semaphoreCreateInfo.pNext = &timelineCreateInfo;
 
-        NVVK_CHECK(vkCreateSemaphore(_app->getDevice(), &semaphoreCreateInfo, nullptr,
-                                     &_frameData[i].semaphore));
+        NVVK_CHECK(vkCreateSemaphore(_app->getDevice(), &semaphoreCreateInfo, nullptr, &_frameData[i].semaphore));
     }
 
     _profilerTimeline = _info.profilerManager->createTimeline({"graphics"});
-    _profilerGpuTimer.init(_profilerTimeline, app->getDevice(), app->getPhysicalDevice(),
-                           app->getQueue(0).familyIndex, true);
+    _profilerGpuTimer.init(_profilerTimeline, app->getDevice(), app->getPhysicalDevice(), app->getQueue(0).familyIndex, true);
     createGraphicsDescriptResource();
 
     _sceneManager.init(this);
@@ -67,13 +75,12 @@ void PlayElement::onAttach(nvapp::Application* app)
     {
         case eDeferRendering:
         {
-            _renderer = std::make_shared<DeferRenderer>(*this);
+            _renderer = std::make_unique<DeferRenderer>(*this);
             break;
         }
         default:
         {
             LOGE("Unsupported render mode, defaulting to DeferRendering");
-            _renderer = std::make_shared<DeferRenderer>(*this);
         }
     }
 }
@@ -88,16 +95,7 @@ void PlayElement::onDetach()
     ShaderManager::Instance().deInit();
     _profilerGpuTimer.deinit();
     _info.profilerManager->destroyTimeline(_profilerTimeline);
-    _sceneManager.deinit();
-    _renderer->OnDestroy();
     PipelineCacheManager::Instance().deinit();
-    _descriptorSetCache->deInit();
-    for (auto& frame : _frameData)
-    {
-        vkDestroySemaphore(_app->getDevice(), frame.semaphore, nullptr);
-        vkDestroyCommandPool(_app->getDevice(), frame.graphicsCmdPool, nullptr);
-        vkDestroyCommandPool(_app->getDevice(), frame.computeCmdPool, nullptr);
-    }
 }
 
 void PlayElement::onResize(VkCommandBuffer cmd, const VkExtent2D& size)
@@ -157,14 +155,11 @@ void PlayElement::onLastHeadlessFrame()
 
 void PlayElement::createGraphicsDescriptResource()
 {
-    _uiTexture = Texture::Create(_app->getWindowSize().width, _app->getWindowSize().height,
-                                 VK_FORMAT_R8G8B8A8_UNORM,
-                                 VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
+    _uiTexture = Texture::Create(_app->getWindowSize().width, _app->getWindowSize().height, VK_FORMAT_R8G8B8A8_UNORM,
+                                 VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
     PlayResourceManager::Instance().acquireSampler(_uiTexture->descriptor.sampler);
-    _uiTextureDescriptor = ImGui_ImplVulkan_AddTexture(_uiTexture->descriptor.sampler,
-                                                       _uiTexture->descriptor.imageView,
-                                                       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    _uiTextureDescriptor =
+        ImGui_ImplVulkan_AddTexture(_uiTexture->descriptor.sampler, _uiTexture->descriptor.imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }
 
 std::filesystem::path getBaseFilePath()

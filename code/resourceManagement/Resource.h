@@ -17,17 +17,13 @@ class Texture : public nvvk::Image
 public:
     static Texture* Create();
     static Texture* Create(std::string name);
-    static Texture* Create(uint32_t width, uint32_t height, VkFormat format,
-                           VkImageUsageFlags usage,
+    static Texture* Create(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage,
                            VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED, uint32_t mipLevels = 1,
                            VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT);
-    static Texture* Create(uint32_t width, uint32_t height, uint32_t depth, VkFormat format,
-                           VkImageUsageFlags usage, VkImageLayout initialLayout,
+    static Texture* Create(uint32_t width, uint32_t height, uint32_t depth, VkFormat format, VkImageUsageFlags usage, VkImageLayout initialLayout,
                            uint32_t mipLevels = 1);
-    static Texture* Create(uint32_t size, VkFormat format, VkImageUsageFlags usage,
-                           VkImageLayout initialLayout, uint32_t mipLevels = 1);
-    static Texture* Create(const std::filesystem::path& imagePath,
-                           VkImageLayout finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    static Texture* Create(uint32_t size, VkFormat format, VkImageUsageFlags usage, VkImageLayout initialLayout, uint32_t mipLevels = 1);
+    static Texture* Create(const std::filesystem::path& imagePath, VkImageLayout finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                            uint32_t mipLevels = 1, bool isSrgb = true);
     static void     Destroy(Texture* texture);
     struct TexMetaData
@@ -93,8 +89,7 @@ public:
     }
     TexMetaData getMetaData()
     {
-        return {format,      type,      extent,      usageFlags, aspectFlags,
-                sampleCount, mipLevels, arrayLayers, debugName};
+        return {format, type, extent, usageFlags, aspectFlags, sampleCount, mipLevels, arrayLayers, debugName};
     }
 
     void setMetaData(TexMetaData& metadata)
@@ -122,8 +117,7 @@ protected:
     VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT;
     std::string           debugName;
     VkImageAspectFlags    aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
-    VkImageUsageFlags     usageFlags =
-        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    VkImageUsageFlags     usageFlags  = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 };
 
 class Buffer : public nvvk::Buffer
@@ -131,8 +125,7 @@ class Buffer : public nvvk::Buffer
 public:
     static Buffer* Create();
     static Buffer* Create(std::string name);
-    static Buffer* Create(std::string name, VkBufferUsageFlags2 usage, VkDeviceSize size,
-                          VkMemoryPropertyFlags property);
+    static Buffer* Create(std::string name, VkBufferUsageFlags2 usage, VkDeviceSize size, VkMemoryPropertyFlags property);
     static void    Destroy(Buffer* buffer);
 
     struct BufferMetaData

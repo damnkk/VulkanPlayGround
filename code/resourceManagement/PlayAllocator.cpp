@@ -54,8 +54,7 @@ Texture* TexturePool::alloc(VkImageCreateInfo* imgInfo, VkImageViewCreateInfo* v
     return texture;
 }
 
-Texture* TexturePool::alloc(uint32_t width, uint32_t height, VkFormat format,
-                            VkImageUsageFlags usage, VkImageLayout layout, uint32_t mipLevels,
+Texture* TexturePool::alloc(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkImageLayout layout, uint32_t mipLevels,
                             VkSampleCountFlagBits samples)
 {
     std::lock_guard<std::mutex> lock(_mutex);
@@ -83,8 +82,7 @@ Texture* TexturePool::alloc(uint32_t width, uint32_t height, VkFormat format,
         .sType            = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .viewType         = VK_IMAGE_VIEW_TYPE_2D,
         .format           = format,
-        .components       = {VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B,
-                             VK_COMPONENT_SWIZZLE_A},
+        .components       = {VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A},
         .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, 1},
     };
     NVVK_CHECK(_manager->createImage(*texture, imageInfo, viewInfo));
@@ -112,14 +110,12 @@ Texture* TexturePool::alloc(uint32_t width, uint32_t height, VkFormat format,
     texture->extent                 = {width, height, 1};
     texture->sampleCount            = samples;
     texture->usageFlags             = imageInfo.usage;
-    texture->aspectFlags            = (usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
-                                          ? (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
-                                          : VK_IMAGE_ASPECT_COLOR_BIT;
+    texture->aspectFlags =
+        (usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) ? (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT) : VK_IMAGE_ASPECT_COLOR_BIT;
     return texture;
 }
 
-Texture* TexturePool::alloc(uint32_t width, uint32_t height, uint32_t depth, VkFormat format,
-                            VkImageUsageFlags usage, VkImageLayout initialLayout,
+Texture* TexturePool::alloc(uint32_t width, uint32_t height, uint32_t depth, VkFormat format, VkImageUsageFlags usage, VkImageLayout initialLayout,
                             uint32_t mipLevels)
 {
     std::lock_guard<std::mutex> lock(_mutex);
@@ -146,8 +142,7 @@ Texture* TexturePool::alloc(uint32_t width, uint32_t height, uint32_t depth, VkF
         .sType            = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .viewType         = VK_IMAGE_VIEW_TYPE_3D,
         .format           = format,
-        .components       = {VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B,
-                             VK_COMPONENT_SWIZZLE_A},
+        .components       = {VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A},
         .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, 1},
     };
     if (_manager->createImage(*texture, imageInfo, viewInfo) != VK_SUCCESS)
@@ -174,14 +169,12 @@ Texture* TexturePool::alloc(uint32_t width, uint32_t height, uint32_t depth, VkF
     texture->extent                 = {width, height, depth};
     texture->sampleCount            = VK_SAMPLE_COUNT_1_BIT;
     texture->usageFlags             = imageInfo.usage;
-    texture->aspectFlags            = (usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
-                                          ? (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
-                                          : VK_IMAGE_ASPECT_COLOR_BIT;
+    texture->aspectFlags =
+        (usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) ? (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT) : VK_IMAGE_ASPECT_COLOR_BIT;
     return texture;
 }
 
-Texture* TexturePool::allocCube(uint32_t size, VkFormat format, VkImageUsageFlags usage,
-                                VkImageLayout initialLayout, uint32_t mipLevels)
+Texture* TexturePool::allocCube(uint32_t size, VkFormat format, VkImageUsageFlags usage, VkImageLayout initialLayout, uint32_t mipLevels)
 {
     std::lock_guard<std::mutex> lock(_mutex);
     Texture*                    texture = alloc();
@@ -207,8 +200,7 @@ Texture* TexturePool::allocCube(uint32_t size, VkFormat format, VkImageUsageFlag
         .sType            = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .viewType         = VK_IMAGE_VIEW_TYPE_CUBE,
         .format           = format,
-        .components       = {VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B,
-                             VK_COMPONENT_SWIZZLE_A},
+        .components       = {VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A},
         .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, 6},
     };
     if (_manager->createImage(*texture, imageInfo, viewInfo) != VK_SUCCESS)
@@ -236,43 +228,36 @@ Texture* TexturePool::allocCube(uint32_t size, VkFormat format, VkImageUsageFlag
     texture->extent                 = {size, size, 1};
     texture->sampleCount            = VK_SAMPLE_COUNT_1_BIT;
     texture->usageFlags             = imageInfo.usage;
-    texture->aspectFlags            = (usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
-                                          ? (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
-                                          : VK_IMAGE_ASPECT_COLOR_BIT;
+    texture->aspectFlags =
+        (usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) ? (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT) : VK_IMAGE_ASPECT_COLOR_BIT;
     return texture;
 }
 
-Texture* TexturePool::alloc(const void* data, size_t dataSize, uint32_t width, uint32_t height,
-                            VkFormat format, VkImageUsageFlags usage, uint32_t mipLevels,
-                            VkImageLayout layout)
+Texture* TexturePool::alloc(const void* data, size_t dataSize, uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage,
+                            uint32_t mipLevels, VkImageLayout layout)
 {
-    Texture* texture =
-        alloc(width, height, format, usage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels);
-    auto cmd = _manager->getTempCommandBuffer();
+    Texture* texture = alloc(width, height, format, usage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels);
+    auto     cmd     = _manager->getTempCommandBuffer();
     _manager->appendImage(*texture, dataSize, data, layout);
     _manager->cmdUploadAppended(cmd);
-    nvvk::cmdGenerateMipmaps(cmd, texture->image, {width, height}, mipLevels, 1,
-                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    nvvk::cmdGenerateMipmaps(cmd, texture->image, {width, height}, mipLevels, 1, layout);
     _manager->submitAndWaitTempCmdBuffer(cmd);
     _manager->acquireSampler(texture->descriptor.sampler);
     return texture;
 }
 
-Texture* TexturePool::alloc(const std::filesystem::path& imagePath, VkImageLayout finalLayout,
-                            uint32_t mipLevels, bool isSrgb)
+Texture* TexturePool::alloc(const std::filesystem::path& imagePath, VkImageLayout finalLayout, uint32_t mipLevels, bool isSrgb)
 {
     const std::string imageFileContents = nvutils::loadFile(imagePath);
     if (imageFileContents.empty())
     {
-        LOGW("File was empty or could not be opened: %s\n",
-             nvutils::utf8FromPath(imagePath).c_str());
+        LOGW("File was empty or could not be opened: %s\n", nvutils::utf8FromPath(imagePath).c_str());
         return nullptr;
     }
     const stbi_uc* imageFileData = reinterpret_cast<const stbi_uc*>(imageFileContents.data());
     if (imageFileContents.size() > std::numeric_limits<int>::max())
     {
-        LOGW("File too large for stb_image to read: %s\n",
-             nvutils::utf8FromPath(imagePath).c_str());
+        LOGW("File too large for stb_image to read: %s\n", nvutils::utf8FromPath(imagePath).c_str());
         return nullptr;
     }
     const int imageFileSize = static_cast<int>(imageFileContents.size());
@@ -295,15 +280,13 @@ Texture* TexturePool::alloc(const std::filesystem::path& imagePath, VkImageLayou
     int      requiredComponents = comp == 1 ? 1 : 4;
     if (is16Bit)
     {
-        stbi_us* data16 = stbi_load_16_from_memory(imageFileData, imageFileSize, &w, &h, &comp,
-                                                   requiredComponents);
+        stbi_us* data16 = stbi_load_16_from_memory(imageFileData, imageFileSize, &w, &h, &comp, requiredComponents);
         bytes_per_pixel = sizeof(*data16) * requiredComponents;
         data            = reinterpret_cast<stbi_uc*>(data16);
     }
     else
     {
-        data =
-            stbi_load_from_memory(imageFileData, imageFileSize, &w, &h, &comp, requiredComponents);
+        data            = stbi_load_from_memory(imageFileData, imageFileSize, &w, &h, &comp, requiredComponents);
         bytes_per_pixel = sizeof(*data) * requiredComponents;
     }
 
@@ -317,18 +300,15 @@ Texture* TexturePool::alloc(const std::filesystem::path& imagePath, VkImageLayou
                 format = is16Bit ? VK_FORMAT_R16_UNORM : VK_FORMAT_R8_UNORM;
                 break;
             case 4:
-                format = is16Bit  ? VK_FORMAT_R16G16B16A16_UNORM
-                         : isSrgb ? VK_FORMAT_R8G8B8A8_SRGB
-                                  : VK_FORMAT_R8G8B8A8_UNORM;
+                format = is16Bit ? VK_FORMAT_R16G16B16A16_UNORM : isSrgb ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
 
                 break;
         }
 
         VkDeviceSize buffer_size = static_cast<VkDeviceSize>(w) * h * bytes_per_pixel;
-        Texture*     texture     = alloc(data, buffer_size, (uint32_t) w, (uint32_t) h, format,
-                                         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                                             VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-                                         mipLevels, finalLayout);
+        Texture*     texture =
+            alloc(data, buffer_size, (uint32_t) w, (uint32_t) h, format,
+                  VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, mipLevels, finalLayout);
 
         texture->DebugName() = nvutils::utf8FromPath(imagePath);
         stbi_image_free(data);
@@ -365,8 +345,7 @@ Buffer* BufferPool::alloc()
     return _objs[index];
 }
 
-Buffer* BufferPool::alloc(VkDeviceSize size, VkBufferUsageFlags usage,
-                          VkMemoryPropertyFlags properties)
+Buffer* BufferPool::alloc(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties)
 {
     std::lock_guard<std::mutex> lock(_mutex);
     Buffer*                     buffer = alloc();
@@ -382,8 +361,7 @@ Buffer* BufferPool::alloc(VkDeviceSize size, VkBufferUsageFlags usage,
     }
     else if (properties & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
     {
-        vmaUsage = (properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) ? VMA_MEMORY_USAGE_CPU_TO_GPU
-                                                                       : VMA_MEMORY_USAGE_CPU_ONLY;
+        vmaUsage = (properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) ? VMA_MEMORY_USAGE_CPU_TO_GPU : VMA_MEMORY_USAGE_CPU_ONLY;
     }
     else
     {
@@ -398,8 +376,7 @@ Buffer* BufferPool::alloc(VkDeviceSize size, VkBufferUsageFlags usage,
     return buffer;
 }
 
-Buffer* BufferPool::alloc(const void* data, VkDeviceSize size, VkBufferUsageFlags usage,
-                          VkMemoryPropertyFlags properties)
+Buffer* BufferPool::alloc(const void* data, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties)
 {
     std::lock_guard<std::mutex> lock(_mutex);
     Buffer*                     buffer = alloc(size, usage, properties);
@@ -415,8 +392,7 @@ Buffer* BufferPool::alloc(const void* data, VkDeviceSize size, VkBufferUsageFlag
 Buffer* BufferPool::alloc(VkBufferCreateInfo& bufferInfo)
 {
     std::lock_guard<std::mutex> lock(_mutex);
-    return alloc(bufferInfo.size, (VkBufferUsageFlags) (bufferInfo.usage),
-                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    return alloc(bufferInfo.size, (VkBufferUsageFlags) (bufferInfo.usage), VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 }
 
 void BufferPool::free(Buffer* obj)
@@ -466,6 +442,7 @@ void PlayResourceManager::initialize(PlayElement* element)
     cmdPoolInfo.flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     cmdPoolInfo.queueFamilyIndex = element->getApp()->getQueue(2).familyIndex;
     vkCreateCommandPool(element->getDevice(), &cmdPoolInfo, nullptr, &_tempCmdPool);
+    this->m_enableLayoutBarriers = true;
 }
 void PlayResourceManager::deInit()
 {

@@ -240,8 +240,7 @@ std::vector<Node*> Dag::getLogicalDependencies(Node* node) const
     return dependencies;
 }
 
-bool Dag::hasCycleDFS(Node* node, std::unordered_map<Node*, int>& colors, std::vector<Node*>& path,
-                      std::vector<std::vector<Node*>>& cycles) const
+bool Dag::hasCycleDFS(Node* node, std::unordered_map<Node*, int>& colors, std::vector<Node*>& path, std::vector<std::vector<Node*>>& cycles) const
 {
     colors[node] = 1; // 标记为灰色（正在处理）
     path.push_back(node);

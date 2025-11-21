@@ -56,8 +56,7 @@ public:
     VkImageLayout attachFinalLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     bool          operator==(TextureAccessInfo& candidate)
     {
-        return accessMask == candidate.accessMask && layout == candidate.layout &&
-               stageMask == candidate.stageMask;
+        return accessMask == candidate.accessMask && layout == candidate.layout && stageMask == candidate.stageMask;
     }
 };
 
@@ -75,8 +74,7 @@ public:
     uint32_t              descriptorIndex  = 0;
     bool                  operator==(BufferAccessInfo& candidate)
     {
-        return accessMask == candidate.accessMask && stageMask == candidate.stageMask &&
-               offset == candidate.offset && size == candidate.size &&
+        return accessMask == candidate.accessMask && stageMask == candidate.stageMask && offset == candidate.offset && size == candidate.size &&
                queueFamilyIndex == candidate.queueFamilyIndex;
     }
 };
@@ -104,11 +102,10 @@ public:
 
     struct TextureDesc
     {
-        VkFormat          _format = VK_FORMAT_UNDEFINED;
-        VkImageType       _type   = VK_IMAGE_TYPE_2D;
-        VkExtent3D        _extent = {1, 1, 1};
-        VkImageUsageFlags _usageFlags =
-            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        VkFormat              _format      = VK_FORMAT_UNDEFINED;
+        VkImageType           _type        = VK_IMAGE_TYPE_2D;
+        VkExtent3D            _extent      = {1, 1, 1};
+        VkImageUsageFlags     _usageFlags  = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         VkImageAspectFlags    _aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
         VkSampleCountFlagBits _sampleCount = VK_SAMPLE_COUNT_1_BIT;
         uint32_t              _mipmapLevel = 1;
@@ -120,7 +117,7 @@ private:
     friend class RDGBuilder;
     friend class RDGTextureBuilder;
     uint32_t     _refCount = 0;
-    Texture*     _rhi;
+    Texture*     _rhi      = nullptr;
     ProducerInfo _producerInfo;
     // latest access info for each sub resource
     TextureSubresourceAccessInfo _subResourceAccessInfos;
@@ -149,10 +146,9 @@ public:
 
     struct BufferDesc
     {
-        VkBufferUsageFlags _usageFlags =
-            VK_BUFFER_USAGE_2_TRANSFER_DST_BIT | VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT;
-        VkDeviceSize _size  = 8;
-        VkDeviceSize _range = VK_WHOLE_SIZE;
+        VkBufferUsageFlags _usageFlags = VK_BUFFER_USAGE_2_TRANSFER_DST_BIT | VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT;
+        VkDeviceSize       _size       = 8;
+        VkDeviceSize       _range      = VK_WHOLE_SIZE;
         enum class MemoryLocation : uint8_t
         {
             eDeviceLocal,

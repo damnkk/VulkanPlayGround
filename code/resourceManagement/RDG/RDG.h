@@ -36,10 +36,7 @@ class RDGBuilder;
 class RDGTextureBuilder
 {
 public:
-    RDGTextureBuilder(RDGBuilder* builder, RDGTextureRef node)
-        : _builder(builder), _textureNode(node)
-    {
-    }
+    RDGTextureBuilder(RDGBuilder* builder, RDGTextureRef node) : _builder(builder), _textureNode(node) {}
     RDGTextureBuilder& Import(Texture* texture);
     RDGTextureBuilder& Format(VkFormat format);
     RDGTextureBuilder& Type(VkImageType type);
@@ -58,9 +55,7 @@ private:
 class RDGBufferBuilder
 {
 public:
-    RDGBufferBuilder(RDGBuilder* builder, RDGBufferRef node) : _builder(builder), _bufferNode(node)
-    {
-    }
+    RDGBufferBuilder(RDGBuilder* builder, RDGBufferRef node) : _builder(builder), _bufferNode(node) {}
     RDGBufferBuilder& Size(VkDeviceSize size);
     RDGBufferBuilder& Range(VkDeviceSize range);
     RDGBufferBuilder& UsageFlags(VkBufferUsageFlags usageFlags);
@@ -93,13 +88,31 @@ private:
 struct PendingGfxState
 {
     PendingGfxState(RenderContext* renderContext) : _renderContext(renderContext) {}
-    const RenderContext* _renderContext = nullptr;
+    const RenderContext* _renderContext       = nullptr;
+    VkDescriptorSet      _globalDescriptorSet = VK_NULL_HANDLE;
+    VkDescriptorSet      _frameDescriptorSet  = VK_NULL_HANDLE;
+    VkDescriptorSet      _sceneDescriptorSet  = VK_NULL_HANDLE;
+    VkDescriptorSet      _passDescriptorSet   = VK_NULL_HANDLE;
 };
 
 struct PendingComputeState
 {
     PendingComputeState(RenderContext* renderContext) : _renderContext(renderContext) {}
-    const RenderContext* _renderContext = nullptr;
+    const RenderContext* _renderContext       = nullptr;
+    VkDescriptorSet      _globalDescriptorSet = VK_NULL_HANDLE;
+    VkDescriptorSet      _frameDescriptorSet  = VK_NULL_HANDLE;
+    VkDescriptorSet      _sceneDescriptorSet  = VK_NULL_HANDLE;
+    VkDescriptorSet      _passDescriptorSet   = VK_NULL_HANDLE;
+};
+
+struct PendingRTState
+{
+    PendingRTState(RenderContext* renderContext) : _renderContext(renderContext) {};
+    const RenderContext* _renderContext       = nullptr;
+    VkDescriptorSet      _globalDescriptorSet = VK_NULL_HANDLE;
+    VkDescriptorSet      _frameDescriptorSet  = VK_NULL_HANDLE;
+    VkDescriptorSet      _sceneDescriptorSet  = VK_NULL_HANDLE;
+    VkDescriptorSet      _passDescriptorSet   = VK_NULL_HANDLE;
 };
 
 struct RenderContext
@@ -108,15 +121,17 @@ struct RenderContext
     {
         _pendingComputeState = std::make_shared<PendingComputeState>(this);
         _pendingGfxState     = std::make_shared<PendingGfxState>(this);
+        _pendingRTState      = std::make_shared<PendingRTState>(this);
     }
     ~RenderContext() {}
-    PlayElement*                         _element;
-    PlayElement::PlayFrameData*          _frameData;
-    uint32_t                             _frameInFlightIndex;
-    PassNode*                            _prevPassNode;
+    PlayElement*                         _element             = nullptr;
+    PlayElement::PlayFrameData*          _frameData           = nullptr;
+    uint32_t                             _frameInFlightIndex  = 0;
+    PassNode*                            _prevPassNode        = nullptr;
     VkCommandBuffer                      _currCmdBuffer       = VK_NULL_HANDLE;
     std::shared_ptr<PendingComputeState> _pendingComputeState = nullptr;
     std::shared_ptr<PendingGfxState>     _pendingGfxState     = nullptr;
+    std::shared_ptr<PendingRTState>      _pendingRTState      = nullptr;
 };
 
 class RDGBuilder
@@ -150,8 +165,8 @@ protected:
     void           executePass(PassNode* pass);
     void           afterPassExecute();
     RenderContext* prepareRenderContext(PassNode* pass);
-    void           prepareRenderTargets(PassNode* pass);
     void           prepareDescriptorSets(RenderContext& context, PassNode* pass);
+    void           prepareResourceBarrier(RenderContext& context, PassNode* pass);
     void           prepareRenderPass(PassNode* pass);
     friend class RenderPassBuilder;
     friend class ComputePassBuilder;
@@ -165,9 +180,8 @@ protected:
     std::unordered_map<std::string, RDGBuffer*>  _bufferMap;
 
 private:
-    std::shared_ptr<RenderContext> _renderContext;
-    std::vector<std::pair<VkSubmitInfo2, uint32_t>>
-        _submitInfos; // pairs of submit info and frame index
+    std::shared_ptr<RenderContext>                  _renderContext;
+    std::vector<std::pair<VkSubmitInfo2, uint32_t>> _submitInfos; // pairs of submit info and frame index
 };
 } // namespace Play::RDG
 

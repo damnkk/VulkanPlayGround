@@ -11,11 +11,10 @@ class PostProcessPass : public RenderPass
 {
 public:
     PostProcessPass(PlayElement* element) : _element(element) {}
-    ~PostProcessPass() override = default;
+    ~PostProcessPass() override;
 
     void init() override;
     void build(RDG::RDGBuilder* rdgBuilder) override;
-    void deinit() override;
 
 private:
     std::unique_ptr<RenderProgram> _postProgram;

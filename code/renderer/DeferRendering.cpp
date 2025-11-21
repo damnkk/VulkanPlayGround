@@ -28,11 +28,4 @@ void DeferRenderer::RenderFrame()
 }
 void DeferRenderer::SetScene(Scene* scene) {}
 void DeferRenderer::OnResize(int width, int height) {}
-void DeferRenderer::OnDestroy()
-{
-    for (auto& pass : _passes)
-    {
-        pass->deinit();
-    }
-}
 } // namespace Play

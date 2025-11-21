@@ -61,13 +61,12 @@ public:
 #endif
 
         // Create a 1x1 Vulkan texture
-        VkCommandBuffer   cmd       = m_app->createTempCmdBuffer();
-        VkImageCreateInfo imageInfo = DEFAULT_VkImageCreateInfo;
-        imageInfo.extent            = {1, 1, 1};
-        imageInfo.format            = VK_FORMAT_R32G32B32A32_SFLOAT;
-        imageInfo.usage =
-            VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT; // Added transfer dst bit
-        std::array<float, 4> imageData = {0.46F, 0.72F, 0, 1};            // NVIDIA Green
+        VkCommandBuffer   cmd          = m_app->createTempCmdBuffer();
+        VkImageCreateInfo imageInfo    = DEFAULT_VkImageCreateInfo;
+        imageInfo.extent               = {1, 1, 1};
+        imageInfo.format               = VK_FORMAT_R32G32B32A32_SFLOAT;
+        imageInfo.usage                = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT; // Added transfer dst bit
+        std::array<float, 4> imageData = {0.46F, 0.72F, 0, 1};                                         // NVIDIA Green
 
         VkImageViewCreateInfo viewInfo = DEFAULT_VkImageViewCreateInfo;
         viewInfo.components            = {.a = VK_COMPONENT_SWIZZLE_ONE}; // Force alpha to 1.0
@@ -79,22 +78,19 @@ public:
         NVVK_DBG_NAME(m_viewportImage.descriptor.sampler);
 
         // upload image
-        NVVK_CHECK(m_stagingUploader.appendImage(
-            m_viewportImage, std::span<float>(imageData.data(), imageData.size()),
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
+        NVVK_CHECK(m_stagingUploader.appendImage(m_viewportImage, std::span<float>(imageData.data(), imageData.size()),
+                                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
         m_stagingUploader.cmdUploadAppended(cmd);
         m_app->submitAndWaitTempCmdBuffer(cmd);
         m_stagingUploader.releaseStaging();
 
         // Add image to ImGui, for display
-        m_imguiImage = ImGui_ImplVulkan_AddTexture(m_viewportImage.descriptor.sampler,
-                                                   m_viewportImage.descriptor.imageView,
+        m_imguiImage = ImGui_ImplVulkan_AddTexture(m_viewportImage.descriptor.sampler, m_viewportImage.descriptor.imageView,
                                                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
         // Init profiler with a single queue
         m_profilerTimeline = m_info.profilerManager->createTimeline({"graphics"});
-        m_profilerGpuTimer.init(m_profilerTimeline, app->getDevice(), app->getPhysicalDevice(),
-                                app->getQueue(0).familyIndex, true);
+        m_profilerGpuTimer.init(m_profilerTimeline, app->getDevice(), app->getPhysicalDevice(), app->getQueue(0).familyIndex, true);
     }
 
     void onDetach() override
@@ -114,8 +110,7 @@ public:
     {
         ImGui::Begin("Settings");
         ImGui::Checkbox("Animated Viewport", &m_animate);
-        ImGui::TextDisabled("%d FPS / %.3fms", static_cast<int>(ImGui::GetIO().Framerate),
-                            1000.F / ImGui::GetIO().Framerate);
+        ImGui::TextDisabled("%d FPS / %.3fms", static_cast<int>(ImGui::GetIO().Framerate), 1000.F / ImGui::GetIO().Framerate);
 
         // Add window information
         const VkExtent2D& viewportSize = m_app->getViewportSize();
@@ -141,18 +136,11 @@ public:
             auto timerSection = m_profilerGpuTimer.cmdFrameSection(cmd, "Animation");
 
             VkClearColorValue clearColor{};
-            ImGui::ColorConvertHSVtoRGB((float) ImGui::GetTime() * 0.05f, 1, 1,
-                                        clearColor.float32[0], clearColor.float32[1],
-                                        clearColor.float32[2]);
+            ImGui::ColorConvertHSVtoRGB((float) ImGui::GetTime() * 0.05f, 1, 1, clearColor.float32[0], clearColor.float32[1], clearColor.float32[2]);
             VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-            nvvk::cmdImageMemoryBarrier(
-                cmd, {m_viewportImage.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL});
-            vkCmdClearColorImage(cmd, m_viewportImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                 &clearColor, 1, &range);
-            nvvk::cmdImageMemoryBarrier(
-                cmd, {m_viewportImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
+            nvvk::cmdImageMemoryBarrier(cmd, {m_viewportImage.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL});
+            vkCmdClearColorImage(cmd, m_viewportImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &range);
+            nvvk::cmdImageMemoryBarrier(cmd, {m_viewportImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
         }
     }
 
@@ -177,8 +165,7 @@ public:
             m_app->close();
         }
 
-        if (ImGui::IsKeyPressed(ImGuiKey_V) && ImGui::IsKeyDown(ImGuiKey_LeftCtrl) &&
-            ImGui::IsKeyDown(ImGuiKey_LeftShift))
+        if (ImGui::IsKeyPressed(ImGuiKey_V) && ImGui::IsKeyDown(ImGuiKey_LeftCtrl) && ImGui::IsKeyDown(ImGuiKey_LeftShift))
         {
             vsync = !vsync;
         }
@@ -217,24 +204,15 @@ int main(int argc, char** argv)
         .profilerManager   = &profilerManager,
         .parameterRegistry = &parameterRegistry,
     };
-    std::shared_ptr<Play::PlayElement> playElement = std::make_shared<Play::PlayElement>(playInfo);
     // setup logger element, `true` means shown by default
     // we add it early so outputs are captured early on, you might want to defer this to a later
     // timer.
-    std::shared_ptr<nvapp::ElementLogger> elementLogger =
-        std::make_shared<nvapp::ElementLogger>(true);
-    nvutils::Logger::getInstance().setLogCallback(
-        [&](nvutils::Logger::LogLevel logLevel, const std::string& text)
-        { elementLogger->addLog(logLevel, "%s", text.c_str()); });
-    VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures = {
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR, nullptr, VK_TRUE};
+    std::shared_ptr<nvapp::ElementLogger> elementLogger = std::make_shared<nvapp::ElementLogger>(true);
+    nvutils::Logger::getInstance().setLogCallback([&](nvutils::Logger::LogLevel logLevel, const std::string& text)
+                                                  { elementLogger->addLog(logLevel, "%s", text.c_str()); });
+    VkPhysicalDeviceRayQueryFeaturesKHR         rayQueryFeatures = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR, nullptr, VK_TRUE};
     VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptorBufferFeatures = {
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
-        nullptr,
-        VK_TRUE,
-        VK_TRUE,
-        VK_TRUE,
-        VK_TRUE};
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT, nullptr, VK_TRUE, VK_TRUE, VK_TRUE, VK_TRUE};
     nvvk::ContextInitInfo vkSetup{
         .instanceExtensions = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME},
 
@@ -245,8 +223,7 @@ int main(int argc, char** argv)
                              {VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME, &descriptorBufferFeatures}},
         .queues           = {VK_QUEUE_GRAPHICS_BIT, VK_QUEUE_COMPUTE_BIT, VK_QUEUE_TRANSFER_BIT},
     };
-    vkSetup.deviceExtensions.insert(vkSetup.deviceExtensions.end(), afterMathExtList.begin(),
-                                    afterMathExtList.end());
+    vkSetup.deviceExtensions.insert(vkSetup.deviceExtensions.end(), afterMathExtList.begin(), afterMathExtList.end());
 
     // let's add a command-line option to enable/disable validation layers
     parameterRegistry.add({"validation"}, &vkSetup.enableValidationLayers);
@@ -278,16 +255,13 @@ int main(int argc, char** argv)
     appInfo.dockSetup      = [](ImGuiID viewportID)
     {
         // right side panel container
-        ImGuiID settingID =
-            ImGui::DockBuilderSplitNode(viewportID, ImGuiDir_Right, 0.25F, nullptr, &viewportID);
+        ImGuiID settingID = ImGui::DockBuilderSplitNode(viewportID, ImGuiDir_Right, 0.25F, nullptr, &viewportID);
         ImGui::DockBuilderDockWindow("Settings", settingID);
 
         // bottom panel container
-        ImGuiID loggerID =
-            ImGui::DockBuilderSplitNode(viewportID, ImGuiDir_Down, 0.35F, nullptr, &viewportID);
+        ImGuiID loggerID = ImGui::DockBuilderSplitNode(viewportID, ImGuiDir_Down, 0.35F, nullptr, &viewportID);
         ImGui::DockBuilderDockWindow("Log", loggerID);
-        ImGuiID profilerID =
-            ImGui::DockBuilderSplitNode(loggerID, ImGuiDir_Right, 0.4F, nullptr, &loggerID);
+        ImGuiID profilerID = ImGui::DockBuilderSplitNode(loggerID, ImGuiDir_Right, 0.4F, nullptr, &loggerID);
         ImGui::DockBuilderDockWindow("Profiler", profilerID);
     };
 
@@ -297,7 +271,7 @@ int main(int argc, char** argv)
 
     // add the sample main element
     // app.addElement(sampleElement);
-    app.addElement(playElement);
+    app.addElement(std::make_shared<Play::PlayElement>(playInfo));
     app.addElement(std::make_shared<nvapp::ElementDefaultWindowTitle>());
     // add profiler element
     app.addElement(std::make_shared<nvapp::ElementProfiler>(&profilerManager));

@@ -33,23 +33,19 @@ public:
     DescriptorSetManager(VkDevice device);
     ~DescriptorSetManager();
     void                  deinit();
-    DescriptorSetManager& addBinding(uint32_t setIdx, uint32_t bindingIdx, uint32_t descriptorCount,
-                                     VkDescriptorType      descriptorType,
+    DescriptorSetManager& addBinding(uint32_t setIdx, uint32_t bindingIdx, uint32_t descriptorCount, VkDescriptorType descriptorType,
                                      VkPipelineStageFlags2 pipelineStageFlags);
     DescriptorSetManager& addBinding(const BindInfo& bindingInfo);
     bool                  finish();
-    DescriptorSetManager& addConstantRange(uint32_t size, uint32_t offset,
-                                           VkPipelineStageFlags2 stage);
+    DescriptorSetManager& addConstantRange(uint32_t size, uint32_t offset, VkPipelineStageFlags2 stage);
 
-    VkPipelineLayout getPipelineLayout() const;
-    std::array<nvvk::DescriptorBindings, static_cast<size_t>(DescriptorEnum::eCount)>&
-    getSetBindingInfo()
+    VkPipelineLayout                                                                   getPipelineLayout() const;
+    std::array<nvvk::DescriptorBindings, static_cast<size_t>(DescriptorEnum::eCount)>& getSetBindingInfo()
     {
         return _descBindSet;
     }
 
-    std::array<VkDescriptorSetLayout, static_cast<size_t>(DescriptorEnum::eCount)>&
-    getDescriptorSetLayouts()
+    std::array<VkDescriptorSetLayout, static_cast<size_t>(DescriptorEnum::eCount)>& getDescriptorSetLayouts()
     {
         return _descSetLayouts;
     }
@@ -60,34 +56,24 @@ public:
         return _descSetLayouts[uint32_t(setEnum)];
     }
 
-    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::Buffer& buffer,
-                     VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE);
-    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
-                     const nvvk::AccelerationStructure& accel);
+    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::Buffer& buffer, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE);
+    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::AccelerationStructure& accel);
     void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::Image& image);
-    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, VkBuffer buffer, VkDeviceSize offset = 0,
-                     VkDeviceSize range = VK_WHOLE_SIZE);
-    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
-                     const VkDescriptorBufferInfo& bufferInfo);
-    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, VkImageView imageView,
-                     VkImageLayout imageLayout, VkSampler sampler = nullptr);
+    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, VkBuffer buffer, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE);
+    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const VkDescriptorBufferInfo& bufferInfo);
+    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, VkImageView imageView, VkImageLayout imageLayout, VkSampler sampler = nullptr);
     void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const VkDescriptorImageInfo& imageInfo);
     void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, VkAccelerationStructureKHR accel);
 
     // writeSet.descriptorCount many elements
     void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::Buffer* buffers,
                      uint32_t count); // offset 0 and VK_WHOLE_SIZE
-    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
-                     const nvvk::AccelerationStructure* accels, uint32_t count);
-    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::Image* images,
-                     uint32_t count);
+    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::AccelerationStructure* accels, uint32_t count);
+    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::Image* images, uint32_t count);
 
-    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
-                     const VkDescriptorBufferInfo* bufferInfos, uint32_t count);
-    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const VkDescriptorImageInfo* imageInfos,
-                     uint32_t count);
-    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const VkAccelerationStructureKHR* accels,
-                     uint32_t count);
+    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const VkDescriptorBufferInfo* bufferInfos, uint32_t count);
+    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const VkDescriptorImageInfo* imageInfos, uint32_t count);
+    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const VkAccelerationStructureKHR* accels, uint32_t count);
 
     uint64_t getBindingsHash(uint32_t setIdx);
     uint64_t getDescsetLayoutHash(uint32_t setIdx);
@@ -111,20 +97,19 @@ private:
     {
         return _vkDevice;
     }
-    bool _recordState = false; // 记录状态,保证binding有增改之后会调用finish,刷新管线布局
+    bool                             _recordState = false; // 记录状态,保证binding有增改之后会调用finish,刷新管线布局
     std::vector<BindInfo>            _bindingInfos;
     std::vector<VkPushConstantRange> _constantRanges;
     std::array<nvvk::DescriptorBindings, static_cast<size_t>(DescriptorEnum::eCount)> _descBindSet;
-    std::array<VkDescriptorSetLayout, static_cast<size_t>(DescriptorEnum::eCount)> _descSetLayouts =
-        {};
-    VkPipelineLayout _pipelineLayout = VK_NULL_HANDLE;
-    VkDevice         _vkDevice;
-    uint8_t          _dirtyFlags = 0; // bit0: binding changed, bit1: constant range changed
+    std::array<VkDescriptorSetLayout, static_cast<size_t>(DescriptorEnum::eCount)>    _descSetLayouts = {};
+    VkPipelineLayout                                                                  _pipelineLayout = VK_NULL_HANDLE;
+    VkDevice                                                                          _vkDevice;
+    uint8_t _dirtyFlags = 0; // bit0: binding changed, bit1: constant range changed
 
-    std::array<std::vector<DescriptorInfo>, static_cast<size_t>(DescriptorEnum::eCount)> _descInfos;
-    std::array<uint64_t, static_cast<size_t>(DescriptorEnum::eCount) -
-                             static_cast<size_t>(DescriptorEnum::ePerPassDescriptorSet)>
-        _setBindingHashs = {};
+    std::array<std::vector<DescriptorInfo>, static_cast<size_t>(DescriptorEnum::eCount) - static_cast<size_t>(DescriptorEnum::ePerPassDescriptorSet)>
+                                                                                                                                   _descInfos;
+    std::array<uint64_t, static_cast<size_t>(DescriptorEnum::eCount) - static_cast<size_t>(DescriptorEnum::ePerPassDescriptorSet)> _setBindingHashs =
+        {};
 };
 
 enum class ProgramType
@@ -140,11 +125,11 @@ class PlayProgram
 {
 public:
     PlayProgram(VkDevice device) : _descriptorSetManager(device) {}
-    virtual ~PlayProgram() {}
-    virtual void deinit()
+    virtual ~PlayProgram()
     {
         _descriptorSetManager.deinit();
     }
+
     PlayProgram(const PlayProgram&);
     PlayProgram&          operator=(const PlayProgram&);
     virtual VkPipeline    getOrCreatePipeline()  = 0;
@@ -155,8 +140,7 @@ public:
     }
     VkPipelineBindPoint getPipelineBindPoint() const
     {
-        if (_programType == ProgramType::eRenderProgram ||
-            _programType == ProgramType::eMeshRenderProgram)
+        if (_programType == ProgramType::eRenderProgram || _programType == ProgramType::eMeshRenderProgram)
         {
             return VK_PIPELINE_BIND_POINT_GRAPHICS;
         }
@@ -206,10 +190,7 @@ class ComputeProgram : public PlayProgram
 {
 public:
     ComputeProgram(VkDevice device) : PlayProgram(device) {}
-    ComputeProgram(VkDevice device, ShaderID computeModuleID)
-        : PlayProgram(device), _computeModuleID(computeModuleID)
-    {
-    }
+    ComputeProgram(VkDevice device, ShaderID computeModuleID) : PlayProgram(device), _computeModuleID(computeModuleID) {}
     ComputeProgram&     setComputeModuleID(ShaderID computeModuleID);
     void                finish();
     VkPipeline          getOrCreatePipeline() override;
@@ -228,10 +209,7 @@ class RTProgram : public PlayProgram
 public:
     RTProgram(VkDevice device) : PlayProgram(device) {}
     RTProgram(VkDevice device, ShaderID rayGenID, ShaderID rayCHitID, ShaderID rayMissID)
-        : PlayProgram(device),
-          _rayGenModuleID(rayGenID),
-          _rayCHitModuleID(rayCHitID),
-          _rayMissModuleID(rayMissID)
+        : PlayProgram(device), _rayGenModuleID(rayGenID), _rayCHitModuleID(rayCHitID), _rayMissModuleID(rayMissID)
     {
     }
     RTProgram&          setRayGenModuleID(ShaderID rayGenModuleID);

@@ -4,6 +4,7 @@
 #include "utils.hpp"
 #include <nvutils/logger.hpp>
 #include <nvvk/check_error.hpp>
+#include <nvvk/barriers.hpp>
 #include "nvvk/debug_util.hpp"
 namespace Play::RDG
 {
@@ -102,9 +103,8 @@ RDGBufferBuilder& RDGBufferBuilder::UsageFlags(VkBufferUsageFlags usageFlags)
 
 RDGBufferBuilder& RDGBufferBuilder::Location(bool isDeviceLocal)
 {
-    _bufferNode->_info._location = isDeviceLocal
-                                       ? RDGBuffer::BufferDesc::MemoryLocation::eDeviceLocal
-                                       : RDGBuffer::BufferDesc::MemoryLocation::eHostVisible;
+    _bufferNode->_info._location =
+        isDeviceLocal ? RDGBuffer::BufferDesc::MemoryLocation::eDeviceLocal : RDGBuffer::BufferDesc::MemoryLocation::eHostVisible;
     return *this;
 }
 
@@ -191,71 +191,84 @@ PresentPassBuilder RDGBuilder::createPresentPass()
 
 void RDGBuilder::beforePassExecute() {}
 
-void RDGBuilder::prepareRenderTargets(PassNode* pass)
-{
-    RenderPassNode* renderPass = static_cast<RenderPassNode*>(pass);
-    if (pass->type() != PassNode::Type::Render) return;
-    for (auto& [rdgTexture, colorAttachmentState] : renderPass->_textureStates)
-    {
-        if (!colorAttachmentState.textureStates.front().isAttachment) continue;
-        rdgTexture->setRHI(Texture::Create(
-            rdgTexture->_info._extent.width, rdgTexture->_info._extent.height,
-            rdgTexture->_info._format, rdgTexture->_info._usageFlags, VK_IMAGE_LAYOUT_UNDEFINED,
-            rdgTexture->_info._mipmapLevel, rdgTexture->_info._sampleCount));
-    }
-}
-
 void RDGBuilder::prepareDescriptorSets(RenderContext& context, PassNode* pass)
 {
-    auto                inputEdges         = pass->getIncomingEdges();
     DescriptorSetCache* descCache          = _element->getDescriptorSetCache();
     auto&               programDescManager = pass->getProgram()->getDescriptorSetManager();
-    auto bindingInfo = pass->getProgram()->getDescriptorSetManager().getSetBindingInfo();
+    auto                bindingInfo        = pass->getProgram()->getDescriptorSetManager().getSetBindingInfo();
 
     for (auto& [texture, state] : pass->_textureStates)
     {
         if (state.textureStates.front().isAttachment) continue;
-        if (!texture->getRHI())
-        {
-            RDGTexture::TextureDesc& info = texture->_info;
-            texture->setRHI(Texture::Create(info._extent.width, info._extent.height,
-                                            info._extent.depth, info._format, info._usageFlags,
-                                            VK_IMAGE_LAYOUT_UNDEFINED, info._mipmapLevel));
-        }
+        assert(texture->getRHI());
         TextureAccessInfo accessInfo = state.textureStates[0];
         if (accessInfo.isAttachment) continue;
-        programDescManager.setDescInfo(uint32_t(DescriptorEnum::ePerPassDescriptorSet),
-                                       accessInfo.binding, *texture->_rhi);
+        programDescManager.setDescInfo(uint32_t(DescriptorEnum::ePerPassDescriptorSet), accessInfo.binding, *texture->_rhi);
     }
 
     for (auto& [buffer, state] : pass->_bufferStates)
     {
-        if (buffer->getRHI()) continue;
-
-        RDGBuffer::BufferDesc& info = buffer->_info;
-        buffer->setRHI(Buffer::Create(
-            info._debugName, info._size, info._usageFlags,
-            info._location == RDGBuffer::BufferDesc::MemoryLocation::eDeviceLocal
-                ? VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-                : VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
+        assert(buffer->getRHI());
         BufferAccessInfo bufferInfo = state.bufferState;
-        programDescManager.setDescInfo(uint32_t(DescriptorEnum::ePerPassDescriptorSet),
-                                       bufferInfo.binding, *buffer->_rhi);
+        programDescManager.setDescInfo(uint32_t(DescriptorEnum::ePerPassDescriptorSet), bufferInfo.binding, *buffer->_rhi);
     }
-    VkDescriptorSet currPassSet = descCache->requestDescriptorSet(
-        programDescManager, (uint32_t) DescriptorEnum::ePerPassDescriptorSet);
-    VkBindDescriptorSetsInfo bindDescInfo{VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO};
-    bindDescInfo.layout             = programDescManager.getPipelineLayout();
-    bindDescInfo.firstSet           = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
-    bindDescInfo.descriptorSetCount = 1;
-    bindDescInfo.pDescriptorSets    = &currPassSet;
-    programDescManager.getDescriptorSetLayout(DescriptorEnum::ePerPassDescriptorSet);
-    vkCmdBindDescriptorSets2(context._currCmdBuffer, &bindDescInfo);
+
+    VkDescriptorSet currPassSet = descCache->requestDescriptorSet(programDescManager, (uint32_t) DescriptorEnum::ePerPassDescriptorSet);
+    switch (pass->type())
+    {
+        case PassNode::Type::Render:
+            context._pendingGfxState->_passDescriptorSet = currPassSet;
+            break;
+        case PassNode::Type::Compute:
+
+            context._pendingComputeState->_passDescriptorSet = currPassSet;
+            break;
+        case PassNode::Type::RayTracing:
+            context._pendingRTState->_passDescriptorSet = currPassSet;
+            break;
+        default:
+            break;
+    }
+}
+
+void RDGBuilder::prepareResourceBarrier(RenderContext& context, PassNode* pass)
+{
+    nvvk::BarrierContainer barrierContainer;
+    for (auto& [texture, state] : pass->_textureStates)
+    {
+        RDGTexture::TextureDesc& info       = texture->_info;
+        TextureAccessInfo        accessInfo = state.textureStates[0];
+        if (!texture->getRHI())
+        {
+            texture->setRHI(Texture::Create(info._extent.width, info._extent.height, info._extent.depth, info._format, info._usageFlags,
+                                            accessInfo.layout, info._mipmapLevel));
+        }
+        if (!Play::isImageBarrierValid(state.barrierInfo)) continue;
+        state.barrierInfo.image = texture->getRHI()->image;
+        barrierContainer.appendOptionalLayoutTransition(*texture->getRHI(), state.barrierInfo);
+    }
+
+    for (auto& [buffer, state] : pass->_bufferStates)
+    {
+        RDGBuffer::BufferDesc& info = buffer->_info;
+        if (!buffer->getRHI())
+        {
+            buffer->setRHI(Buffer::Create(info._debugName, info._size, info._usageFlags,
+                                          info._location == RDGBuffer::BufferDesc::MemoryLocation::eDeviceLocal
+                                              ? VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+                                              : VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
+        }
+        if (!Play::isBufferBarrierValid(state.barrierInfo)) continue;
+        state.barrierInfo.buffer = buffer->getRHI()->buffer;
+        barrierContainer.bufferBarriers.push_back(state.barrierInfo);
+    }
+    barrierContainer.cmdPipelineBarrier(_renderContext->_currCmdBuffer, 0);
 }
 
 void RDGBuilder::prepareRenderPass(PassNode* pass)
 {
-    if (pass->type() != PassNode::Type::Render) return;
+    assert(pass->type() == PassNode::Type::Render);
+    _renderContext->_pendingGfxState;
 }
 
 RDGTextureBuilder RDGBuilder::createTexture(std::string name)
@@ -297,35 +310,45 @@ void RDGBuilder::compile()
                 if (producerInfo.lastReadOnlyAccesser == nullptr)
                 {
                     // this is rdg connection, but not equivalent to a barrier relationship,
-                    Edge* edge = _dag->createEdge(producerInfo.lastProducer, passNode);
-                    lastAccessInfo =
-                        &producerInfo.lastProducer->_textureStates[texture].textureStates.front();
+                    Edge* edge     = _dag->createEdge(producerInfo.lastProducer, passNode);
+                    lastAccessInfo = &producerInfo.lastProducer->_textureStates[texture].textureStates.front();
                 }
                 else
                 {
-                    lastAccessInfo = &producerInfo.lastReadOnlyAccesser->_textureStates[texture]
-                                          .textureStates.front();
+                    lastAccessInfo = &producerInfo.lastReadOnlyAccesser->_textureStates[texture].textureStates.front();
                 }
 
                 TextureAccessInfo& currAccessInfo = state.textureStates.front();
-                if (lastAccessInfo->isAttachment || *lastAccessInfo == currAccessInfo) continue;
-                VkImageMemoryBarrier2& imageBarrier = state.barrierInfo;
-                imageBarrier.srcAccessMask          = lastAccessInfo->accessMask;
-                imageBarrier.dstAccessMask          = currAccessInfo.accessMask;
-                imageBarrier.srcStageMask           = lastAccessInfo->stageMask;
-                imageBarrier.dstStageMask           = currAccessInfo.stageMask;
-                imageBarrier.oldLayout              = lastAccessInfo->layout;
-                imageBarrier.newLayout              = currAccessInfo.layout;
-                imageBarrier.srcQueueFamilyIndex    = lastAccessInfo->queueFamilyIndex;
-                imageBarrier.dstQueueFamilyIndex    = currAccessInfo.queueFamilyIndex;
-                imageBarrier.subresourceRange       = {texture->_info._aspectFlags, 0,
-                                                       texture->_info._mipmapLevel, 0,
-                                                       texture->_info._layerCount};
+                if (*lastAccessInfo == currAccessInfo)
+                {
+                    VkImageMemoryBarrier2& imageBarrier = state.barrierInfo;
+                    imageBarrier.srcAccessMask          = VK_ACCESS_2_NONE;
+                    imageBarrier.dstAccessMask          = VK_ACCESS_2_NONE;
+                    imageBarrier.srcStageMask           = VK_PIPELINE_STAGE_2_NONE;
+                    imageBarrier.dstStageMask           = VK_PIPELINE_STAGE_2_NONE;
+                    imageBarrier.oldLayout              = VK_IMAGE_LAYOUT_UNDEFINED;
+                    imageBarrier.newLayout              = VK_IMAGE_LAYOUT_UNDEFINED;
+                    imageBarrier.srcQueueFamilyIndex    = ~0U;
+                    imageBarrier.dstQueueFamilyIndex    = ~0U;
+                    imageBarrier.subresourceRange = {texture->_info._aspectFlags, 0, texture->_info._mipmapLevel, 0, texture->_info._layerCount};
+                }
+                else
+                {
+                    VkImageMemoryBarrier2& imageBarrier = state.barrierInfo;
+                    imageBarrier.srcAccessMask          = lastAccessInfo->accessMask;
+                    imageBarrier.dstAccessMask          = currAccessInfo.accessMask;
+                    imageBarrier.srcStageMask           = lastAccessInfo->stageMask;
+                    imageBarrier.dstStageMask           = currAccessInfo.stageMask;
+                    imageBarrier.oldLayout              = lastAccessInfo->layout;
+                    imageBarrier.newLayout              = currAccessInfo.layout;
+                    imageBarrier.srcQueueFamilyIndex    = lastAccessInfo->queueFamilyIndex;
+                    imageBarrier.dstQueueFamilyIndex    = currAccessInfo.queueFamilyIndex;
+                    imageBarrier.subresourceRange = {texture->_info._aspectFlags, 0, texture->_info._mipmapLevel, 0, texture->_info._layerCount};
+                }
             }
 
             if (state.textureStates.front().accessMask &
-                (VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT |
-                 VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT))
+                (VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT))
             {
                 producerInfo.lastProducer         = passNode;
                 producerInfo.lastReadOnlyAccesser = nullptr;
@@ -353,25 +376,38 @@ void RDGBuilder::compile()
                 }
                 else
                 {
-                    lastAccessInfo =
-                        &producerInfo.lastReadOnlyAccesser->_bufferStates[buffer].bufferState;
+                    lastAccessInfo = &producerInfo.lastReadOnlyAccesser->_bufferStates[buffer].bufferState;
                 }
 
                 BufferAccessInfo& currAccessInfo = state.bufferState;
-                if (*lastAccessInfo == currAccessInfo) continue;
-                VkBufferMemoryBarrier2& bufferBarrier = state.barrierInfo;
-                bufferBarrier.srcAccessMask           = lastAccessInfo->accessMask;
-                bufferBarrier.dstAccessMask           = currAccessInfo.accessMask;
-                bufferBarrier.srcStageMask            = lastAccessInfo->stageMask;
-                bufferBarrier.dstStageMask            = currAccessInfo.stageMask;
-                bufferBarrier.srcQueueFamilyIndex     = lastAccessInfo->queueFamilyIndex;
-                bufferBarrier.dstQueueFamilyIndex     = currAccessInfo.queueFamilyIndex;
-                bufferBarrier.offset                  = state.bufferState.offset;
-                bufferBarrier.size                    = state.bufferState.size;
+                if (*lastAccessInfo == currAccessInfo)
+                {
+                    VkBufferMemoryBarrier2& bufferBarrier = state.barrierInfo;
+                    bufferBarrier.srcAccessMask           = VK_ACCESS_2_NONE;
+                    bufferBarrier.dstAccessMask           = VK_ACCESS_2_NONE;
+                    bufferBarrier.srcStageMask            = VK_PIPELINE_STAGE_2_NONE;
+                    bufferBarrier.dstStageMask            = VK_PIPELINE_STAGE_2_NONE;
+                    bufferBarrier.srcQueueFamilyIndex     = ~0U;
+                    bufferBarrier.dstQueueFamilyIndex     = ~0U;
+                    bufferBarrier.offset                  = 0;
+                    bufferBarrier.size                    = 0;
+                    continue;
+                }
+                else
+                {
+                    VkBufferMemoryBarrier2& bufferBarrier = state.barrierInfo;
+                    bufferBarrier.srcAccessMask           = lastAccessInfo->accessMask;
+                    bufferBarrier.dstAccessMask           = currAccessInfo.accessMask;
+                    bufferBarrier.srcStageMask            = lastAccessInfo->stageMask;
+                    bufferBarrier.dstStageMask            = currAccessInfo.stageMask;
+                    bufferBarrier.srcQueueFamilyIndex     = lastAccessInfo->queueFamilyIndex;
+                    bufferBarrier.dstQueueFamilyIndex     = currAccessInfo.queueFamilyIndex;
+                    bufferBarrier.offset                  = state.bufferState.offset;
+                    bufferBarrier.size                    = state.bufferState.size;
+                }
             }
 
-            if (state.bufferState.accessMask &
-                (VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT))
+            if (state.bufferState.accessMask & (VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT))
             {
                 producerInfo.lastProducer         = passNode;
                 producerInfo.lastReadOnlyAccesser = nullptr;
@@ -426,13 +462,15 @@ void RDGBuilder::execute()
 void RDGBuilder::executePass(PassNode* pass)
 {
     auto renderContext = prepareRenderContext(pass);
+    prepareResourceBarrier(*renderContext, pass);
+    prepareDescriptorSets(*renderContext, pass);
+
     if (pass->type() == PassNode::Type::Render)
     {
-        prepareRenderTargets(pass);
         prepareRenderPass(pass);
     }
-    prepareDescriptorSets(*renderContext, pass);
-    pass->execute(*renderContext);
+
+    // pass->execute(*renderContext);
 }
 
 bool isAsyncCompute(PassNode* pass)
@@ -524,22 +562,78 @@ void RDGBuilder::afterPassExecute()
 // make passNode's execute func more cleaner, without caring about the submit details.
 RenderContext* RDGBuilder::prepareRenderContext(PassNode* pass)
 {
-    _renderContext                      = std::make_shared<RenderContext>(_element);
+    switch (pass->type())
+    {
+        case PassNode::Type::Render:
+        {
+            auto& globalDescriptorSet = _renderContext->_pendingComputeState->_globalDescriptorSet;
+            auto& sceneDescriptorSet  = _renderContext->_pendingComputeState->_sceneDescriptorSet;
+            auto& frameDescriptorSet  = _renderContext->_pendingComputeState->_frameDescriptorSet;
+
+            globalDescriptorSet = globalDescriptorSet == this->_element->getDescriptorSetCache()->getEngineDescriptorSet()
+                                      ? this->_element->getDescriptorSetCache()->getEngineDescriptorSet()
+                                      : globalDescriptorSet;
+            sceneDescriptorSet  = sceneDescriptorSet == this->_element->getDescriptorSetCache()->getSceneDescriptorSet()
+                                      ? this->_element->getDescriptorSetCache()->getSceneDescriptorSet()
+                                      : sceneDescriptorSet;
+            frameDescriptorSet  = frameDescriptorSet == this->_element->getDescriptorSetCache()->getFrameDescriptorSet()
+                                      ? this->_element->getDescriptorSetCache()->getFrameDescriptorSet()
+                                      : frameDescriptorSet;
+
+            break;
+        }
+        case PassNode::Type::Compute:
+        {
+            auto& globalDescriptorSet = _renderContext->_pendingComputeState->_globalDescriptorSet;
+            auto& sceneDescriptorSet  = _renderContext->_pendingComputeState->_sceneDescriptorSet;
+            auto& frameDescriptorSet  = _renderContext->_pendingComputeState->_frameDescriptorSet;
+
+            globalDescriptorSet = globalDescriptorSet == this->_element->getDescriptorSetCache()->getEngineDescriptorSet()
+                                      ? this->_element->getDescriptorSetCache()->getEngineDescriptorSet()
+                                      : globalDescriptorSet;
+            sceneDescriptorSet  = sceneDescriptorSet == this->_element->getDescriptorSetCache()->getSceneDescriptorSet()
+                                      ? this->_element->getDescriptorSetCache()->getSceneDescriptorSet()
+                                      : sceneDescriptorSet;
+            frameDescriptorSet  = frameDescriptorSet == this->_element->getDescriptorSetCache()->getFrameDescriptorSet()
+                                      ? this->_element->getDescriptorSetCache()->getFrameDescriptorSet()
+                                      : frameDescriptorSet;
+            break;
+        }
+        case PassNode::Type::RayTracing:
+        {
+            auto& globalDescriptorSet = _renderContext->_pendingComputeState->_globalDescriptorSet;
+            auto& sceneDescriptorSet  = _renderContext->_pendingComputeState->_sceneDescriptorSet;
+            auto& frameDescriptorSet  = _renderContext->_pendingComputeState->_frameDescriptorSet;
+
+            globalDescriptorSet = globalDescriptorSet == this->_element->getDescriptorSetCache()->getEngineDescriptorSet()
+                                      ? this->_element->getDescriptorSetCache()->getEngineDescriptorSet()
+                                      : globalDescriptorSet;
+            sceneDescriptorSet  = sceneDescriptorSet == this->_element->getDescriptorSetCache()->getSceneDescriptorSet()
+                                      ? this->_element->getDescriptorSetCache()->getSceneDescriptorSet()
+                                      : sceneDescriptorSet;
+            frameDescriptorSet  = frameDescriptorSet == this->_element->getDescriptorSetCache()->getFrameDescriptorSet()
+                                      ? this->_element->getDescriptorSetCache()->getFrameDescriptorSet()
+                                      : frameDescriptorSet;
+            break;
+        }
+        default:
+            break;
+    }
+
     _renderContext->_frameInFlightIndex = _element->getApp()->getFrameCycleIndex();
-    _renderContext->_frameData = &_element->getFrameData(_renderContext->_frameInFlightIndex);
+    _renderContext->_frameData          = &_element->getFrameData(_renderContext->_frameInFlightIndex);
+
     // if the first pass in the frame, we directly allocate a command buffer from the pool,and
     // begin it.
     [[unlikely]]
-    if (!_renderContext->_prevPassNode)
+    if (!(_renderContext->_prevPassNode))
     {
-        VkCommandPool cmdPool = isAsyncCompute(pass) ? _renderContext->_frameData->computeCmdPool
-                                                     : _renderContext->_frameData->graphicsCmdPool;
+        VkCommandPool cmdPool = isAsyncCompute(pass) ? _renderContext->_frameData->computeCmdPool : _renderContext->_frameData->graphicsCmdPool;
         VkCommandBufferAllocateInfo allocInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
         allocInfo.commandPool        = cmdPool;
         allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocInfo.commandBufferCount = 1;
-        NVVK_CHECK(vkAllocateCommandBuffers(_element->getApp()->getDevice(), &allocInfo,
-                                            &_renderContext->_currCmdBuffer));
+        NVVK_CHECK(vkAllocateCommandBuffers(_element->getApp()->getDevice(), &allocInfo, &_renderContext->_currCmdBuffer));
         VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         vkBeginCommandBuffer(_renderContext->_currCmdBuffer, &beginInfo);
     }
@@ -620,14 +714,12 @@ RenderContext* RDGBuilder::prepareRenderContext(PassNode* pass)
             submitInfo.pSignalSemaphoreInfos    = &signalInfo;
 
             _submitInfos.push_back({submitInfo, isPrevPassAsync ? 1 : 0});
-            VkCommandPool cmdPool = isCurrPassAsync ? _renderContext->_frameData->computeCmdPool
-                                                    : _renderContext->_frameData->graphicsCmdPool;
+            VkCommandPool cmdPool = isCurrPassAsync ? _renderContext->_frameData->computeCmdPool : _renderContext->_frameData->graphicsCmdPool;
             VkCommandBufferAllocateInfo allocInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
             allocInfo.commandPool        = cmdPool;
             allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
             allocInfo.commandBufferCount = 1;
-            NVVK_CHECK(vkAllocateCommandBuffers(_element->getApp()->getDevice(), &allocInfo,
-                                                &_renderContext->_currCmdBuffer));
+            NVVK_CHECK(vkAllocateCommandBuffers(_element->getApp()->getDevice(), &allocInfo, &_renderContext->_currCmdBuffer));
             VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
             vkBeginCommandBuffer(_renderContext->_currCmdBuffer, &beginInfo);
         }

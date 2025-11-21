@@ -52,37 +52,28 @@ public:
     [[nodiscard]] Texture* alloc(VkImageCreateInfo* imgInfo, VkImageViewCreateInfo* viewInfo);
 
     // 通用2D纹理分配
-    [[nodiscard]] Texture* alloc(uint32_t width, uint32_t height, VkFormat format,
-                                 VkImageUsageFlags     usage,
-                                 VkImageLayout         layout    = VK_IMAGE_LAYOUT_UNDEFINED,
-                                 uint32_t              mipLevels = 1,
-                                 VkSampleCountFlagBits samples   = VK_SAMPLE_COUNT_1_BIT);
+    [[nodiscard]] Texture* alloc(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage,
+                                 VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED, uint32_t mipLevels = 1,
+                                 VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT);
 
     // 3D纹理分配
-    [[nodiscard]] Texture* alloc(uint32_t width, uint32_t height, uint32_t depth, VkFormat format,
-                                 VkImageUsageFlags usage, VkImageLayout initialLayout,
-                                 uint32_t mipLevels = 1);
+    [[nodiscard]] Texture* alloc(uint32_t width, uint32_t height, uint32_t depth, VkFormat format, VkImageUsageFlags usage,
+                                 VkImageLayout initialLayout, uint32_t mipLevels = 1);
 
     // 立方体纹理分配
-    [[nodiscard]] Texture* allocCube(uint32_t size, VkFormat format, VkImageUsageFlags usage,
-                                     VkImageLayout initialLayout, uint32_t mipLevels = 1);
+    [[nodiscard]] Texture* allocCube(uint32_t size, VkFormat format, VkImageUsageFlags usage, VkImageLayout initialLayout, uint32_t mipLevels = 1);
 
     // 从像素数据分配2D纹理
-    [[nodiscard]] Texture* alloc(const void* data, size_t dataSize, uint32_t width, uint32_t height,
-                                 VkFormat format, VkImageUsageFlags usage, uint32_t mipLevels = 1,
-                                 VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    [[nodiscard]] Texture* alloc(const void* data, size_t dataSize, uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage,
+                                 uint32_t mipLevels = 1, VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     // 分配带采样器的2D纹理
-    [[nodiscard]] Texture* alloc(uint32_t width, uint32_t height, VkFormat format,
-                                 VkImageUsageFlags usage, VkImageLayout initialLayout,
-                                 VkFilter filter, VkSamplerAddressMode addressMode,
-                                 uint32_t mipLevels = 1);
+    [[nodiscard]] Texture* alloc(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkImageLayout initialLayout,
+                                 VkFilter filter, VkSamplerAddressMode addressMode, uint32_t mipLevels = 1);
 
     // just for png or jpg image
-    [[nodiscard]] Texture* alloc(
-        const std::filesystem::path& imagePath,
-        VkImageLayout                finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        uint32_t mipLevels = 1, bool isSrgb = true);
+    [[nodiscard]] Texture* alloc(const std::filesystem::path& imagePath, VkImageLayout finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                 uint32_t mipLevels = 1, bool isSrgb = true);
 
     void deinit() override;
 
@@ -101,8 +92,7 @@ public:
     Buffer* alloc(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
 
     // 按初始数据分配Buffer
-    Buffer* alloc(const void* data, VkDeviceSize size, VkBufferUsageFlags usage,
-                  VkMemoryPropertyFlags properties);
+    Buffer* alloc(const void* data, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
 
     Buffer* alloc(VkBufferCreateInfo& bufferInfo);
 
@@ -120,9 +110,7 @@ protected:
     Buffer* alloc();
 };
 
-class PlayResourceManager : public nvvk::ResourceAllocatorExport,
-                            public nvvk::StagingUploader,
-                            public nvvk::SamplerPool
+class PlayResourceManager : public nvvk::ResourceAllocatorExport, public nvvk::StagingUploader, public nvvk::SamplerPool
 {
 public:
     static PlayResourceManager&           Instance();

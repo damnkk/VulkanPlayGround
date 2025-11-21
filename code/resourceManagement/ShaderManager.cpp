@@ -40,8 +40,7 @@ void ShaderManager::init(PlayElement* element)
     _element = element;
     _shaderPool.init(MaxShaderModules, &PlayResourceManager::Instance());
     std::filesystem::path shaderBasePath = std::filesystem::path(getBaseFilePath()) / "shaders";
-    _searchPaths                         = {shaderBasePath, shaderBasePath / "newShaders",
-                                            std::filesystem::path(getBaseFilePath()) / "External/nvpro_core2/nvshaders"};
+    _searchPaths = {shaderBasePath, shaderBasePath / "newShaders", std::filesystem::path(getBaseFilePath()) / "External/nvpro_core2/nvshaders"};
     _glslCCompiler.addSearchPaths(_searchPaths);
     _glslCCompiler.defaultOptions();
     _glslCCompiler.defaultTarget();
@@ -51,9 +50,7 @@ void ShaderManager::init(PlayElement* element)
     _slangCompiler.defaultOptions();
     _slangCompiler.defaultTarget();
     _slangCompiler.addSearchPaths(_searchPaths);
-    _slangCompiler.addOption(
-        {slang::CompilerOptionName::DebugInformation,
-         {slang::CompilerOptionValueKind::Int, SLANG_DEBUG_INFO_LEVEL_MAXIMAL}});
+    _slangCompiler.addOption({slang::CompilerOptionName::DebugInformation, {slang::CompilerOptionValueKind::Int, SLANG_DEBUG_INFO_LEVEL_MAXIMAL}});
 
 #if defined(AFTERMATH_AVAILABLE)
     // This aftermath callback is used to report the shader hash (Spirv) to the Aftermath library.
@@ -69,12 +66,9 @@ void ShaderManager::init(PlayElement* element)
 
 void ShaderManager::registBuiltInShader()
 {
-    uint32_t RayGenId2 = loadShaderFromFile("rayQuery", "test.frag", ShaderStage::eCompute,
-                                            ShaderType::eGLSL, "main");
-    uint32_t RayGenId = loadShaderFromFile("slangtesttt", "slangtest.slang", ShaderStage::eFragment,
-                                           ShaderType::eSLANG, "main");
-    uint32_t CompGenRayId = loadShaderFromFile("volumeGenRay", "volumeRender/volumeGenRay.comp",
-                                               ShaderStage::eCompute, ShaderType::eGLSL, "main");
+    uint32_t RayGenId2    = loadShaderFromFile("rayQuery", "test.frag", ShaderStage::eCompute, ShaderType::eGLSL, "main");
+    uint32_t RayGenId     = loadShaderFromFile("slangtesttt", "slangtest.slang", ShaderStage::eFragment, ShaderType::eSLANG, "main");
+    uint32_t CompGenRayId = loadShaderFromFile("volumeGenRay", "volumeRender/volumeGenRay.comp", ShaderStage::eCompute, ShaderType::eGLSL, "main");
 }
 
 VkDescriptorType spvToDescriptorType(SpvReflectDescriptorType type)
@@ -204,8 +198,7 @@ VkShaderStageFlagBits getVkShaderKind(ShaderStage stage)
     }
 }
 
-bool ShaderManager::checkShaderUpdate(std::filesystem::path shaderPath,
-                                      std::filesystem::path spvPath)
+bool ShaderManager::checkShaderUpdate(std::filesystem::path shaderPath, std::filesystem::path spvPath)
 {
     if (!std::filesystem::exists(spvPath))
     {
@@ -282,8 +275,8 @@ bool ShaderManager::checkShaderUpdate(std::filesystem::path shaderPath,
     return true;
 }
 
-uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesystem::path& filePath,
-                                           ShaderStage stage, ShaderType type, std::string entry)
+uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesystem::path& filePath, ShaderStage stage, ShaderType type,
+                                           std::string entry)
 {
     if (type == ShaderType::eSLANG)
     {
@@ -308,13 +301,11 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
                     module->_type        = ShaderType::eSLANG;
                     module->_name        = name;
 
-                    VkShaderModuleCreateInfo createInfo{
-                        VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+                    VkShaderModuleCreateInfo createInfo{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
                     createInfo.codeSize = module->_spvCode.size();
-                    createInfo.pCode = reinterpret_cast<const uint32_t*>(module->_spvCode.data());
+                    createInfo.pCode    = reinterpret_cast<const uint32_t*>(module->_spvCode.data());
 
-                    NVVK_CHECK(vkCreateShaderModule(_element->getApp()->getDevice(), &createInfo,
-                                                    nullptr, &module->_shaderModule));
+                    NVVK_CHECK(vkCreateShaderModule(_element->getApp()->getDevice(), &createInfo, nullptr, &module->_shaderModule));
                     _nameIdMap[name] = module->_poolId;
                     return module->_poolId;
                 }
@@ -337,13 +328,11 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
         module->_type = ShaderType::eSLANG;
         module->_name = name;
         module->_spvCode.resize(_slangCompiler.getSpirvSize());
-        std::memcpy(module->_spvCode.data(), _slangCompiler.getSpirv(),
-                    _slangCompiler.getSpirvSize());
+        std::memcpy(module->_spvCode.data(), _slangCompiler.getSpirv(), _slangCompiler.getSpirvSize());
         VkShaderModuleCreateInfo createInfo{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
         createInfo.codeSize = module->_spvCode.size();
         createInfo.pCode    = reinterpret_cast<const uint32_t*>(module->_spvCode.data());
-        NVVK_CHECK(vkCreateShaderModule(_element->getApp()->getDevice(), &createInfo, nullptr,
-                                        &module->_shaderModule));
+        NVVK_CHECK(vkCreateShaderModule(_element->getApp()->getDevice(), &createInfo, nullptr, &module->_shaderModule));
         _nameIdMap[name] = module->_poolId;
         std::ofstream spvFile(fullSpvPath, std::ios::binary);
         if (spvFile.is_open())
@@ -380,15 +369,11 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
                         module->_type = ShaderType::eGLSL;
                         module->_name = name;
 
-                        VkShaderModuleCreateInfo createInfo{
-                            VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+                        VkShaderModuleCreateInfo createInfo{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
                         createInfo.codeSize = module->_spvCode.size() * sizeof(uint8_t);
-                        createInfo.pCode =
-                            reinterpret_cast<const uint32_t*>(module->_spvCode.data());
+                        createInfo.pCode    = reinterpret_cast<const uint32_t*>(module->_spvCode.data());
 
-                        NVVK_CHECK(vkCreateShaderModule(_element->getApp()->getDevice(),
-                                                        &createInfo, nullptr,
-                                                        &module->_shaderModule));
+                        NVVK_CHECK(vkCreateShaderModule(_element->getApp()->getDevice(), &createInfo, nullptr, &module->_shaderModule));
                         _nameIdMap[name] = module->_poolId;
                         return module->_poolId;
                     }
@@ -403,22 +388,18 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
                 return -1;
             }
             module->_spvCode.resize(_glslCCompiler.getSpirvSize(result));
-            std::memcpy(module->_spvCode.data(), _glslCCompiler.getSpirv(result),
-                        _glslCCompiler.getSpirvSize(result));
-            module->_type = ShaderType::eGLSL;
-            module->_name = name;
-            VkShaderModuleCreateInfo createInfo =
-                _glslCCompiler.makeShaderModuleCreateInfo(result, 0);
-            NVVK_CHECK(vkCreateShaderModule(_element->getApp()->getDevice(), &createInfo, nullptr,
-                                            &module->_shaderModule));
+            std::memcpy(module->_spvCode.data(), _glslCCompiler.getSpirv(result), _glslCCompiler.getSpirvSize(result));
+            module->_type                       = ShaderType::eGLSL;
+            module->_name                       = name;
+            VkShaderModuleCreateInfo createInfo = _glslCCompiler.makeShaderModuleCreateInfo(result, 0);
+            NVVK_CHECK(vkCreateShaderModule(_element->getApp()->getDevice(), &createInfo, nullptr, &module->_shaderModule));
             _nameIdMap[name] = module->_poolId;
             // Save the compiled SPV code to disk
 
             std::ofstream spvFile(fullSpvPath, std::ios::binary);
             if (spvFile.is_open())
             {
-                spvFile.write(reinterpret_cast<const char*>(module->_spvCode.data()),
-                              module->_spvCode.size());
+                spvFile.write(reinterpret_cast<const char*>(module->_spvCode.data()), module->_spvCode.size());
                 spvFile.close();
             }
             return module->_poolId;

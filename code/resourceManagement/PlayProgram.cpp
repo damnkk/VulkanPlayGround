@@ -30,8 +30,7 @@ DescriptorSetManager& DescriptorSetManager::addBinding(const BindInfo& bindingIn
     _recordState = false;
     for (int i = 0; i < _bindingInfos.size(); i++)
     {
-        if (_bindingInfos[i].setIdx == bindingInfo.setIdx &&
-            _bindingInfos[i].bindingIdx == bindingInfo.bindingIdx)
+        if (_bindingInfos[i].setIdx == bindingInfo.setIdx && _bindingInfos[i].bindingIdx == bindingInfo.bindingIdx)
         {
             if (_bindingInfos[i].descriptorType != bindingInfo.descriptorType)
             {
@@ -47,14 +46,11 @@ DescriptorSetManager& DescriptorSetManager::addBinding(const BindInfo& bindingIn
     return *this;
 }
 
-DescriptorSetManager& DescriptorSetManager::addBinding(uint32_t setIdx, uint32_t bindingIdx,
-                                                       uint32_t              descriptorCount,
-                                                       VkDescriptorType      descriptorType,
-                                                       VkPipelineStageFlags2 pipelineStageFlags)
+DescriptorSetManager& DescriptorSetManager::addBinding(uint32_t setIdx, uint32_t bindingIdx, uint32_t descriptorCount,
+                                                       VkDescriptorType descriptorType, VkPipelineStageFlags2 pipelineStageFlags)
 {
     _recordState         = false;
-    BindInfo bindingInfo = {setIdx, bindingIdx, descriptorCount, descriptorType,
-                            pipelineStageFlags};
+    BindInfo bindingInfo = {setIdx, bindingIdx, descriptorCount, descriptorType, pipelineStageFlags};
     return addBinding(bindingInfo);
 }
 
@@ -62,23 +58,18 @@ DescriptorSetManager& DescriptorSetManager::initLayout()
 {
     for (int i = 0; i < uint32_t(DescriptorEnum::eCount); ++i)
     {
-        _descBindSet[i].createDescriptorSetLayout(
-            _vkDevice, VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
-            &_descSetLayouts[i]);
+        _descBindSet[i].createDescriptorSetLayout(_vkDevice, 0, &_descSetLayouts[i]);
     }
-    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{
-        VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
     pipelineLayoutCreateInfo.setLayoutCount         = static_cast<uint32_t>(_descSetLayouts.size());
     pipelineLayoutCreateInfo.pSetLayouts            = _descSetLayouts.data();
     pipelineLayoutCreateInfo.pushConstantRangeCount = static_cast<uint32_t>(_constantRanges.size());
     pipelineLayoutCreateInfo.pPushConstantRanges    = _constantRanges.data();
-    NVVK_CHECK(
-        vkCreatePipelineLayout(_vkDevice, &pipelineLayoutCreateInfo, nullptr, &_pipelineLayout));
+    NVVK_CHECK(vkCreatePipelineLayout(_vkDevice, &pipelineLayoutCreateInfo, nullptr, &_pipelineLayout));
     return *this;
 }
 
-DescriptorSetManager& DescriptorSetManager::addConstantRange(uint32_t size, uint32_t offset,
-                                                             VkPipelineStageFlags2 stage)
+DescriptorSetManager& DescriptorSetManager::addConstantRange(uint32_t size, uint32_t offset, VkPipelineStageFlags2 stage)
 {
     _recordState = false;
     _constantRanges.emplace_back(stage, offset, size);
@@ -100,24 +91,21 @@ bool DescriptorSetManager::finish()
     {
         assert(bindings.setIdx <= uint32_t(DescriptorEnum::eCount));
         auto& set = _descBindSet[bindings.setIdx];
-        set.addBinding(bindings.bindingIdx, bindings.descriptorType, bindings.descriptorCount,
-                       bindings.pipelineStageFlags);
+        set.addBinding(bindings.bindingIdx, bindings.descriptorType, bindings.descriptorCount, bindings.pipelineStageFlags);
     }
     initLayout();
     uint32_t descriptorCount = 0;
     std::for_each(_bindingInfos.begin(), _bindingInfos.end(),
                   [&](const BindInfo& info)
                   {
-                      if (info.setIdx == uint32_t(DescriptorEnum::ePerPassDescriptorSet) - 3)
-                          descriptorCount += info.descriptorCount;
+                      if (info.setIdx == uint32_t(DescriptorEnum::ePerPassDescriptorSet)) descriptorCount += info.descriptorCount;
                   });
     _descInfos[0].resize(descriptorCount);
     descriptorCount = 0;
     std::for_each(_bindingInfos.begin(), _bindingInfos.end(),
                   [&](const BindInfo& info)
                   {
-                      if (info.setIdx == uint32_t(DescriptorEnum::eDrawObjectDescriptorSet) - 3)
-                          descriptorCount += info.descriptorCount;
+                      if (info.setIdx == uint32_t(DescriptorEnum::eDrawObjectDescriptorSet)) descriptorCount += info.descriptorCount;
                   });
     _descInfos[1].resize(descriptorCount);
     return _recordState;
@@ -137,15 +125,10 @@ VkPipelineLayout DescriptorSetManager::getPipelineLayout() const
     return _pipelineLayout;
 }
 
-void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
-                                       const nvvk::Buffer& buffer, VkDeviceSize offset,
-                                       VkDeviceSize range)
+void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::Buffer& buffer, VkDeviceSize offset, VkDeviceSize range)
 {
-    auto& bufferInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)]
-                                 [descriptorOffset(setIdx, bindingIdx)]
-                                     .buffer;
-    if (bufferInfo.buffer == buffer.buffer && bufferInfo.offset == offset &&
-        bufferInfo.range == range)
+    auto& bufferInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)][descriptorOffset(setIdx, bindingIdx)].buffer;
+    if (bufferInfo.buffer == buffer.buffer && bufferInfo.offset == offset && bufferInfo.range == range)
     {
         return;
     }
@@ -155,12 +138,9 @@ void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
     bufferInfo.range  = range;
 }
 
-void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
-                                       const nvvk::AccelerationStructure& accel)
+void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::AccelerationStructure& accel)
 {
-    auto& accelInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)]
-                                [descriptorOffset(setIdx, bindingIdx)]
-                                    .accel;
+    auto& accelInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)][descriptorOffset(setIdx, bindingIdx)].accel;
     if (accelInfo == accel.accel)
     {
         return;
@@ -169,28 +149,21 @@ void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
     accelInfo = accel.accel;
 }
 
-void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
-                                       const nvvk::Image& image)
+void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::Image& image)
 {
-    auto& imageInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)]
-                                [descriptorOffset(setIdx, bindingIdx)]
-                                    .image;
-    if (imageInfo.imageLayout == image.descriptor.imageLayout &&
-        imageInfo.imageView == image.descriptor.imageView &&
-        imageInfo.sampler == image.descriptor.sampler)
+    auto& imageInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)][descriptorOffset(setIdx, bindingIdx)];
+    if (imageInfo.image.imageLayout == image.descriptor.imageLayout && imageInfo.image.imageView == image.descriptor.imageView &&
+        imageInfo.image.sampler == image.descriptor.sampler)
     {
         return;
     }
     _dirtyFlags |= 1 << 0;
-    imageInfo = image.descriptor;
+    imageInfo.image = image.descriptor;
 }
 
-void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx, VkBuffer buffer,
-                                       VkDeviceSize offset, VkDeviceSize range)
+void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx, VkBuffer buffer, VkDeviceSize offset, VkDeviceSize range)
 {
-    auto& bufferInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)]
-                                 [descriptorOffset(setIdx, bindingIdx)]
-                                     .buffer;
+    auto& bufferInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)][descriptorOffset(setIdx, bindingIdx)].buffer;
     if (bufferInfo.buffer == buffer && bufferInfo.offset == offset && bufferInfo.range == range)
     {
         return;
@@ -201,14 +174,10 @@ void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx, VkB
     bufferInfo.range  = range;
 }
 
-void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
-                                       const VkDescriptorBufferInfo& bufferInfo)
+void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const VkDescriptorBufferInfo& bufferInfo)
 {
-    auto& destBufferInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)]
-                                     [descriptorOffset(setIdx, bindingIdx)]
-                                         .buffer;
-    if (destBufferInfo.buffer == bufferInfo.buffer && destBufferInfo.offset == bufferInfo.offset &&
-        destBufferInfo.range == bufferInfo.range)
+    auto& destBufferInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)][descriptorOffset(setIdx, bindingIdx)].buffer;
+    if (destBufferInfo.buffer == bufferInfo.buffer && destBufferInfo.offset == bufferInfo.offset && destBufferInfo.range == bufferInfo.range)
     {
         return;
     }
@@ -216,14 +185,10 @@ void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
     destBufferInfo = bufferInfo;
 }
 
-void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx, VkImageView imageView,
-                                       VkImageLayout imageLayout, VkSampler sampler)
+void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx, VkImageView imageView, VkImageLayout imageLayout, VkSampler sampler)
 {
-    auto& imageInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)]
-                                [descriptorOffset(setIdx, bindingIdx)]
-                                    .image;
-    if (imageInfo.imageLayout == imageLayout && imageInfo.imageView == imageView &&
-        imageInfo.sampler == sampler)
+    auto& imageInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)][descriptorOffset(setIdx, bindingIdx)].image;
+    if (imageInfo.imageLayout == imageLayout && imageInfo.imageView == imageView && imageInfo.sampler == sampler)
     {
         return;
     }
@@ -233,14 +198,10 @@ void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx, VkI
     imageInfo.sampler     = sampler;
 }
 
-void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
-                                       const VkDescriptorImageInfo& imageInfo)
+void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const VkDescriptorImageInfo& imageInfo)
 {
-    auto& destImageInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)]
-                                    [descriptorOffset(setIdx, bindingIdx)]
-                                        .image;
-    if (destImageInfo.imageLayout == imageInfo.imageLayout &&
-        destImageInfo.imageView == imageInfo.imageView &&
+    auto& destImageInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)][descriptorOffset(setIdx, bindingIdx)].image;
+    if (destImageInfo.imageLayout == imageInfo.imageLayout && destImageInfo.imageView == imageInfo.imageView &&
         destImageInfo.sampler == imageInfo.sampler)
     {
         return;
@@ -249,12 +210,9 @@ void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
     destImageInfo = imageInfo;
 }
 
-void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
-                                       VkAccelerationStructureKHR accel)
+void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx, VkAccelerationStructureKHR accel)
 {
-    auto& accelInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)]
-                                [descriptorOffset(setIdx, bindingIdx)]
-                                    .accel;
+    auto& accelInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)][descriptorOffset(setIdx, bindingIdx)].accel;
     if (accelInfo == accel)
     {
         return;
@@ -263,12 +221,9 @@ void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
     accelInfo = accel;
 }
 
-void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
-                                       const nvvk::Buffer* buffers, uint32_t count)
+void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::Buffer* buffers, uint32_t count)
 {
-    auto& bufferInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)]
-                                 [descriptorOffset(setIdx, bindingIdx)]
-                                     .buffer;
+    auto& bufferInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)][descriptorOffset(setIdx, bindingIdx)].buffer;
     for (uint32_t i = 0; i < count; ++i)
     {
         if (bufferInfo.buffer == buffers[i].buffer)
@@ -280,12 +235,9 @@ void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
     }
 }
 
-void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
-                                       const nvvk::AccelerationStructure* accels, uint32_t count)
+void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::AccelerationStructure* accels, uint32_t count)
 {
-    auto& accelInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)]
-                                [descriptorOffset(setIdx, bindingIdx)]
-                                    .accel;
+    auto& accelInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)][descriptorOffset(setIdx, bindingIdx)].accel;
     for (uint32_t i = 0; i < count; ++i)
     {
         if (accelInfo == accels[i].accel)
@@ -297,16 +249,12 @@ void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
     }
 }
 
-void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
-                                       const nvvk::Image* images, uint32_t count)
+void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::Image* images, uint32_t count)
 {
-    auto& imageInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)]
-                                [descriptorOffset(setIdx, bindingIdx)]
-                                    .image;
+    auto& imageInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)][descriptorOffset(setIdx, bindingIdx)].image;
     for (uint32_t i = 0; i < count; ++i)
     {
-        if (imageInfo.imageLayout == images[i].descriptor.imageLayout &&
-            imageInfo.imageView == images[i].descriptor.imageView &&
+        if (imageInfo.imageLayout == images[i].descriptor.imageLayout && imageInfo.imageView == images[i].descriptor.imageView &&
             imageInfo.sampler == images[i].descriptor.sampler)
         {
             continue;
@@ -316,16 +264,12 @@ void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
     }
 }
 
-void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
-                                       const VkDescriptorBufferInfo* bufferInfos, uint32_t count)
+void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const VkDescriptorBufferInfo* bufferInfos, uint32_t count)
 {
-    auto& destBufferInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)]
-                                     [descriptorOffset(setIdx, bindingIdx)]
-                                         .buffer;
+    auto& destBufferInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)][descriptorOffset(setIdx, bindingIdx)].buffer;
     for (uint32_t i = 0; i < count; ++i)
     {
-        if (destBufferInfo.buffer == bufferInfos[i].buffer &&
-            destBufferInfo.offset == bufferInfos[i].offset &&
+        if (destBufferInfo.buffer == bufferInfos[i].buffer && destBufferInfo.offset == bufferInfos[i].offset &&
             destBufferInfo.range == bufferInfos[i].range)
         {
             continue;
@@ -335,16 +279,12 @@ void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
     }
 }
 
-void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
-                                       const VkDescriptorImageInfo* imageInfos, uint32_t count)
+void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const VkDescriptorImageInfo* imageInfos, uint32_t count)
 {
-    auto& imageInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)]
-                                [descriptorOffset(setIdx, bindingIdx)]
-                                    .image;
+    auto& imageInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)][descriptorOffset(setIdx, bindingIdx)].image;
     for (uint32_t i = 0; i < count; ++i)
     {
-        if (imageInfo.imageLayout == imageInfos[i].imageLayout &&
-            imageInfo.imageView == imageInfos[i].imageView &&
+        if (imageInfo.imageLayout == imageInfos[i].imageLayout && imageInfo.imageView == imageInfos[i].imageView &&
             imageInfo.sampler == imageInfos[i].sampler)
         {
             continue;
@@ -354,12 +294,9 @@ void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
     }
 }
 
-void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx,
-                                       const VkAccelerationStructureKHR* accels, uint32_t count)
+void DescriptorSetManager::setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const VkAccelerationStructureKHR* accels, uint32_t count)
 {
-    auto& accelInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)]
-                                [descriptorOffset(setIdx, bindingIdx)]
-                                    .accel;
+    auto& accelInfo = _descInfos[setIdx - uint32_t(DescriptorEnum::ePerPassDescriptorSet)][descriptorOffset(setIdx, bindingIdx)].accel;
     for (uint32_t i = 0; i < count; ++i)
     {
         if (accelInfo == accels[i])
@@ -376,6 +313,7 @@ int DescriptorSetManager::descriptorOffset(uint32_t setIdx, uint32_t bindingIdx)
     int  offset     = 0;
     bool gotSet     = false;
     bool gotBinding = false;
+    // bindInfo with same setIdx and bindingIdx would be merge to one bindingInfo
     std::for_each(_bindingInfos.begin(), _bindingInfos.end(),
                   [&](const BindInfo& bindInfo)
                   {
@@ -383,13 +321,13 @@ int DescriptorSetManager::descriptorOffset(uint32_t setIdx, uint32_t bindingIdx)
                       {
                           gotSet = true;
                           if (bindInfo.bindingIdx == bindingIdx) gotBinding = true;
-                          if (bindInfo.bindingIdx < bindingIdx)
-                          {
-                              offset += bindInfo.descriptorCount;
-                          }
+                      }
+                      if (bindInfo.setIdx == setIdx && bindInfo.bindingIdx < bindingIdx)
+                      {
+                          offset += bindInfo.descriptorCount;
                       }
                   });
-    assert(gotSet && gotBinding && offset);
+    assert(gotSet && gotBinding);
     return offset; // 或者其他适当的错误值
 }
 
@@ -412,8 +350,7 @@ uint64_t DescriptorSetManager::getDescsetLayoutHash(uint32_t setIdx)
     return memoryHash(_descBindSet[setIdx].getBindings());
 }
 
-std::vector<DescriptorSetManager::DescriptorInfo> DescriptorSetManager::getDescriptorInfo(
-    uint32_t setIdx)
+std::vector<DescriptorSetManager::DescriptorInfo> DescriptorSetManager::getDescriptorInfo(uint32_t setIdx)
 {
     assert(setIdx >= 3);
 
@@ -445,8 +382,7 @@ void RenderProgram::finish()
     for (auto* module : modules)
     {
         SpvReflectShaderModule spvModule{};
-        SpvReflectResult       result = spvReflectCreateShaderModule(module->_spvCode.size(),
-                                                                     module->_spvCode.data(), &spvModule);
+        SpvReflectResult       result = spvReflectCreateShaderModule(module->_spvCode.size(), module->_spvCode.data(), &spvModule);
         if (result != SPV_REFLECT_RESULT_SUCCESS)
         { /* error */
             continue;
@@ -508,13 +444,12 @@ ComputeProgram& ComputeProgram::setComputeModuleID(ShaderID computeModuleID)
 
 void ComputeProgram::finish()
 {
-    const ShaderModule* compModule = ShaderManager::Instance().getShaderById(_computeModuleID);
-    std::vector<const ShaderModule*> modules = {compModule};
+    const ShaderModule*              compModule = ShaderManager::Instance().getShaderById(_computeModuleID);
+    std::vector<const ShaderModule*> modules    = {compModule};
     for (auto* module : modules)
     {
         SpvReflectShaderModule spvModule{};
-        SpvReflectResult       result = spvReflectCreateShaderModule(module->_spvCode.size(),
-                                                                     module->_spvCode.data(), &spvModule);
+        SpvReflectResult       result = spvReflectCreateShaderModule(module->_spvCode.size(), module->_spvCode.data(), &spvModule);
         if (result != SPV_REFLECT_RESULT_SUCCESS)
         { /* error */
             continue;
@@ -600,20 +535,17 @@ RTProgram& RTProgram::setRayIntersectModuleID(ShaderID rayIntersectModuleID)
 
 void RTProgram::finish()
 {
-    const ShaderModule* rayGenModule  = ShaderManager::Instance().getShaderById(_rayGenModuleID);
-    const ShaderModule* rayCHitModule = ShaderManager::Instance().getShaderById(_rayCHitModuleID);
-    const ShaderModule* rayAHitModule = ShaderManager::Instance().getShaderById(_rayAHitModuleID);
-    const ShaderModule* rayMissModule = ShaderManager::Instance().getShaderById(_rayMissModuleID);
-    const ShaderModule* rayIntersectModule =
-        ShaderManager::Instance().getShaderById(_rayIntersectModuleID);
-    std::vector<const ShaderModule*> modules = {rayGenModule, rayCHitModule, rayAHitModule,
-                                                rayMissModule, rayIntersectModule};
+    const ShaderModule*              rayGenModule       = ShaderManager::Instance().getShaderById(_rayGenModuleID);
+    const ShaderModule*              rayCHitModule      = ShaderManager::Instance().getShaderById(_rayCHitModuleID);
+    const ShaderModule*              rayAHitModule      = ShaderManager::Instance().getShaderById(_rayAHitModuleID);
+    const ShaderModule*              rayMissModule      = ShaderManager::Instance().getShaderById(_rayMissModuleID);
+    const ShaderModule*              rayIntersectModule = ShaderManager::Instance().getShaderById(_rayIntersectModuleID);
+    std::vector<const ShaderModule*> modules            = {rayGenModule, rayCHitModule, rayAHitModule, rayMissModule, rayIntersectModule};
     for (auto* module : modules)
     {
         if (!module) continue;
         SpvReflectShaderModule spvModule{};
-        SpvReflectResult       result = spvReflectCreateShaderModule(module->_spvCode.size(),
-                                                                     module->_spvCode.data(), &spvModule);
+        SpvReflectResult       result = spvReflectCreateShaderModule(module->_spvCode.size(), module->_spvCode.data(), &spvModule);
         if (result != SPV_REFLECT_RESULT_SUCCESS)
         { /* error */
             continue;

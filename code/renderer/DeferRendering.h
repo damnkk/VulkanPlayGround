@@ -21,12 +21,12 @@ class DeferRenderer : public Renderer
 public:
     explicit DeferRenderer(PlayElement& element);
     ~DeferRenderer() override;
-    void     OnPreRender() override;
-    void     OnPostRender() override;
-    void     RenderFrame() override;
-    void     SetScene(Scene* scene) override;
-    void     OnResize(int width, int height) override;
-    void     OnDestroy() override;
+    void OnPreRender() override;
+    void OnPostRender() override;
+    void RenderFrame() override;
+    void SetScene(Scene* scene) override;
+    void OnResize(int width, int height) override;
+
     Texture* getOutputTexture() override
     {
         return _outputTexture;

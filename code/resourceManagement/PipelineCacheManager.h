@@ -32,8 +32,7 @@ public:
     static PipelineCacheManager& Instance();
     void                         init(PlayElement* view);
     void                         deinit();
-    void getOrCreateComputePipeline(const ComputePipelineStateWithKey&   cState,
-                                    std::function<void(VkPipelineCache)> createCPipelineFunc);
+    void getOrCreateComputePipeline(const ComputePipelineStateWithKey& cState, std::function<void(VkPipelineCache)> createCPipelineFunc);
 
 private:
     std::vector<VkPipeline> _pipelines;

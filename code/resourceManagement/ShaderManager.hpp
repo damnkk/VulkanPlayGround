@@ -73,12 +73,11 @@ public:
     void registBuiltInShader();
     void addSearchPath(const std::filesystem::path& path);
 
-    uint32_t            loadShaderFromFile(std::string name, const std::filesystem::path& filePath,
-                                           ShaderStage stage, ShaderType type = ShaderType::eGLSL,
-                                           std::string entry = "main");
-    void                eraseShaderByName(std::string name);
-    void                eraseShaderById(uint32_t id);
-    void                eraseShaderByModule(const ShaderModule& module);
+    uint32_t loadShaderFromFile(std::string name, const std::filesystem::path& filePath, ShaderStage stage, ShaderType type = ShaderType::eGLSL,
+                                std::string entry = "main");
+    void     eraseShaderByName(std::string name);
+    void     eraseShaderById(uint32_t id);
+    void     eraseShaderByModule(const ShaderModule& module);
     const ShaderModule* getShaderById(uint32_t id);
     const ShaderModule* getShaderByName(std::string name);
     uint32_t            getShaderIdByName(std::string name);

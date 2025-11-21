@@ -35,17 +35,15 @@ public:
     void deinit();
     void updateDescSetBindingOffset(DescriptorSetManager* manager);
 
-    void updateDescriptor(uint32_t setIdx, uint32_t bindingIdx, VkDescriptorType descriptorType,
-                          uint32_t descriptorCount, Buffer* buffers);
+    void updateDescriptor(uint32_t setIdx, uint32_t bindingIdx, VkDescriptorType descriptorType, uint32_t descriptorCount, Buffer* buffers);
 
-    void updateDescriptor(uint32_t setIdx, uint32_t bindingIdx, VkDescriptorType descriptorType,
-                          uint32_t descriptorCount, nvvk::Image* imageInfos);
+    void updateDescriptor(uint32_t setIdx, uint32_t bindingIdx, VkDescriptorType descriptorType, uint32_t descriptorCount, nvvk::Image* imageInfos);
 
-    void updateDescriptor(uint32_t setIdx, uint32_t bindingIdx, VkDescriptorType descriptorType,
-                          uint32_t descriptorCount, const VkBufferView* bufferViews);
+    void updateDescriptor(uint32_t setIdx, uint32_t bindingIdx, VkDescriptorType descriptorType, uint32_t descriptorCount,
+                          const VkBufferView* bufferViews);
 
-    void updateDescriptor(uint32_t setIdx, uint32_t bindingIdx, VkDescriptorType descriptorType,
-                          uint32_t descriptorCount, nvvk::AccelerationStructure* accels);
+    void updateDescriptor(uint32_t setIdx, uint32_t bindingIdx, VkDescriptorType descriptorType, uint32_t descriptorCount,
+                          nvvk::AccelerationStructure* accels);
 
     void cmdBindDescriptorBuffers(VkCommandBuffer cmdBuf, PlayProgram* program);
 
@@ -53,12 +51,11 @@ protected:
     size_t getDescriptorSize(VkDescriptorType descriptorType);
 
 private:
-    Buffer*                                       _descBuffer = nullptr;
-    VkDevice                                      _device;
-    VkPhysicalDevice                              _physicalDevice;
-    VkPhysicalDeviceDescriptorBufferPropertiesEXT _descriptorBufferProperties;
-    std::array<std::unordered_map<uint32_t, size_t>, static_cast<uint32_t>(DescriptorEnum::eCount)>
-        _descriptorOffsetInfo;
+    Buffer*                                                                                         _descBuffer = nullptr;
+    VkDevice                                                                                        _device;
+    VkPhysicalDevice                                                                                _physicalDevice;
+    VkPhysicalDeviceDescriptorBufferPropertiesEXT                                                   _descriptorBufferProperties;
+    std::array<std::unordered_map<uint32_t, size_t>, static_cast<uint32_t>(DescriptorEnum::eCount)> _descriptorOffsetInfo;
 };
 
 class DescriptorSetCache
@@ -68,6 +65,18 @@ public:
     ~DescriptorSetCache();
     void            deInit();
     VkDescriptorSet requestDescriptorSet(DescriptorSetManager& setManager, uint32_t setIdx);
+    VkDescriptorSet getEngineDescriptorSet()
+    {
+        return _globalDescriptorSet;
+    }
+    VkDescriptorSet getSceneDescriptorSet()
+    {
+        return _sceneDescriptorSet;
+    }
+    VkDescriptorSet getFrameDescriptorSet()
+    {
+        return _frameDescriptorSet;
+    }
 
 private:
     struct CacheNode
@@ -94,16 +103,13 @@ private:
         std::unordered_map<size_t, CachedSet> descriptorSetMap;
         std::vector<PoolNode>                 pools;
     };
-    VkDescriptorSet      createDescriptorSet(CacheNode& cacheNode, DescriptorSetManager& setManager,
-                                             uint32_t setIdx);
-    CacheNode::CachedSet createDescriptorSetImplement(CacheNode&            cacheNode,
-                                                      DescriptorSetManager& setManager,
-                                                      uint32_t              setIdx);
-    std::unordered_map<uint64_t, CacheNode> _descriptorPoolMap;
-    VkDescriptorSet                         _globalDescriptorSet = VK_NULL_HANDLE;
-    VkDescriptorSet                         _sceneDescriptorSet  = VK_NULL_HANDLE;
-    VkDescriptorSet                         _frameDescriptorSet  = VK_NULL_HANDLE;
-    Play::PlayElement*                      _element             = nullptr;
+    VkDescriptorSet      createDescriptorSet(CacheNode& cacheNode, DescriptorSetManager& setManager, uint32_t setIdx);
+    CacheNode::CachedSet createDescriptorSetImplement(CacheNode& cacheNode, DescriptorSetManager& setManager, uint32_t setIdx);
+    std::unordered_map<uint64_t, std::shared_ptr<CacheNode>> _descriptorPoolMap;
+    VkDescriptorSet                                          _globalDescriptorSet = VK_NULL_HANDLE;
+    VkDescriptorSet                                          _sceneDescriptorSet  = VK_NULL_HANDLE;
+    VkDescriptorSet                                          _frameDescriptorSet  = VK_NULL_HANDLE;
+    Play::PlayElement*                                       _element             = nullptr;
 };
 
 } // namespace Play

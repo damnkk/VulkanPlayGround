@@ -31,36 +31,7 @@ std::string GetUniqueName()
     return std::to_string(uniqueId++);
 }
 
-VkAttachmentLoadOp RTState::getVkLoadOp() const
-{
-    switch (_loadOp)
-    {
-        case loadOp::eLoad:
-            return VK_ATTACHMENT_LOAD_OP_LOAD;
-        case loadOp::eDontCare:
-            return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        case loadOp::eClear:
-            return VK_ATTACHMENT_LOAD_OP_CLEAR;
-        default:
-            return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    }
-}
-
-VkAttachmentStoreOp RTState::getVkStoreOp() const
-{
-    switch (_storeOp)
-    {
-        case storeOp::eStore:
-            return VK_ATTACHMENT_STORE_OP_STORE;
-        case storeOp::eDontCare:
-            return VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        default:
-            return VK_ATTACHMENT_STORE_OP_STORE;
-    }
-}
-
-VkImageCreateInfo makeImage2DCreateInfo(VkExtent2D extent, VkFormat format,
-                                        VkImageUsageFlags usageFlags, bool mipmap)
+VkImageCreateInfo makeImage2DCreateInfo(VkExtent2D extent, VkFormat format, VkImageUsageFlags usageFlags, bool mipmap)
 {
     VkImageCreateInfo createInfo = {};
     createInfo.sType             = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -72,8 +43,7 @@ VkImageCreateInfo makeImage2DCreateInfo(VkExtent2D extent, VkFormat format,
     return createInfo;
 }
 
-VkImageCreateInfo makeImage3DCreateInfo(VkExtent3D extent, VkFormat format,
-                                        VkImageUsageFlags usageFlags, bool mipmap)
+VkImageCreateInfo makeImage3DCreateInfo(VkExtent3D extent, VkFormat format, VkImageUsageFlags usageFlags, bool mipmap)
 {
     VkImageCreateInfo createInfo = {};
     createInfo.sType             = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -87,5 +57,15 @@ VkImageCreateInfo makeImage3DCreateInfo(VkExtent3D extent, VkFormat format,
 uint64_t memoryHash(void* data, size_t size)
 {
     return crc32c::Crc32c(reinterpret_cast<char*>(data), size);
+}
+
+bool isImageBarrierValid(const VkImageMemoryBarrier2& barrier)
+{
+    return barrier.srcAccessMask | barrier.dstAccessMask | barrier.oldLayout | barrier.newLayout | barrier.dstStageMask | barrier.srcStageMask;
+}
+bool isBufferBarrierValid(const VkBufferMemoryBarrier2& barrier)
+{
+    return barrier.srcAccessMask | barrier.dstAccessMask | barrier.dstStageMask | barrier.srcStageMask | barrier.dstQueueFamilyIndex |
+           barrier.srcQueueFamilyIndex;
 }
 } // namespace Play

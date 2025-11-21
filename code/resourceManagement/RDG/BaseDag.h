@@ -94,10 +94,7 @@ public:
     }
 
     // 构造函数简化
-    Edge(Node* from, Node* to, EdgeType type = EdgeType::eGeneral)
-        : m_from(from), m_to(to), m_type(type)
-    {
-    }
+    Edge(Node* from, Node* to, EdgeType type = EdgeType::eGeneral) : m_from(from), m_to(to), m_type(type) {}
 
 private:
     friend class Dag;
@@ -169,11 +166,10 @@ private:
     bool pathExists(Node* start, Node* end);
 
     // 环路检测辅助函数
-    bool hasCycleDFS(Node* node, std::unordered_map<Node*, int>& colors, std::vector<Node*>& path,
-                     std::vector<std::vector<Node*>>& cycles) const;
+    bool hasCycleDFS(Node* node, std::unordered_map<Node*, int>& colors, std::vector<Node*>& path, std::vector<std::vector<Node*>>& cycles) const;
 
     // 剔除分析辅助函数
-    void markNeededNodesFromOutput(Node* outputNode, std::unordered_map<Node*, bool>& needed) const;
+    void  markNeededNodesFromOutput(Node* outputNode, std::unordered_map<Node*, bool>& needed) const;
     Node* findClosestPrimaryInput(Node* secondaryNode, Node* outputNode) const;
 
     // 获取节点的逻辑依赖关系（用于环路检测）

@@ -15,25 +15,22 @@ Texture* Texture::Create(std::string name)
     res->DebugName() = name;
     return res;
 }
-Texture* Texture::Create(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage,
-                         VkImageLayout layout, uint32_t mipLevels, VkSampleCountFlagBits samples)
+Texture* Texture::Create(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkImageLayout layout, uint32_t mipLevels,
+                         VkSampleCountFlagBits samples)
 {
     return TexturePool::Instance().alloc(width, height, format, usage, layout, mipLevels, samples);
 }
 
-Texture* Texture::Create(uint32_t width, uint32_t height, uint32_t depth, VkFormat format,
-                         VkImageUsageFlags usage, VkImageLayout initialLayout, uint32_t mipLevels)
+Texture* Texture::Create(uint32_t width, uint32_t height, uint32_t depth, VkFormat format, VkImageUsageFlags usage, VkImageLayout initialLayout,
+                         uint32_t mipLevels)
 {
-    return TexturePool::Instance().alloc(width, height, depth, format, usage, initialLayout,
-                                         mipLevels);
+    return TexturePool::Instance().alloc(width, height, depth, format, usage, initialLayout, mipLevels);
 }
-Texture* Texture::Create(uint32_t size, VkFormat format, VkImageUsageFlags usage,
-                         VkImageLayout initialLayout, uint32_t mipLevels)
+Texture* Texture::Create(uint32_t size, VkFormat format, VkImageUsageFlags usage, VkImageLayout initialLayout, uint32_t mipLevels)
 {
     return TexturePool::Instance().allocCube(size, format, usage, initialLayout, mipLevels);
 }
-Texture* Texture::Create(const std::filesystem::path& imagePath, VkImageLayout finalLayout,
-                         uint32_t mipLevels, bool isSrgb)
+Texture* Texture::Create(const std::filesystem::path& imagePath, VkImageLayout finalLayout, uint32_t mipLevels, bool isSrgb)
 {
     return TexturePool::Instance().alloc(imagePath, finalLayout, mipLevels, isSrgb);
 }
@@ -56,8 +53,7 @@ Buffer* Buffer::Create(std::string name)
     return res;
 }
 
-Buffer* Buffer::Create(std::string name, VkBufferUsageFlags2 usage, VkDeviceSize size,
-                       VkMemoryPropertyFlags property)
+Buffer* Buffer::Create(std::string name, VkBufferUsageFlags2 usage, VkDeviceSize size, VkMemoryPropertyFlags property)
 {
     Buffer* res      = BufferPool::Instance().alloc(size, usage, property);
     res->DebugName() = name;

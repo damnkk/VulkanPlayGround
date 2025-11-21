@@ -3,21 +3,6 @@
 #include "Resource.h"
 namespace Play
 {
-void SceneManager::deinit()
-{
-    for (auto& scene : _scenes)
-    {
-        scene.destroy();
-    }
-    for (auto& vkScene : _scenesVk)
-    {
-        vkScene.deinit();
-    }
-    for (auto& rtScene : _scenesRTX)
-    {
-        rtScene.deinit();
-    }
-}
 
 void SceneManager::addScene(std::filesystem::path filename)
 {
@@ -43,6 +28,20 @@ void SceneManager::addScenes(std::vector<std::filesystem::path> filenames)
     nvutils::parallel_batches<8>(filenames.size(), [&](size_t i) { addScene(filenames[i]); }, 4);
 }
 
-SceneManager::~SceneManager() {}
+SceneManager::~SceneManager()
+{
+    for (auto& scene : _scenes)
+    {
+        scene.destroy();
+    }
+    for (auto& vkScene : _scenesVk)
+    {
+        vkScene.deinit();
+    }
+    for (auto& rtScene : _scenesRTX)
+    {
+        rtScene.deinit();
+    }
+}
 
 } // namespace Play

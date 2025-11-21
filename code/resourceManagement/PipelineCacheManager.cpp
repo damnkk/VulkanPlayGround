@@ -90,8 +90,7 @@ public:
 
     void deinit() {}
 
-    void createComputePipeline(ComputePipelineStateWithKey          cState,
-                               std::function<void(VkPipelineCache)> createCPipelineFunc)
+    void createComputePipeline(ComputePipelineStateWithKey cState, std::function<void(VkPipelineCache)> createCPipelineFunc)
     {
         return;
     }
@@ -127,8 +126,7 @@ private:
             nvutils::FileReadOverWriteMapping mapping;
             mapping.open(getRootInfoPath(), sizeof(HeaderInfo));
 
-            HeaderInfo header = {.deviceID = prop2.properties.deviceID,
-                                 .vendorID = prop2.properties.vendorID};
+            HeaderInfo header = {.deviceID = prop2.properties.deviceID, .vendorID = prop2.properties.vendorID};
             memcpy(header.pipelineCacheUUID, prop2.properties.pipelineCacheUUID, VK_UUID_SIZE);
             memcpy(mapping.data(), &header, sizeof(header));
             mapping.close();
@@ -142,10 +140,8 @@ private:
             mapping.open(getRootInfoPath(), sizeof(HeaderInfo));
             HeaderInfo header;
             memcpy(&header, mapping.data(), sizeof(header));
-            if (prop2.properties.deviceID != header.deviceID ||
-                prop2.properties.vendorID != header.vendorID ||
-                memcmp(prop2.properties.pipelineCacheUUID, header.pipelineCacheUUID,
-                       VK_UUID_SIZE) != 0)
+            if (prop2.properties.deviceID != header.deviceID || prop2.properties.vendorID != header.vendorID ||
+                memcmp(prop2.properties.pipelineCacheUUID, header.pipelineCacheUUID, VK_UUID_SIZE) != 0)
             {
                 // 设备信息不匹配,删除所有cache文件
                 mapping.close();
@@ -159,8 +155,7 @@ private:
                 {
                     BlockKey currBlockKey = static_cast<BlockKey>(index + header.blockOffset);
                     auto     block        = std::make_shared<PplCacheBlock>(currBlockKey);
-                    if (!block->loadFromDisk(CacheBasePath /
-                                             (std::to_string(currBlockKey) + ".bin")))
+                    if (!block->loadFromDisk(CacheBasePath / (std::to_string(currBlockKey) + ".bin")))
                     {
                         return;
                     }
@@ -186,9 +181,8 @@ private:
 
 PipelineCacheManager::PipelineCacheManager() {}
 
-void PipelineCacheManager::getOrCreateComputePipeline(
-    const ComputePipelineStateWithKey&   cState,
-    std::function<void(VkPipelineCache)> createCPipelineFunc)
+void PipelineCacheManager::getOrCreateComputePipeline(const ComputePipelineStateWithKey&   cState,
+                                                      std::function<void(VkPipelineCache)> createCPipelineFunc)
 {
     PplCacheBlockManager::instance().createComputePipeline(cState, createCPipelineFunc);
 }

@@ -17,7 +17,6 @@ public:
 
     virtual void init()                             = 0;
     virtual void build(RDG::RDGBuilder* rdgBuilder) = 0;
-    virtual void deinit();
     std::string  _name;
 
 private:

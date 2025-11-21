@@ -33,21 +33,18 @@ public:
         nvutils::ParameterRegistry* parameterRegistry{};
     };
     // Interface
-    PlayElement(Info info) : _info(info) {}
-    virtual ~PlayElement() {};
-    virtual void onAttach(nvapp::Application* app) override; // Called once at start
-    virtual void onDetach() override; // Called before destroying the application
-    virtual void onResize(VkCommandBuffer cmd, const VkExtent2D& size)
-        override;                       // Called when the viewport size is changing
-    virtual void onUIRender() override; // Called for anything related to UI
-    virtual void onUIMenu() override;   // This is the menubar to create
-    virtual void onPreRender()
-        override; // called post onUIRender and prior onRender (looped over all elements)
-    virtual void onRender(VkCommandBuffer cmd) override; // For anything to render within a frame
-    virtual void onFileDrop(const std::filesystem::path& filename)
-        override; // For when a file is dragged on top of the window
-    virtual void onLastHeadlessFrame()
-        override; // Called at the end of the last frame in headless mode
+    PlayElement(Info info);
+    virtual ~PlayElement();
+
+    virtual void onAttach(nvapp::Application* app) override;                     // Called once at start
+    virtual void onDetach() override;                                            // Called before destroying the application
+    virtual void onResize(VkCommandBuffer cmd, const VkExtent2D& size) override; // Called when the viewport size is changing
+    virtual void onUIRender() override;                                          // Called for anything related to UI
+    virtual void onUIMenu() override;                                            // This is the menubar to create
+    virtual void onPreRender() override;                                     // called post onUIRender and prior onRender (looped over all elements)
+    virtual void onRender(VkCommandBuffer cmd) override;                     // For anything to render within a frame
+    virtual void onFileDrop(const std::filesystem::path& filename) override; // For when a file is dragged on top of the window
+    virtual void onLastHeadlessFrame() override;                             // Called at the end of the last frame in headless mode
 
     nvapp::Application* getApp()
     {
@@ -138,12 +135,12 @@ public:
     inline Texture*        CreateTexture(VkImageCreateInfo& info, VkCommandBuffer* cmd = nullptr);
     static inline Texture* AllocTexture();
     static inline void     FreeTexture(Texture* texture);
-    inline Buffer* CreateBuffer(VkBufferCreateInfo& info, VkMemoryPropertyFlags memProperties);
-    static inline Buffer* AllocBuffer();
-    static inline void    FreeBuffer(Buffer* buffer);
-    static inline void*   MapBuffer(Buffer& buffer);
-    static inline void    UnmapBuffer(Buffer& buffer);
-    uint64_t              _frameNum = 0;
+    inline Buffer*         CreateBuffer(VkBufferCreateInfo& info, VkMemoryPropertyFlags memProperties);
+    static inline Buffer*  AllocBuffer();
+    static inline void     FreeBuffer(Buffer* buffer);
+    static inline void*    MapBuffer(Buffer& buffer);
+    static inline void     UnmapBuffer(Buffer& buffer);
+    uint64_t               _frameNum = 0;
 
     enum RenderMode
     {
@@ -160,7 +157,7 @@ protected:
     // RenderPassCache
     // FrameBufferCache
     // PipelineCache
-    std::shared_ptr<Renderer> _renderer;
+    std::unique_ptr<Renderer> _renderer;
     Texture*                  _uiTexture;
     VkDescriptorSet           _uiTextureDescriptor;
     VkDescriptorPool          _descriptorPool;
