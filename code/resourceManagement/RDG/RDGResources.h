@@ -47,8 +47,9 @@ public:
     uint32_t binding         = 0;
     uint32_t descriptorIndex = 0;
     // ------ attachment info ------
-    bool     isAttachment  = false;
-    uint32_t attachSlotIdx = ~0U;
+    bool     isAttachment        = false;
+    bool     isResolveAttachment = false;
+    uint32_t attachSlotIdx       = ~0U;
 
     VkAttachmentLoadOp  loadOp;
     VkAttachmentStoreOp storeOp;
@@ -113,12 +114,18 @@ public:
         std::string           _debugName;
     } _info;
 
+    TextureAccessInfo* getAttachmentFinalAccessInfo()
+    {
+        return _attachmentFinalAccessInfo;
+    }
+
 private:
     friend class RDGBuilder;
     friend class RDGTextureBuilder;
-    uint32_t     _refCount = 0;
-    Texture*     _rhi      = nullptr;
-    ProducerInfo _producerInfo;
+    uint32_t           _refCount = 0;
+    Texture*           _rhi      = nullptr;
+    ProducerInfo       _producerInfo;
+    TextureAccessInfo* _attachmentFinalAccessInfo = nullptr;
     // latest access info for each sub resource
     TextureSubresourceAccessInfo _subResourceAccessInfos;
     std::string                  _name;

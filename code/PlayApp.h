@@ -18,6 +18,8 @@ class RTRenderer;
 class VolumeRenderer;
 class ShaderInfo;
 class DescriptorSetCache;
+class RenderPassCache;
+class FrameBufferCache;
 namespace RDG
 {
 class RenderDependencyGraph;
@@ -107,6 +109,11 @@ public:
         return _uiTexture;
     }
 
+    inline bool isEnableDynamicRendering() const
+    {
+        return _enableDynamicRendering;
+    }
+
     struct PlayFrameData
     {
         VkCommandPool                graphicsCmdPool;
@@ -176,6 +183,12 @@ private:
     std::vector<PlayFrameData>          _frameData;
     std::unique_ptr<DescriptorSetCache> _descriptorSetCache;
     SceneManager                        _sceneManager;
+    // feature switch
+private:
+    bool                              _enableRayTracing       = true;
+    bool                              _enableDynamicRendering = true;
+    std::unique_ptr<RenderPassCache>  _renderPassCache;  // if Dynamic rendering is off, use RenderPassCache to manage render passes
+    std::unique_ptr<FrameBufferCache> _frameBufferCache; // if Dynamic rendering is off, use FrameBufferCache to manage frame buffers
 };
 
 std::filesystem::path getBaseFilePath();

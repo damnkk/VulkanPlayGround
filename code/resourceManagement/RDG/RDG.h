@@ -17,8 +17,13 @@ GPU resource when RDG compile.
 #include "PlayApp.h"
 #include "RDGResources.h"
 #include "RDGPasses.hpp"
+namespace Play
+{
+class RenderPass;
+}
 namespace Play::RDG
 {
+
 // we can reuse some texture here, to save some gpu memory
 class RDGTextureCache
 {
@@ -93,6 +98,7 @@ struct PendingGfxState
     VkDescriptorSet      _frameDescriptorSet  = VK_NULL_HANDLE;
     VkDescriptorSet      _sceneDescriptorSet  = VK_NULL_HANDLE;
     VkDescriptorSet      _passDescriptorSet   = VK_NULL_HANDLE;
+    RenderPass*          _renderPass          = nullptr;
 };
 
 struct PendingComputeState
@@ -168,6 +174,7 @@ protected:
     void           prepareDescriptorSets(RenderContext& context, PassNode* pass);
     void           prepareResourceBarrier(RenderContext& context, PassNode* pass);
     void           prepareRenderPass(PassNode* pass);
+    void           endRenderPass(PassNode* pass);
     friend class RenderPassBuilder;
     friend class ComputePassBuilder;
     friend class RTPassBuilder;

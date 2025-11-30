@@ -7,6 +7,10 @@
 #include "RDGResources.h"
 #include "utils.hpp"
 #include "BaseDag.h"
+namespace Play
+{
+class RenderPass;
+}
 namespace Play::RDG
 {
 
@@ -74,6 +78,15 @@ public:
     };
     virtual Type type() const = 0;
 
+    std::unordered_map<RDGTexture*, RDGTextureState>& getTextureStates()
+    {
+        return _textureStates;
+    }
+    std::unordered_map<RDGBuffer*, RDGBufferState>& getBufferStates()
+    {
+        return _bufferStates;
+    }
+
 protected:
     friend class RDGBuilder;
     PlayProgram*                                     _program = nullptr;
@@ -88,15 +101,17 @@ protected:
 class RenderPassNode : public PassNode
 {
 public:
-    RenderPassNode(uint32_t id, std::string name) : PassNode(id, std::move(name), NodeType::eRenderPass) {}
+    RenderPassNode(uint32_t id, std::string name);
     Type type() const override
     {
         return Type::Render;
     }
+    void initRenderPass(PlayElement* element);
 
 private:
     friend class RenderPassBuilder;
     friend class RDGBuilder;
+    std::unique_ptr<RenderPass> _renderPass = nullptr;
 };
 
 using RenderPassNodeRef = RenderPassNode*;

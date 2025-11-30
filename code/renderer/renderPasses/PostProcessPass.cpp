@@ -32,7 +32,7 @@ void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
     auto presentTexRef = rdgBuilder->createTexture("presentTexture").Import(_element->getUITexture()).finish();
 
     auto pass = rdgBuilder->createRenderPass("postProcessPass")
-                    .color(0, outputTexRef, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_UNDEFINED,
+                    .color(0, outputTexRef, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
                     .read(0, colorTexId, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, _element->getApp()->getQueue(0).familyIndex)
                     .program(_postProgram.get())

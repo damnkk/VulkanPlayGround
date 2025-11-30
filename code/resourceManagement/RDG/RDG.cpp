@@ -6,6 +6,8 @@
 #include <nvvk/check_error.hpp>
 #include <nvvk/barriers.hpp>
 #include "nvvk/debug_util.hpp"
+#include "RenderPassCache.h"
+#include "RenderPass.h"
 namespace Play::RDG
 {
 void RDGTextureCache::regist(Texture* texture) {}
@@ -243,7 +245,7 @@ void RDGBuilder::prepareResourceBarrier(RenderContext& context, PassNode* pass)
             texture->setRHI(Texture::Create(info._extent.width, info._extent.height, info._extent.depth, info._format, info._usageFlags,
                                             accessInfo.layout, info._mipmapLevel));
         }
-        if (!Play::isImageBarrierValid(state.barrierInfo)) continue;
+        if (!Play::isImageBarrierValid(state.barrierInfo) || accessInfo.isAttachment) continue;
         state.barrierInfo.image = texture->getRHI()->image;
         barrierContainer.appendOptionalLayoutTransition(*texture->getRHI(), state.barrierInfo);
     }
@@ -267,8 +269,19 @@ void RDGBuilder::prepareResourceBarrier(RenderContext& context, PassNode* pass)
 
 void RDGBuilder::prepareRenderPass(PassNode* pass)
 {
+    assert(pass->type() == PassNode::Type::Render || pass->type() == PassNode::Type::Present);
+    RenderPassNode* renderPassNode = dynamic_cast<RenderPassNode*>(pass);
+    renderPassNode->initRenderPass(_element);
+    _renderContext->_pendingGfxState->_renderPass = renderPassNode->_renderPass.get();
+    renderPassNode->_renderPass->begin(_renderContext->_currCmdBuffer,
+                                       {{0, 0}, {_element->getApp()->getWindowSize().width, _element->getApp()->getWindowSize().height}});
+}
+
+void RDGBuilder::endRenderPass(PassNode* pass)
+{
     assert(pass->type() == PassNode::Type::Render);
-    _renderContext->_pendingGfxState;
+    // deal with dynamic rendering
+    _renderContext->_pendingGfxState->_renderPass->end(_renderContext->_currCmdBuffer);
 }
 
 RDGTextureBuilder RDGBuilder::createTexture(std::string name)
@@ -302,7 +315,8 @@ void RDGBuilder::compile()
     {
         for (auto& [texture, state] : passNode->_textureStates)
         {
-            auto& producerInfo = texture->_producerInfo;
+            auto&              producerInfo   = texture->_producerInfo;
+            TextureAccessInfo& currAccessInfo = state.textureStates.front();
             if (producerInfo.accessMask != VK_ACCESS_2_NONE)
             {
                 TextureAccessInfo* lastAccessInfo = nullptr;
@@ -318,7 +332,6 @@ void RDGBuilder::compile()
                     lastAccessInfo = &producerInfo.lastReadOnlyAccesser->_textureStates[texture].textureStates.front();
                 }
 
-                TextureAccessInfo& currAccessInfo = state.textureStates.front();
                 if (*lastAccessInfo == currAccessInfo)
                 {
                     VkImageMemoryBarrier2& imageBarrier = state.barrierInfo;
@@ -345,6 +358,10 @@ void RDGBuilder::compile()
                     imageBarrier.dstQueueFamilyIndex    = currAccessInfo.queueFamilyIndex;
                     imageBarrier.subresourceRange = {texture->_info._aspectFlags, 0, texture->_info._mipmapLevel, 0, texture->_info._layerCount};
                 }
+            }
+            if (currAccessInfo.isAttachment)
+            {
+                texture->_attachmentFinalAccessInfo = &currAccessInfo;
             }
 
             if (state.textureStates.front().accessMask &
@@ -465,12 +482,16 @@ void RDGBuilder::executePass(PassNode* pass)
     prepareResourceBarrier(*renderContext, pass);
     prepareDescriptorSets(*renderContext, pass);
 
-    if (pass->type() == PassNode::Type::Render)
+    if (pass->type() == PassNode::Type::Render || pass->type() == PassNode::Type::Present)
     {
         prepareRenderPass(pass);
     }
 
     // pass->execute(*renderContext);
+    if (pass->type() == PassNode::Type::Render || pass->type() == PassNode::Type::Present)
+    {
+        endRenderPass(pass);
+    }
 }
 
 bool isAsyncCompute(PassNode* pass)

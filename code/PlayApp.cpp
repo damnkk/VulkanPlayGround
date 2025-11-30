@@ -9,6 +9,8 @@
 #include "ShaderManager.hpp"
 #include "PlayAllocator.h"
 #include "PipelineCacheManager.h"
+#include "RenderPassCache.h"
+#include "FrameBufferCache.h"
 namespace Play
 {
 struct ScopeTimer
@@ -47,6 +49,11 @@ void PlayElement::onAttach(nvapp::Application* app)
     PipelineCacheManager::Instance().init(this);
     _descriptorSetCache = std::make_unique<DescriptorSetCache>(this);
     _frameData.resize(_app->getFrameCycleSize());
+    if (!_enableDynamicRendering)
+    {
+        _renderPassCache  = std::make_unique<RenderPassCache>(this);
+        _frameBufferCache = std::make_unique<FrameBufferCache>(this);
+    }
     for (size_t i = 0; i < _frameData.size(); ++i)
     {
         VkCommandPoolCreateInfo cmdPoolCI{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};

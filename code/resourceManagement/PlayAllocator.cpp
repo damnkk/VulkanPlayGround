@@ -83,7 +83,7 @@ Texture* TexturePool::alloc(uint32_t width, uint32_t height, VkFormat format, Vk
         .viewType         = VK_IMAGE_VIEW_TYPE_2D,
         .format           = format,
         .components       = {VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A},
-        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, 1},
+        .subresourceRange = {inferImageAspectFlags(format, usage), 0, mipLevels, 0, 1},
     };
     NVVK_CHECK(_manager->createImage(*texture, imageInfo, viewInfo));
 
@@ -94,8 +94,10 @@ Texture* TexturePool::alloc(uint32_t width, uint32_t height, VkFormat format, Vk
         imageBarrier.oldLayout        = VK_IMAGE_LAYOUT_UNDEFINED;
         imageBarrier.newLayout        = layout;
         imageBarrier.srcAccessMask    = VK_ACCESS_2_NONE;
-        imageBarrier.dstAccessMask    = VK_ACCESS_2_NONE;
-        imageBarrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, 1};
+        imageBarrier.dstAccessMask    = inferAccessFlags(layout);
+        imageBarrier.srcStageMask     = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+        imageBarrier.dstStageMask     = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+        imageBarrier.subresourceRange = {inferImageAspectFlags(format, usage), 0, mipLevels, 0, 1};
         VkDependencyInfo info{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
         info.imageMemoryBarrierCount = 1;
         info.pImageMemoryBarriers    = &imageBarrier;
@@ -153,9 +155,14 @@ Texture* TexturePool::alloc(uint32_t width, uint32_t height, uint32_t depth, VkF
     if (initialLayout != VK_IMAGE_LAYOUT_UNDEFINED)
     {
         VkImageMemoryBarrier2 imageBarrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
-        imageBarrier.image     = texture->image;
-        imageBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imageBarrier.newLayout = initialLayout;
+        imageBarrier.image            = texture->image;
+        imageBarrier.oldLayout        = VK_IMAGE_LAYOUT_UNDEFINED;
+        imageBarrier.newLayout        = initialLayout;
+        imageBarrier.srcAccessMask    = VK_ACCESS_2_NONE;
+        imageBarrier.dstAccessMask    = inferAccessFlags(initialLayout);
+        imageBarrier.srcStageMask     = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+        imageBarrier.dstStageMask     = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+        imageBarrier.subresourceRange = {inferImageAspectFlags(format, usage), 0, mipLevels, 0, 1};
         VkDependencyInfo info{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
         info.imageMemoryBarrierCount = 1;
         info.pImageMemoryBarriers    = &imageBarrier;
@@ -211,9 +218,12 @@ Texture* TexturePool::allocCube(uint32_t size, VkFormat format, VkImageUsageFlag
     if (initialLayout != VK_IMAGE_LAYOUT_UNDEFINED)
     {
         VkImageMemoryBarrier2 imageBarrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
-        imageBarrier.image     = texture->image;
-        imageBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imageBarrier.newLayout = initialLayout;
+        imageBarrier.image            = texture->image;
+        imageBarrier.oldLayout        = VK_IMAGE_LAYOUT_UNDEFINED;
+        imageBarrier.newLayout        = initialLayout;
+        imageBarrier.srcAccessMask    = VK_ACCESS_2_NONE;
+        imageBarrier.dstAccessMask    = inferAccessFlags(initialLayout);
+        imageBarrier.subresourceRange = {inferImageAspectFlags(format, usage), 0, mipLevels, 0, 6};
         VkDependencyInfo info{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
         info.imageMemoryBarrierCount = 1;
         info.pImageMemoryBarriers    = &imageBarrier;

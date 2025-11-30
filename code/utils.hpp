@@ -27,5 +27,7 @@ uint64_t memoryHash(const std::vector<T>& data)
 bool isImageBarrierValid(const VkImageMemoryBarrier2& barrier);
 bool isBufferBarrierValid(const VkBufferMemoryBarrier2& barrier);
 
+VkImageAspectFlags inferImageAspectFlags(VkFormat format, VkImageUsageFlags usage = 0);
+VkAccessFlags2     inferAccessFlags(VkImageLayout layout);
 } // namespace Play
 #endif // UTILS_HPP
