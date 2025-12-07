@@ -73,8 +73,7 @@ public:
     {
         Render,
         Compute,
-        RayTracing,
-        Present
+        RayTracing
     };
     virtual Type type() const = 0;
 
@@ -156,41 +155,6 @@ private:
 };
 using RTPassNodeRef = RTPassNode*;
 
-// class InputPassNode : public PassNode
-// {
-// public:
-//     InputPassNode(uint32_t id, std::string name) : PassNode(id, std::move(name),
-//     NodeType::eInput)
-//     {
-//     }
-//     Type type() const override
-//     {
-//         return Type::Input;
-//     }
-// };
-// using InputPassNodeRef = InputPassNode*;
-
-class PresentPassNode : public PassNode
-{
-public:
-    PresentPassNode(uint32_t id, std::string name);
-    ~PresentPassNode() override
-    {
-        delete _program;
-        _program = nullptr;
-    }
-
-    Type type() const override
-    {
-        return Type::Present;
-    }
-    static std::atomic_int creationCount;
-
-private:
-    friend class PresentPassBuilder;
-    friend class RDGBuilder;
-};
-
 class RenderPassBuilder
 {
 public:
@@ -201,10 +165,10 @@ public:
         _node->setProgram(std::move(program));
         return *this;
     }
-    RenderPassBuilder&              color(uint32_t slotIdx, RDGTextureRef texHandle, VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+    RenderPassBuilder&              color(uint32_t slotIdx, RDGTextureRef texHandle, VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                                           VkAttachmentStoreOp storeOp = VK_ATTACHMENT_STORE_OP_STORE, VkImageLayout initLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                                           VkImageLayout finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    RenderPassBuilder&              depthStencil(RDGTextureRef texHandle, VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+    RenderPassBuilder&              depthStencil(RDGTextureRef texHandle, VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                                                  VkAttachmentStoreOp storeOp = VK_ATTACHMENT_STORE_OP_STORE, VkImageLayout initLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                                                  VkImageLayout finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
     RenderPassBuilder&              read(uint32_t binding, RDGTextureRef texture, VkPipelineStageFlagBits2 stage,
@@ -285,21 +249,6 @@ private:
     RDGBuilder*   _builder = nullptr;
     RTPassNodeRef _node    = nullptr;
     Dag*          _dag     = nullptr;
-};
-
-class PresentPassBuilder
-{
-public:
-    PresentPassBuilder(RDGBuilder* builder, PresentPassNode* node);
-    ~PresentPassBuilder() = default;
-    PresentPassBuilder& color(RDGTextureRef texHandle);
-    PresentPassBuilder& read(RDGTextureRef texHandle);
-    PresentPassNode*    finish();
-
-private:
-    RDGBuilder*      _builder = nullptr;
-    PresentPassNode* _node    = nullptr;
-    Dag*             _dag     = nullptr;
 };
 
 } // namespace Play::RDG

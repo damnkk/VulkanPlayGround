@@ -40,6 +40,7 @@ PlayElement::~PlayElement()
 void PlayElement::onAttach(nvapp::Application* app)
 {
     _app = app;
+    nvvk::DebugUtil::getInstance().init(_app->getDevice());
     // _modelLoader.init(this);
     // CameraManip
     PlayResourceManager::Instance().initialize(this);
@@ -90,6 +91,7 @@ void PlayElement::onAttach(nvapp::Application* app)
             LOGE("Unsupported render mode, defaulting to DeferRendering");
         }
     }
+    nvvk::DebugUtil::getInstance().setObjectName(_uiTexture->image, "PlayElement_UITexture");
 }
 
 void PlayElement::onDetach()
@@ -109,8 +111,13 @@ void PlayElement::onResize(VkCommandBuffer cmd, const VkExtent2D& size)
 {
     vkQueueWaitIdle(_app->getQueue(0).queue);
     _renderer->OnResize(size.width, size.height);
-    ImGui_ImplVulkan_RemoveTexture(_uiTextureDescriptor);
-    Texture::Destroy(_uiTexture);
+    auto task = [uiTextureDescriptor = _uiTextureDescriptor, uiTexture = _uiTexture]()
+    {
+        ImGui_ImplVulkan_RemoveTexture(uiTextureDescriptor);
+        Texture::Destroy(uiTexture);
+    };
+    _deferredDeleteTaskQueue.push({getFrameCycleIndex(), task});
+
     createGraphicsDescriptResource();
 }
 
@@ -126,6 +133,13 @@ void PlayElement::onUIMenu() {}
 void PlayElement::onPreRender()
 {
     _renderer->OnPreRender();
+    while (!_deferredDeleteTaskQueue.empty())
+    {
+        auto& taskPair = _deferredDeleteTaskQueue.front();
+        if ((uint32_t) taskPair.first != _app->getFrameCycleIndex()) break;
+        taskPair.second();
+        _deferredDeleteTaskQueue.pop();
+    }
 }
 
 void PlayElement::onRender(VkCommandBuffer cmd)
@@ -146,6 +160,18 @@ void PlayElement::onRender(VkCommandBuffer cmd)
 
     _renderer->RenderFrame();
     _renderer->OnPostRender();
+    nvvk::BarrierContainer barrierContainer;
+    VkImageMemoryBarrier2  uiImageBarrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
+    uiImageBarrier.image            = _uiTexture->image;
+    uiImageBarrier.oldLayout        = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    uiImageBarrier.newLayout        = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    uiImageBarrier.srcAccessMask    = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    uiImageBarrier.dstAccessMask    = VK_ACCESS_2_SHADER_READ_BIT;
+    uiImageBarrier.srcStageMask     = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    uiImageBarrier.dstStageMask     = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    uiImageBarrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    barrierContainer.appendOptionalLayoutTransition(*_uiTexture, uiImageBarrier);
+    barrierContainer.cmdPipelineBarrier(cmd, 0);
 }
 
 void PlayElement::onFileDrop(const std::filesystem::path& filename)

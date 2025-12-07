@@ -148,10 +148,12 @@ public:
     RenderPassBuilder  createRenderPass(std::string name);
     ComputePassBuilder createComputePass(std::string name);
     RTPassBuilder      createRTPass(std::string name);
-    PresentPassBuilder createPresentPass();
 
     RDGTextureBuilder createTexture(std::string name);
     RDGBufferBuilder  createBuffer(std::string name);
+
+    void registTexture(RDGTextureRef texture);
+    void registBuffer(RDGBufferRef buffer);
 
     RDGTextureRef getTexture(std::string name);
     RDGBufferRef  getBuffer(std::string name);
@@ -179,16 +181,16 @@ protected:
     friend class ComputePassBuilder;
     friend class RTPassBuilder;
     friend class PresentPassBuilder;
-    PlayElement*                                 _element = nullptr;
-    std::unique_ptr<Dag>                         _dag     = nullptr;
-    std::vector<PassNode*>                       _passes;
-    BlackBoard                                   _blackBoard;
-    std::unordered_map<std::string, RDGTexture*> _textureMap;
-    std::unordered_map<std::string, RDGBuffer*>  _bufferMap;
+    PlayElement*           _element = nullptr;
+    std::unique_ptr<Dag>   _dag     = nullptr;
+    std::vector<PassNode*> _passes;
+    BlackBoard             _blackBoard;
+    // std::unordered_map<std::string, RDGTexture*> _textureMap;
+    // std::unordered_map<std::string, RDGBuffer*>  _bufferMap;
 
 private:
     std::shared_ptr<RenderContext>                  _renderContext;
-    std::vector<std::pair<VkSubmitInfo2, uint32_t>> _submitInfos; // pairs of submit info and frame index
+    std::vector<std::pair<VkSubmitInfo2, uint32_t>> _submitInfos; // pairs of submit info and queue index
 };
 } // namespace Play::RDG
 

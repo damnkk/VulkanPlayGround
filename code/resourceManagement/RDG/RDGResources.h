@@ -25,8 +25,8 @@ class RDGTexturePool;
 class RenderDependencyGraph;
 struct ProducerInfo
 {
-    PassNode*      lastProducer         = nullptr;
-    PassNode*      lastReadOnlyAccesser = nullptr;
+    PassNode*      lastProducer         = nullptr; // sync for write after read
+    PassNode*      lastReadOnlyAccesser = nullptr; // sync for read after write
     VkAccessFlags2 accessMask           = 0;
 };
 

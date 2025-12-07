@@ -141,11 +141,13 @@ VkDescriptorSet DescriptorSetCache::requestDescriptorSet(DescriptorSetManager& s
         }
         else
         { // if same layout but different binding info, create new set from pool
+            LOGD("descriptorSet layout with hash {} got a new descriptor info, new descriptor set allocated", layoutHash);
             return createDescriptorSet(cacheNode, setManager, setIdx);
         }
     }
     else
     { // damn new layout, create new pool array
+        LOGD("descriptorSet layout with hash {} is not founded, it's a never meeted descriptor layout", layoutHash);
         auto cacheNode                 = std::make_shared<DescriptorSetCache::CacheNode>();
         _descriptorPoolMap[layoutHash] = cacheNode;
         return createDescriptorSet(*cacheNode, setManager, setIdx);

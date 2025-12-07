@@ -62,6 +62,7 @@ void DynamicRenderPass::begin(VkCommandBuffer cmd, const VkRect2D& renderArea)
     {
         auto& accessInfo = state.textureStates[0];
         if (!accessInfo.isAttachment) continue;
+        state.barrierInfo.oldLayout = texture->getRHI()->Layout();
         batchBarrier.appendOptionalLayoutTransition(*texture->getRHI(), state.barrierInfo);
     }
     batchBarrier.cmdPipelineBarrier(cmd, 0);

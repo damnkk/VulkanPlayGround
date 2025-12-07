@@ -177,34 +177,18 @@ RTPassBuilder RDGBuilder::createRTPass(std::string name)
     return RTPassBuilder(this, nodeRef);
 }
 
-PresentPassBuilder RDGBuilder::createPresentPass()
-{
-    PresentPassNode* nodeRef = _dag->addNode<PresentPassNode>("PresentPass");
-    _passes.push_back(nodeRef);
-    _blackBoard.registPass(nodeRef);
-    return PresentPassBuilder(this, nodeRef);
-}
-
-// InputPassNodeRef RDGBuilder::createInputPass(std::string name)
-// {
-//     InputPassNodeRef nodeRef = _dag->addNode<InputPassNode>(std::move(name));
-//     return nodeRef;
-// }
-
 void RDGBuilder::beforePassExecute() {}
 
 void RDGBuilder::prepareDescriptorSets(RenderContext& context, PassNode* pass)
 {
     DescriptorSetCache* descCache          = _element->getDescriptorSetCache();
     auto&               programDescManager = pass->getProgram()->getDescriptorSetManager();
-    auto                bindingInfo        = pass->getProgram()->getDescriptorSetManager().getSetBindingInfo();
 
     for (auto& [texture, state] : pass->_textureStates)
     {
         if (state.textureStates.front().isAttachment) continue;
         assert(texture->getRHI());
         TextureAccessInfo accessInfo = state.textureStates[0];
-        if (accessInfo.isAttachment) continue;
         programDescManager.setDescInfo(uint32_t(DescriptorEnum::ePerPassDescriptorSet), accessInfo.binding, *texture->_rhi);
     }
 
@@ -244,8 +228,9 @@ void RDGBuilder::prepareResourceBarrier(RenderContext& context, PassNode* pass)
         {
             texture->setRHI(Texture::Create(info._extent.width, info._extent.height, info._extent.depth, info._format, info._usageFlags,
                                             accessInfo.layout, info._mipmapLevel));
+            nvvk::DebugUtil::getInstance().setObjectName(texture->getRHI()->image, texture->name().c_str());
         }
-        if (!Play::isImageBarrierValid(state.barrierInfo) || accessInfo.isAttachment) continue;
+        if (accessInfo.isAttachment || !Play::isImageBarrierValid(state.barrierInfo)) continue;
         state.barrierInfo.image = texture->getRHI()->image;
         barrierContainer.appendOptionalLayoutTransition(*texture->getRHI(), state.barrierInfo);
     }
@@ -269,7 +254,7 @@ void RDGBuilder::prepareResourceBarrier(RenderContext& context, PassNode* pass)
 
 void RDGBuilder::prepareRenderPass(PassNode* pass)
 {
-    assert(pass->type() == PassNode::Type::Render || pass->type() == PassNode::Type::Present);
+    assert(pass->type() == PassNode::Type::Render);
     RenderPassNode* renderPassNode = dynamic_cast<RenderPassNode*>(pass);
     renderPassNode->initRenderPass(_element);
     _renderContext->_pendingGfxState->_renderPass = renderPassNode->_renderPass.get();
@@ -296,6 +281,16 @@ RDGBufferBuilder RDGBuilder::createBuffer(std::string name)
     RDGBufferRef     node = new RDGBuffer(name);
     RDGBufferBuilder builder(this, node);
     return builder;
+}
+
+void RDGBuilder::registTexture(RDGTextureRef texture)
+{
+    _blackBoard.registTexture(texture);
+}
+
+void RDGBuilder::registBuffer(RDGBufferRef buffer)
+{
+    _blackBoard.registBuffer(buffer);
 }
 
 RDGTextureRef RDGBuilder::getTexture(std::string name)
@@ -359,6 +354,7 @@ void RDGBuilder::compile()
                     imageBarrier.subresourceRange = {texture->_info._aspectFlags, 0, texture->_info._mipmapLevel, 0, texture->_info._layerCount};
                 }
             }
+            // Todo: RT got finalAccessInfo or persisent image resource got finalAccessInfo?
             if (currAccessInfo.isAttachment)
             {
                 texture->_attachmentFinalAccessInfo = &currAccessInfo;
@@ -469,11 +465,13 @@ void RDGBuilder::compile()
 
 void RDGBuilder::execute()
 {
+    beforePassExecute();
     for (auto& pass : _passes)
     {
         if (pass->isCull() || !pass) continue;
         executePass(pass);
     }
+    afterPassExecute();
 }
 
 void RDGBuilder::executePass(PassNode* pass)
@@ -482,13 +480,13 @@ void RDGBuilder::executePass(PassNode* pass)
     prepareResourceBarrier(*renderContext, pass);
     prepareDescriptorSets(*renderContext, pass);
 
-    if (pass->type() == PassNode::Type::Render || pass->type() == PassNode::Type::Present)
+    if (pass->type() == PassNode::Type::Render)
     {
         prepareRenderPass(pass);
     }
 
     // pass->execute(*renderContext);
-    if (pass->type() == PassNode::Type::Render || pass->type() == PassNode::Type::Present)
+    if (pass->type() == PassNode::Type::Render)
     {
         endRenderPass(pass);
     }
@@ -577,6 +575,8 @@ void RDGBuilder::afterPassExecute()
     }
     // we add the last signaled semaphore into here, so that the next frame would wait on it.
     _element->getApp()->addWaitSemaphore(signalInfo);
+    _renderContext->_prevPassNode = nullptr;
+    _submitInfos.clear();
 }
 
 // reference passNode is AsyncCompute or not to determine the submit package. This func would
@@ -587,9 +587,9 @@ RenderContext* RDGBuilder::prepareRenderContext(PassNode* pass)
     {
         case PassNode::Type::Render:
         {
-            auto& globalDescriptorSet = _renderContext->_pendingComputeState->_globalDescriptorSet;
-            auto& sceneDescriptorSet  = _renderContext->_pendingComputeState->_sceneDescriptorSet;
-            auto& frameDescriptorSet  = _renderContext->_pendingComputeState->_frameDescriptorSet;
+            auto& globalDescriptorSet = _renderContext->_pendingGfxState->_globalDescriptorSet;
+            auto& sceneDescriptorSet  = _renderContext->_pendingGfxState->_sceneDescriptorSet;
+            auto& frameDescriptorSet  = _renderContext->_pendingGfxState->_frameDescriptorSet;
 
             globalDescriptorSet = globalDescriptorSet == this->_element->getDescriptorSetCache()->getEngineDescriptorSet()
                                       ? this->_element->getDescriptorSetCache()->getEngineDescriptorSet()
@@ -622,9 +622,9 @@ RenderContext* RDGBuilder::prepareRenderContext(PassNode* pass)
         }
         case PassNode::Type::RayTracing:
         {
-            auto& globalDescriptorSet = _renderContext->_pendingComputeState->_globalDescriptorSet;
-            auto& sceneDescriptorSet  = _renderContext->_pendingComputeState->_sceneDescriptorSet;
-            auto& frameDescriptorSet  = _renderContext->_pendingComputeState->_frameDescriptorSet;
+            auto& globalDescriptorSet = _renderContext->_pendingRTState->_globalDescriptorSet;
+            auto& sceneDescriptorSet  = _renderContext->_pendingRTState->_sceneDescriptorSet;
+            auto& frameDescriptorSet  = _renderContext->_pendingRTState->_frameDescriptorSet;
 
             globalDescriptorSet = globalDescriptorSet == this->_element->getDescriptorSetCache()->getEngineDescriptorSet()
                                       ? this->_element->getDescriptorSetCache()->getEngineDescriptorSet()
@@ -657,6 +657,7 @@ RenderContext* RDGBuilder::prepareRenderContext(PassNode* pass)
         NVVK_CHECK(vkAllocateCommandBuffers(_element->getApp()->getDevice(), &allocInfo, &_renderContext->_currCmdBuffer));
         VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         vkBeginCommandBuffer(_renderContext->_currCmdBuffer, &beginInfo);
+        _renderContext->_frameData->cmdBuffersGfx.push_back(_renderContext->_currCmdBuffer);
     }
     else
     {
@@ -743,6 +744,7 @@ RenderContext* RDGBuilder::prepareRenderContext(PassNode* pass)
             NVVK_CHECK(vkAllocateCommandBuffers(_element->getApp()->getDevice(), &allocInfo, &_renderContext->_currCmdBuffer));
             VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
             vkBeginCommandBuffer(_renderContext->_currCmdBuffer, &beginInfo);
+            _renderContext->_frameData->cmdBuffersCompute.push_back(_renderContext->_currCmdBuffer);
         }
     }
 

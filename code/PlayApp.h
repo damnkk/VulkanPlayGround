@@ -118,14 +118,24 @@ public:
     {
         VkCommandPool                graphicsCmdPool;
         VkCommandPool                computeCmdPool;
-        std::vector<VkCommandBuffer> cmdBuffers;
+        std::vector<VkCommandBuffer> cmdBuffersGfx;
+        std::vector<VkCommandBuffer> cmdBuffersCompute;
         VkSemaphore                  semaphore;
         uint64_t                     timelineValue = 0;
         void                         reset(VkDevice device)
         {
+            if (!cmdBuffersGfx.empty())
+            {
+                vkFreeCommandBuffers(device, graphicsCmdPool, (uint32_t) cmdBuffersGfx.size(), cmdBuffersGfx.data());
+                cmdBuffersGfx.clear();
+            }
+            if (!cmdBuffersCompute.empty())
+            {
+                vkFreeCommandBuffers(device, computeCmdPool, (uint32_t) cmdBuffersCompute.size(), cmdBuffersCompute.data());
+                cmdBuffersCompute.clear();
+            }
             vkResetCommandPool(device, graphicsCmdPool, 0);
             vkResetCommandPool(device, computeCmdPool, 0);
-            cmdBuffers.clear();
         }
     };
 
@@ -177,12 +187,13 @@ private:
     friend class ShadingRateRenderer;
     friend class RDG::RenderDependencyGraph;
     friend class SceneManager;
-    nvapp::Application*                 _app{};
-    nvutils::ProfilerTimeline*          _profilerTimeline{};
-    nvvk::ProfilerGpuTimer              _profilerGpuTimer{};
-    std::vector<PlayFrameData>          _frameData;
-    std::unique_ptr<DescriptorSetCache> _descriptorSetCache;
-    SceneManager                        _sceneManager;
+    nvapp::Application*                                   _app{};
+    nvutils::ProfilerTimeline*                            _profilerTimeline{};
+    nvvk::ProfilerGpuTimer                                _profilerGpuTimer{};
+    std::vector<PlayFrameData>                            _frameData;
+    std::unique_ptr<DescriptorSetCache>                   _descriptorSetCache;
+    SceneManager                                          _sceneManager;
+    std::queue<std::pair<uint8_t, std::function<void()>>> _deferredDeleteTaskQueue;
     // feature switch
 private:
     bool                              _enableRayTracing       = true;

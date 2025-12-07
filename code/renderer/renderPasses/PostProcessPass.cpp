@@ -28,13 +28,12 @@ void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
                             .UsageFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
                             .MipmapLevel(1)
                             .finish();
-
-    auto presentTexRef = rdgBuilder->createTexture("presentTexture").Import(_element->getUITexture()).finish();
+    rdgBuilder->registTexture(outputTexRef);
 
     auto pass = rdgBuilder->createRenderPass("postProcessPass")
                     .color(0, outputTexRef, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-                    .read(0, colorTexId, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, _element->getApp()->getQueue(0).familyIndex)
+                    .read(0, colorTexId, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
                     .program(_postProgram.get())
                     .execute(
                         [this](RDG::RenderContext& context)
@@ -43,7 +42,6 @@ void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
                             vkCmdDraw(cmd, 3, 1, 0, 0);
                         })
                     .finish();
-    auto outputPass = rdgBuilder->createPresentPass().read(outputTexRef).color(presentTexRef).finish();
 }
 
 PostProcessPass::~PostProcessPass() {}
