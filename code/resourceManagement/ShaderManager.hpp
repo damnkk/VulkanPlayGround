@@ -68,7 +68,7 @@ class ShaderManager
 public:
     static ShaderManager& Instance();
     ShaderManager() = default;
-    void init(PlayElement* element);
+    void init();
 
     void registBuiltInShader();
     void addSearchPath(const std::filesystem::path& path);
@@ -88,7 +88,6 @@ protected:
     bool checkShaderUpdate(std::filesystem::path shaderPath, std::filesystem::path spvPath);
 
 private:
-    PlayElement*                              _element;
     ShaderPool                                _shaderPool;
     nvslang::SlangCompiler                    _slangCompiler;
     nvvkglsl::GlslCompiler                    _glslCCompiler;

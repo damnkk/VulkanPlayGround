@@ -6,7 +6,7 @@
 namespace Play
 {
 
-DeferRenderer::DeferRenderer(PlayElement& view) : _rdgBuilder(&view)
+DeferRenderer::DeferRenderer(PlayElement& view) : _rdgBuilder()
 {
     _outputTexture = view.getUITexture();
     // add logic pass

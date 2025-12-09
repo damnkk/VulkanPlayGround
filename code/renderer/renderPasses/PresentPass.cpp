@@ -1,6 +1,7 @@
 #include "PresentPass.h"
 #include "PlayApp.h" // 包含 PlayElement 定义
 #include "RDG/RDG.h"
+#include "VulkanDriver.h"
 namespace Play
 {
 
@@ -8,7 +9,7 @@ PresentPass::~PresentPass() {}
 
 void PresentPass::init()
 {
-    _presentProgram = std::make_unique<RenderProgram>(_element->getDevice());
+    _presentProgram = std::make_unique<RenderProgram>(vkDriver->_device);
     _presentProgram->setFragModuleID(ShaderManager::Instance().getShaderIdByName("postProcessf"))
         .setVertexModuleID(ShaderManager::Instance().getShaderIdByName("postProcessv"))
         .finish();

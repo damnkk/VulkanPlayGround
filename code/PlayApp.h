@@ -7,10 +7,7 @@
 #include <nvutils/parameter_parser.hpp>
 #include "PlayAllocator.h"
 #include "resourceManagement/Resource.h"
-#include "utils.hpp"
-#include "DescriptorManager.h"
 #include "SceneManager.h"
-#include "nvvk/staging.hpp"
 namespace Play
 {
 class Renderer;
@@ -48,116 +45,10 @@ public:
     virtual void onFileDrop(const std::filesystem::path& filename) override; // For when a file is dragged on top of the window
     virtual void onLastHeadlessFrame() override;                             // Called at the end of the last frame in headless mode
 
-    nvapp::Application* getApp()
-    {
-        return _app;
-    }
-    inline VkDevice getDevice()
-    {
-        return _app->getDevice();
-    }
-    inline VkPhysicalDevice getPhysicalDevice()
-    {
-        return _app->getPhysicalDevice();
-    }
-    inline const nvvk::QueueInfo& getQueue(uint32_t index)
-    {
-        return _app->getQueue(index);
-    }
-    inline VkCommandPool getCommandPool() const
-    {
-        return _app->getCommandPool();
-    }
-    inline VkDescriptorPool getTextureDescriptorPool() const
-    {
-        return _app->getTextureDescriptorPool();
-    }
-    inline const VkExtent2D& getViewportSize() const
-    {
-        return _app->getViewportSize();
-    }
-    inline const VkExtent2D& getWindowSize() const
-    {
-        return _app->getWindowSize();
-    }
-    inline GLFWwindow* getWindowHandle() const
-    {
-        return _app->getWindowHandle();
-    }
-    inline uint32_t getFrameCycleIndex() const
-    {
-        return _app->getFrameCycleIndex();
-    }
-    inline uint32_t getFrameCycleSize() const
-    {
-        return _app->getFrameCycleSize();
-    }
-    inline bool isAsyncQueue() const
-    {
-        try
-        {
-            return _app->getQueue(2).queue != VK_NULL_HANDLE;
-        }
-        catch (const std::out_of_range&)
-        {
-            return false;
-        }
-    }
-
     inline Texture* getUITexture() const
     {
         return _uiTexture;
     }
-
-    inline bool isEnableDynamicRendering() const
-    {
-        return _enableDynamicRendering;
-    }
-
-    struct PlayFrameData
-    {
-        VkCommandPool                graphicsCmdPool;
-        VkCommandPool                computeCmdPool;
-        std::vector<VkCommandBuffer> cmdBuffersGfx;
-        std::vector<VkCommandBuffer> cmdBuffersCompute;
-        VkSemaphore                  semaphore;
-        uint64_t                     timelineValue = 0;
-        void                         reset(VkDevice device)
-        {
-            if (!cmdBuffersGfx.empty())
-            {
-                vkFreeCommandBuffers(device, graphicsCmdPool, (uint32_t) cmdBuffersGfx.size(), cmdBuffersGfx.data());
-                cmdBuffersGfx.clear();
-            }
-            if (!cmdBuffersCompute.empty())
-            {
-                vkFreeCommandBuffers(device, computeCmdPool, (uint32_t) cmdBuffersCompute.size(), cmdBuffersCompute.data());
-                cmdBuffersCompute.clear();
-            }
-            vkResetCommandPool(device, graphicsCmdPool, 0);
-            vkResetCommandPool(device, computeCmdPool, 0);
-        }
-    };
-
-    inline PlayFrameData& getFrameData(uint32_t index)
-    {
-        assert(index < _frameData.size());
-        return _frameData[index];
-    }
-    DescriptorSetCache* getDescriptorSetCache()
-    {
-        return _descriptorSetCache.get();
-    }
-
-    inline Texture*        CreateTexture(VkImageCreateInfo& info, VkCommandBuffer* cmd = nullptr);
-    static inline Texture* AllocTexture();
-    static inline void     FreeTexture(Texture* texture);
-    inline Buffer*         CreateBuffer(VkBufferCreateInfo& info, VkMemoryPropertyFlags memProperties);
-    static inline Buffer*  AllocBuffer();
-    static inline void     FreeBuffer(Buffer* buffer);
-    static inline void*    MapBuffer(Buffer& buffer);
-    static inline void     UnmapBuffer(Buffer& buffer);
-    uint64_t               _frameNum = 0;
 
     enum RenderMode
     {
@@ -187,22 +78,11 @@ private:
     friend class ShadingRateRenderer;
     friend class RDG::RenderDependencyGraph;
     friend class SceneManager;
-    nvapp::Application*                                   _app{};
-    nvutils::ProfilerTimeline*                            _profilerTimeline{};
-    nvvk::ProfilerGpuTimer                                _profilerGpuTimer{};
-    std::vector<PlayFrameData>                            _frameData;
-    std::unique_ptr<DescriptorSetCache>                   _descriptorSetCache;
-    SceneManager                                          _sceneManager;
-    std::queue<std::pair<uint8_t, std::function<void()>>> _deferredDeleteTaskQueue;
-    // feature switch
-private:
-    bool                              _enableRayTracing       = true;
-    bool                              _enableDynamicRendering = true;
-    std::unique_ptr<RenderPassCache>  _renderPassCache;  // if Dynamic rendering is off, use RenderPassCache to manage render passes
-    std::unique_ptr<FrameBufferCache> _frameBufferCache; // if Dynamic rendering is off, use FrameBufferCache to manage frame buffers
+    nvapp::Application*        _app{};
+    nvutils::ProfilerTimeline* _profilerTimeline{};
+    nvvk::ProfilerGpuTimer     _profilerGpuTimer{};
+    SceneManager               _sceneManager;
 };
-
-std::filesystem::path getBaseFilePath();
 
 } //    namespace Play
 

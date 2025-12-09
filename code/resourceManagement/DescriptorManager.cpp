@@ -1,6 +1,7 @@
 #include "DescriptorManager.h"
 #include "PlayProgram.h"
 #include "nvvk/check_error.hpp"
+#include "VulkanDriver.h"
 
 namespace Play
 {
@@ -104,7 +105,7 @@ DescriptorSetCache::~DescriptorSetCache()
     {
         for (auto& poolNode : cacheNode->pools)
         {
-            vkDestroyDescriptorPool(_element->getDevice(), poolNode.pool, nullptr);
+            vkDestroyDescriptorPool(vkDriver->_device, poolNode.pool, nullptr);
         }
     }
 }
@@ -169,7 +170,7 @@ VkDescriptorSet DescriptorSetCache::createDescriptorSet(DescriptorSetCache::Cach
         poolCreateInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolCreateInfo.pPoolSizes    = poolSizes.data();
         CacheNode::PoolNode newPoolNode;
-        NVVK_CHECK(vkCreateDescriptorPool(_element->getDevice(), &poolCreateInfo, nullptr, &newPoolNode.pool));
+        NVVK_CHECK(vkCreateDescriptorPool(vkDriver->_device, &poolCreateInfo, nullptr, &newPoolNode.pool));
         cacheNode.pools.push_back(newPoolNode);
         CacheNode::CachedSet newSet = createDescriptorSetImplement(cacheNode, setManager, setIdx);
         return newSet.descriptorSet;
@@ -190,7 +191,7 @@ DescriptorSetCache::CacheNode::CachedSet DescriptorSetCache::createDescriptorSet
     allocInfo.descriptorSetCount = 1;
     allocInfo.pSetLayouts        = &setManager.getDescriptorSetLayouts()[setIdx];
 
-    NVVK_CHECK(vkAllocateDescriptorSets(_element->getDevice(), &allocInfo, &newSet.descriptorSet));
+    NVVK_CHECK(vkAllocateDescriptorSets(vkDriver->_device, &allocInfo, &newSet.descriptorSet));
     uint64_t BindingsHash                    = setManager.getBindingsHash(setIdx);
     cacheNode.descriptorSetMap[BindingsHash] = newSet;
     // currently new descriptor set allocated success, decrease the available count
@@ -281,7 +282,7 @@ DescriptorSetCache::CacheNode::CachedSet DescriptorSetCache::createDescriptorSet
         writeSets.push_back(writeSet);
     }
     // Update the descriptor set with the new binding information
-    vkUpdateDescriptorSets(_element->getDevice(), static_cast<uint32_t>(writeSets.size()), writeSets.data(), 0, nullptr);
+    vkUpdateDescriptorSets(vkDriver->_device, static_cast<uint32_t>(writeSets.size()), writeSets.data(), 0, nullptr);
     return newSet;
 }
 

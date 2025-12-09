@@ -1,7 +1,8 @@
 #include "ShaderManager.hpp"
 #include <regex>
 #include <set>
-#include "PlayApp.h"
+#include "utils.hpp"
+#include "VulkanDriver.h"
 #include "nvvk/check_error.hpp"
 #include "nvvk/debug_util.hpp"
 #include "nvaftermath/aftermath.hpp"
@@ -35,9 +36,8 @@ void ShaderPool::free(uint32_t id)
     _objs[id]->_poolId              = -1;
 }
 
-void ShaderManager::init(PlayElement* element)
+void ShaderManager::init()
 {
-    _element = element;
     _shaderPool.init(MaxShaderModules, &PlayResourceManager::Instance());
     std::filesystem::path shaderBasePath = std::filesystem::path(getBaseFilePath()) / "shaders";
     _searchPaths = {shaderBasePath, shaderBasePath / "newShaders", std::filesystem::path(getBaseFilePath()) / "External/nvpro_core2/nvshaders"};
@@ -305,7 +305,7 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
                     createInfo.codeSize = module->_spvCode.size();
                     createInfo.pCode    = reinterpret_cast<const uint32_t*>(module->_spvCode.data());
 
-                    NVVK_CHECK(vkCreateShaderModule(_element->getApp()->getDevice(), &createInfo, nullptr, &module->_shaderModule));
+                    NVVK_CHECK(vkCreateShaderModule(vkDriver->_device, &createInfo, nullptr, &module->_shaderModule));
                     _nameIdMap[name] = module->_poolId;
                     return module->_poolId;
                 }
@@ -332,7 +332,7 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
         VkShaderModuleCreateInfo createInfo{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
         createInfo.codeSize = module->_spvCode.size();
         createInfo.pCode    = reinterpret_cast<const uint32_t*>(module->_spvCode.data());
-        NVVK_CHECK(vkCreateShaderModule(_element->getApp()->getDevice(), &createInfo, nullptr, &module->_shaderModule));
+        NVVK_CHECK(vkCreateShaderModule(vkDriver->_device, &createInfo, nullptr, &module->_shaderModule));
         _nameIdMap[name] = module->_poolId;
         std::ofstream spvFile(fullSpvPath, std::ios::binary);
         if (spvFile.is_open())
@@ -373,7 +373,7 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
                         createInfo.codeSize = module->_spvCode.size() * sizeof(uint8_t);
                         createInfo.pCode    = reinterpret_cast<const uint32_t*>(module->_spvCode.data());
 
-                        NVVK_CHECK(vkCreateShaderModule(_element->getApp()->getDevice(), &createInfo, nullptr, &module->_shaderModule));
+                        NVVK_CHECK(vkCreateShaderModule(vkDriver->_device, &createInfo, nullptr, &module->_shaderModule));
                         _nameIdMap[name] = module->_poolId;
                         return module->_poolId;
                     }
@@ -392,7 +392,7 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
             module->_type                       = ShaderType::eGLSL;
             module->_name                       = name;
             VkShaderModuleCreateInfo createInfo = _glslCCompiler.makeShaderModuleCreateInfo(result, 0);
-            NVVK_CHECK(vkCreateShaderModule(_element->getApp()->getDevice(), &createInfo, nullptr, &module->_shaderModule));
+            NVVK_CHECK(vkCreateShaderModule(vkDriver->_device, &createInfo, nullptr, &module->_shaderModule));
             _nameIdMap[name] = module->_poolId;
             // Save the compiled SPV code to disk
 
@@ -439,7 +439,7 @@ void ShaderManager::deInit()
         ShaderModule* module = _shaderPool.get(id);
         if (module)
         {
-            vkDestroyShaderModule(_element->getApp()->getDevice(), module->_shaderModule, nullptr);
+            vkDestroyShaderModule(vkDriver->_device, module->_shaderModule, nullptr);
             _shaderPool.free(id);
         }
     }

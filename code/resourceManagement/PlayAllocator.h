@@ -119,7 +119,7 @@ public:
     static nvvk::SamplerPool*             GetAsSamplerPool();
     PlayResourceManager() = default;
     ~PlayResourceManager() {}
-    void            initialize(PlayElement* element);
+    void            initialize();
     void            deInit();
     VkCommandBuffer getTempCommandBuffer();
     void            submitAndWaitTempCmdBuffer(VkCommandBuffer cmd);
@@ -128,8 +128,6 @@ private:
     friend class TexturePool;
     friend class BufferPool;
     VkCommandPool _tempCmdPool{VK_NULL_HANDLE};
-
-    PlayElement* _element{nullptr};
 };
 
 } // namespace Play

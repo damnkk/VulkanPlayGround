@@ -1,16 +1,17 @@
 #include "RDGPasses.hpp"
 #include "RDG.h"
 #include "RenderPass.h"
+#include <VulkanDriver.h>
 
 namespace Play::RDG
 {
 const uint32_t ATTACHMENT_DEPTH_STENCIL = 0xFFFFFFFF;
 RenderPassNode::RenderPassNode(uint32_t id, std::string name) : PassNode(id, std::move(name), NodeType::eRenderPass) {}
-void RenderPassNode::initRenderPass(PlayElement* element)
+void RenderPassNode::initRenderPass()
 {
     if (_renderPass && !_renderPass->isDirty()) return;
 
-    if (element->isEnableDynamicRendering())
+    if (vkDriver->_enableDynamicRendering)
     {
         _renderPass = std::make_unique<DynamicRenderPass>(this);
     }

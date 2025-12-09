@@ -20,7 +20,8 @@ GPU resource when RDG compile.
 namespace Play
 {
 class RenderPass;
-}
+struct PlayFrameData;
+} // namespace Play
 namespace Play::RDG
 {
 
@@ -123,16 +124,14 @@ struct PendingRTState
 
 struct RenderContext
 {
-    RenderContext(PlayElement* element) : _element(element)
+    RenderContext()
     {
         _pendingComputeState = std::make_shared<PendingComputeState>(this);
         _pendingGfxState     = std::make_shared<PendingGfxState>(this);
         _pendingRTState      = std::make_shared<PendingRTState>(this);
     }
     ~RenderContext() {}
-    PlayElement*                         _element             = nullptr;
-    PlayElement::PlayFrameData*          _frameData           = nullptr;
-    uint32_t                             _frameInFlightIndex  = 0;
+    PlayFrameData*                       _frameData           = nullptr;
     PassNode*                            _prevPassNode        = nullptr;
     VkCommandBuffer                      _currCmdBuffer       = VK_NULL_HANDLE;
     std::shared_ptr<PendingComputeState> _pendingComputeState = nullptr;
@@ -143,7 +142,7 @@ struct RenderContext
 class RDGBuilder
 {
 public:
-    RDGBuilder(PlayElement* element);
+    RDGBuilder();
     ~RDGBuilder();
     RenderPassBuilder  createRenderPass(std::string name);
     ComputePassBuilder createComputePass(std::string name);
@@ -181,8 +180,7 @@ protected:
     friend class ComputePassBuilder;
     friend class RTPassBuilder;
     friend class PresentPassBuilder;
-    PlayElement*           _element = nullptr;
-    std::unique_ptr<Dag>   _dag     = nullptr;
+    std::unique_ptr<Dag>   _dag = nullptr;
     std::vector<PassNode*> _passes;
     BlackBoard             _blackBoard;
     // std::unordered_map<std::string, RDGTexture*> _textureMap;

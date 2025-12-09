@@ -61,7 +61,7 @@ private:
 class DescriptorSetCache
 {
 public:
-    DescriptorSetCache(PlayElement* element) : _element(element) {}
+    DescriptorSetCache() {}
     ~DescriptorSetCache();
     void            deInit();
     VkDescriptorSet requestDescriptorSet(DescriptorSetManager& setManager, uint32_t setIdx);
@@ -109,7 +109,6 @@ private:
     VkDescriptorSet                                          _globalDescriptorSet = VK_NULL_HANDLE;
     VkDescriptorSet                                          _sceneDescriptorSet  = VK_NULL_HANDLE;
     VkDescriptorSet                                          _frameDescriptorSet  = VK_NULL_HANDLE;
-    Play::PlayElement*                                       _element             = nullptr;
 };
 
 } // namespace Play

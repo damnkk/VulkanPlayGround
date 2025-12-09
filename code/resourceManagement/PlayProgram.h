@@ -3,8 +3,11 @@
 
 #include "PlayApp.h"
 #include <nvvk/descriptors.hpp>
+#include <nvvk/graphics_pipeline.hpp>
+#include <nvvk/compute_pipeline.hpp>
+#include <nvvk/pipeline.hpp>
 #include <ShaderManager.hpp>
-
+#include "DescriptorManager.h"
 namespace Play
 {
 using ShaderID = uint32_t;
@@ -181,9 +184,10 @@ public:
     }
 
 private:
-    ShaderID    _vertexModuleID = ~0U;
-    ShaderID    _fragModuleID   = ~0U;
-    ProgramType _programType    = ProgramType::eRenderProgram;
+    ShaderID                    _vertexModuleID = ~0U;
+    ShaderID                    _fragModuleID   = ~0U;
+    ProgramType                 _programType    = ProgramType::eRenderProgram;
+    nvvk::GraphicsPipelineState _pipelineState;
 };
 
 class ComputeProgram : public PlayProgram

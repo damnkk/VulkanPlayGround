@@ -105,7 +105,7 @@ public:
     {
         return Type::Render;
     }
-    void initRenderPass(PlayElement* element);
+    void initRenderPass();
 
 private:
     friend class RenderPassBuilder;

@@ -6,12 +6,10 @@ class PlayElement;
 class FrameBufferCache
 {
 public:
-    FrameBufferCache(PlayElement* element);
+    FrameBufferCache();
     ~FrameBufferCache();
 
 private:
-    int          test = 0;
-    PlayElement* _element;
 };
 
 } // namespace Play

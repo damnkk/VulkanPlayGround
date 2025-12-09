@@ -2,6 +2,7 @@
 #include "RDG/RDG.h"
 #include "PlayProgram.h"
 #include "ShaderManager.hpp"
+#include "VulkanDriver.h"
 namespace Play
 {
 void PostProcessPass::init()
@@ -11,7 +12,7 @@ void PostProcessPass::init()
     uint32_t PostProcessfId = ShaderManager::Instance().loadShaderFromFile("postProcessf", "newShaders/postProcess.frag.slang",
                                                                            ShaderStage::eFragment, ShaderType::eSLANG, "main");
 
-    _postProgram = std::make_unique<RenderProgram>(_element->getDevice());
+    _postProgram = std::make_unique<RenderProgram>(vkDriver->_device);
     _postProgram->setFragModuleID(PostProcessfId).setVertexModuleID(PostProcessvId).finish();
     _postPipelineState.rasterizationState.cullMode = VK_CULL_MODE_NONE;
 }
@@ -22,7 +23,7 @@ void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
     Texture*              inputTex         = Texture::Create(inputTexturePath);
     auto                  colorTexId       = rdgBuilder->createTexture("inputTexture").Import(inputTex).finish();
     auto                  outputTexRef     = rdgBuilder->createTexture("outputTexture")
-                            .Extent({_element->getApp()->getWindowSize().width, _element->getApp()->getWindowSize().height, 1})
+                            .Extent({vkDriver->getWindowSize().width, vkDriver->getWindowSize().height, 1})
                             .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
                             .Format(VK_FORMAT_R8G8B8A8_UNORM)
                             .UsageFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)

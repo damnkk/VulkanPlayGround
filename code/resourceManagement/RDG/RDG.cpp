@@ -2,12 +2,14 @@
 #include <stdexcept>
 #include "queue"
 #include "utils.hpp"
+#include "RenderPassCache.h"
+#include "RenderPass.h"
+#include "VulkanDriver.h"
+#include "DescriptorManager.h"
 #include <nvutils/logger.hpp>
 #include <nvvk/check_error.hpp>
 #include <nvvk/barriers.hpp>
 #include "nvvk/debug_util.hpp"
-#include "RenderPassCache.h"
-#include "RenderPass.h"
 namespace Play::RDG
 {
 void RDGTextureCache::regist(Texture* texture) {}
@@ -145,10 +147,10 @@ PassNode* BlackBoard::getPass(std::string name)
     return _passMap[name];
 }
 
-RDGBuilder::RDGBuilder(PlayElement* element) : _element(element)
+RDGBuilder::RDGBuilder()
 {
     _dag           = std::make_unique<Dag>();
-    _renderContext = std::make_shared<RenderContext>(element);
+    _renderContext = std::make_shared<RenderContext>();
 }
 
 RDGBuilder::~RDGBuilder() {}
@@ -181,7 +183,7 @@ void RDGBuilder::beforePassExecute() {}
 
 void RDGBuilder::prepareDescriptorSets(RenderContext& context, PassNode* pass)
 {
-    DescriptorSetCache* descCache          = _element->getDescriptorSetCache();
+    DescriptorSetCache* descCache          = vkDriver->getDescriptorSetCache();
     auto&               programDescManager = pass->getProgram()->getDescriptorSetManager();
 
     for (auto& [texture, state] : pass->_textureStates)
@@ -256,10 +258,9 @@ void RDGBuilder::prepareRenderPass(PassNode* pass)
 {
     assert(pass->type() == PassNode::Type::Render);
     RenderPassNode* renderPassNode = dynamic_cast<RenderPassNode*>(pass);
-    renderPassNode->initRenderPass(_element);
+    renderPassNode->initRenderPass();
     _renderContext->_pendingGfxState->_renderPass = renderPassNode->_renderPass.get();
-    renderPassNode->_renderPass->begin(_renderContext->_currCmdBuffer,
-                                       {{0, 0}, {_element->getApp()->getWindowSize().width, _element->getApp()->getWindowSize().height}});
+    renderPassNode->_renderPass->begin(_renderContext->_currCmdBuffer, {{0, 0}, {vkDriver->getWindowSize().width, vkDriver->getWindowSize().height}});
 }
 
 void RDGBuilder::endRenderPass(PassNode* pass)
@@ -571,10 +572,10 @@ void RDGBuilder::afterPassExecute()
     _submitInfos.push_back({submitInfo, isAsyncCompute(_renderContext->_prevPassNode) ? 1 : 0});
     for (auto& [submit, queueIndex] : _submitInfos)
     {
-        vkQueueSubmit2(_element->getApp()->getQueue(queueIndex).queue, 1, &submit, nullptr);
+        vkQueueSubmit2(vkDriver->getQueue(queueIndex).queue, 1, &submit, nullptr);
     }
     // we add the last signaled semaphore into here, so that the next frame would wait on it.
-    _element->getApp()->addWaitSemaphore(signalInfo);
+    vkDriver->_app->addWaitSemaphore(signalInfo);
     _renderContext->_prevPassNode = nullptr;
     _submitInfos.clear();
 }
@@ -591,14 +592,14 @@ RenderContext* RDGBuilder::prepareRenderContext(PassNode* pass)
             auto& sceneDescriptorSet  = _renderContext->_pendingGfxState->_sceneDescriptorSet;
             auto& frameDescriptorSet  = _renderContext->_pendingGfxState->_frameDescriptorSet;
 
-            globalDescriptorSet = globalDescriptorSet == this->_element->getDescriptorSetCache()->getEngineDescriptorSet()
-                                      ? this->_element->getDescriptorSetCache()->getEngineDescriptorSet()
+            globalDescriptorSet = globalDescriptorSet == vkDriver->getDescriptorSetCache()->getEngineDescriptorSet()
+                                      ? vkDriver->getDescriptorSetCache()->getEngineDescriptorSet()
                                       : globalDescriptorSet;
-            sceneDescriptorSet  = sceneDescriptorSet == this->_element->getDescriptorSetCache()->getSceneDescriptorSet()
-                                      ? this->_element->getDescriptorSetCache()->getSceneDescriptorSet()
+            sceneDescriptorSet  = sceneDescriptorSet == vkDriver->getDescriptorSetCache()->getSceneDescriptorSet()
+                                      ? vkDriver->getDescriptorSetCache()->getSceneDescriptorSet()
                                       : sceneDescriptorSet;
-            frameDescriptorSet  = frameDescriptorSet == this->_element->getDescriptorSetCache()->getFrameDescriptorSet()
-                                      ? this->_element->getDescriptorSetCache()->getFrameDescriptorSet()
+            frameDescriptorSet  = frameDescriptorSet == vkDriver->getDescriptorSetCache()->getFrameDescriptorSet()
+                                      ? vkDriver->getDescriptorSetCache()->getFrameDescriptorSet()
                                       : frameDescriptorSet;
 
             break;
@@ -609,14 +610,14 @@ RenderContext* RDGBuilder::prepareRenderContext(PassNode* pass)
             auto& sceneDescriptorSet  = _renderContext->_pendingComputeState->_sceneDescriptorSet;
             auto& frameDescriptorSet  = _renderContext->_pendingComputeState->_frameDescriptorSet;
 
-            globalDescriptorSet = globalDescriptorSet == this->_element->getDescriptorSetCache()->getEngineDescriptorSet()
-                                      ? this->_element->getDescriptorSetCache()->getEngineDescriptorSet()
+            globalDescriptorSet = globalDescriptorSet == vkDriver->getDescriptorSetCache()->getEngineDescriptorSet()
+                                      ? vkDriver->getDescriptorSetCache()->getEngineDescriptorSet()
                                       : globalDescriptorSet;
-            sceneDescriptorSet  = sceneDescriptorSet == this->_element->getDescriptorSetCache()->getSceneDescriptorSet()
-                                      ? this->_element->getDescriptorSetCache()->getSceneDescriptorSet()
+            sceneDescriptorSet  = sceneDescriptorSet == vkDriver->getDescriptorSetCache()->getSceneDescriptorSet()
+                                      ? vkDriver->getDescriptorSetCache()->getSceneDescriptorSet()
                                       : sceneDescriptorSet;
-            frameDescriptorSet  = frameDescriptorSet == this->_element->getDescriptorSetCache()->getFrameDescriptorSet()
-                                      ? this->_element->getDescriptorSetCache()->getFrameDescriptorSet()
+            frameDescriptorSet  = frameDescriptorSet == vkDriver->getDescriptorSetCache()->getFrameDescriptorSet()
+                                      ? vkDriver->getDescriptorSetCache()->getFrameDescriptorSet()
                                       : frameDescriptorSet;
             break;
         }
@@ -626,14 +627,14 @@ RenderContext* RDGBuilder::prepareRenderContext(PassNode* pass)
             auto& sceneDescriptorSet  = _renderContext->_pendingRTState->_sceneDescriptorSet;
             auto& frameDescriptorSet  = _renderContext->_pendingRTState->_frameDescriptorSet;
 
-            globalDescriptorSet = globalDescriptorSet == this->_element->getDescriptorSetCache()->getEngineDescriptorSet()
-                                      ? this->_element->getDescriptorSetCache()->getEngineDescriptorSet()
+            globalDescriptorSet = globalDescriptorSet == vkDriver->getDescriptorSetCache()->getEngineDescriptorSet()
+                                      ? vkDriver->getDescriptorSetCache()->getEngineDescriptorSet()
                                       : globalDescriptorSet;
-            sceneDescriptorSet  = sceneDescriptorSet == this->_element->getDescriptorSetCache()->getSceneDescriptorSet()
-                                      ? this->_element->getDescriptorSetCache()->getSceneDescriptorSet()
+            sceneDescriptorSet  = sceneDescriptorSet == vkDriver->getDescriptorSetCache()->getSceneDescriptorSet()
+                                      ? vkDriver->getDescriptorSetCache()->getSceneDescriptorSet()
                                       : sceneDescriptorSet;
-            frameDescriptorSet  = frameDescriptorSet == this->_element->getDescriptorSetCache()->getFrameDescriptorSet()
-                                      ? this->_element->getDescriptorSetCache()->getFrameDescriptorSet()
+            frameDescriptorSet  = frameDescriptorSet == vkDriver->getDescriptorSetCache()->getFrameDescriptorSet()
+                                      ? vkDriver->getDescriptorSetCache()->getFrameDescriptorSet()
                                       : frameDescriptorSet;
             break;
         }
@@ -641,8 +642,7 @@ RenderContext* RDGBuilder::prepareRenderContext(PassNode* pass)
             break;
     }
 
-    _renderContext->_frameInFlightIndex = _element->getApp()->getFrameCycleIndex();
-    _renderContext->_frameData          = &_element->getFrameData(_renderContext->_frameInFlightIndex);
+    _renderContext->_frameData = &vkDriver->getCurrentFrameData();
 
     // if the first pass in the frame, we directly allocate a command buffer from the pool,and
     // begin it.
@@ -654,7 +654,7 @@ RenderContext* RDGBuilder::prepareRenderContext(PassNode* pass)
         allocInfo.commandPool        = cmdPool;
         allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocInfo.commandBufferCount = 1;
-        NVVK_CHECK(vkAllocateCommandBuffers(_element->getApp()->getDevice(), &allocInfo, &_renderContext->_currCmdBuffer));
+        NVVK_CHECK(vkAllocateCommandBuffers(vkDriver->_device, &allocInfo, &_renderContext->_currCmdBuffer));
         VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         vkBeginCommandBuffer(_renderContext->_currCmdBuffer, &beginInfo);
         _renderContext->_frameData->cmdBuffersGfx.push_back(_renderContext->_currCmdBuffer);
@@ -741,7 +741,7 @@ RenderContext* RDGBuilder::prepareRenderContext(PassNode* pass)
             allocInfo.commandPool        = cmdPool;
             allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
             allocInfo.commandBufferCount = 1;
-            NVVK_CHECK(vkAllocateCommandBuffers(_element->getApp()->getDevice(), &allocInfo, &_renderContext->_currCmdBuffer));
+            NVVK_CHECK(vkAllocateCommandBuffers(vkDriver->_device, &allocInfo, &_renderContext->_currCmdBuffer));
             VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
             vkBeginCommandBuffer(_renderContext->_currCmdBuffer, &beginInfo);
             _renderContext->_frameData->cmdBuffersCompute.push_back(_renderContext->_currCmdBuffer);

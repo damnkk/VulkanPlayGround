@@ -2,10 +2,7 @@
 namespace Play
 {
 
-FrameBufferCache::FrameBufferCache(PlayElement* element)
-{
-    _element = element;
-}
+FrameBufferCache::FrameBufferCache() {}
 FrameBufferCache::~FrameBufferCache() {}
 
 } // namespace Play

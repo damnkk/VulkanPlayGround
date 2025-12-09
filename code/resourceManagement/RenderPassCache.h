@@ -15,11 +15,10 @@ struct RenderPassKey
 class RenderPassCache
 {
 public:
-    RenderPassCache(PlayElement* element);
+    RenderPassCache();
     ~RenderPassCache();
 
 private:
-    PlayElement* _element = nullptr;
 };
 
 } // namespace Play

@@ -2,10 +2,8 @@
 namespace Play
 {
 
-RenderPassCache::RenderPassCache(PlayElement* element)
+RenderPassCache::RenderPassCache()
 {
-    _element = element;
-
     // vkCmdBeginRendering(VkCommandBuffer commandBuffer, const VkRenderingInfo *pRenderingInfo)
 }
 RenderPassCache::~RenderPassCache() {}

@@ -6,7 +6,7 @@
 #include <nvvk/check_error.hpp>
 #include <list>
 #include <unordered_set>
-#include "PlayApp.h"
+#include "VulkanDriver.h"
 namespace Play
 {
 
@@ -122,7 +122,7 @@ private:
 
             std::filesystem::create_directories(CacheBasePath);
             VkPhysicalDeviceProperties2 prop2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
-            vkGetPhysicalDeviceProperties2(RHIContext->getPhysicalDevice(), &prop2);
+            vkGetPhysicalDeviceProperties2(vkDriver->_physicalDevice, &prop2);
             nvutils::FileReadOverWriteMapping mapping;
             mapping.open(getRootInfoPath(), sizeof(HeaderInfo));
 
@@ -135,7 +135,7 @@ private:
         {
             // 首先验证头信息,然后判断cache是否过多,执行一定的删除逻辑
             VkPhysicalDeviceProperties2 prop2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
-            vkGetPhysicalDeviceProperties2(RHIContext->getPhysicalDevice(), &prop2);
+            vkGetPhysicalDeviceProperties2(vkDriver->_physicalDevice, &prop2);
             nvutils::FileReadOverWriteMapping mapping;
             mapping.open(getRootInfoPath(), sizeof(HeaderInfo));
             HeaderInfo header;
@@ -192,10 +192,7 @@ PipelineCacheManager& PipelineCacheManager::Instance()
     static PipelineCacheManager instance;
     return instance;
 }
-void PipelineCacheManager::init(PlayElement* view)
-{
-    RHIContext = view;
-}
+void PipelineCacheManager::init() {}
 void PipelineCacheManager::deinit() {}
 
 } // namespace Play

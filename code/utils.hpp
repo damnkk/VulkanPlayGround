@@ -1,19 +1,18 @@
 #ifndef UTILS_HPP
 #define UTILS_HPP
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
-#include <type_traits>
 #include <vector>
-#include "vulkan/vulkan.h"
+#include <filesystem>
+#include <vulkan/vulkan.h>
 
 #define CUSTOM_NAME_VK(DEBUGER, _x) \
     DEBUGER.setObjectName(_x, (std::string(CLASS_NAME) + std::string("::") + std::string(#_x " (") + NAME_FILE_LOCATION).c_str())
 namespace Play
 {
-std::string GetUniqueName();
-
+std::string           GetUniqueName();
+std::filesystem::path getBaseFilePath();
 // memory hash function
 uint64_t memoryHash(void* data, size_t size);
 

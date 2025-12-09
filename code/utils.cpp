@@ -31,6 +31,11 @@ std::string GetUniqueName()
     return std::to_string(uniqueId++);
 }
 
+std::filesystem::path getBaseFilePath()
+{
+    return "./";
+}
+
 VkImageCreateInfo makeImage2DCreateInfo(VkExtent2D extent, VkFormat format, VkImageUsageFlags usageFlags, bool mipmap)
 {
     VkImageCreateInfo createInfo = {};

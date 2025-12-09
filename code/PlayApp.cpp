@@ -1,6 +1,5 @@
 #include "PlayApp.h"
 #include "nvvk/debug_util.hpp"
-#include "nvvk/check_error.hpp"
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include <backends/imgui_impl_vulkan.h>
 #include "stb_image.h"
@@ -11,6 +10,7 @@
 #include "PipelineCacheManager.h"
 #include "RenderPassCache.h"
 #include "FrameBufferCache.h"
+#include "VulkanDriver.h"
 namespace Play
 {
 struct ScopeTimer
@@ -28,56 +28,20 @@ PlayElement::PlayElement(Info info) : _info(info) {}
 
 PlayElement::~PlayElement()
 {
-    _descriptorSetCache.reset();
-    for (auto& frame : _frameData)
-    {
-        vkDestroySemaphore(_app->getDevice(), frame.semaphore, nullptr);
-        vkDestroyCommandPool(_app->getDevice(), frame.graphicsCmdPool, nullptr);
-        vkDestroyCommandPool(_app->getDevice(), frame.computeCmdPool, nullptr);
-    }
+    delete vkDriver;
+    vkDriver = nullptr;
 }
 
 void PlayElement::onAttach(nvapp::Application* app)
 {
-    _app = app;
-    nvvk::DebugUtil::getInstance().init(_app->getDevice());
-    // _modelLoader.init(this);
+    _app     = app;
+    vkDriver = new VulkanDriver(app);
+    vkDriver->init();
     // CameraManip
-    PlayResourceManager::Instance().initialize(this);
-    TexturePool::Instance().init(65535, &PlayResourceManager::Instance());
-    BufferPool::Instance().init(65535, &PlayResourceManager::Instance());
-    ShaderManager::Instance().init(this);
-    PipelineCacheManager::Instance().init(this);
-    _descriptorSetCache = std::make_unique<DescriptorSetCache>(this);
-    _frameData.resize(_app->getFrameCycleSize());
-    if (!_enableDynamicRendering)
-    {
-        _renderPassCache  = std::make_unique<RenderPassCache>(this);
-        _frameBufferCache = std::make_unique<FrameBufferCache>(this);
-    }
-    for (size_t i = 0; i < _frameData.size(); ++i)
-    {
-        VkCommandPoolCreateInfo cmdPoolCI{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
-        cmdPoolCI.queueFamilyIndex = _app->getQueue(0).familyIndex;
-        NVVK_CHECK(vkCreateCommandPool(_app->getDevice(), &cmdPoolCI, nullptr, &_frameData[i].graphicsCmdPool));
-        cmdPoolCI.queueFamilyIndex = _app->getQueue(1).familyIndex;
-        NVVK_CHECK(vkCreateCommandPool(_app->getDevice(), &cmdPoolCI, nullptr, &_frameData[i].computeCmdPool));
-        VkSemaphoreTypeCreateInfo timelineCreateInfo{VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO};
-        timelineCreateInfo.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
-        timelineCreateInfo.initialValue  = 0;
-
-        VkSemaphoreCreateInfo semaphoreCreateInfo{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-        semaphoreCreateInfo.flags = 0;
-        semaphoreCreateInfo.pNext = &timelineCreateInfo;
-
-        NVVK_CHECK(vkCreateSemaphore(_app->getDevice(), &semaphoreCreateInfo, nullptr, &_frameData[i].semaphore));
-    }
 
     _profilerTimeline = _info.profilerManager->createTimeline({"graphics"});
     _profilerGpuTimer.init(_profilerTimeline, app->getDevice(), app->getPhysicalDevice(), app->getQueue(0).familyIndex, true);
     createGraphicsDescriptResource();
-
-    _sceneManager.init(this);
 
     switch (_renderMode)
     {
@@ -98,13 +62,9 @@ void PlayElement::onDetach()
 {
     vkQueueWaitIdle(_app->getQueue(0).queue);
     ImGui_ImplVulkan_RemoveTexture(_uiTextureDescriptor);
-    TexturePool::Instance().deinit();
-    BufferPool::Instance().deinit();
-    PlayResourceManager::Instance().deInit();
-    ShaderManager::Instance().deInit();
+
     _profilerGpuTimer.deinit();
     _info.profilerManager->destroyTimeline(_profilerTimeline);
-    PipelineCacheManager::Instance().deinit();
 }
 
 void PlayElement::onResize(VkCommandBuffer cmd, const VkExtent2D& size)
@@ -116,7 +76,7 @@ void PlayElement::onResize(VkCommandBuffer cmd, const VkExtent2D& size)
         ImGui_ImplVulkan_RemoveTexture(uiTextureDescriptor);
         Texture::Destroy(uiTexture);
     };
-    _deferredDeleteTaskQueue.push({getFrameCycleIndex(), task});
+    vkDriver->_deferredDeleteTaskQueue.push({vkDriver->getFrameCycleIndex(), task});
 
     createGraphicsDescriptResource();
 }
@@ -132,14 +92,9 @@ void PlayElement::onUIMenu() {}
 
 void PlayElement::onPreRender()
 {
+    vkDriver->tick();
     _renderer->OnPreRender();
-    while (!_deferredDeleteTaskQueue.empty())
-    {
-        auto& taskPair = _deferredDeleteTaskQueue.front();
-        if ((uint32_t) taskPair.first != _app->getFrameCycleIndex()) break;
-        taskPair.second();
-        _deferredDeleteTaskQueue.pop();
-    }
+    vkDriver->tryCleanupDeferredTasks();
 }
 
 void PlayElement::onRender(VkCommandBuffer cmd)
@@ -154,9 +109,8 @@ void PlayElement::onRender(VkCommandBuffer cmd)
     //                      1, &range);
     // nvvk::cmdImageMemoryBarrier(cmd, {_uiTexture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
     //                                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
-    _frameNum++;
-    PlayFrameData& frameData = _frameData[_app->getFrameCycleIndex()];
-    frameData.reset(getDevice());
+
+    vkDriver->getCurrentFrameData().reset(vkDriver->_device);
 
     _renderer->RenderFrame();
     _renderer->OnPostRender();
@@ -193,11 +147,6 @@ void PlayElement::createGraphicsDescriptResource()
     PlayResourceManager::Instance().acquireSampler(_uiTexture->descriptor.sampler);
     _uiTextureDescriptor =
         ImGui_ImplVulkan_AddTexture(_uiTexture->descriptor.sampler, _uiTexture->descriptor.imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-}
-
-std::filesystem::path getBaseFilePath()
-{
-    return "./";
 }
 
 } // namespace Play
