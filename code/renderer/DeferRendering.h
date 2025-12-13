@@ -15,7 +15,7 @@ enum class DeferPasses
     ePostProcessPass,
     eCount
 };
-class RenderPass;
+class BasePass;
 class DeferRenderer : public Renderer
 {
 public:
@@ -35,7 +35,7 @@ public:
     RDG::RDGBuilder                          _rdgBuilder;
     Texture*                                 _outputTexture = nullptr;
     std::bitset<size_t(DeferPasses::eCount)> _renderPasses;
-    std::vector<std::unique_ptr<RenderPass>> _passes;
+    std::vector<std::unique_ptr<BasePass>>   _passes;
 };
 } // namespace Play
 #endif // DEFERRENDERING_H

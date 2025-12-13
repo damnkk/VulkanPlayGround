@@ -50,6 +50,8 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/code/resourceManagement
   ${CMAKE_CURRENT_LIST_DIR}/External/spv_reflect/include
   ${CMAKE_CURRENT_LIST_DIR}/External/Crc32/include
+  ${CMAKE_CURRENT_LIST_DIR}/External/sqlite3
+
 
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE
@@ -66,6 +68,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   nvpro2::nvvkgltf
   spirv-reflect-static
   crc32c
+  "${CMAKE_CURRENT_SOURCE_DIR}/External/sqlite3/libsqlite3.lib"
 )
 
 add_project_definitions(${PROJECT_NAME})

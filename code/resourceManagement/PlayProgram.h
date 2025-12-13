@@ -5,9 +5,11 @@
 #include <nvvk/descriptors.hpp>
 #include <nvvk/graphics_pipeline.hpp>
 #include <nvvk/compute_pipeline.hpp>
+#include "PipelineCacheManager.h"
 #include <nvvk/pipeline.hpp>
 #include <ShaderManager.hpp>
 #include "DescriptorManager.h"
+#include "RenderPass.h"
 namespace Play
 {
 using ShaderID = uint32_t;
@@ -135,7 +137,6 @@ public:
 
     PlayProgram(const PlayProgram&);
     PlayProgram&          operator=(const PlayProgram&);
-    virtual VkPipeline    getOrCreatePipeline()  = 0;
     virtual ProgramType   getProgramType() const = 0;
     DescriptorSetManager& getDescriptorSetManager()
     {
@@ -177,17 +178,17 @@ public:
     RenderProgram&      setVertexModuleID(ShaderID vertexModuleID);
     RenderProgram&      setFragModuleID(ShaderID fragModuleID);
     void                finish();
-    VkPipeline          getOrCreatePipeline() override;
+    VkPipeline          getOrCreatePipeline(RenderPass* renderPass);
     virtual ProgramType getProgramType() const override
     {
         return _programType;
     }
 
 private:
-    ShaderID                    _vertexModuleID = ~0U;
-    ShaderID                    _fragModuleID   = ~0U;
-    ProgramType                 _programType    = ProgramType::eRenderProgram;
-    nvvk::GraphicsPipelineState _pipelineState;
+    ShaderID    _vertexModuleID = ~0U;
+    ShaderID    _fragModuleID   = ~0U;
+    ProgramType _programType    = ProgramType::eRenderProgram;
+    PSOState    _psoState;
 };
 
 class ComputeProgram : public PlayProgram
@@ -197,7 +198,7 @@ public:
     ComputeProgram(VkDevice device, ShaderID computeModuleID) : PlayProgram(device), _computeModuleID(computeModuleID) {}
     ComputeProgram&     setComputeModuleID(ShaderID computeModuleID);
     void                finish();
-    VkPipeline          getOrCreatePipeline() override;
+    VkPipeline          getOrCreatePipeline();
     virtual ProgramType getProgramType() const override
     {
         return _programType;
@@ -222,7 +223,7 @@ public:
     RTProgram&          setRayMissModuleID(ShaderID rayMissModuleID);
     RTProgram&          setRayIntersectModuleID(ShaderID rayIntersectModuleID);
     void                finish();
-    VkPipeline          getOrCreatePipeline() override;
+    VkPipeline          getOrCreatePipeline();
     virtual ProgramType getProgramType() const override
     {
         return _programType;
@@ -249,7 +250,7 @@ public:
     MeshRenderProgram&  setMeshModuleID(ShaderID meshModuleID);
     MeshRenderProgram&  setFragModuleID(ShaderID fragModuleID);
     void                finish();
-    VkPipeline          getOrCreatePipeline() override;
+    VkPipeline          getOrCreatePipeline();
     virtual ProgramType getProgramType() const override
     {
         return _programType;

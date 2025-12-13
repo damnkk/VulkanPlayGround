@@ -14,9 +14,11 @@ VulkanDriver* vkDriver = nullptr;
 VulkanDriver::VulkanDriver(nvapp::Application* app) : _app(app)
 {
     // 1. 缓存核心句柄
-    _device         = app->getDevice();
-    _physicalDevice = app->getPhysicalDevice();
-    _instance       = app->getInstance();
+    _device                    = app->getDevice();
+    _physicalDevice            = app->getPhysicalDevice();
+    _instance                  = app->getInstance();
+    _physicalDeviceProperties2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+    vkGetPhysicalDeviceProperties2(_physicalDevice, &_physicalDeviceProperties2);
 
     // 2. 缓存队列信息
     // 注意：这里假设 nvapp 的队列索引约定。通常 0 是 GCT，1 是 Transfer，2 是 Compute
@@ -44,16 +46,18 @@ VulkanDriver::VulkanDriver(nvapp::Application* app) : _app(app)
     nvvk::DebugUtil::getInstance().init(_app->getDevice());
 
     _descriptorSetCache = std::make_unique<DescriptorSetCache>();
+
     _frameData.resize(_app->getFrameCycleSize());
 }
 
 void VulkanDriver::init()
 {
+    _pipelineCacheManager = std::make_unique<PipelineCacheManager>();
     PlayResourceManager::Instance().initialize();
     TexturePool::Instance().init(65535, &PlayResourceManager::Instance());
     BufferPool::Instance().init(65535, &PlayResourceManager::Instance());
     ShaderManager::Instance().init();
-    PipelineCacheManager::Instance().init();
+
     if (!_enableDynamicRendering)
     {
         _renderPassCache  = std::make_unique<RenderPassCache>();
@@ -93,7 +97,6 @@ VulkanDriver::~VulkanDriver()
     BufferPool::Instance().deinit();
     PlayResourceManager::Instance().deInit();
     ShaderManager::Instance().deInit();
-    PipelineCacheManager::Instance().deinit();
 }
 
 void VulkanDriver::tryCleanupDeferredTasks()

@@ -8,7 +8,7 @@ namespace Play
 class PlayElement;
 class RenderProgram;
 
-class PresentPass : public RenderPass
+class PresentPass : public BasePass
 {
 public:
     PresentPass(PlayElement* element) : _element(element) {}

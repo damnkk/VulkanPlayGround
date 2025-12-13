@@ -2,7 +2,7 @@
 namespace Play
 {
 
-void RenderPass::init() {}
-void RenderPass::build(RDG::RDGBuilder* rdgBuilder) {}
+void BasePass::init() {}
+void BasePass::build(RDG::RDGBuilder* rdgBuilder) {}
 
 } // namespace Play

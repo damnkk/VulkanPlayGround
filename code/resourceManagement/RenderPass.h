@@ -46,7 +46,6 @@ class RenderPass
 public:
     RenderPass()          = default;
     virtual ~RenderPass() = default;
-
     // Initialization interface: pass in config, internally check if dirty and rebuild resources
     virtual void init(const RenderPassConfig& config) = 0;
 
@@ -125,7 +124,9 @@ private:
 
     // Cache VkRenderingInfo related structures to avoid per-frame construction
     std::vector<VkRenderingAttachmentInfo> m_vkColorAttachments;
+    std::vector<VkFormat>                  m_vkColorAttachmentFormats;
     VkRenderingAttachmentInfo              m_vkDepthAttachment{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
+    VkFormat                               m_vkDepthAttachmentFormat{VK_FORMAT_UNDEFINED};
     VkRenderingInfo                        m_vkRenderingInfo{VK_STRUCTURE_TYPE_RENDERING_INFO};
     RDG::RenderPassNode*                   m_ownerPass{nullptr};
 };

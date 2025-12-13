@@ -32,6 +32,7 @@ void DynamicRenderPass::init(const RenderPassConfig& config)
         colorAttachment.loadOp      = attachment.loadOp;
         colorAttachment.storeOp     = attachment.storeOp;
         colorAttachment.resolveMode = VK_RESOLVE_MODE_NONE;
+        m_vkColorAttachmentFormats.push_back(attachment.format);
     }
     if (config.depthStencilAttachment)
     {
@@ -41,6 +42,7 @@ void DynamicRenderPass::init(const RenderPassConfig& config)
         m_vkDepthAttachment.loadOp      = config.depthStencilAttachment->loadOp;
         m_vkDepthAttachment.storeOp     = config.depthStencilAttachment->storeOp;
         m_vkDepthAttachment.resolveMode = VK_RESOLVE_MODE_NONE;
+        m_vkDepthAttachmentFormat       = config.depthStencilAttachment->format;
     }
     m_vkRenderingInfo.colorAttachmentCount = static_cast<uint32_t>(m_vkColorAttachments.size());
     m_vkRenderingInfo.pColorAttachments    = m_vkColorAttachments.data();

@@ -7,7 +7,7 @@ namespace Play
 {
 class RenderProgram;
 class PlayElement;
-class PostProcessPass : public RenderPass
+class PostProcessPass : public BasePass
 {
 public:
     PostProcessPass(PlayElement* element) : _element(element) {}

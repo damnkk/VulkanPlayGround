@@ -9,12 +9,11 @@ class RDGBuilder;
 }
 
 // logic pass, like gbuffer pass, light pass, not the vulkan render pass
-class RenderPass
+class BasePass
 {
 public:
-    RenderPass()          = default;
-    virtual ~RenderPass() = default;
-
+    BasePass()                                      = default;
+    virtual ~BasePass()                             = default;
     virtual void init()                             = 0;
     virtual void build(RDG::RDGBuilder* rdgBuilder) = 0;
     std::string  _name;

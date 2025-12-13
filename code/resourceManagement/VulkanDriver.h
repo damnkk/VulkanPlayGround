@@ -13,7 +13,7 @@ namespace Play
 class DescriptorSetCache;
 class RenderPassCache;
 class FrameBufferCache;
-
+class PipelineCacheManager;
 struct PlayFrameData
 {
     VkCommandPool                graphicsCmdPool;
@@ -155,12 +155,15 @@ public:
         }
     }
 
+    VkPhysicalDeviceProperties2 _physicalDeviceProperties2;
+
 public:
     void tryCleanupDeferredTasks();
     void tick();
 
-    std::vector<PlayFrameData>          _frameData;
-    std::unique_ptr<DescriptorSetCache> _descriptorSetCache;
+    std::vector<PlayFrameData>            _frameData;
+    std::unique_ptr<DescriptorSetCache>   _descriptorSetCache   = nullptr;
+    std::unique_ptr<PipelineCacheManager> _pipelineCacheManager = nullptr;
 
     // 核心句柄 (从 Application 拷贝过来，避免每次都解引用 App)
     VkDevice         _device         = VK_NULL_HANDLE;
@@ -178,8 +181,8 @@ public:
     uint64_t                          _frameNum               = 0;
     bool                              _enableRayTracing       = true;
     bool                              _enableDynamicRendering = true;
-    std::unique_ptr<RenderPassCache>  _renderPassCache;  // if Dynamic rendering is off, use RenderPassCache to manage render passes
-    std::unique_ptr<FrameBufferCache> _frameBufferCache; // if Dynamic rendering is off, use FrameBufferCache to manage frame buffers
+    std::unique_ptr<RenderPassCache>  _renderPassCache        = nullptr; // if Dynamic rendering is off, use RenderPassCache to manage render passes
+    std::unique_ptr<FrameBufferCache> _frameBufferCache       = nullptr; // if Dynamic rendering is off, use FrameBufferCache to manage frame buffers
 };
 extern VulkanDriver* vkDriver;
 

@@ -431,7 +431,7 @@ void RenderProgram::finish()
     _descriptorSetManager.finish();
 }
 
-VkPipeline RenderProgram::getOrCreatePipeline()
+VkPipeline RenderProgram::getOrCreatePipeline(RenderPass* renderPass)
 {
     return VK_NULL_HANDLE;
 }
