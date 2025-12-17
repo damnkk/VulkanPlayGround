@@ -80,8 +80,14 @@ void RenderPassNode::initRenderPass()
     std::sort(config.colorAttachments.begin(), config.colorAttachments.end(),
               [](const RenderPassAttachment& a, const RenderPassAttachment& b) { return a.slotIndex < b.slotIndex; });
     _renderPass->init(config);
+    static_cast<RenderProgram*>(this->_program)->setRenderPass(_renderPass.get());
 }
 
+void RenderPassNode::setProgram(PlayProgram* program)
+{
+    _program = program;
+    ((RenderProgram*) program)->setRenderPass(_renderPass.get());
+}
 RenderPassBuilder::RenderPassBuilder(RDGBuilder* builder, RenderPassNodeRef node) : _builder(builder), _node(node), _dag(builder->getDag()) {}
 
 RenderPassBuilder& RenderPassBuilder::color(uint32_t slotIdx, RDGTextureRef texHandle, VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp,
@@ -126,6 +132,7 @@ RenderPassBuilder& RenderPassBuilder::read(uint32_t binding, RDGTextureRef textu
     TextureAccessInfo&           accessInfo = subResource.emplace_back();
     accessInfo.set                          = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
     accessInfo.binding                      = binding;
+    accessInfo.descriptorType               = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
     accessInfo.isAttachment                 = false;
     accessInfo.layout                       = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     accessInfo.accessMask                   = VK_ACCESS_2_SHADER_READ_BIT;
@@ -141,6 +148,7 @@ RenderPassBuilder& RenderPassBuilder::read(uint32_t binding, RDGBufferRef buffer
     BufferAccessInfo accessInfo;
     accessInfo.accessMask        = VK_ACCESS_2_UNIFORM_READ_BIT;
     accessInfo.stageMask         = stage;
+    accessInfo.descriptorType    = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     accessInfo.set               = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
     accessInfo.binding           = binding;
     accessInfo.queueFamilyIndex  = queueFamilyIndex;
@@ -156,6 +164,7 @@ RenderPassBuilder& RenderPassBuilder::readWrite(uint32_t binding, RDGTextureRef 
     TextureAccessInfo&           accessInfo = subResource.emplace_back();
     accessInfo.set                          = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
     accessInfo.binding                      = binding;
+    accessInfo.descriptorType               = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     accessInfo.isAttachment                 = false;
     accessInfo.accessMask                   = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
     accessInfo.layout                       = VK_IMAGE_LAYOUT_GENERAL;
@@ -169,6 +178,7 @@ RenderPassBuilder& RenderPassBuilder::readWrite(uint32_t binding, RDGBufferRef b
 {
     BufferAccessInfo bufferAccess;
     bufferAccess.accessMask       = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
+    bufferAccess.descriptorType   = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     bufferAccess.stageMask        = stage;
     bufferAccess.set              = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
     bufferAccess.binding          = binding;
@@ -179,7 +189,7 @@ RenderPassBuilder& RenderPassBuilder::readWrite(uint32_t binding, RDGBufferRef b
     return *this;
 }
 
-RenderPassBuilder& RenderPassBuilder::execute(std::function<void(RenderContext& context)> func)
+RenderPassBuilder& RenderPassBuilder::execute(std::function<void(PassNode* passNode, RenderContext& context)> func)
 {
     _node->setFunc(func);
     return *this;
@@ -193,6 +203,7 @@ ComputePassBuilder& ComputePassBuilder::read(uint32_t binding, RDGTextureRef tex
     TextureAccessInfo&           accessInfo = subResource.emplace_back();
     accessInfo.set                          = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
     accessInfo.binding                      = binding;
+    accessInfo.descriptorType               = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
     accessInfo.isAttachment                 = false;
     accessInfo.layout                       = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     accessInfo.accessMask                   = VK_ACCESS_2_SHADER_READ_BIT;
@@ -206,8 +217,9 @@ ComputePassBuilder& ComputePassBuilder::read(uint32_t binding, RDGBufferRef buff
                                              uint32_t offset, size_t size)
 {
     BufferAccessInfo accessInfo;
-    accessInfo.set     = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
-    accessInfo.binding = binding;
+    accessInfo.set            = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
+    accessInfo.binding        = binding;
+    accessInfo.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     accessInfo.accessMask =
         buffer->_info._usageFlags & VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT ? VK_ACCESS_2_UNIFORM_READ_BIT : VK_ACCESS_2_SHADER_READ_BIT;
     accessInfo.stageMask         = stage;
@@ -224,6 +236,7 @@ ComputePassBuilder& ComputePassBuilder::readWrite(uint32_t binding, RDGTextureRe
     TextureAccessInfo&           accessInfo = subResource.emplace_back();
     accessInfo.set                          = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
     accessInfo.binding                      = binding;
+    accessInfo.descriptorType               = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     accessInfo.isAttachment                 = false;
     accessInfo.layout                       = VK_IMAGE_LAYOUT_GENERAL;
     accessInfo.accessMask                   = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
@@ -241,6 +254,7 @@ ComputePassBuilder& ComputePassBuilder::readWrite(uint32_t binding, RDGBufferRef
     bufferAccess.stageMask        = stage;
     bufferAccess.set              = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
     bufferAccess.binding          = binding;
+    bufferAccess.descriptorType   = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     bufferAccess.queueFamilyIndex = queueFamilyIndex;
     bufferAccess.offset           = offset;
     bufferAccess.size             = size;
@@ -248,7 +262,7 @@ ComputePassBuilder& ComputePassBuilder::readWrite(uint32_t binding, RDGBufferRef
     return *this;
 }
 
-ComputePassBuilder& ComputePassBuilder::execute(std::function<void(RenderContext& context)> func)
+ComputePassBuilder& ComputePassBuilder::execute(std::function<void(PassNode* passNode, RenderContext& context)> func)
 {
     _node->setFunc(func);
     return *this;
@@ -268,6 +282,7 @@ RTPassBuilder& RTPassBuilder::read(uint32_t binding, RDGTextureRef texture, VkPi
     TextureAccessInfo&           accessInfo = subResource.emplace_back();
     accessInfo.set                          = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
     accessInfo.binding                      = binding;
+    accessInfo.descriptorType               = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
     accessInfo.isAttachment                 = false;
     accessInfo.layout                       = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     accessInfo.accessMask                   = VK_ACCESS_2_SHADER_READ_BIT;
@@ -283,6 +298,7 @@ RTPassBuilder& RTPassBuilder::read(uint32_t binding, RDGBufferRef buffer, VkPipe
     BufferAccessInfo accessInfo;
     accessInfo.accessMask        = VK_ACCESS_2_UNIFORM_READ_BIT;
     accessInfo.stageMask         = stage;
+    accessInfo.descriptorType    = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     accessInfo.set               = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
     accessInfo.binding           = binding;
     accessInfo.queueFamilyIndex  = queueFamilyIndex;
@@ -298,6 +314,7 @@ RTPassBuilder& RTPassBuilder::readWrite(uint32_t binding, RDGTextureRef texture,
     TextureAccessInfo&           accessInfo = subResource.emplace_back();
     accessInfo.set                          = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
     accessInfo.binding                      = binding;
+    accessInfo.descriptorType               = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     accessInfo.isAttachment                 = false;
     accessInfo.layout                       = VK_IMAGE_LAYOUT_GENERAL;
     accessInfo.accessMask                   = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
@@ -313,6 +330,7 @@ RTPassBuilder& RTPassBuilder::readWrite(uint32_t binding, RDGBufferRef buffer, V
     BufferAccessInfo bufferAccess;
     bufferAccess.accessMask       = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
     bufferAccess.stageMask        = stage;
+    bufferAccess.descriptorType   = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     bufferAccess.set              = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
     bufferAccess.binding          = binding;
     bufferAccess.queueFamilyIndex = queueFamilyIndex;
@@ -322,7 +340,7 @@ RTPassBuilder& RTPassBuilder::readWrite(uint32_t binding, RDGBufferRef buffer, V
     return *this;
 }
 
-RTPassBuilder& RTPassBuilder::execute(std::function<void(RenderContext& context)> func)
+RTPassBuilder& RTPassBuilder::execute(std::function<void(PassNode* passNode, RenderContext& context)> func)
 {
     _node->setFunc(func);
     return *this;

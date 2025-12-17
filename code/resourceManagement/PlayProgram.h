@@ -16,17 +16,17 @@ using ShaderID = uint32_t;
 
 struct BindInfo
 {
-    uint32_t              setIdx;
-    uint32_t              bindingIdx;
-    uint32_t              descriptorCount;
-    VkDescriptorType      descriptorType;
-    VkPipelineStageFlags2 pipelineStageFlags;
+    uint32_t           setIdx;
+    uint32_t           bindingIdx;
+    uint32_t           descriptorCount;
+    VkDescriptorType   descriptorType;
+    VkShaderStageFlags shaderStageFlags;
 };
 
 struct ConstantRange
 {
-    size_t                size;
-    VkPipelineStageFlags2 stage;
+    size_t             size;
+    VkShaderStageFlags stage;
 };
 /*
 Example:
@@ -39,10 +39,10 @@ public:
     ~DescriptorSetManager();
     void                  deinit();
     DescriptorSetManager& addBinding(uint32_t setIdx, uint32_t bindingIdx, uint32_t descriptorCount, VkDescriptorType descriptorType,
-                                     VkPipelineStageFlags2 pipelineStageFlags);
+                                     VkShaderStageFlags shaderStageFlags);
     DescriptorSetManager& addBinding(const BindInfo& bindingInfo);
-    bool                  finish();
-    DescriptorSetManager& addConstantRange(uint32_t size, uint32_t offset, VkPipelineStageFlags2 stage);
+    bool                  finalizeLayout();
+    DescriptorSetManager& addConstantRange(uint32_t size, uint32_t offset, VkShaderStageFlags stage);
 
     VkPipelineLayout                                                                   getPipelineLayout() const;
     std::array<nvvk::DescriptorBindings, static_cast<size_t>(DescriptorEnum::eCount)>& getSetBindingInfo()
@@ -102,7 +102,7 @@ private:
     {
         return _vkDevice;
     }
-    bool                             _recordState = false; // 记录状态,保证binding有增改之后会调用finish,刷新管线布局
+    bool                             _isRecorded = false; // 记录状态,保证binding有增改之后会调用finish,刷新管线布局
     std::vector<BindInfo>            _bindingInfos;
     std::vector<VkPushConstantRange> _constantRanges;
     std::array<nvvk::DescriptorBindings, static_cast<size_t>(DescriptorEnum::eCount)> _descBindSet;
@@ -159,6 +159,11 @@ public:
         LOGW("Undefined program type, return VK_PIPELINE_BIND_POINT_MAX_ENUM\n");
         return VK_PIPELINE_BIND_POINT_MAX_ENUM;
     }
+    virtual void bind(VkCommandBuffer cmdBuf) = 0;
+    virtual void finish()
+    {
+        _descriptorSetManager.finalizeLayout();
+    };
 
 protected:
     DescriptorSetManager _descriptorSetManager;
@@ -170,24 +175,41 @@ class RenderProgram : public PlayProgram
 public:
     RenderProgram(VkDevice device) : PlayProgram(device) {}
     ~RenderProgram() override {}
-    RenderProgram(VkDevice device, ShaderID vertexModuleID, ShaderID fragModuleID)
-        : PlayProgram(device), _vertexModuleID(vertexModuleID), _fragModuleID(fragModuleID)
+    RenderProgram& setVertexModuleID(ShaderID vertexModuleID);
+    ShaderID       getVertexModuleID() const
     {
-        finish();
+        return _vertexModuleID;
     }
-    RenderProgram&      setVertexModuleID(ShaderID vertexModuleID);
-    RenderProgram&      setFragModuleID(ShaderID fragModuleID);
-    void                finish();
-    VkPipeline          getOrCreatePipeline(RenderPass* renderPass);
+    ShaderID getFragModuleID() const
+    {
+        return _fragModuleID;
+    }
+    RenderProgram& setFragModuleID(ShaderID fragModuleID);
+
+    void                bind(VkCommandBuffer cmdBuf) override;
     virtual ProgramType getProgramType() const override
     {
         return _programType;
     }
+    void setRenderPass(RenderPass* renderPass)
+    {
+        _renderPass = renderPass;
+    }
+    RenderPass* getRenderPass()
+    {
+        return _renderPass;
+    }
+    PSOState& psoState()
+    {
+        return _psoState;
+    }
 
 private:
+    VkPipeline  getOrCreatePipeline(RenderPass* renderPass);
     ShaderID    _vertexModuleID = ~0U;
     ShaderID    _fragModuleID   = ~0U;
     ProgramType _programType    = ProgramType::eRenderProgram;
+    RenderPass* _renderPass     = nullptr;
     PSOState    _psoState;
 };
 
@@ -196,15 +218,16 @@ class ComputeProgram : public PlayProgram
 public:
     ComputeProgram(VkDevice device) : PlayProgram(device) {}
     ComputeProgram(VkDevice device, ShaderID computeModuleID) : PlayProgram(device), _computeModuleID(computeModuleID) {}
-    ComputeProgram&     setComputeModuleID(ShaderID computeModuleID);
-    void                finish();
-    VkPipeline          getOrCreatePipeline();
+    ComputeProgram& setComputeModuleID(ShaderID computeModuleID);
+
+    void                bind(VkCommandBuffer cmdBuf) override;
     virtual ProgramType getProgramType() const override
     {
         return _programType;
     }
 
 private:
+    VkPipeline  getOrCreatePipeline();
     ShaderID    _computeModuleID = ~0U;
     ProgramType _programType     = ProgramType::eComputeProgram;
 };
@@ -217,19 +240,20 @@ public:
         : PlayProgram(device), _rayGenModuleID(rayGenID), _rayCHitModuleID(rayCHitID), _rayMissModuleID(rayMissID)
     {
     }
-    RTProgram&          setRayGenModuleID(ShaderID rayGenModuleID);
-    RTProgram&          setRayCHitModuleID(ShaderID rayCHitModuleID);
-    RTProgram&          setRayAHitModuleID(ShaderID rayAHitModuleID);
-    RTProgram&          setRayMissModuleID(ShaderID rayMissModuleID);
-    RTProgram&          setRayIntersectModuleID(ShaderID rayIntersectModuleID);
-    void                finish();
-    VkPipeline          getOrCreatePipeline();
+    RTProgram& setRayGenModuleID(ShaderID rayGenModuleID);
+    RTProgram& setRayCHitModuleID(ShaderID rayCHitModuleID);
+    RTProgram& setRayAHitModuleID(ShaderID rayAHitModuleID);
+    RTProgram& setRayMissModuleID(ShaderID rayMissModuleID);
+    RTProgram& setRayIntersectModuleID(ShaderID rayIntersectModuleID);
+
+    void                bind(VkCommandBuffer cmdBuf) override;
     virtual ProgramType getProgramType() const override
     {
         return _programType;
     }
 
 private:
+    VkPipeline  getOrCreatePipeline();
     ShaderID    _rayGenModuleID       = ~0U;
     ShaderID    _rayCHitModuleID      = ~0U;
     ShaderID    _rayAHitModuleID      = ~0U;
@@ -246,17 +270,18 @@ public:
         : PlayProgram(device), _meshModuleID(meshModuleID), _fragModuleID(fragModuleID)
     {
     }
-    MeshRenderProgram&  setTaskModuleID(ShaderID taskModuleID);
-    MeshRenderProgram&  setMeshModuleID(ShaderID meshModuleID);
-    MeshRenderProgram&  setFragModuleID(ShaderID fragModuleID);
-    void                finish();
-    VkPipeline          getOrCreatePipeline();
+    MeshRenderProgram& setTaskModuleID(ShaderID taskModuleID);
+    MeshRenderProgram& setMeshModuleID(ShaderID meshModuleID);
+    MeshRenderProgram& setFragModuleID(ShaderID fragModuleID);
+
+    void                bind(VkCommandBuffer cmdBuf) override;
     virtual ProgramType getProgramType() const override
     {
         return _programType;
     }
 
 private:
+    VkPipeline  getOrCreatePipeline();
     ShaderID    _taskModuleID = ~0U;
     ShaderID    _meshModuleID = ~0U;
     ShaderID    _fragModuleID = ~0U;

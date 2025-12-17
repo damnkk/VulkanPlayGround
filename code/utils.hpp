@@ -28,5 +28,7 @@ bool isBufferBarrierValid(const VkBufferMemoryBarrier2& barrier);
 
 VkImageAspectFlags inferImageAspectFlags(VkFormat format, VkImageUsageFlags usage = 0);
 VkAccessFlags2     inferAccessFlags(VkImageLayout layout);
+VkFlags            pipelineStageToShaderStage(VkPipelineStageFlags2 pipelineStage);
+VkFlags            inferShaderStageFromPipelineStage(VkFlags64 pipelineStage);
 } // namespace Play
 #endif // UTILS_HPP

@@ -2,7 +2,7 @@
 #include <nvutils/hash_operations.hpp>
 #include <nvutils/parallel_work.hpp>
 #include <nvvk/check_error.hpp>
-
+#include "PlayProgram.h"
 #include <list>
 #include <unordered_set>
 #include "VulkanDriver.h"
@@ -357,19 +357,42 @@ PipelineCacheManager::~PipelineCacheManager()
     }
 }
 
-VkPipeline PipelineCacheManager::getOrCreateGraphicsPipeline(const PSOState& psoState, RenderPass* renderPass, ShaderID vShaderID, ShaderID fShaderID)
+VkPipeline PipelineCacheManager::getOrCreateGraphicsPipeline(RenderProgram* program)
+{
+    uint64_t key = program->psoState().getPipelineKey();
+    nvutils::hashCombine(key, program->getVertexModuleID());
+    nvutils::hashCombine(key, program->getFragModuleID());
+    auto vShaderModule = ShaderManager::Instance().getShaderById(program->getVertexModuleID());
+    auto fShaderModule = ShaderManager::Instance().getShaderById(program->getFragModuleID());
+    _gfxPipelineCreator.clearShaders();
+    _gfxPipelineCreator.addShader(VK_SHADER_STAGE_VERTEX_BIT, vShaderModule->_entryPoint.c_str(), vShaderModule->_shaderModule);
+    _gfxPipelineCreator.addShader(VK_SHADER_STAGE_FRAGMENT_BIT, fShaderModule->_entryPoint.c_str(), fShaderModule->_shaderModule);
+
+    _gfxPipelineCreator.pipelineInfo.layout = program->getDescriptorSetManager().getPipelineLayout();
+
+    if (vkDriver->_enableDynamicRendering)
+    {
+        DynamicRenderPass* dRenderPass                           = dynamic_cast<DynamicRenderPass*>(program->getRenderPass());
+        _gfxPipelineCreator.renderingState.depthAttachmentFormat = dRenderPass->getDepthAttachmentFormat();
+        _gfxPipelineCreator.colorFormats                         = dRenderPass->getColorAttachmentFormats();
+    }
+    else
+    {
+        LOGE("Not support general render pass");
+    }
+
+    _gfxPipelineCreator.createGraphicsPipeline(vkDriver->getDevice(), VK_NULL_HANDLE, program->psoState(), &_pipelineMap[key]);
+    return _pipelineMap[key];
+}
+VkPipeline PipelineCacheManager::getOrCreateComputePipeline(ComputePipelineState& computeState)
 {
     return VK_NULL_HANDLE;
 }
-VkPipeline PipelineCacheManager::getOrCreateComputePipeline(const ComputePipelineState& computeState)
+VkPipeline PipelineCacheManager::getOrCreateRTPipeline(RTPipelineState& rtState)
 {
     return VK_NULL_HANDLE;
 }
-VkPipeline PipelineCacheManager::getOrCreateRTPipeline(const RTPipelineState& rtState)
-{
-    return VK_NULL_HANDLE;
-}
-VkPipeline PipelineCacheManager::getOrCreateMeshPipeline(const PSOState& psoState, RenderPass* renderPass, ShaderID mShaderID, ShaderID fShaderID,
+VkPipeline PipelineCacheManager::getOrCreateMeshPipeline(PSOState& psoState, RenderPass* renderPass, ShaderID mShaderID, ShaderID fShaderID,
                                                          ShaderID tShaderID)
 {
     return VK_NULL_HANDLE;

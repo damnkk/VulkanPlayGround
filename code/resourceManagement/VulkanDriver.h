@@ -157,6 +157,14 @@ public:
 
     VkPhysicalDeviceProperties2 _physicalDeviceProperties2;
 
+private:
+    void                  prepareGlobalDescriptorSet();
+    VkDescriptorSet       getGlobalDescriptorSet();
+    VkDescriptorSetLayout getGlobalDescriptorSetLayout();
+    VkDescriptorSet       _globalDescriptorSet{VK_NULL_HANDLE};
+    VkDescriptorSetLayout _globalDescriptorSetLayout{VK_NULL_HANDLE};
+    VkDescriptorPool      _globalDescriptorPool{VK_NULL_HANDLE};
+
 public:
     void tryCleanupDeferredTasks();
     void tick();

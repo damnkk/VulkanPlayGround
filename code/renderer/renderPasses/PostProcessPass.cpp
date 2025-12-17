@@ -13,8 +13,9 @@ void PostProcessPass::init()
                                                                            ShaderStage::eFragment, ShaderType::eSLANG, "main");
 
     _postProgram = std::make_unique<RenderProgram>(vkDriver->_device);
-    _postProgram->setFragModuleID(PostProcessfId).setVertexModuleID(PostProcessvId).finish();
-    _postPipelineState.rasterizationState.cullMode = VK_CULL_MODE_NONE;
+    _postProgram->setFragModuleID(PostProcessfId).setVertexModuleID(PostProcessvId);
+    _postProgram->psoState().rasterizationState.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    _postProgram->psoState().rasterizationState.cullMode  = VK_CULL_MODE_NONE;
 }
 
 void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
@@ -31,18 +32,25 @@ void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
                             .finish();
     rdgBuilder->registTexture(outputTexRef);
 
-    auto pass = rdgBuilder->createRenderPass("postProcessPass")
-                    .color(0, outputTexRef, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-                    .read(0, colorTexId, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
-                    .program(_postProgram.get())
-                    .execute(
-                        [this](RDG::RenderContext& context)
-                        {
-                            VkCommandBuffer cmd = context._currCmdBuffer;
-                            vkCmdDraw(cmd, 3, 1, 0, 0);
-                        })
-                    .finish();
+    auto pass =
+        rdgBuilder->createRenderPass("postProcessPass")
+            .color(0, outputTexRef, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+            .read(0, colorTexId, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
+            .program(_postProgram.get())
+            .execute(
+                [this](RDG::PassNode* passNode, RDG::RenderContext& context)
+                {
+                    VkCommandBuffer cmd = context._currCmdBuffer;
+                    passNode->getProgram()->bind(cmd);
+                    context._pendingGfxState->bindDescriptorSet(cmd, passNode->getProgram());
+                    VkViewport viewport = {0, 0, (float) vkDriver->getViewportSize().width, (float) vkDriver->getViewportSize().height, 0.0f, 1.0f};
+                    VkRect2D   scissor  = {{0, 0}, {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height}};
+                    vkCmdSetViewportWithCount(cmd, 1, &viewport);
+                    vkCmdSetScissorWithCount(cmd, 1, &scissor);
+                    vkCmdDraw(cmd, 3, 1, 0, 0);
+                })
+            .finish();
 }
 
 PostProcessPass::~PostProcessPass() {}

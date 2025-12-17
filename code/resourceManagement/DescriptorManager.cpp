@@ -118,11 +118,11 @@ VkDescriptorSet DescriptorSetCache::requestDescriptorSet(DescriptorSetManager& s
         switch (setIdx)
         {
             case static_cast<uint32_t>(DescriptorEnum::eGlobalDescriptorSet):
-                return _globalDescriptorSet;
+                return _globalDescriptorSet.set;
             case static_cast<uint32_t>(DescriptorEnum::eSceneDescriptorSet):
-                return _sceneDescriptorSet;
+                return _sceneDescriptorSet.set;
             case static_cast<uint32_t>(DescriptorEnum::eFrameDescriptorSet):
-                return _frameDescriptorSet;
+                return _frameDescriptorSet.set;
         }
     }
     // if (setIdx >= static_cast<uint32_t>(DescriptorEnum::ePerPassDescriptorSet))

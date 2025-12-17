@@ -4,6 +4,7 @@
 #include "spirv_reflect.h"
 #include "ShaderManager.hpp"
 #include "crc32c/crc32c.h"
+#include "VulkanDriver.h"
 namespace Play
 {
 DescriptorSetManager::DescriptorSetManager(VkDevice device) : _vkDevice(device) {}
@@ -27,7 +28,7 @@ void DescriptorSetManager::deinit()
 }
 DescriptorSetManager& DescriptorSetManager::addBinding(const BindInfo& bindingInfo)
 {
-    _recordState = false;
+    if (_isRecorded) return *this;
     for (int i = 0; i < _bindingInfos.size(); i++)
     {
         if (_bindingInfos[i].setIdx == bindingInfo.setIdx && _bindingInfos[i].bindingIdx == bindingInfo.bindingIdx)
@@ -37,7 +38,7 @@ DescriptorSetManager& DescriptorSetManager::addBinding(const BindInfo& bindingIn
                 LOGE("Descriptor type mismatch");
                 return *this;
             }
-            _bindingInfos[i].pipelineStageFlags |= bindingInfo.pipelineStageFlags;
+            _bindingInfos[i].shaderStageFlags |= bindingInfo.shaderStageFlags;
             _bindingInfos[i].descriptorCount += bindingInfo.descriptorCount;
             return *this;
         }
@@ -47,16 +48,16 @@ DescriptorSetManager& DescriptorSetManager::addBinding(const BindInfo& bindingIn
 }
 
 DescriptorSetManager& DescriptorSetManager::addBinding(uint32_t setIdx, uint32_t bindingIdx, uint32_t descriptorCount,
-                                                       VkDescriptorType descriptorType, VkPipelineStageFlags2 pipelineStageFlags)
+                                                       VkDescriptorType descriptorType, VkShaderStageFlags shaderStageFlags)
 {
-    _recordState         = false;
-    BindInfo bindingInfo = {setIdx, bindingIdx, descriptorCount, descriptorType, pipelineStageFlags};
+    if (_isRecorded) return *this;
+    BindInfo bindingInfo = {setIdx, bindingIdx, descriptorCount, descriptorType, shaderStageFlags};
     return addBinding(bindingInfo);
 }
 
 DescriptorSetManager& DescriptorSetManager::initLayout()
 {
-    for (int i = 0; i < uint32_t(DescriptorEnum::eCount); ++i)
+    for (int i = uint32_t(DescriptorEnum::ePerPassDescriptorSet); i < uint32_t(DescriptorEnum::eCount); ++i)
     {
         _descBindSet[i].createDescriptorSetLayout(_vkDevice, 0, &_descSetLayouts[i]);
     }
@@ -69,16 +70,19 @@ DescriptorSetManager& DescriptorSetManager::initLayout()
     return *this;
 }
 
-DescriptorSetManager& DescriptorSetManager::addConstantRange(uint32_t size, uint32_t offset, VkPipelineStageFlags2 stage)
+DescriptorSetManager& DescriptorSetManager::addConstantRange(uint32_t size, uint32_t offset, VkShaderStageFlags stage)
 {
-    _recordState = false;
+    if (_isRecorded) return *this;
     _constantRanges.emplace_back(stage, offset, size);
     return *this;
 }
 
-bool DescriptorSetManager::finish()
+bool DescriptorSetManager::finalizeLayout()
 {
-    _recordState = true;
+    if (!(_isRecorded ^ true))
+    {
+        return _isRecorded;
+    }
     for (auto& layout : _descSetLayouts)
     {
         if (layout != VK_NULL_HANDLE)
@@ -87,11 +91,14 @@ bool DescriptorSetManager::finish()
             layout = VK_NULL_HANDLE;
         }
     }
+    _descSetLayouts[uint32_t(DescriptorEnum::eGlobalDescriptorSet)] = vkDriver->getDescriptorSetCache()->getEngineDescriptorSet().layout;
+    _descSetLayouts[uint32_t(DescriptorEnum::eSceneDescriptorSet)]  = vkDriver->getDescriptorSetCache()->getSceneDescriptorSet().layout;
+    _descSetLayouts[uint32_t(DescriptorEnum::eFrameDescriptorSet)]  = vkDriver->getDescriptorSetCache()->getFrameDescriptorSet().layout;
     for (const auto& bindings : _bindingInfos)
     {
         assert(bindings.setIdx <= uint32_t(DescriptorEnum::eCount));
         auto& set = _descBindSet[bindings.setIdx];
-        set.addBinding(bindings.bindingIdx, bindings.descriptorType, bindings.descriptorCount, bindings.pipelineStageFlags);
+        set.addBinding(bindings.bindingIdx, bindings.descriptorType, bindings.descriptorCount, bindings.shaderStageFlags);
     }
     initLayout();
     uint32_t descriptorCount = 0;
@@ -108,12 +115,12 @@ bool DescriptorSetManager::finish()
                       if (info.setIdx == uint32_t(DescriptorEnum::eDrawObjectDescriptorSet)) descriptorCount += info.descriptorCount;
                   });
     _descInfos[1].resize(descriptorCount);
-    return _recordState;
+    return _isRecorded;
 }
 
 VkPipelineLayout DescriptorSetManager::getPipelineLayout() const
 {
-    if (!_recordState)
+    if (!_isRecorded)
     {
         LOGE("Pipeline layout is not created, check finish() is called");
         return VK_NULL_HANDLE;
@@ -373,67 +380,24 @@ RenderProgram& RenderProgram::setFragModuleID(ShaderID fragModuleID)
     return *this;
 }
 
-void RenderProgram::finish()
+void RenderProgram::bind(VkCommandBuffer cmdBuf)
 {
-    const ShaderModule* vertModule = ShaderManager::Instance().getShaderById(_vertexModuleID);
-    const ShaderModule* fragModule = ShaderManager::Instance().getShaderById(_fragModuleID);
-    // … inside RenderProgram::finish(), after拿到vert/frag module
-    const ShaderModule* modules[] = {vertModule, fragModule};
-    for (auto* module : modules)
-    {
-        SpvReflectShaderModule spvModule{};
-        SpvReflectResult       result = spvReflectCreateShaderModule(module->_spvCode.size(), module->_spvCode.data(), &spvModule);
-        if (result != SPV_REFLECT_RESULT_SUCCESS)
-        { /* error */
-            continue;
-        }
-
-        uint32_t setCount = 0;
-        spvReflectEnumerateDescriptorSets(&spvModule, &setCount, nullptr);
-        std::vector<SpvReflectDescriptorSet*> sets(setCount);
-        spvReflectEnumerateDescriptorSets(&spvModule, &setCount, sets.data());
-        std::vector<BindInfo> bindInfos;
-        for (SpvReflectDescriptorSet* set : sets)
-        {
-            for (uint32_t i = 0; i < set->binding_count; ++i)
-            {
-                const SpvReflectDescriptorBinding& reflBinding = *set->bindings[i];
-                BindInfo                           info{};
-                info.setIdx             = set->set;
-                info.bindingIdx         = reflBinding.binding;
-                info.descriptorCount    = reflBinding.count;
-                info.descriptorType     = spvToDescriptorType(reflBinding.descriptor_type);
-                info.pipelineStageFlags = spvToVkStageFlags(spvModule.shader_stage);
-                bindInfos.push_back(info);
-            }
-        }
-
-        for (const auto& bindInfo : bindInfos)
-        {
-            _descriptorSetManager.addBinding(bindInfo);
-        }
-
-        uint32_t pushConstCount = 0;
-        spvReflectEnumeratePushConstantBlocks(&spvModule, &pushConstCount, nullptr);
-        std::vector<SpvReflectBlockVariable*> pushConsts(pushConstCount);
-        spvReflectEnumeratePushConstantBlocks(&spvModule, &pushConstCount, pushConsts.data());
-        for (const auto& pushConst : pushConsts)
-        {
-            VkPushConstantRange range{};
-            range.offset = pushConst->offset;
-            range.size   = pushConst->size;
-            range.stageFlags |= spvToVkStageFlags(spvModule.shader_stage);
-            _descriptorSetManager.addConstantRange(range.size, range.offset, range.stageFlags);
-        }
-
-        spvReflectDestroyShaderModule(&spvModule);
-    }
-    _descriptorSetManager.finish();
+    VkPipeline gfxPipeline = getOrCreatePipeline(_renderPass);
+    vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, gfxPipeline);
+    VkDescriptorSet set =
+        vkDriver->getDescriptorSetCache()->requestDescriptorSet(this->getDescriptorSetManager(), (uint32_t) DescriptorEnum::eDrawObjectDescriptorSet);
+    VkBindDescriptorSetsInfo bindInfo{VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO};
+    bindInfo.descriptorSetCount = 1;
+    bindInfo.pDescriptorSets    = &set;
+    bindInfo.stageFlags         = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT;
+    bindInfo.layout             = this->_descriptorSetManager.getPipelineLayout();
+    bindInfo.firstSet           = static_cast<uint32_t>(DescriptorEnum::eDrawObjectDescriptorSet);
+    vkCmdBindDescriptorSets2(cmdBuf, &bindInfo);
 }
 
 VkPipeline RenderProgram::getOrCreatePipeline(RenderPass* renderPass)
 {
-    return VK_NULL_HANDLE;
+    return vkDriver->_pipelineCacheManager->getOrCreateGraphicsPipeline(this);
 }
 
 ComputeProgram& ComputeProgram::setComputeModuleID(ShaderID computeModuleID)
@@ -442,61 +406,7 @@ ComputeProgram& ComputeProgram::setComputeModuleID(ShaderID computeModuleID)
     return *this;
 }
 
-void ComputeProgram::finish()
-{
-    const ShaderModule*              compModule = ShaderManager::Instance().getShaderById(_computeModuleID);
-    std::vector<const ShaderModule*> modules    = {compModule};
-    for (auto* module : modules)
-    {
-        SpvReflectShaderModule spvModule{};
-        SpvReflectResult       result = spvReflectCreateShaderModule(module->_spvCode.size(), module->_spvCode.data(), &spvModule);
-        if (result != SPV_REFLECT_RESULT_SUCCESS)
-        { /* error */
-            continue;
-        }
-
-        uint32_t setCount = 0;
-        spvReflectEnumerateDescriptorSets(&spvModule, &setCount, nullptr);
-        std::vector<SpvReflectDescriptorSet*> sets(setCount);
-        spvReflectEnumerateDescriptorSets(&spvModule, &setCount, sets.data());
-        std::vector<BindInfo> bindInfos;
-        for (SpvReflectDescriptorSet* set : sets)
-        {
-            for (uint32_t i = 0; i < set->binding_count; ++i)
-            {
-                const SpvReflectDescriptorBinding& reflBinding = *set->bindings[i];
-                BindInfo                           info{};
-                info.setIdx             = set->set;
-                info.bindingIdx         = reflBinding.binding;
-                info.descriptorCount    = reflBinding.count;
-                info.descriptorType     = spvToDescriptorType(reflBinding.descriptor_type);
-                info.pipelineStageFlags = spvToVkStageFlags(spvModule.shader_stage);
-                bindInfos.push_back(info);
-            }
-        }
-
-        for (const auto& bindInfo : bindInfos)
-        {
-            _descriptorSetManager.addBinding(bindInfo);
-        }
-
-        uint32_t pushConstCount = 0;
-        spvReflectEnumeratePushConstantBlocks(&spvModule, &pushConstCount, nullptr);
-        std::vector<SpvReflectBlockVariable*> pushConsts(pushConstCount);
-        spvReflectEnumeratePushConstantBlocks(&spvModule, &pushConstCount, pushConsts.data());
-        for (const auto& pushConst : pushConsts)
-        {
-            VkPushConstantRange range{};
-            range.offset = pushConst->offset;
-            range.size   = pushConst->size;
-            range.stageFlags |= spvToVkStageFlags(spvModule.shader_stage);
-            _descriptorSetManager.addConstantRange(range.size, range.offset, range.stageFlags);
-        }
-        _descriptorSetManager.finish();
-
-        spvReflectDestroyShaderModule(&spvModule);
-    }
-}
+void ComputeProgram::bind(VkCommandBuffer cmdBuf) {}
 
 VkPipeline ComputeProgram::getOrCreatePipeline()
 {
@@ -533,66 +443,7 @@ RTProgram& RTProgram::setRayIntersectModuleID(ShaderID rayIntersectModuleID)
     return *this;
 }
 
-void RTProgram::finish()
-{
-    const ShaderModule*              rayGenModule       = ShaderManager::Instance().getShaderById(_rayGenModuleID);
-    const ShaderModule*              rayCHitModule      = ShaderManager::Instance().getShaderById(_rayCHitModuleID);
-    const ShaderModule*              rayAHitModule      = ShaderManager::Instance().getShaderById(_rayAHitModuleID);
-    const ShaderModule*              rayMissModule      = ShaderManager::Instance().getShaderById(_rayMissModuleID);
-    const ShaderModule*              rayIntersectModule = ShaderManager::Instance().getShaderById(_rayIntersectModuleID);
-    std::vector<const ShaderModule*> modules            = {rayGenModule, rayCHitModule, rayAHitModule, rayMissModule, rayIntersectModule};
-    for (auto* module : modules)
-    {
-        if (!module) continue;
-        SpvReflectShaderModule spvModule{};
-        SpvReflectResult       result = spvReflectCreateShaderModule(module->_spvCode.size(), module->_spvCode.data(), &spvModule);
-        if (result != SPV_REFLECT_RESULT_SUCCESS)
-        { /* error */
-            continue;
-        }
-
-        uint32_t setCount = 0;
-        spvReflectEnumerateDescriptorSets(&spvModule, &setCount, nullptr);
-        std::vector<SpvReflectDescriptorSet*> sets(setCount);
-        spvReflectEnumerateDescriptorSets(&spvModule, &setCount, sets.data());
-        std::vector<BindInfo> bindInfos;
-        for (SpvReflectDescriptorSet* set : sets)
-        {
-            for (uint32_t i = 0; i < set->binding_count; ++i)
-            {
-                const SpvReflectDescriptorBinding& reflBinding = *set->bindings[i];
-                BindInfo                           info{};
-                info.setIdx             = set->set;
-                info.bindingIdx         = reflBinding.binding;
-                info.descriptorCount    = reflBinding.count;
-                info.descriptorType     = spvToDescriptorType(reflBinding.descriptor_type);
-                info.pipelineStageFlags = spvToVkStageFlags(spvModule.shader_stage);
-                bindInfos.push_back(info);
-            }
-        }
-
-        for (const auto& bindInfo : bindInfos)
-        {
-            _descriptorSetManager.addBinding(bindInfo);
-        }
-
-        uint32_t pushConstCount = 0;
-        spvReflectEnumeratePushConstantBlocks(&spvModule, &pushConstCount, nullptr);
-        std::vector<SpvReflectBlockVariable*> pushConsts(pushConstCount);
-        spvReflectEnumeratePushConstantBlocks(&spvModule, &pushConstCount, pushConsts.data());
-        for (const auto& pushConst : pushConsts)
-        {
-            VkPushConstantRange range{};
-            range.offset = pushConst->offset;
-            range.size   = pushConst->size;
-            range.stageFlags |= spvToVkStageFlags(spvModule.shader_stage);
-            _descriptorSetManager.addConstantRange(range.size, range.offset, range.stageFlags);
-        }
-        _descriptorSetManager.finish();
-
-        spvReflectDestroyShaderModule(&spvModule);
-    }
-}
+void RTProgram::bind(VkCommandBuffer cmdBuf) {}
 
 VkPipeline RTProgram::getOrCreatePipeline()
 {
@@ -617,7 +468,7 @@ MeshRenderProgram& MeshRenderProgram::setFragModuleID(ShaderID fragModuleID)
     return *this;
 }
 
-void MeshRenderProgram::finish() {}
+void MeshRenderProgram::bind(VkCommandBuffer cmdBuf) {}
 
 VkPipeline MeshRenderProgram::getOrCreatePipeline()
 {

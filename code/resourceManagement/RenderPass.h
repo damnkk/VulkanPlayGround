@@ -116,6 +116,15 @@ public:
     void begin(VkCommandBuffer cmd, const VkRect2D& renderArea) override;
     void end(VkCommandBuffer cmd) override;
 
+    std::vector<VkFormat> getColorAttachmentFormats() const
+    {
+        return m_vkColorAttachmentFormats;
+    }
+    VkFormat getDepthAttachmentFormat() const
+    {
+        return m_vkDepthAttachmentFormat;
+    }
+
 private:
     // Internal helper: handle Layout Transition
     // isBegin = true: initialLayout -> layout

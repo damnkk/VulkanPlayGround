@@ -150,22 +150,24 @@ public:
     ShaderID _rayMissModuleID      = ~0U;
     ShaderID _rayIntersectModuleID = ~0U;
 };
+class RenderProgram;
+class ComputeProgram;
+class RTProgram;
 
 class PipelineCacheManager
 {
 public:
     PipelineCacheManager();
     virtual ~PipelineCacheManager();
-    VkPipeline getOrCreateGraphicsPipeline(const PSOState& psoState, RenderPass* renderPass, ShaderID vShaderID, ShaderID fShaderID);
-    VkPipeline getOrCreateComputePipeline(const ComputePipelineState& computeState);
-    VkPipeline getOrCreateRTPipeline(const RTPipelineState& rtState);
-    VkPipeline getOrCreateMeshPipeline(const PSOState& psoState, RenderPass* renderPass, ShaderID mShaderID, ShaderID fShaderID,
-                                       ShaderID tShaderID = ~0U);
+    VkPipeline getOrCreateGraphicsPipeline(RenderProgram* program);
+    VkPipeline getOrCreateComputePipeline(ComputePipelineState& computeState);
+    VkPipeline getOrCreateRTPipeline(RTPipelineState& rtState);
+    VkPipeline getOrCreateMeshPipeline(PSOState& psoState, RenderPass* renderPass, ShaderID mShaderID, ShaderID fShaderID, ShaderID tShaderID = ~0U);
 
 private:
-    std::unique_ptr<PplCacheBlockManager> _cacheBlockManager = nullptr;
-    nvvk::GraphicsPipelineCreator         _gfxPipelineCreator;
-    std::vector<VkPipeline>               _pipelines;
+    std::unique_ptr<PplCacheBlockManager>    _cacheBlockManager = nullptr;
+    nvvk::GraphicsPipelineCreator            _gfxPipelineCreator;
+    std::unordered_map<uint64_t, VkPipeline> _pipelineMap;
 };
 
 } // namespace Play

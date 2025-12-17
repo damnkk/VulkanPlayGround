@@ -91,35 +91,32 @@ private:
     std::unordered_map<std::string, PassNode*>     _passMap;
 };
 
-struct PendingGfxState
+struct PendingState
+{
+    void            bindDescriptorSet(VkCommandBuffer cmd, PlayProgram* program);
+    VkDescriptorSet _globalDescriptorSet = VK_NULL_HANDLE;
+    VkDescriptorSet _frameDescriptorSet  = VK_NULL_HANDLE;
+    VkDescriptorSet _sceneDescriptorSet  = VK_NULL_HANDLE;
+    VkDescriptorSet _passDescriptorSet   = VK_NULL_HANDLE;
+};
+
+struct PendingGfxState : public PendingState
 {
     PendingGfxState(RenderContext* renderContext) : _renderContext(renderContext) {}
-    const RenderContext* _renderContext       = nullptr;
-    VkDescriptorSet      _globalDescriptorSet = VK_NULL_HANDLE;
-    VkDescriptorSet      _frameDescriptorSet  = VK_NULL_HANDLE;
-    VkDescriptorSet      _sceneDescriptorSet  = VK_NULL_HANDLE;
-    VkDescriptorSet      _passDescriptorSet   = VK_NULL_HANDLE;
-    RenderPass*          _renderPass          = nullptr;
+    const RenderContext* _renderContext = nullptr;
+    RenderPass*          _renderPass    = nullptr;
 };
 
-struct PendingComputeState
+struct PendingComputeState : public PendingState
 {
     PendingComputeState(RenderContext* renderContext) : _renderContext(renderContext) {}
-    const RenderContext* _renderContext       = nullptr;
-    VkDescriptorSet      _globalDescriptorSet = VK_NULL_HANDLE;
-    VkDescriptorSet      _frameDescriptorSet  = VK_NULL_HANDLE;
-    VkDescriptorSet      _sceneDescriptorSet  = VK_NULL_HANDLE;
-    VkDescriptorSet      _passDescriptorSet   = VK_NULL_HANDLE;
+    const RenderContext* _renderContext = nullptr;
 };
 
-struct PendingRTState
+struct PendingRTState : public PendingState
 {
     PendingRTState(RenderContext* renderContext) : _renderContext(renderContext) {};
-    const RenderContext* _renderContext       = nullptr;
-    VkDescriptorSet      _globalDescriptorSet = VK_NULL_HANDLE;
-    VkDescriptorSet      _frameDescriptorSet  = VK_NULL_HANDLE;
-    VkDescriptorSet      _sceneDescriptorSet  = VK_NULL_HANDLE;
-    VkDescriptorSet      _passDescriptorSet   = VK_NULL_HANDLE;
+    const RenderContext* _renderContext = nullptr;
 };
 
 struct RenderContext

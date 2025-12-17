@@ -300,6 +300,7 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
                     module->_spvCode     = buffer;
                     module->_type        = ShaderType::eSLANG;
                     module->_name        = name;
+                    module->_entryPoint  = entry;
 
                     VkShaderModuleCreateInfo createInfo{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
                     createInfo.codeSize = module->_spvCode.size();
@@ -328,6 +329,7 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
         module->_type = ShaderType::eSLANG;
         module->_name = name;
         module->_spvCode.resize(_slangCompiler.getSpirvSize());
+        module->_entryPoint = entry;
         std::memcpy(module->_spvCode.data(), _slangCompiler.getSpirv(), _slangCompiler.getSpirvSize());
         VkShaderModuleCreateInfo createInfo{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
         createInfo.codeSize = module->_spvCode.size();
@@ -366,8 +368,9 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
                         module->_spvCode.resize(buffer.size() / sizeof(uint8_t));
                         std::memcpy(module->_spvCode.data(), buffer.data(), buffer.size());
 
-                        module->_type = ShaderType::eGLSL;
-                        module->_name = name;
+                        module->_type       = ShaderType::eGLSL;
+                        module->_name       = name;
+                        module->_entryPoint = entry;
 
                         VkShaderModuleCreateInfo createInfo{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
                         createInfo.codeSize = module->_spvCode.size() * sizeof(uint8_t);
@@ -391,6 +394,7 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
             std::memcpy(module->_spvCode.data(), _glslCCompiler.getSpirv(result), _glslCCompiler.getSpirvSize(result));
             module->_type                       = ShaderType::eGLSL;
             module->_name                       = name;
+            module->_entryPoint                 = entry;
             VkShaderModuleCreateInfo createInfo = _glslCCompiler.makeShaderModuleCreateInfo(result, 0);
             NVVK_CHECK(vkCreateShaderModule(vkDriver->_device, &createInfo, nullptr, &module->_shaderModule));
             _nameIdMap[name] = module->_poolId;

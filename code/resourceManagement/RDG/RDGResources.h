@@ -43,9 +43,10 @@ public:
     VkPipelineStageFlags2 stageMask        = 0;
     uint32_t              queueFamilyIndex = 0;
 
-    uint32_t set             = 0;
-    uint32_t binding         = 0;
-    uint32_t descriptorIndex = 0;
+    uint32_t         set             = 0;
+    uint32_t         binding         = 0;
+    uint32_t         descriptorIndex = 0;
+    VkDescriptorType descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
     // ------ attachment info ------
     bool     isAttachment        = false;
     bool     isResolveAttachment = false;
@@ -66,6 +67,7 @@ class BufferAccessInfo : public RDGResourceAccessInfo
 public:
     BufferAccessInfo()                     = default;
     VkAccessFlags2        accessMask       = 0;
+    VkDescriptorType      descriptorType   = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     VkPipelineStageFlags2 stageMask        = 0;
     uint32_t              queueFamilyIndex = 0;
     VkDeviceSize          offset           = 0;

@@ -18,7 +18,6 @@ public:
 
 private:
     std::unique_ptr<RenderProgram> _postProgram;
-    nvvk::GraphicsPipelineState    _postPipelineState;
     PlayElement*                   _element = nullptr;
 };
 

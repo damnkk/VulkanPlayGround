@@ -50,6 +50,24 @@ VulkanDriver::VulkanDriver(nvapp::Application* app) : _app(app)
     _frameData.resize(_app->getFrameCycleSize());
 }
 
+void VulkanDriver::prepareGlobalDescriptorSet()
+{
+    std::vector<VkDescriptorSetLayoutBinding> bindings;
+    bindings.emplace_back(3, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_ALL, nullptr);
+    VkDescriptorSetLayoutCreateInfo layoutInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+    layoutInfo.pBindings    = bindings.data();
+    vkCreateDescriptorSetLayout(_device, &layoutInfo, nullptr, &_globalDescriptorSetLayout);
+}
+VkDescriptorSet VulkanDriver::getGlobalDescriptorSet()
+{
+    return _globalDescriptorSet;
+}
+VkDescriptorSetLayout VulkanDriver::getGlobalDescriptorSetLayout()
+{
+    return _globalDescriptorSetLayout;
+}
+
 void VulkanDriver::init()
 {
     _pipelineCacheManager = std::make_unique<PipelineCacheManager>();
@@ -81,6 +99,7 @@ void VulkanDriver::init()
 
         NVVK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frameData[i].semaphore));
     }
+    prepareGlobalDescriptorSet();
 }
 
 VulkanDriver::~VulkanDriver()

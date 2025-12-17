@@ -58,22 +58,28 @@ private:
     std::array<std::unordered_map<uint32_t, size_t>, static_cast<uint32_t>(DescriptorEnum::eCount)> _descriptorOffsetInfo;
 };
 
+struct CommonDescriptorSet
+{
+    VkDescriptorSet       set;
+    VkDescriptorSetLayout layout;
+};
+
 class DescriptorSetCache
 {
 public:
     DescriptorSetCache() {}
     ~DescriptorSetCache();
-    void            deInit();
-    VkDescriptorSet requestDescriptorSet(DescriptorSetManager& setManager, uint32_t setIdx);
-    VkDescriptorSet getEngineDescriptorSet()
+    void                deInit();
+    VkDescriptorSet     requestDescriptorSet(DescriptorSetManager& setManager, uint32_t setIdx);
+    CommonDescriptorSet getEngineDescriptorSet()
     {
         return _globalDescriptorSet;
     }
-    VkDescriptorSet getSceneDescriptorSet()
+    CommonDescriptorSet getSceneDescriptorSet()
     {
         return _sceneDescriptorSet;
     }
-    VkDescriptorSet getFrameDescriptorSet()
+    CommonDescriptorSet getFrameDescriptorSet()
     {
         return _frameDescriptorSet;
     }
@@ -106,9 +112,9 @@ private:
     VkDescriptorSet      createDescriptorSet(CacheNode& cacheNode, DescriptorSetManager& setManager, uint32_t setIdx);
     CacheNode::CachedSet createDescriptorSetImplement(CacheNode& cacheNode, DescriptorSetManager& setManager, uint32_t setIdx);
     std::unordered_map<uint64_t, std::shared_ptr<CacheNode>> _descriptorPoolMap;
-    VkDescriptorSet                                          _globalDescriptorSet = VK_NULL_HANDLE;
-    VkDescriptorSet                                          _sceneDescriptorSet  = VK_NULL_HANDLE;
-    VkDescriptorSet                                          _frameDescriptorSet  = VK_NULL_HANDLE;
+    CommonDescriptorSet                                      _globalDescriptorSet = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    CommonDescriptorSet                                      _sceneDescriptorSet  = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    CommonDescriptorSet                                      _frameDescriptorSet  = {VK_NULL_HANDLE, VK_NULL_HANDLE};
 };
 
 } // namespace Play

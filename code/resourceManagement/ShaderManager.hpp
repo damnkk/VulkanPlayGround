@@ -46,6 +46,7 @@ struct ShaderModule
     ShaderType           _type;
     std::vector<uint8_t> _spvCode;
     std::string          _name;
+    std::string          _entryPoint;
 };
 
 class ShaderPool : public BasePool<ShaderModule>
