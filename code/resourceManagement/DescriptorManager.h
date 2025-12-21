@@ -84,6 +84,10 @@ public:
         return _frameDescriptorSet;
     }
 
+    void initGlobalDescriptorSets(nvvk::DescriptorBindings& setBindings);
+    void initFrameDescriptorSets(nvvk::DescriptorBindings& setBindings);
+    void initSceneDescriptorSets(nvvk::DescriptorBindings& setBindings);
+
 private:
     struct CacheNode
     {
@@ -112,9 +116,12 @@ private:
     VkDescriptorSet      createDescriptorSet(CacheNode& cacheNode, DescriptorSetManager& setManager, uint32_t setIdx);
     CacheNode::CachedSet createDescriptorSetImplement(CacheNode& cacheNode, DescriptorSetManager& setManager, uint32_t setIdx);
     std::unordered_map<uint64_t, std::shared_ptr<CacheNode>> _descriptorPoolMap;
-    CommonDescriptorSet                                      _globalDescriptorSet = {VK_NULL_HANDLE, VK_NULL_HANDLE};
-    CommonDescriptorSet                                      _sceneDescriptorSet  = {VK_NULL_HANDLE, VK_NULL_HANDLE};
-    CommonDescriptorSet                                      _frameDescriptorSet  = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    CommonDescriptorSet                                      _globalDescriptorSet  = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    VkDescriptorPool                                         _globalDescriptorPool = VK_NULL_HANDLE;
+    CommonDescriptorSet                                      _sceneDescriptorSet   = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    VkDescriptorPool                                         _sceneDescriptorPool  = VK_NULL_HANDLE;
+    CommonDescriptorSet                                      _frameDescriptorSet   = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    VkDescriptorPool                                         _frameDescriptorPool  = VK_NULL_HANDLE;
 };
 
 } // namespace Play

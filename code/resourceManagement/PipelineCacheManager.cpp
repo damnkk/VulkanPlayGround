@@ -355,6 +355,10 @@ PipelineCacheManager::~PipelineCacheManager()
         delete sqliteWriter;
         sqliteWriter = nullptr;
     }
+    for (auto& [key, ppl] : _pipelineMap)
+    {
+        vkDestroyPipeline(vkDriver->getDevice(), ppl, nullptr);
+    }
 }
 
 VkPipeline PipelineCacheManager::getOrCreateGraphicsPipeline(RenderProgram* program)
@@ -362,6 +366,10 @@ VkPipeline PipelineCacheManager::getOrCreateGraphicsPipeline(RenderProgram* prog
     uint64_t key = program->psoState().getPipelineKey();
     nvutils::hashCombine(key, program->getVertexModuleID());
     nvutils::hashCombine(key, program->getFragModuleID());
+    if (_pipelineMap.find(key) != _pipelineMap.end())
+    {
+        return _pipelineMap[key];
+    }
     auto vShaderModule = ShaderManager::Instance().getShaderById(program->getVertexModuleID());
     auto fShaderModule = ShaderManager::Instance().getShaderById(program->getFragModuleID());
     _gfxPipelineCreator.clearShaders();

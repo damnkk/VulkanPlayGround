@@ -135,7 +135,7 @@ RenderPassBuilder& RenderPassBuilder::read(uint32_t binding, RDGTextureRef textu
     accessInfo.descriptorType               = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
     accessInfo.isAttachment                 = false;
     accessInfo.layout                       = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    accessInfo.accessMask                   = VK_ACCESS_2_SHADER_READ_BIT;
+    accessInfo.accessMask                   = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
     accessInfo.stageMask                    = stage;
     accessInfo.queueFamilyIndex             = queueFamilyIndex;
     _node->_textureStates[texture]          = {subResource, {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2}};

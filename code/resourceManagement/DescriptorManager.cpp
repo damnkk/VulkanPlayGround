@@ -108,6 +108,12 @@ DescriptorSetCache::~DescriptorSetCache()
             vkDestroyDescriptorPool(vkDriver->_device, poolNode.pool, nullptr);
         }
     }
+    vkDestroyDescriptorPool(vkDriver->_device, _globalDescriptorPool, nullptr);
+    vkDestroyDescriptorPool(vkDriver->_device, _sceneDescriptorPool, nullptr);
+    vkDestroyDescriptorPool(vkDriver->_device, _frameDescriptorPool, nullptr);
+    vkDestroyDescriptorSetLayout(vkDriver->_device, _globalDescriptorSet.layout, nullptr);
+    vkDestroyDescriptorSetLayout(vkDriver->_device, _sceneDescriptorSet.layout, nullptr);
+    vkDestroyDescriptorSetLayout(vkDriver->_device, _frameDescriptorSet.layout, nullptr);
 }
 
 VkDescriptorSet DescriptorSetCache::requestDescriptorSet(DescriptorSetManager& setManager, uint32_t setIdx)
@@ -227,7 +233,8 @@ DescriptorSetCache::CacheNode::CachedSet DescriptorSetCache::createDescriptorSet
 
                 for (int i = offset; i < binding.descriptorCount; ++i)
                 {
-                    imageInfos[i] = descriptorInfo[i].image;
+                    imageInfos[i]         = descriptorInfo[i].image;
+                    imageInfos[i].sampler = VK_NULL_HANDLE;
                 }
                 writeSet.pImageInfo = imageInfos.data();
                 break;
@@ -284,6 +291,52 @@ DescriptorSetCache::CacheNode::CachedSet DescriptorSetCache::createDescriptorSet
     // Update the descriptor set with the new binding information
     vkUpdateDescriptorSets(vkDriver->_device, static_cast<uint32_t>(writeSets.size()), writeSets.data(), 0, nullptr);
     return newSet;
+}
+
+void DescriptorSetCache::initGlobalDescriptorSets(nvvk::DescriptorBindings& setBindings)
+{
+    VkDescriptorPoolCreateInfo        poolInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+    std::vector<VkDescriptorPoolSize> poolSizes = setBindings.calculatePoolSizes(1);
+    poolInfo.poolSizeCount                      = static_cast<uint32_t>(poolSizes.size());
+    poolInfo.pPoolSizes                         = poolSizes.data();
+    poolInfo.maxSets                            = 1;
+    NVVK_CHECK(vkCreateDescriptorPool(vkDriver->_device, &poolInfo, nullptr, &_globalDescriptorPool));
+    setBindings.createDescriptorSetLayout(vkDriver->getDevice(), 0, &_globalDescriptorSet.layout);
+    VkDescriptorSetAllocateInfo allocInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+    allocInfo.descriptorPool     = _globalDescriptorPool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts        = &_globalDescriptorSet.layout;
+    NVVK_CHECK(vkAllocateDescriptorSets(vkDriver->_device, &allocInfo, &_globalDescriptorSet.set));
+}
+void DescriptorSetCache::initFrameDescriptorSets(nvvk::DescriptorBindings& setBindings)
+{
+    VkDescriptorPoolCreateInfo        poolInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+    std::vector<VkDescriptorPoolSize> poolSizes = setBindings.calculatePoolSizes(1);
+    poolInfo.poolSizeCount                      = static_cast<uint32_t>(poolSizes.size());
+    poolInfo.pPoolSizes                         = poolSizes.data();
+    poolInfo.maxSets                            = 1;
+    NVVK_CHECK(vkCreateDescriptorPool(vkDriver->_device, &poolInfo, nullptr, &_frameDescriptorPool));
+    setBindings.createDescriptorSetLayout(vkDriver->getDevice(), 0, &_frameDescriptorSet.layout);
+    VkDescriptorSetAllocateInfo allocInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+    allocInfo.descriptorPool     = _frameDescriptorPool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts        = &_frameDescriptorSet.layout;
+    NVVK_CHECK(vkAllocateDescriptorSets(vkDriver->_device, &allocInfo, &_frameDescriptorSet.set));
+}
+void DescriptorSetCache::initSceneDescriptorSets(nvvk::DescriptorBindings& setBindings)
+{
+    VkDescriptorPoolCreateInfo        poolInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+    std::vector<VkDescriptorPoolSize> poolSizes = setBindings.calculatePoolSizes(1);
+    poolInfo.poolSizeCount                      = static_cast<uint32_t>(poolSizes.size());
+    poolInfo.pPoolSizes                         = poolSizes.data();
+    poolInfo.maxSets                            = 1;
+    NVVK_CHECK(vkCreateDescriptorPool(vkDriver->_device, &poolInfo, nullptr, &_sceneDescriptorPool));
+    setBindings.createDescriptorSetLayout(vkDriver->getDevice(), 0, &_sceneDescriptorSet.layout);
+    VkDescriptorSetAllocateInfo allocInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+    allocInfo.descriptorPool     = _sceneDescriptorPool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts        = &_sceneDescriptorSet.layout;
+    NVVK_CHECK(vkAllocateDescriptorSets(vkDriver->_device, &allocInfo, &_sceneDescriptorSet.set));
 }
 
 void DescriptorBufferManagerExt::updateDescriptor(uint32_t setIdx, uint32_t bindingIdx, VkDescriptorType descriptorType, uint32_t descriptorCount,

@@ -30,6 +30,8 @@ PlayElement::~PlayElement()
 {
     delete vkDriver;
     vkDriver = nullptr;
+    delete _sceneManager;
+    _sceneManager = nullptr;
 }
 
 void PlayElement::onAttach(nvapp::Application* app)
@@ -38,7 +40,7 @@ void PlayElement::onAttach(nvapp::Application* app)
     vkDriver = new VulkanDriver(app);
     vkDriver->init();
     // CameraManip
-
+    _sceneManager     = new SceneManager();
     _profilerTimeline = _info.profilerManager->createTimeline({"graphics"});
     _profilerGpuTimer.init(_profilerTimeline, app->getDevice(), app->getPhysicalDevice(), app->getQueue(0).familyIndex, true);
     createGraphicsDescriptResource();
@@ -70,7 +72,6 @@ void PlayElement::onDetach()
 void PlayElement::onResize(VkCommandBuffer cmd, const VkExtent2D& size)
 {
     vkQueueWaitIdle(_app->getQueue(0).queue);
-    _renderer->OnResize(size.width, size.height);
     auto task = [uiTextureDescriptor = _uiTextureDescriptor, uiTexture = _uiTexture]()
     {
         ImGui_ImplVulkan_RemoveTexture(uiTextureDescriptor);
@@ -79,6 +80,7 @@ void PlayElement::onResize(VkCommandBuffer cmd, const VkExtent2D& size)
     vkDriver->_deferredDeleteTaskQueue.push({vkDriver->getFrameCycleIndex(), task});
 
     createGraphicsDescriptResource();
+    _renderer->OnResize(size.width, size.height);
 }
 
 void PlayElement::onUIRender()
@@ -99,17 +101,6 @@ void PlayElement::onPreRender()
 
 void PlayElement::onRender(VkCommandBuffer cmd)
 {
-    // VkClearColorValue       clearColor = {{0.91f, 0.23f, 0.77f, 1.0f}};
-    // VkImageSubresourceRange range      = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-    // nvvk::cmdImageMemoryBarrier(cmd, {_uiTexture->image,
-    // VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    //                                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL});
-    // vkCmdClearColorImage(cmd, _uiTexture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-    // &clearColor,
-    //                      1, &range);
-    // nvvk::cmdImageMemoryBarrier(cmd, {_uiTexture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-    //                                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
-
     vkDriver->getCurrentFrameData().reset(vkDriver->_device);
 
     _renderer->RenderFrame();
@@ -142,7 +133,7 @@ void PlayElement::onLastHeadlessFrame()
 
 void PlayElement::createGraphicsDescriptResource()
 {
-    _uiTexture = Texture::Create(_app->getWindowSize().width, _app->getWindowSize().height, VK_FORMAT_R8G8B8A8_UNORM,
+    _uiTexture = Texture::Create(std::max(1u, _app->getViewportSize().width), std::max(1u, _app->getViewportSize().height), VK_FORMAT_R8G8B8A8_UNORM,
                                  VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
     PlayResourceManager::Instance().acquireSampler(_uiTexture->descriptor.sampler);
     _uiTextureDescriptor =

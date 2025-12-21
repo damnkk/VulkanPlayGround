@@ -4,12 +4,14 @@
 #include "nvvkgltf/scene.hpp"
 #include "nvvkgltf/scene_vk.hpp"
 #include "nvvkgltf/scene_rtx.hpp"
+#include "nvvk/descriptors.hpp"
 namespace Play
 {
 class PlayElement;
 class SceneManager
 {
 public:
+    SceneManager();
     void addScene(std::filesystem::path filename);
     void addScenes(std::vector<std::filesystem::path> filenames);
 
@@ -23,6 +25,7 @@ private:
     std::mutex                      _scenesVkMutex;
     std::vector<nvvkgltf::SceneRtx> _scenesRTX; // for ray tracing gpu
     std::mutex                      _scenesRTXMutex;
+    nvvk::DescriptorBindings        _sceneDescriptorBindings;
 };
 
 } // namespace Play

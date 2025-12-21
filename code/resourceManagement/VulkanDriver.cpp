@@ -52,20 +52,63 @@ VulkanDriver::VulkanDriver(nvapp::Application* app) : _app(app)
 
 void VulkanDriver::prepareGlobalDescriptorSet()
 {
-    std::vector<VkDescriptorSetLayoutBinding> bindings;
-    bindings.emplace_back(3, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_ALL, nullptr);
-    VkDescriptorSetLayoutCreateInfo layoutInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-    layoutInfo.pBindings    = bindings.data();
-    vkCreateDescriptorSetLayout(_device, &layoutInfo, nullptr, &_globalDescriptorSetLayout);
+    _globalDescriptorBindings.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_ALL, nullptr);  // g_GlobalTexture
+    _globalDescriptorBindings.addBinding(1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_ALL, nullptr);  // g_GlobalLutTexture  for tone map
+    _globalDescriptorBindings.addBinding(2, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_ALL, nullptr);        // g_GlobalSampler_Nerest
+    _globalDescriptorBindings.addBinding(3, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_ALL, nullptr);        // g_GlobalSampler_Linear
+    _globalDescriptorBindings.addBinding(4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr); // g_GlobalSampler_Linear
+    _descriptorSetCache->initGlobalDescriptorSets(_globalDescriptorBindings);
+    updateGlobalDescriptorSet();
 }
+
+void VulkanDriver::updateGlobalDescriptorSet()
+{
+    std::vector<VkSampler>             samplerList(2);
+    std::vector<VkDescriptorImageInfo> imageInfoList;
+    VkSamplerCreateInfo                samplerCreateInfo{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+    samplerCreateInfo.magFilter     = VK_FILTER_NEAREST;
+    samplerCreateInfo.minFilter     = VK_FILTER_NEAREST;
+    samplerCreateInfo.addressModeU  = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+    samplerCreateInfo.addressModeV  = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+    samplerCreateInfo.addressModeW  = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+    samplerCreateInfo.mipLodBias    = 0.0f;
+    samplerCreateInfo.maxAnisotropy = 1.0f;
+    samplerCreateInfo.compareEnable = VK_FALSE;
+    PlayResourceManager::Instance().acquireSampler(samplerList[0], samplerCreateInfo);
+    imageInfoList.push_back({samplerList[0]});
+    samplerCreateInfo.magFilter = VK_FILTER_LINEAR;
+    samplerCreateInfo.minFilter = VK_FILTER_LINEAR;
+    PlayResourceManager::Instance().acquireSampler(samplerList[1], samplerCreateInfo);
+    imageInfoList.push_back({samplerList[1]});
+    std::vector<VkWriteDescriptorSet> writeSet(2, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET});
+    writeSet[0].dstSet          = _descriptorSetCache->getEngineDescriptorSet().set;
+    writeSet[0].dstBinding      = 2;
+    writeSet[0].descriptorCount = 1;
+    writeSet[0].descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLER;
+    writeSet[0].pImageInfo      = &imageInfoList[0];
+    writeSet[1].dstSet          = _descriptorSetCache->getEngineDescriptorSet().set;
+    writeSet[1].dstBinding      = 3;
+    writeSet[1].descriptorCount = 1;
+    writeSet[1].descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLER;
+    writeSet[1].pImageInfo      = &imageInfoList[1];
+
+    vkUpdateDescriptorSets(vkDriver->_device, static_cast<uint32_t>(writeSet.size()), writeSet.data(), 0, nullptr);
+}
+
+void VulkanDriver::prepareFrameDescriptorSet()
+{
+    _frameDescriptorBindings.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr); // g_CameraDataBuffer
+    _descriptorSetCache->initFrameDescriptorSets(_frameDescriptorBindings);
+}
+
+void            VulkanDriver::updateFrameDescriptorSet() {}
 VkDescriptorSet VulkanDriver::getGlobalDescriptorSet()
 {
-    return _globalDescriptorSet;
+    return VK_NULL_HANDLE;
 }
 VkDescriptorSetLayout VulkanDriver::getGlobalDescriptorSetLayout()
 {
-    return _globalDescriptorSetLayout;
+    return VK_NULL_HANDLE;
 }
 
 void VulkanDriver::init()
@@ -100,6 +143,7 @@ void VulkanDriver::init()
         NVVK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frameData[i].semaphore));
     }
     prepareGlobalDescriptorSet();
+    prepareFrameDescriptorSet();
 }
 
 VulkanDriver::~VulkanDriver()

@@ -280,6 +280,10 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
 {
     if (type == ShaderType::eSLANG)
     {
+        if (_nameIdMap.find(name) != _nameIdMap.end())
+        {
+            return _nameIdMap[name];
+        }
         std::filesystem::path spvPath     = getBaseFilePath() / "spv";
         std::filesystem::path spvFileName = name + ".spv";
         std::filesystem::path fullSpvPath = spvPath / spvFileName;
@@ -351,7 +355,10 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
             std::filesystem::path spvPath     = getBaseFilePath() / "spv";
             std::filesystem::path spvFileName = name + ".spv";
             std::filesystem::path fullSpvPath = spvPath / spvFileName;
-
+            if (_nameIdMap.find(name) != _nameIdMap.end())
+            {
+                return _nameIdMap[name];
+            }
             if (std::filesystem::exists(fullSpvPath) && checkShaderUpdate(filePath, fullSpvPath))
             {
                 // Load pre-compiled SPV file

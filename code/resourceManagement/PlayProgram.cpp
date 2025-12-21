@@ -17,8 +17,9 @@ void DescriptorSetManager::deinit()
         vkDestroyPipelineLayout(_vkDevice, _pipelineLayout, nullptr);
         _pipelineLayout = VK_NULL_HANDLE;
     }
-    for (auto& layout : _descSetLayouts)
+    for (size_t i = (size_t) DescriptorEnum::ePerPassDescriptorSet; i < (size_t) DescriptorEnum::eCount; ++i)
     {
+        auto& layout = _descSetLayouts[i];
         if (layout != VK_NULL_HANDLE)
         {
             vkDestroyDescriptorSetLayout(_vkDevice, layout, nullptr);
@@ -115,7 +116,8 @@ bool DescriptorSetManager::finalizeLayout()
                       if (info.setIdx == uint32_t(DescriptorEnum::eDrawObjectDescriptorSet)) descriptorCount += info.descriptorCount;
                   });
     _descInfos[1].resize(descriptorCount);
-    return _isRecorded;
+
+    return _isRecorded = true;
 }
 
 VkPipelineLayout DescriptorSetManager::getPipelineLayout() const

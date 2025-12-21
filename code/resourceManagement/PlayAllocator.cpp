@@ -129,7 +129,7 @@ Texture* TexturePool::alloc(uint32_t width, uint32_t height, uint32_t depth, VkF
     }
     VkImageCreateInfo imageInfo{
         .sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .imageType     = VK_IMAGE_TYPE_3D,
+        .imageType     = depth == 1 ? VK_IMAGE_TYPE_2D : VK_IMAGE_TYPE_3D,
         .format        = format,
         .extent        = {width, height, depth},
         .mipLevels     = mipLevels,
@@ -143,7 +143,7 @@ Texture* TexturePool::alloc(uint32_t width, uint32_t height, uint32_t depth, VkF
 
     VkImageViewCreateInfo viewInfo{
         .sType            = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .viewType         = VK_IMAGE_VIEW_TYPE_3D,
+        .viewType         = depth == 1 ? VK_IMAGE_VIEW_TYPE_2D : VK_IMAGE_VIEW_TYPE_3D,
         .format           = format,
         .components       = {VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A},
         .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, 1},
@@ -172,7 +172,7 @@ Texture* TexturePool::alloc(uint32_t width, uint32_t height, uint32_t depth, VkF
         _manager->submitAndWaitTempCmdBuffer(cmd);
     }
     texture->descriptor.imageLayout = initialLayout;
-    texture->type                   = VK_IMAGE_TYPE_3D;
+    texture->type                   = imageInfo.imageType;
     texture->format                 = format;
     texture->extent                 = {width, height, depth};
     texture->sampleCount            = VK_SAMPLE_COUNT_1_BIT;

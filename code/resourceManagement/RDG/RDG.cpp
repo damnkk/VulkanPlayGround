@@ -149,31 +149,25 @@ PassNode* BlackBoard::getPass(std::string name)
 
 void PendingState::bindDescriptorSet(VkCommandBuffer cmd, PlayProgram* program)
 {
-    // std::array<VkDescriptorSet, 4> sets = {_globalDescriptorSet, _sceneDescriptorSet, _frameDescriptorSet, _passDescriptorSet};
-    std::array<VkDescriptorSet, 1> sets = {_passDescriptorSet};
-
-    VkBindDescriptorSetsInfo bindInfo{VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO};
-    bindInfo.descriptorSetCount = static_cast<uint32_t>(sets.size());
-    bindInfo.pDescriptorSets    = sets.data();
+    std::array<VkDescriptorSet, 4> sets      = {_globalDescriptorSet, _sceneDescriptorSet, _frameDescriptorSet, _passDescriptorSet};
+    VkPipelineBindPoint            bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     switch (program->getProgramType())
     {
         case ProgramType::eRenderProgram:
-            bindInfo.stageFlags = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT;
+            bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
             break;
         case ProgramType::eComputeProgram:
-            bindInfo.stageFlags = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+            bindPoint = VK_PIPELINE_BIND_POINT_COMPUTE;
             break;
         case ProgramType::eRTProgram:
-            bindInfo.stageFlags = VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR;
+            bindPoint = VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR;
             break;
         default:
-            bindInfo.stageFlags = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+            bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
             break;
     }
-    bindInfo.layout = program->getDescriptorSetManager().getPipelineLayout();
-    // bindInfo.firstSet = (uint32_t) DescriptorEnum::eGlobalDescriptorSet;
-    bindInfo.firstSet = (uint32_t) DescriptorEnum::ePerPassDescriptorSet;
-    vkCmdBindDescriptorSets2(cmd, &bindInfo);
+    vkCmdBindDescriptorSets(cmd, bindPoint, program->getDescriptorSetManager().getPipelineLayout(), (uint32_t) DescriptorEnum::eGlobalDescriptorSet,
+                            static_cast<uint32_t>(sets.size()), sets.data(), 0, nullptr);
 }
 
 RDGBuilder::RDGBuilder()
@@ -263,8 +257,9 @@ void RDGBuilder::prepareResourceBarrier(RenderContext& context, PassNode* pass)
         TextureAccessInfo        accessInfo = state.textureStates[0];
         if (!texture->getRHI())
         {
-            texture->setRHI(Texture::Create(info._extent.width, info._extent.height, info._extent.depth, info._format, info._usageFlags,
-                                            accessInfo.layout, info._mipmapLevel));
+            auto ptr = Texture::Create(info._extent.width, info._extent.height, info._extent.depth, info._format, info._usageFlags, accessInfo.layout,
+                                       info._mipmapLevel);
+            texture->setRHI(ptr);
             nvvk::DebugUtil::getInstance().setObjectName(texture->getRHI()->image, texture->name().c_str());
         }
         if (accessInfo.isAttachment || !Play::isImageBarrierValid(state.barrierInfo)) continue;
@@ -295,7 +290,8 @@ void RDGBuilder::prepareRenderPass(PassNode* pass)
     RenderPassNode* renderPassNode = dynamic_cast<RenderPassNode*>(pass);
     renderPassNode->initRenderPass();
     _renderContext->_pendingGfxState->_renderPass = renderPassNode->_renderPass.get();
-    renderPassNode->_renderPass->begin(_renderContext->_currCmdBuffer, {{0, 0}, {vkDriver->getWindowSize().width, vkDriver->getWindowSize().height}});
+    renderPassNode->_renderPass->begin(_renderContext->_currCmdBuffer,
+                                       {{0, 0}, {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height}});
 }
 
 void RDGBuilder::endRenderPass(PassNode* pass)
@@ -647,16 +643,9 @@ RenderContext* RDGBuilder::prepareRenderContext(PassNode* pass)
             auto& sceneDescriptorSet  = _renderContext->_pendingGfxState->_sceneDescriptorSet;
             auto& frameDescriptorSet  = _renderContext->_pendingGfxState->_frameDescriptorSet;
 
-            globalDescriptorSet = globalDescriptorSet == vkDriver->getDescriptorSetCache()->getEngineDescriptorSet().set
-                                      ? vkDriver->getDescriptorSetCache()->getEngineDescriptorSet().set
-                                      : globalDescriptorSet;
-            sceneDescriptorSet  = sceneDescriptorSet == vkDriver->getDescriptorSetCache()->getSceneDescriptorSet().set
-                                      ? vkDriver->getDescriptorSetCache()->getSceneDescriptorSet().set
-                                      : sceneDescriptorSet;
-            frameDescriptorSet  = frameDescriptorSet == vkDriver->getDescriptorSetCache()->getFrameDescriptorSet().set
-                                      ? vkDriver->getDescriptorSetCache()->getFrameDescriptorSet().set
-                                      : frameDescriptorSet;
-
+            globalDescriptorSet = vkDriver->getDescriptorSetCache()->getEngineDescriptorSet().set;
+            sceneDescriptorSet  = vkDriver->getDescriptorSetCache()->getSceneDescriptorSet().set;
+            frameDescriptorSet  = vkDriver->getDescriptorSetCache()->getFrameDescriptorSet().set;
             break;
         }
         case PassNode::Type::Compute:

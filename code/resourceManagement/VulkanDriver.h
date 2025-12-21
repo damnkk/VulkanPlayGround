@@ -3,6 +3,7 @@
 #include <volk.h>
 #include <nvvk/context.hpp>
 #include <nvapp/application.hpp>
+#include <nvvk/descriptors.hpp>
 #include <memory>
 #include <cassert>
 #include <queue>
@@ -158,12 +159,15 @@ public:
     VkPhysicalDeviceProperties2 _physicalDeviceProperties2;
 
 private:
-    void                  prepareGlobalDescriptorSet();
-    VkDescriptorSet       getGlobalDescriptorSet();
-    VkDescriptorSetLayout getGlobalDescriptorSetLayout();
-    VkDescriptorSet       _globalDescriptorSet{VK_NULL_HANDLE};
-    VkDescriptorSetLayout _globalDescriptorSetLayout{VK_NULL_HANDLE};
-    VkDescriptorPool      _globalDescriptorPool{VK_NULL_HANDLE};
+    void prepareGlobalDescriptorSet();
+    void updateGlobalDescriptorSet();
+    void prepareFrameDescriptorSet();
+    void updateFrameDescriptorSet();
+
+    VkDescriptorSet          getGlobalDescriptorSet();
+    VkDescriptorSetLayout    getGlobalDescriptorSetLayout();
+    nvvk::DescriptorBindings _globalDescriptorBindings;
+    nvvk::DescriptorBindings _frameDescriptorBindings;
 
 public:
     void tryCleanupDeferredTasks();

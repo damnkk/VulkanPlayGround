@@ -24,7 +24,7 @@ void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
     Texture*              inputTex         = Texture::Create(inputTexturePath);
     auto                  colorTexId       = rdgBuilder->createTexture("inputTexture").Import(inputTex).finish();
     auto                  outputTexRef     = rdgBuilder->createTexture("outputTexture")
-                            .Extent({vkDriver->getWindowSize().width, vkDriver->getWindowSize().height, 1})
+                            .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
                             .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
                             .Format(VK_FORMAT_R8G8B8A8_UNORM)
                             .UsageFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)

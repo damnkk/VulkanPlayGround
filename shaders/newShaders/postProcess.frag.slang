@@ -1,4 +1,5 @@
 #include "common.slang"
+#include "tonemap_functions.h.slang"
 struct FragmentInput
 {
     float2 uv : TEXCOORD0;
@@ -16,5 +17,7 @@ Texture2D<float4> inputTexture;
 [shader("fragment")]
 void main(FragmentInput fragIn, out FragmentOutput fragOut)
 {
-    fragOut.color = inputTexture.Sample(g_GlobalSampler_Linear, fragIn.uv);
+    fragOut.color     = inputTexture.Sample(g_GlobalSampler_Linear, fragIn.uv);
+    fragOut.color.xyz = toSrgb(fragOut.color.xyz);
+    // fragOut.color = float4(1.0);
 }
