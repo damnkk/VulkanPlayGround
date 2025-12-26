@@ -14,6 +14,16 @@ find_path(NVPRO_CORE2_DIR
   DOC "Path to nvpro_core2"
 )
 include(${NVPRO_CORE2_DIR}/cmake/Setup.cmake)
+
+# Add compile definitions for nvutils to enable thread pool priority and deadlock check
+# This ensures both the library and our application see the same class layout
+if(TARGET nvutils)
+  target_compile_definitions(nvutils PUBLIC 
+    BS_THREAD_POOL_ENABLE_PRIORITY 
+    BS_THREAD_POOL_ENABLE_WAIT_DEADLOCK_CHECK
+  )
+endif()
+
 # implement spirv-reflect as static lib
 set(SPIRV_REFLECT_STATIC_LIB ON CACHE BOOL "Build spv-reflect as static lib" FORCE)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/External/spv_reflect)

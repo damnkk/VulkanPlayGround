@@ -5,6 +5,7 @@
 #include "PipelineCacheManager.h"
 #include <nvvk/check_error.hpp>
 #include <nvvk/debug_util.hpp>
+#include <nvutils/parallel_work.hpp>
 #include <stdexcept>
 namespace Play
 {
@@ -13,6 +14,8 @@ VulkanDriver* vkDriver = nullptr;
 
 VulkanDriver::VulkanDriver(nvapp::Application* app) : _app(app)
 {
+    auto& threadPool = nvutils::get_thread_pool();
+
     // 1. 缓存核心句柄
     _device                    = app->getDevice();
     _physicalDevice            = app->getPhysicalDevice();

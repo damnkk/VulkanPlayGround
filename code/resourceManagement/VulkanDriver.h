@@ -7,6 +7,7 @@
 #include <memory>
 #include <cassert>
 #include <queue>
+#include "core/JobSystem.h"
 
 namespace Play
 {

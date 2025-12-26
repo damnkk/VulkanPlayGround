@@ -20,7 +20,7 @@ void PostProcessPass::init()
 
 void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
 {
-    std::filesystem::path inputTexturePath = "C:\\Users\\Amin\\Desktop\\newCreated\\cici.jpg";
+    std::filesystem::path inputTexturePath = "C:\\Users\\Amin\\Desktop\\d06f9d322937f022981ce92880703d26.jpg";
     Texture*              inputTex         = Texture::Create(inputTexturePath);
     auto                  colorTexId       = rdgBuilder->createTexture("inputTexture").Import(inputTex).finish();
     auto                  outputTexRef     = rdgBuilder->createTexture("outputTexture")

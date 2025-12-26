@@ -43,7 +43,8 @@ bool PplCacheBlock::loadFromDisk(bool fullLoading)
 
 void PplCacheBlock::saveToDisk()
 {
-    BufferStream stream;
+    std::unique_lock<std::mutex> lock(_cacheLock);
+    BufferStream                 stream;
     stream.write(&_blockKey, sizeof(BlockKey));
     stream.write(&_currentPipelineCount, sizeof(uint32_t));
     stream.write(_pipelineKeys.data(), sizeof(uint64_t) * _currentPipelineCount);
@@ -52,6 +53,7 @@ void PplCacheBlock::saveToDisk()
     std::vector<uint8_t> cacheData(_currPsoCacheSize);
     vkGetPipelineCacheData(vkDriver->getDevice(), _vkHandle, reinterpret_cast<size_t*>(&_currPsoCacheSize), cacheData.data());
     stream.write(cacheData.data(), _currPsoCacheSize);
+    sqliteWriter->write(getBlockPath(), stream);
 }
 
 void PplCacheBlock::init()
@@ -63,13 +65,14 @@ void PplCacheBlock::init()
     NVVK_CHECK(vkCreatePipelineCache(vkDriver->getDevice(), &pipelineCacheCreateInfo, nullptr, &_vkHandle));
 }
 
-bool PplCacheBlock::tryAdd()
+bool PplCacheBlock::tryAdd(PipelineKey& key)
 {
     std::unique_lock<std::mutex> lock(_stateLock);
     if (_state >= BLOCK_STATE_CLOSING)
     {
         return false;
     }
+    _pipelineKeys.push_back(key);
     ++_pendingPipelineCount;
     if (_currentPipelineCount + _pendingPipelineCount >= MAX_BLOCK_PIPELINE_COUNT)
     {
@@ -78,7 +81,19 @@ bool PplCacheBlock::tryAdd()
     return true;
 }
 
-void PplCacheBlock::createPipeline(std::function<void(VkPipelineCache)> createFunc)
+void PplCacheBlock::unLoad()
+{
+    std::unique_lock<std::mutex> lock(_stateLock);
+    saveToDisk();
+    if (!isEvicted() && _vkHandle != VK_NULL_HANDLE)
+    {
+        vkDestroyPipelineCache(vkDriver->getDevice(), _vkHandle, nullptr);
+        _vkHandle = VK_NULL_HANDLE;
+        _state |= BLOCK_STATE_EVICTED;
+    }
+}
+
+void PplCacheBlock::createPipeline(std::function<VkPipeline(PplCacheBlock*)>&& createFunc)
 {
     { // load data from disk if evicted
         std::unique_lock<std::mutex> lock(_stateLock);
@@ -88,8 +103,8 @@ void PplCacheBlock::createPipeline(std::function<void(VkPipelineCache)> createFu
         }
     }
     { // create pipeline maybe modify the vkHandle, so need lock
-        std::unique_lock<std::mutex> lock(_stateLock);
-        createFunc(_vkHandle);
+        std::unique_lock<std::mutex> lock(_cacheLock);
+        createFunc(this);
     }
     { // update state
         std::unique_lock<std::mutex> lock(_stateLock);
@@ -196,7 +211,7 @@ void PplCacheBlockManager::saveHeaderInfo()
     tempData.write(&_HeaderInfo.vendorID, sizeof(uint32_t));
     tempData.write(&_HeaderInfo.pipelineCacheUUID, VK_UUID_SIZE);
     tempData.write(&_HeaderInfo.blockCnt, sizeof(uint32_t));
-    tempData.write(&_HeaderInfo.blockKeys);
+    tempData.write(_HeaderInfo.blockKeys);
 
     sqliteWriter->write(getRootInfoPath().string(), tempData);
 }
@@ -205,6 +220,7 @@ void PplCacheBlockManager::HeaderInfo::initFromLoadRes(BufferStream& res)
 {
     res.read(this, offsetof(HeaderInfo, pipelineCacheUUID));
     res.read(pipelineCacheUUID, VK_UUID_SIZE);
+    res.read(&blockCnt, sizeof(uint32_t));
     blockKeys.resize(blockCnt);
     res.read(blockKeys.data(), sizeof(BlockKey) * blockCnt);
 }
@@ -302,7 +318,7 @@ PplCacheBlock* PplCacheBlockManager::getOrCreateBlock(PipelineKey key)
         return _blockMap[targetBlock].get();
     }
     // Check if current block can be used
-    else if (_blockMap[_nextBlockKey]->tryAdd())
+    else if (_blockMap.find(_nextBlockKey) != _blockMap.end() && _blockMap[_nextBlockKey]->tryAdd(key))
     {
         // 如果当前block可以添加,则添加到当前block
         _pipelineToBlockMap[key] = _nextBlockKey;
@@ -331,14 +347,23 @@ PplCacheBlock* PplCacheBlockManager::getOrCreateBlock(PipelineKey key)
     else
     {
         // 如果没有可用的block,则创建一个新的block
+        ++_nextBlockKey;
         auto newBlock = std::make_unique<PplCacheBlock>(_nextBlockKey);
         newBlock->init();
         _blockMap[_nextBlockKey] = std::move(newBlock);
         _pipelineToBlockMap[key] = _nextBlockKey;
         _lru.push_front(_nextBlockKey);
-        ++_nextBlockKey;
-        _blockMap[_nextBlockKey - 1]->tryAdd();
-        return _blockMap[_nextBlockKey - 1].get();
+        _blockMap[_nextBlockKey]->tryAdd(key);
+        return _blockMap[_nextBlockKey].get();
+    }
+}
+
+PplCacheBlockManager::~PplCacheBlockManager()
+{
+    saveHeaderInfo();
+    for (auto& [key, block] : _blockMap)
+    {
+        block->unLoad();
     }
 }
 
@@ -349,6 +374,7 @@ PipelineCacheManager::PipelineCacheManager()
 }
 PipelineCacheManager::~PipelineCacheManager()
 {
+    _cacheBlockManager.reset();
     if (sqliteWriter)
     {
         sqliteWriter->close();
@@ -388,18 +414,28 @@ VkPipeline PipelineCacheManager::getOrCreateGraphicsPipeline(RenderProgram* prog
     {
         LOGE("Not support general render pass");
     }
-
-    _gfxPipelineCreator.createGraphicsPipeline(vkDriver->getDevice(), VK_NULL_HANDLE, program->psoState(), &_pipelineMap[key]);
-    return _pipelineMap[key];
+    auto       block = _cacheBlockManager->getOrCreateBlock(key);
+    VkPipeline pipeline;
+    block->createPipeline(
+        [pipelineCreatorPtr = &_gfxPipelineCreator, program, pipelinePtr = &pipeline](PplCacheBlock* block)
+        {
+            pipelineCreatorPtr->createGraphicsPipeline(vkDriver->getDevice(), block->_vkHandle, program->psoState(), pipelinePtr);
+            return *pipelinePtr;
+        });
+    _pipelineMap[key] = pipeline;
+    return pipeline;
 }
+
 VkPipeline PipelineCacheManager::getOrCreateComputePipeline(ComputePipelineState& computeState)
 {
     return VK_NULL_HANDLE;
 }
+
 VkPipeline PipelineCacheManager::getOrCreateRTPipeline(RTPipelineState& rtState)
 {
     return VK_NULL_HANDLE;
 }
+
 VkPipeline PipelineCacheManager::getOrCreateMeshPipeline(PSOState& psoState, RenderPass* renderPass, ShaderID mShaderID, ShaderID fShaderID,
                                                          ShaderID tShaderID)
 {

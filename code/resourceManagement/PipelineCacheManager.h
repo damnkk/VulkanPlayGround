@@ -55,9 +55,11 @@ public:
 
     void init();
 
-    bool tryAdd();
+    bool tryAdd(PipelineKey& key);
 
-    void createPipeline(std::function<void(VkPipelineCache)> createFunc);
+    void createPipeline(std::function<VkPipeline(PplCacheBlock*)>&& createFunc);
+
+    void unLoad();
 
     inline std::string getBlockPath() const
     {
@@ -79,13 +81,14 @@ class PplCacheBlockManager
 {
 public:
     PplCacheBlockManager();
-
+    ~PplCacheBlockManager();
     void deinit() {}
 
     void Tick() {}
 
-    void tryToUnloadBlock() {}
-    void loadAllBlockFromDisk();
+    void           tryToUnloadBlock() {}
+    void           loadAllBlockFromDisk();
+    PplCacheBlock* getOrCreateBlock(PipelineKey key);
 
 private:
     friend class PplCacheBlock;
@@ -104,8 +107,6 @@ private:
         std::vector<BlockKey> blockKeys;
         void                  initFromLoadRes(BufferStream& res);
     } _HeaderInfo;
-
-    PplCacheBlock* getOrCreateBlock(PipelineKey key);
 
     CacheLRU                                                     _lru;
     std::unordered_map<BlockKey, std::unique_ptr<PplCacheBlock>> _blockMap;
