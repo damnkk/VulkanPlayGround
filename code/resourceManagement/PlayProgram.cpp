@@ -7,6 +7,31 @@
 #include "VulkanDriver.h"
 namespace Play
 {
+
+PushConstantManager::PushConstantManager()
+{
+    _maxSize = vkDriver->_physicalDeviceProperties2.properties.limits.maxPushConstantsSize;
+    _constantData.resize(_maxSize, 0);
+}
+
+const std::vector<VkPushConstantRange>& PushConstantManager::getRanges() const
+{
+    return _ranges;
+}
+
+uint32_t PushConstantManager::getMaxSize() const
+{
+    return _maxSize;
+}
+
+void PushConstantManager::clear()
+{
+    _currOffset = 0;
+    _ranges.clear();
+    std::fill(_constantData.begin(), _constantData.end(), 0);
+    _typeMap.clear();
+}
+
 DescriptorSetManager::DescriptorSetManager(VkDevice device) : _vkDevice(device) {}
 
 DescriptorSetManager::~DescriptorSetManager() {}
@@ -65,16 +90,9 @@ DescriptorSetManager& DescriptorSetManager::initLayout()
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
     pipelineLayoutCreateInfo.setLayoutCount         = static_cast<uint32_t>(_descSetLayouts.size());
     pipelineLayoutCreateInfo.pSetLayouts            = _descSetLayouts.data();
-    pipelineLayoutCreateInfo.pushConstantRangeCount = static_cast<uint32_t>(_constantRanges.size());
-    pipelineLayoutCreateInfo.pPushConstantRanges    = _constantRanges.data();
+    pipelineLayoutCreateInfo.pushConstantRangeCount = static_cast<uint32_t>(_constantRanges.getRanges().size());
+    pipelineLayoutCreateInfo.pPushConstantRanges    = _constantRanges.getRanges().data();
     NVVK_CHECK(vkCreatePipelineLayout(_vkDevice, &pipelineLayoutCreateInfo, nullptr, &_pipelineLayout));
-    return *this;
-}
-
-DescriptorSetManager& DescriptorSetManager::addConstantRange(uint32_t size, uint32_t offset, VkShaderStageFlags stage)
-{
-    if (_isRecorded) return *this;
-    _constantRanges.emplace_back(stage, offset, size);
     return *this;
 }
 

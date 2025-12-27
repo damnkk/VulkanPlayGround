@@ -7,6 +7,7 @@ using float4   = glm::vec4;
 using float4x4 = glm::mat4;
 using uint     = unsigned int;
 #endif
+#include "PConstantType.h.slang"
 struct EngineConfig
 {
 };

@@ -2,6 +2,7 @@
 #include "PlayApp.h"
 #include "renderpasses/PostProcessPass.h"
 #include "renderPasses/PresentPass.h"
+#include "core/PlayCamera.h"
 
 namespace Play
 {
@@ -11,13 +12,18 @@ DeferRenderer::DeferRenderer(PlayElement& view)
     _view = &view;
 }
 DeferRenderer::~DeferRenderer() {}
-void DeferRenderer::OnPreRender() {}
+void DeferRenderer::OnPreRender()
+{
+    PlayCamera* camera            = getActiveCamera();
+    glm::mat4   viewMatrix        = camera->getCameraManipulator()->getViewMatrix();
+    glm::mat4   perspectiveMatrix = camera->getCameraManipulator()->getPerspectiveMatrix();
+}
 void DeferRenderer::OnPostRender() {}
 void DeferRenderer::RenderFrame()
 {
     _rdgBuilder->execute();
 }
-void DeferRenderer::SetScene(Scene* scene) {}
+void DeferRenderer::SetScene(SceneManager* scene) {}
 void DeferRenderer::OnResize(int width, int height)
 {
     _passes.clear();

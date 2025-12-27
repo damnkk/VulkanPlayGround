@@ -157,13 +157,13 @@ public:
         }
     }
 
+    void                        updateFrameDescriptorSet();
     VkPhysicalDeviceProperties2 _physicalDeviceProperties2;
 
 private:
     void prepareGlobalDescriptorSet();
     void updateGlobalDescriptorSet();
     void prepareFrameDescriptorSet();
-    void updateFrameDescriptorSet();
 
     VkDescriptorSet          getGlobalDescriptorSet();
     VkDescriptorSetLayout    getGlobalDescriptorSetLayout();

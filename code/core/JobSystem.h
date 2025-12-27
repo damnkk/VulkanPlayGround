@@ -2,11 +2,6 @@
 #define JOBSYSTEM_H
 namespace Play
 {
-class JobSystem
-{
-public:
-    JobSystem();
-};
 
 } // namespace Play
 

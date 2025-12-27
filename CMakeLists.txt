@@ -61,6 +61,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/External/spv_reflect/include
   ${CMAKE_CURRENT_LIST_DIR}/External/Crc32/include
   ${CMAKE_CURRENT_LIST_DIR}/External/sqlite3
+  ${CMAKE_CURRENT_LIST_DIR}/shaders
 
 
 )

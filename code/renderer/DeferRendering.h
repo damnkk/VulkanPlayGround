@@ -24,7 +24,7 @@ public:
     void OnPreRender() override;
     void OnPostRender() override;
     void RenderFrame() override;
-    void SetScene(Scene* scene) override;
+    void SetScene(SceneManager* scene) override;
     void OnResize(int width, int height) override;
 
     Texture* getOutputTexture() override

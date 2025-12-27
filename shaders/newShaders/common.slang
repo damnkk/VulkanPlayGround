@@ -1,5 +1,6 @@
 #include "Hdevice.h"
 #include "gltf_scene_io.h.slang"
+
 // shader extension
 #extension GL_EXT_scalar_block_layout : enable
 #extension GL_GOOGLE_include_directive : enable
@@ -29,4 +30,6 @@ ConstantBuffer<SceneData> s_SceneDataBuffer;
 // RaytracingAccelerationStructure s_SceneTLAS;
 // Per-Frame bindings (update per frame)
 [vk::binding(0, 2)]
-ConstantBuffer<CameraData> s_CameraDataBuffer;
+ConstantBuffer<CameraData> s_PlaceHolder;
+[[vk::push_constant]]
+ConstantBuffer<PerFrameConstant> g_PerFrameConstant;

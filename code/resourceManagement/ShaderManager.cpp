@@ -40,7 +40,8 @@ void ShaderManager::init()
 {
     _shaderPool.init(MaxShaderModules, &PlayResourceManager::Instance());
     std::filesystem::path shaderBasePath = std::filesystem::path(getBaseFilePath()) / "shaders";
-    _searchPaths = {shaderBasePath, shaderBasePath / "newShaders", std::filesystem::path(getBaseFilePath()) / "External/nvpro_core2/nvshaders"};
+    _searchPaths = {shaderBasePath, shaderBasePath / "newShaders", std::filesystem::path(getBaseFilePath()) / "External/nvpro_core2/nvshaders",
+                    std::filesystem::path(getBaseFilePath()) / "code/resourceManagement"};
     _glslCCompiler.addSearchPaths(_searchPaths);
     _glslCCompiler.defaultOptions();
     _glslCCompiler.defaultTarget();

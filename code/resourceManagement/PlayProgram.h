@@ -22,15 +22,74 @@ struct BindInfo
     VkDescriptorType   descriptorType;
     VkShaderStageFlags shaderStageFlags;
 };
-
-struct ConstantRange
+#include "PConstantType.h.slang"
+class PushConstantManager
 {
-    size_t             size;
-    VkShaderStageFlags stage;
+public:
+    PushConstantManager();
+    template <typename T>
+    void addRange(VkShaderStageFlags stage)
+    {
+        std::type_index typeIdx(typeid(T));
+        auto            it = _typeMap.find(typeIdx);
+        if (it != _typeMap.end())
+        {
+            // 如果存在，合并 stageFlags
+            _ranges[it->second].stageFlags |= stage;
+            return;
+        }
+
+        uint32_t size = static_cast<uint32_t>(sizeof(T));
+
+        // 4字节对齐 (Vulkan Spec 要求 offset 必须是 4 的倍数)
+        uint32_t alignedOffset = static_cast<uint32_t>((_currOffset + 3) & ~3);
+
+        // 3. 检查剩余空间
+        if (alignedOffset + size > _maxSize)
+        {
+            LOGE(("Push constant size limit exceeded! Max: " + std::to_string(_maxSize) + ", Requested end: " + std::to_string(alignedOffset + size))
+                     .c_str());
+        }
+
+        // 4. 创建新 Range
+        VkPushConstantRange range{};
+        range.stageFlags = stage;
+        range.offset     = alignedOffset;
+        range.size       = size;
+
+        _ranges.emplace_back(stage, alignedOffset, size);
+
+        // 记录映射关系
+        _typeMap[typeIdx] = static_cast<uint32_t>(_ranges.size() - 1);
+
+        // 更新当前偏移量
+        _currOffset = alignedOffset + size;
+    }
+    template <typename T>
+    T* getRange()
+    {
+        std::type_index typeIdx(typeid(T));
+        auto            it = _typeMap.find(typeIdx);
+        if (it != _typeMap.end())
+        {
+            LOGE("PushConstantManager::getRange: Type not found");
+        }
+        return static_cast<T*>(&_constantData[_ranges[it->second].offset]);
+    }
+
+    const std::vector<VkPushConstantRange>& getRanges() const;
+
+    uint32_t getMaxSize() const;
+
+    void clear();
+
+private:
+    uint32_t                                      _maxSize;
+    size_t                                        _currOffset = 0;
+    std::vector<VkPushConstantRange>              _ranges;
+    std::unordered_map<std::type_index, uint32_t> _typeMap;
+    std::vector<uint8_t>                          _constantData;
 };
-/*
-Example:
-*/
 
 class DescriptorSetManager
 {
@@ -42,7 +101,18 @@ public:
                                      VkShaderStageFlags shaderStageFlags);
     DescriptorSetManager& addBinding(const BindInfo& bindingInfo);
     bool                  finalizeLayout();
-    DescriptorSetManager& addConstantRange(uint32_t size, uint32_t offset, VkShaderStageFlags stage);
+    template <typename T>
+    DescriptorSetManager& addConstantRange(VkShaderStageFlags stage)
+    {
+        _constantRanges.addRange<T>(stage);
+        return *this;
+    }
+
+    template <typename T>
+    T* getConstantRange()
+    {
+        return _constantRanges.getRange<T>();
+    }
 
     VkPipelineLayout                                                                   getPipelineLayout() const;
     std::array<nvvk::DescriptorBindings, static_cast<size_t>(DescriptorEnum::eCount)>& getSetBindingInfo()
@@ -102,9 +172,9 @@ private:
     {
         return _vkDevice;
     }
-    bool                             _isRecorded = false; // 记录状态,保证binding有增改之后会调用finish,刷新管线布局
-    std::vector<BindInfo>            _bindingInfos;
-    std::vector<VkPushConstantRange> _constantRanges;
+    bool                  _isRecorded = false; // 记录状态,保证binding有增改之后会调用finish,刷新管线布局
+    std::vector<BindInfo> _bindingInfos;
+    PushConstantManager   _constantRanges;
     std::array<nvvk::DescriptorBindings, static_cast<size_t>(DescriptorEnum::eCount)> _descBindSet;
     std::array<VkDescriptorSetLayout, static_cast<size_t>(DescriptorEnum::eCount)>    _descSetLayouts = {};
     VkPipelineLayout                                                                  _pipelineLayout = VK_NULL_HANDLE;
@@ -162,6 +232,7 @@ public:
     virtual void bind(VkCommandBuffer cmdBuf) = 0;
     virtual void finish()
     {
+        _descriptorSetManager.addConstantRange<PerFrameConstant>(VK_SHADER_STAGE_ALL);
         _descriptorSetManager.finalizeLayout();
     };
 
