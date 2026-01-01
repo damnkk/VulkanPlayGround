@@ -365,7 +365,8 @@ Buffer* BufferPool::alloc(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryP
         LOGE("Failed to allocate buffer");
         return nullptr;
     }
-    VmaMemoryUsage vmaUsage;
+    VmaMemoryUsage           vmaUsage;
+    VmaAllocationCreateFlags flags = 0;
     if (properties & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
     {
         vmaUsage = VMA_MEMORY_USAGE_GPU_ONLY;
@@ -373,13 +374,14 @@ Buffer* BufferPool::alloc(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryP
     else if (properties & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
     {
         vmaUsage = (properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) ? VMA_MEMORY_USAGE_CPU_TO_GPU : VMA_MEMORY_USAGE_CPU_ONLY;
+        flags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
     }
     else
     {
         vmaUsage = VMA_MEMORY_USAGE_AUTO;
     }
 
-    _manager->createBuffer(*buffer, size, usage, vmaUsage);
+    _manager->createBuffer(*buffer, size, usage, vmaUsage, flags);
     buffer->size       = size;
     buffer->usageFlags = usage;
     buffer->property   = properties;

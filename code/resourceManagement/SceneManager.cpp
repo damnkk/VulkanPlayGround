@@ -39,6 +39,8 @@ void SceneManager::addScenes(std::vector<std::filesystem::path> filenames)
     nvutils::parallel_batches<8>(filenames.size(), [&](size_t i) { addScene(filenames[i]); }, 4);
 }
 
+void SceneManager::updateAnimationBuffer() {}
+
 SceneManager::~SceneManager()
 {
     for (auto& scene : _scenes)

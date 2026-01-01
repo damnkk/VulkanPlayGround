@@ -14,6 +14,7 @@ public:
     SceneManager();
     void addScene(std::filesystem::path filename);
     void addScenes(std::vector<std::filesystem::path> filenames);
+    void updateAnimationBuffer();
 
     ~SceneManager();
 

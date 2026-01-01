@@ -21,7 +21,6 @@ class PassNode;
 // using BufferHandleArray  = std::vector<BufferHandle>;
 
 class RDGPass;
-class RDGTexturePool;
 class RenderDependencyGraph;
 struct ProducerInfo
 {

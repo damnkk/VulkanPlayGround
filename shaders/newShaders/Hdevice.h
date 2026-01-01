@@ -23,6 +23,6 @@ struct CameraData
     float4x4 invProjMatrix;
     float4x4 invViewProjMatrix;
     float3   cameraPosition;
-    float2   screenSize;
+    float2   viewPortSize;
     float    WorldTime;
 };

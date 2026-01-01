@@ -8,11 +8,6 @@
 
 namespace Play
 {
-namespace RDG
-{
-class RDGTexturePool;
-class RDGBufferPool;
-} // namespace RDG
 class Buffer;
 class Texture;
 class PlayResourceManager;
