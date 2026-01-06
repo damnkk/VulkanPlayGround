@@ -10,6 +10,7 @@
 #include <ShaderManager.hpp>
 #include "DescriptorManager.h"
 #include "RenderPass.h"
+#include "PConstantType.h.slang"
 namespace Play
 {
 using ShaderID = uint32_t;
@@ -66,16 +67,19 @@ public:
         _currOffset = alignedOffset + size;
     }
     template <typename T>
-    T* getRange()
+    void setRange(const T& value)
     {
         std::type_index typeIdx(typeid(T));
         auto            it = _typeMap.find(typeIdx);
-        if (it != _typeMap.end())
+        if (it == _typeMap.end())
         {
-            LOGE("PushConstantManager::getRange: Type not found");
+            LOGW("PushConstantManager::getRange: Type not found");
+            return;
         }
-        return static_cast<T*>(&_constantData[_ranges[it->second].offset]);
+        *reinterpret_cast<T*>(&_constantData[_ranges[it->second].offset]) = value;
     }
+
+    void pushConstantRanges(VkCommandBuffer cmdBuf, VkPipelineLayout layout);
 
     const std::vector<VkPushConstantRange>& getRanges() const;
 
@@ -109,9 +113,14 @@ public:
     }
 
     template <typename T>
-    T* getConstantRange()
+    void setConstantRange(const T& value)
     {
-        return _constantRanges.getRange<T>();
+        _constantRanges.setRange(value);
+    }
+
+    void pushConstantRanges(VkCommandBuffer cmdBuf, VkPipelineLayout layout)
+    {
+        _constantRanges.pushConstantRanges(cmdBuf, layout);
     }
 
     VkPipelineLayout                                                                   getPipelineLayout() const;
@@ -230,6 +239,7 @@ public:
         return VK_PIPELINE_BIND_POINT_MAX_ENUM;
     }
     virtual void bind(VkCommandBuffer cmdBuf) = 0;
+    // if you don't want user explicitly call finish(),you should xx it private
     virtual void finish()
     {
         _descriptorSetManager.addConstantRange<PerFrameConstant>(VK_SHADER_STAGE_ALL);

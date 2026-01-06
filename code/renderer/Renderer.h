@@ -37,8 +37,10 @@ public:
         return _cameras[_activeCameraIdx].get();
     }
 
+    Buffer* getCurrentCameraBuffer() const;
+
 protected:
-    SceneManager*                            _scene;
+    std::unique_ptr<SceneManager>            _scene;
     std::vector<std::unique_ptr<PlayCamera>> _cameras;
     uint32_t                                 _activeCameraIdx = 0;
     std::array<CameraData, 3>                _cameraDatas;

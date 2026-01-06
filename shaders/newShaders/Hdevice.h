@@ -11,9 +11,7 @@ using uint     = unsigned int;
 struct EngineConfig
 {
 };
-struct SceneData
-{
-};
+
 struct CameraData
 {
     float4x4 viewMatrix;

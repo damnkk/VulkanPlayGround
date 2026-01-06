@@ -30,8 +30,8 @@ PlayElement::~PlayElement()
 {
     delete vkDriver;
     vkDriver = nullptr;
-    delete _sceneManager;
-    _sceneManager = nullptr;
+    // delete _sceneManager;
+    // _sceneManager = nullptr;
 }
 
 void PlayElement::onAttach(nvapp::Application* app)
@@ -40,7 +40,7 @@ void PlayElement::onAttach(nvapp::Application* app)
     vkDriver = new VulkanDriver(app);
     vkDriver->init();
     // CameraManip
-    _sceneManager     = new SceneManager();
+    // _sceneManager     = new SceneManager();
     _profilerTimeline = _info.profilerManager->createTimeline({"graphics"});
     _profilerGpuTimer.init(_profilerTimeline, app->getDevice(), app->getPhysicalDevice(), app->getQueue(0).familyIndex, true);
     createGraphicsDescriptResource();
@@ -67,6 +67,7 @@ void PlayElement::onDetach()
 
     _profilerGpuTimer.deinit();
     _info.profilerManager->destroyTimeline(_profilerTimeline);
+    _renderer.reset();
 }
 
 void PlayElement::onResize(VkCommandBuffer cmd, const VkExtent2D& size)

@@ -32,6 +32,20 @@ void PushConstantManager::clear()
     _typeMap.clear();
 }
 
+void PushConstantManager::pushConstantRanges(VkCommandBuffer cmdBuf, VkPipelineLayout layout)
+{
+    VkPushConstantsInfo pushConstantsInfo{VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO};
+    pushConstantsInfo.layout = layout;
+    for (const auto& range : _ranges)
+    {
+        pushConstantsInfo.offset     = range.offset;
+        pushConstantsInfo.size       = range.size;
+        pushConstantsInfo.stageFlags = range.stageFlags;
+        pushConstantsInfo.pValues    = _constantData.data();
+        vkCmdPushConstants(cmdBuf, layout, range.stageFlags, range.offset, range.size, _constantData.data());
+    }
+}
+
 DescriptorSetManager::DescriptorSetManager(VkDevice device) : _vkDevice(device) {}
 
 DescriptorSetManager::~DescriptorSetManager() {}
@@ -405,7 +419,7 @@ void RenderProgram::bind(VkCommandBuffer cmdBuf)
     VkPipeline gfxPipeline = getOrCreatePipeline(_renderPass);
     vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, gfxPipeline);
     VkDescriptorSet set =
-        vkDriver->getDescriptorSetCache()->requestDescriptorSet(this->getDescriptorSetManager(), (uint32_t) DescriptorEnum::eDrawObjectDescriptorSet);
+        vkDriver->getDescriptorSetCache()->requestDescriptorSet(_descriptorSetManager, (uint32_t) DescriptorEnum::eDrawObjectDescriptorSet);
     VkBindDescriptorSetsInfo bindInfo{VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO};
     bindInfo.descriptorSetCount = 1;
     bindInfo.pDescriptorSets    = &set;
@@ -413,6 +427,7 @@ void RenderProgram::bind(VkCommandBuffer cmdBuf)
     bindInfo.layout             = this->_descriptorSetManager.getPipelineLayout();
     bindInfo.firstSet           = static_cast<uint32_t>(DescriptorEnum::eDrawObjectDescriptorSet);
     vkCmdBindDescriptorSets2(cmdBuf, &bindInfo);
+    _descriptorSetManager.pushConstantRanges(cmdBuf, this->_descriptorSetManager.getPipelineLayout());
 }
 
 VkPipeline RenderProgram::getOrCreatePipeline(RenderPass* renderPass)

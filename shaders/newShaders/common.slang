@@ -25,11 +25,11 @@ TextureCube<float4> s_SceneSkyBoxTexture;
 [vk::binding(2, 1)]
 Texture3D<float> s_SceneVolumeFogTexture;
 [vk::binding(3, 1)]
-ConstantBuffer<SceneData> s_SceneDataBuffer;
+Texture2D<float4> s_SceneTextures[];
 // [vk::binding(4, 1)]
 // RaytracingAccelerationStructure s_SceneTLAS;
 // Per-Frame bindings (update per frame)
-[vk::binding(0, 2)]
-ConstantBuffer<CameraData> s_PlaceHolder;
+// [vk::binding(0, 2)]
+// ConstantBuffer<CameraData> s_PlaceHolder;
 [[vk::push_constant]]
 ConstantBuffer<PerFrameConstant> g_PerFrameConstant;

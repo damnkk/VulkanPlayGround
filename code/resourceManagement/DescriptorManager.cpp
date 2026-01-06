@@ -330,8 +330,10 @@ void DescriptorSetCache::initSceneDescriptorSets(nvvk::DescriptorBindings& setBi
     poolInfo.poolSizeCount                      = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes                         = poolSizes.data();
     poolInfo.maxSets                            = 1;
+    poolInfo.flags                              = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT;
     NVVK_CHECK(vkCreateDescriptorPool(vkDriver->_device, &poolInfo, nullptr, &_sceneDescriptorPool));
-    setBindings.createDescriptorSetLayout(vkDriver->getDevice(), 0, &_sceneDescriptorSet.layout);
+    setBindings.createDescriptorSetLayout(vkDriver->getDevice(), VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
+                                          &_sceneDescriptorSet.layout);
     VkDescriptorSetAllocateInfo allocInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
     allocInfo.descriptorPool     = _sceneDescriptorPool;
     allocInfo.descriptorSetCount = 1;

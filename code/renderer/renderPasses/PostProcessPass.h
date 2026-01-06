@@ -6,19 +6,20 @@
 namespace Play
 {
 class RenderProgram;
-class PlayElement;
+class DeferRenderer;
 class PostProcessPass : public BasePass
 {
 public:
-    PostProcessPass(PlayElement* element) : _element(element) {}
+    PostProcessPass(DeferRenderer* ownedRender) : _ownedRender(ownedRender) {}
     ~PostProcessPass() override;
 
     void init() override;
     void build(RDG::RDGBuilder* rdgBuilder) override;
 
 private:
+    friend class DeferRenderer;
     std::unique_ptr<RenderProgram> _postProgram;
-    PlayElement*                   _element = nullptr;
+    DeferRenderer*                 _ownedRender = nullptr;
 };
 
 } // namespace Play

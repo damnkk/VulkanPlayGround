@@ -34,15 +34,13 @@ public:
 
 protected:
     void updateCameraBuffer();
-    void updateSceneAnimationBuffer();
 
 private:
     std::unique_ptr<RDG::RDGBuilder>         _rdgBuilder;
     Texture*                                 _outputTexture = nullptr;
     std::bitset<size_t(DeferPasses::eCount)> _renderPasses;
     std::vector<std::unique_ptr<BasePass>>   _passes;
-    PlayElement*                             _view          = nullptr;
-    Buffer*                                  _cameraInfoBuf = nullptr;
+    PlayElement*                             _view = nullptr;
 };
 } // namespace Play
 #endif // DEFERRENDERING_H

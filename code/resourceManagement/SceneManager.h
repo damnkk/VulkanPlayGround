@@ -5,6 +5,7 @@
 #include "nvvkgltf/scene_vk.hpp"
 #include "nvvkgltf/scene_rtx.hpp"
 #include "nvvk/descriptors.hpp"
+#include "PlayScene.h"
 namespace Play
 {
 class PlayElement;
@@ -12,21 +13,23 @@ class SceneManager
 {
 public:
     SceneManager();
-    void addScene(std::filesystem::path filename);
-    void addScenes(std::vector<std::filesystem::path> filenames);
-    void updateAnimationBuffer();
+    SceneManager& addScene(std::filesystem::path filename);
+    SceneManager& addScenes(std::vector<std::filesystem::path> filenames);
+    void          updateDescriptorSet();
+    void          update();
 
     ~SceneManager();
 
 protected:
 private:
-    std::vector<nvvkgltf::Scene>    _scenes; // for cpu
-    std::mutex                      _sceneMutex;
-    std::vector<nvvkgltf::SceneVk>  _scenesVk; // for vulkan gpu
-    std::mutex                      _scenesVkMutex;
-    std::vector<nvvkgltf::SceneRtx> _scenesRTX; // for ray tracing gpu
-    std::mutex                      _scenesRTXMutex;
-    nvvk::DescriptorBindings        _sceneDescriptorBindings;
+    std::vector<nvvkgltf::Scene> _scenes; // for cpu
+    std::mutex                   _sceneMutex;
+    std::vector<RenderScene>     _scenesVk; // for vulkan gpu
+    std::mutex                   _scenesVkMutex;
+    std::vector<RTScene>         _scenesRTX; // for ray tracing gpu
+    std::mutex                   _scenesRTXMutex;
+    std::vector<nvvk::Image>     _sceneImages; // all scene images
+    nvvk::DescriptorBindings     _sceneDescriptorBindings;
 };
 
 } // namespace Play

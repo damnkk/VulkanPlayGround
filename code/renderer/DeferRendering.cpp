@@ -9,15 +9,13 @@ namespace Play
 
 DeferRenderer::DeferRenderer(PlayElement& view)
 {
-    _view          = &view;
-    _cameraInfoBuf = Buffer::Create("cameraInfoBuf", VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT, sizeof(CameraData),
-                                    VkMemoryPropertyFlagBits::VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    _view = &view;
 }
 DeferRenderer::~DeferRenderer() {}
 void DeferRenderer::OnPreRender()
 {
     updateCameraBuffer();
-    updateSceneAnimationBuffer();
+    _scene->update();
 }
 void DeferRenderer::OnPostRender() {}
 void DeferRenderer::RenderFrame()
@@ -32,7 +30,7 @@ void DeferRenderer::OnResize(int width, int height)
     _rdgBuilder    = std::make_unique<RDG::RDGBuilder>();
     _outputTexture = _view->getUITexture();
     // add logic pass
-    _passes.push_back(std::make_unique<PostProcessPass>(_view));
+    _passes.push_back(std::make_unique<PostProcessPass>(this));
     _passes.push_back(std::make_unique<PresentPass>(_view));
     for (auto& pass : _passes)
     {
@@ -60,12 +58,8 @@ void DeferRenderer::updateCameraBuffer()
     data.invProjMatrix     = glm::inverse(data.projMatrix);
     data.invViewProjMatrix = glm::inverse(data.viewProjMatrix);
 
-    memcpy(_cameraInfoBuf->mapping, &data, sizeof(CameraData));
-    PlayResourceManager::Instance().flushBuffer(*_cameraInfoBuf, 0, VK_WHOLE_SIZE);
+    memcpy(getCurrentCameraBuffer()->mapping, &data, sizeof(CameraData));
+    PlayResourceManager::Instance().flushBuffer(*getCurrentCameraBuffer(), 0, VK_WHOLE_SIZE);
 }
 
-void DeferRenderer::updateSceneAnimationBuffer()
-{
-    _scene->updateAnimationBuffer();
-}
 } // namespace Play

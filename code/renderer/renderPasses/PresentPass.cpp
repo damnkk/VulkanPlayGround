@@ -9,9 +9,13 @@ PresentPass::~PresentPass() {}
 
 void PresentPass::init()
 {
-    _presentProgram = std::make_unique<RenderProgram>(vkDriver->_device);
-    _presentProgram->setFragModuleID(ShaderManager::Instance().getShaderIdByName("postProcessf"))
-        .setVertexModuleID(ShaderManager::Instance().getShaderIdByName("postProcessv"));
+    _presentProgram         = std::make_unique<RenderProgram>(vkDriver->_device);
+    uint32_t PostProcessvId = ShaderManager::Instance().loadShaderFromFile("postProcessv", "newShaders/present.vert.slang", ShaderStage::eVertex,
+                                                                           ShaderType::eSLANG, "main");
+    uint32_t PostProcessfId = ShaderManager::Instance().loadShaderFromFile("postProcessf", "newShaders/present.frag.slang", ShaderStage::eFragment,
+                                                                           ShaderType::eSLANG, "main");
+    _presentProgram->setFragModuleID(PostProcessfId);
+    _presentProgram->setVertexModuleID(PostProcessvId);
     _presentProgram->psoState().rasterizationState.frontFace = VK_FRONT_FACE_CLOCKWISE;
     _presentProgram->psoState().rasterizationState.cullMode  = VK_CULL_MODE_NONE;
 }

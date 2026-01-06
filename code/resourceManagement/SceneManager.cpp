@@ -11,11 +11,13 @@ SceneManager::SceneManager()
     _sceneDescriptorBindings.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr); // g_SceneSkyTexture
     _sceneDescriptorBindings.addBinding(1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr); // s_SceneSkyBoxTexture
     _sceneDescriptorBindings.addBinding(2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr); // s_SceneVolumeFogTexture
-    _sceneDescriptorBindings.addBinding(3, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr);         // s_SceneVolumeFogTexture
+    _sceneDescriptorBindings.addBinding(3, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1024, VK_SHADER_STAGE_ALL, nullptr,
+                                        VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT); // s_SceneVolumeFogTexture
+
     vkDriver->getDescriptorSetCache()->initSceneDescriptorSets(_sceneDescriptorBindings);
 }
 
-void SceneManager::addScene(std::filesystem::path filename)
+SceneManager& SceneManager::addScene(std::filesystem::path filename)
 {
     nvvkgltf::Scene* cpuScene = nullptr;
     {
@@ -23,7 +25,7 @@ void SceneManager::addScene(std::filesystem::path filename)
         cpuScene = &_scenes.emplace_back();
     }
     cpuScene->load(filename);
-    nvvkgltf::SceneVk* vkScene = nullptr;
+    RenderScene* vkScene = nullptr;
     {
         std::lock_guard<std::mutex> lock(_scenesVkMutex);
         vkScene = &_scenesVk.emplace_back();
@@ -32,14 +34,40 @@ void SceneManager::addScene(std::filesystem::path filename)
     auto cmd = PlayResourceManager::Instance().getTempCommandBuffer();
     vkScene->create(cmd, *PlayResourceManager::Instance().GetAsStagingUploader(), *cpuScene, true);
     PlayResourceManager::Instance().submitAndWaitTempCmdBuffer(cmd);
+    {
+        std::lock_guard<std::mutex> lock(_scenesVkMutex);
+        vkScene->setTextureOffset(static_cast<uint32_t>(_sceneImages.size()));
+        _sceneImages.insert(_sceneImages.end(), vkScene->textures().begin(), vkScene->textures().end());
+    }
+    return *this;
 }
 
-void SceneManager::addScenes(std::vector<std::filesystem::path> filenames)
+SceneManager& SceneManager::addScenes(std::vector<std::filesystem::path> filenames)
 {
     nvutils::parallel_batches<8>(filenames.size(), [&](size_t i) { addScene(filenames[i]); }, 4);
+    return *this;
 }
 
-void SceneManager::updateAnimationBuffer() {}
+void SceneManager::updateDescriptorSet()
+{
+    if (_sceneImages.empty()) return;
+    VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    write.descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    write.descriptorCount = static_cast<uint32_t>(_sceneImages.size());
+    write.dstBinding      = 3;
+    write.dstSet          = vkDriver->getDescriptorSetCache()->getSceneDescriptorSet().set;
+    std::vector<VkDescriptorImageInfo> imageInfos(_sceneImages.size());
+    for (size_t i = 0; i < _sceneImages.size(); ++i)
+    {
+        imageInfos[i].imageView   = _sceneImages[i].descriptor.imageView;
+        imageInfos[i].sampler     = VK_NULL_HANDLE;
+        imageInfos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    }
+    write.pImageInfo = imageInfos.data();
+    vkUpdateDescriptorSets(vkDriver->_device, 1, &write, 0, nullptr);
+}
+
+void SceneManager::update() {}
 
 SceneManager::~SceneManager()
 {

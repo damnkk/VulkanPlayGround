@@ -81,7 +81,7 @@ private:
     nvapp::Application*        _app{};
     nvutils::ProfilerTimeline* _profilerTimeline{};
     nvvk::ProfilerGpuTimer     _profilerGpuTimer{};
-    SceneManager*              _sceneManager;
+    // SceneManager*              _sceneManager;
 };
 
 } //    namespace Play
