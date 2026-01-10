@@ -9,6 +9,7 @@ namespace Play
 void Renderer::addCamera()
 {
     auto camera = std::make_unique<PlayCamera>();
+    camera->getCameraManipulator()->setMode(nvutils::CameraManipulator::Modes::Fly);
     _cameras.push_back(std::move(camera));
 }
 
@@ -26,6 +27,7 @@ Renderer::Renderer()
 {
     auto defaultCamera = std::make_unique<PlayCamera>();
     addCamera();
+
     _scene = std::make_unique<SceneManager>();
     // _scene->addScene("D:/repo/downloaded_resources/man/SK_Man_Full_04.gltf");
     _scene->updateDescriptorSet();
