@@ -48,9 +48,15 @@ SceneManager& SceneManager::addScenes(std::vector<std::filesystem::path> filenam
     return *this;
 }
 
+void SceneManager::addSkyBoxTexture(Texture* texture)
+{
+    _sceneSkyTexture.push_back(texture);
+}
+
 void SceneManager::updateDescriptorSet()
 {
-    if (_sceneImages.empty()) return;
+    std::vector<VkWriteDescriptorSet> writes;
+
     VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
     write.descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
     write.descriptorCount = static_cast<uint32_t>(_sceneImages.size());
@@ -64,7 +70,24 @@ void SceneManager::updateDescriptorSet()
         imageInfos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
     write.pImageInfo = imageInfos.data();
-    vkUpdateDescriptorSets(vkDriver->_device, 1, &write, 0, nullptr);
+    if (!_sceneImages.empty()) writes.push_back(write);
+
+    VkWriteDescriptorSet skyWrite{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    skyWrite.descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    skyWrite.descriptorCount = static_cast<uint32_t>(_sceneSkyTexture.size());
+    skyWrite.dstBinding      = 0;
+    skyWrite.dstSet          = vkDriver->getDescriptorSetCache()->getSceneDescriptorSet().set;
+    std::vector<VkDescriptorImageInfo> skyImageInfos(_sceneSkyTexture.size());
+    for (size_t i = 0; i < _sceneSkyTexture.size(); ++i)
+    {
+        skyImageInfos[i].imageView   = _sceneSkyTexture[i]->descriptor.imageView;
+        skyImageInfos[i].sampler     = VK_NULL_HANDLE;
+        skyImageInfos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    }
+    skyWrite.pImageInfo = skyImageInfos.data();
+    if (!_sceneSkyTexture.empty()) writes.push_back(skyWrite);
+
+    vkUpdateDescriptorSets(vkDriver->_device, writes.size(), writes.data(), 0, nullptr);
 }
 
 void SceneManager::update() {}

@@ -9,12 +9,14 @@
 namespace Play
 {
 class PlayElement;
+class Texture;
 class SceneManager
 {
 public:
     SceneManager();
     SceneManager& addScene(std::filesystem::path filename);
     SceneManager& addScenes(std::vector<std::filesystem::path> filenames);
+    void          addSkyBoxTexture(Texture* texture);
     void          updateDescriptorSet();
     void          update();
 
@@ -30,6 +32,7 @@ private:
     std::mutex                   _scenesRTXMutex;
     std::vector<nvvk::Image>     _sceneImages; // all scene images
     nvvk::DescriptorBindings     _sceneDescriptorBindings;
+    std::vector<Texture*>        _sceneSkyTexture;
 };
 
 } // namespace Play

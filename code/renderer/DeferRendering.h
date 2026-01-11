@@ -9,7 +9,7 @@ namespace Play
 enum class DeferPasses
 {
     ePreDepthPass,
-    eBasePass,
+    eBaseColorPass,
     eLightPass,
     eVolumeSkyPass,
     ePostProcessPass,
@@ -21,6 +21,7 @@ class DeferRenderer : public Renderer
 public:
     explicit DeferRenderer(PlayElement& element);
     ~DeferRenderer() override;
+    void OnGUI() override;
     void OnPreRender() override;
     void OnPostRender() override;
     void RenderFrame() override;

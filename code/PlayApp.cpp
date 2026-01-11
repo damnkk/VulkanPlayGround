@@ -89,6 +89,7 @@ void PlayElement::onUIRender()
     ImGui::Begin("Viewport");
     ImGui::Image((ImTextureID) _uiTextureDescriptor, ImGui::GetContentRegionAvail());
     ImGui::End();
+    _renderer->OnGUI();
 }
 
 void PlayElement::onUIMenu() {}

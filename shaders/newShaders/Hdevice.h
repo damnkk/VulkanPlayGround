@@ -1,3 +1,4 @@
+#pragma once
 #ifdef __cplusplus
 #include "stdint.h"
 using int2     = glm::ivec2;

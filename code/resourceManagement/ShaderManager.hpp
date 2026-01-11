@@ -8,6 +8,10 @@
 
 namespace Play
 {
+namespace BuiltinShaders
+{
+inline const std::string BUILTIN_FULL_SCREEN_QUAD_VERT_SHADER_NAME = "builtin_full_screen_quad_vert";
+} // namespace BuiltinShaders
 const uint32_t MaxShaderModules = 1024;
 enum class ShaderStage : uint32_t
 {
@@ -74,7 +78,7 @@ public:
     void registBuiltInShader();
     void addSearchPath(const std::filesystem::path& path);
 
-    uint32_t loadShaderFromFile(std::string name, const std::filesystem::path& filePath, ShaderStage stage, ShaderType type = ShaderType::eGLSL,
+    uint32_t loadShaderFromFile(std::string name, const std::filesystem::path& filePath, ShaderStage stage, ShaderType type = ShaderType::eSLANG,
                                 std::string entry = "main");
     void     eraseShaderByName(std::string name);
     void     eraseShaderById(uint32_t id);

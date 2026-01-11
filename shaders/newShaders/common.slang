@@ -1,3 +1,4 @@
+#pragma once
 #include "Hdevice.h"
 #include "gltf_scene_io.h.slang"
 

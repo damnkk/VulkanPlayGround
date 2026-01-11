@@ -21,8 +21,8 @@ class Renderer
 {
 public:
     Renderer();
-    virtual ~Renderer() = default;
-
+    virtual ~Renderer()                              = default;
+    virtual void     OnGUI()                         = 0;
     virtual void     OnPreRender()                   = 0;
     virtual void     OnPostRender()                  = 0;
     virtual void     RenderFrame()                   = 0;

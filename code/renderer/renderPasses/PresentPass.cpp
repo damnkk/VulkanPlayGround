@@ -9,9 +9,8 @@ PresentPass::~PresentPass() {}
 
 void PresentPass::init()
 {
-    _presentProgram = std::make_unique<RenderProgram>(vkDriver->_device);
-    uint32_t presentvID =
-        ShaderManager::Instance().loadShaderFromFile("presentV", "newShaders/present.vert.slang", ShaderStage::eVertex, ShaderType::eSLANG, "main");
+    _presentProgram     = std::make_unique<RenderProgram>(vkDriver->_device);
+    uint32_t presentvID = ShaderManager::Instance().getShaderIdByName(BuiltinShaders::BUILTIN_FULL_SCREEN_QUAD_VERT_SHADER_NAME);
     uint32_t presentfID =
         ShaderManager::Instance().loadShaderFromFile("presentF", "newShaders/present.frag.slang", ShaderStage::eFragment, ShaderType::eSLANG, "main");
     _presentProgram->setFragModuleID(presentfID);

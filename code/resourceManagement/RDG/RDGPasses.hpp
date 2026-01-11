@@ -172,11 +172,13 @@ public:
         return *this;
     }
     RenderPassBuilder&              color(uint32_t slotIdx, RDGTextureRef texHandle, VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                                          VkAttachmentStoreOp storeOp = VK_ATTACHMENT_STORE_OP_STORE, VkImageLayout initLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                                          VkImageLayout finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                                          VkAttachmentStoreOp storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
+                                          VkImageLayout       initLayout  = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                          VkImageLayout       finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     RenderPassBuilder&              depthStencil(RDGTextureRef texHandle, VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                                                 VkAttachmentStoreOp storeOp = VK_ATTACHMENT_STORE_OP_STORE, VkImageLayout initLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                                                 VkImageLayout finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+                                                 VkAttachmentStoreOp storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
+                                                 VkImageLayout       initLayout  = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                                                 VkImageLayout       finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
     RenderPassBuilder&              read(uint32_t binding, RDGTextureRef texture, VkPipelineStageFlagBits2 stage,
                                          uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
     RenderPassBuilder&              read(uint32_t binding, RDGBufferRef buffer, VkPipelineStageFlagBits2 stage,

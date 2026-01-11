@@ -14,15 +14,15 @@ class PlayCamera
 public:
     PlayCamera();
     ~PlayCamera();
-    void                        update(ImGuiWindow* viewportWindow);
-    void                        onResize(const VkExtent2D& size);
-    nvutils::CameraManipulator* getCameraManipulator() const
+    void                                        update(ImGuiWindow* viewportWindow);
+    void                                        onResize(const VkExtent2D& size);
+    std::shared_ptr<nvutils::CameraManipulator> getCameraManipulator() const
     {
-        return _cameraManip.get();
+        return _cameraManip;
     }
 
 private:
-    std::unique_ptr<nvutils::CameraManipulator> _cameraManip;
+    std::shared_ptr<nvutils::CameraManipulator> _cameraManip;
 };
 } // namespace Play
 #endif // PLAYCAMERA_H

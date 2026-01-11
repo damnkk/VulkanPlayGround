@@ -9,8 +9,7 @@ namespace Play
 {
 void PostProcessPass::init()
 {
-    uint32_t PostProcessvId = ShaderManager::Instance().loadShaderFromFile("postProcessv", "newShaders/postProcess.vert.slang", ShaderStage::eVertex,
-                                                                           ShaderType::eSLANG, "main");
+    uint32_t PostProcessvId = ShaderManager::Instance().getShaderIdByName(BuiltinShaders::BUILTIN_FULL_SCREEN_QUAD_VERT_SHADER_NAME);
     uint32_t PostProcessfId = ShaderManager::Instance().loadShaderFromFile("postProcessf", "newShaders/postProcess.frag.slang",
                                                                            ShaderStage::eFragment, ShaderType::eSLANG, "main");
 
@@ -22,10 +21,8 @@ void PostProcessPass::init()
 
 void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
 {
-    std::filesystem::path inputTexturePath = "C:\\Users\\Amin\\Desktop\\d06f9d322937f022981ce92880703d26.jpg";
-    Texture*              inputTex         = Texture::Create(inputTexturePath);
-    auto                  colorTexId       = rdgBuilder->createTexture("inputTexture").Import(inputTex).finish();
-    auto                  outputTexRef     = rdgBuilder->createTexture("outputTexture")
+    auto inputTexture = rdgBuilder->getTexture("SkyBoxRT");
+    auto outputTexRef = rdgBuilder->createTexture("outputTexture")
                             .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
                             .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
                             .Format(VK_FORMAT_R8G8B8A8_UNORM)
@@ -38,7 +35,7 @@ void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
         rdgBuilder->createRenderPass("postProcessPass")
             .color(0, outputTexRef, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-            .read(0, colorTexId, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
+            .read(0, inputTexture, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
             .program(_postProgram.get())
             .execute(
                 [ownedRender, this](RDG::PassNode* passNode, RDG::RenderContext& context)
@@ -53,7 +50,6 @@ void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
                     VkRect2D   scissor  = {{0, 0}, {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height}};
                     vkCmdSetViewportWithCount(cmd, 1, &viewport);
                     vkCmdSetScissorWithCount(cmd, 1, &scissor);
-
                     vkCmdDraw(cmd, 3, 1, 0, 0);
                 })
             .finish();

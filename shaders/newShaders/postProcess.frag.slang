@@ -17,9 +17,6 @@ Texture2D<float4> inputTexture;
 [shader("fragment")]
 void main(FragmentInput fragIn, out FragmentOutput fragOut)
 {
-    uint64_t    cameraBufferPtr    = g_PerFrameConstant.cameraBufferDeviceAddress;
-    uint64_t    sceneAnimBufferPtr = g_PerFrameConstant.sceneAnimationBufferDeviceAddress;
-    CameraData* cameraData         = (CameraData*) cameraBufferPtr;
-    float3      viewMat            = cameraData->cameraPosition;
-    fragOut.color                  = float4(normalize(viewMat), 1.0);
+    fragOut.color     = inputTexture.Sample(g_GlobalSampler_Linear, fragIn.uv);
+    fragOut.color.xyz = tonemapAgX(fragOut.color.xyz);
 }
