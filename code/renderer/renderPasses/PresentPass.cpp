@@ -9,7 +9,7 @@ PresentPass::~PresentPass() {}
 
 void PresentPass::init()
 {
-    _presentProgram     = std::make_unique<RenderProgram>(vkDriver->_device);
+    _presentProgram     = std::make_unique<RenderProgram>();
     uint32_t presentvID = ShaderManager::Instance().getShaderIdByName(BuiltinShaders::BUILTIN_FULL_SCREEN_QUAD_VERT_SHADER_NAME);
     uint32_t presentfID =
         ShaderManager::Instance().loadShaderFromFile("presentF", "newShaders/present.frag.slang", ShaderStage::eFragment, ShaderType::eSLANG, "main");
@@ -27,16 +27,16 @@ void PresentPass::build(RDG::RDGBuilder* rdgBuilder)
     // 2. 创建 Present Pass
     // 使用 RDG 提供的 createPresentPass 接口，将 inputTexture 写入到 presentTexRef
     rdgBuilder->createRenderPass("present")
-        .program(_presentProgram.get())
         .color(0, presentTexRef, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
         .read(0, inputTexture, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT)
         .execute(
-            [](RDG::PassNode* passNode, RDG::RenderContext& context)
+            [this](RDG::PassNode* passNode, RDG::RenderContext& context)
             {
                 VkCommandBuffer cmd = context._currCmdBuffer;
-                passNode->getProgram()->bind(cmd);
-                context._pendingGfxState->bindDescriptorSet(cmd, passNode->getProgram());
+                this->_presentProgram->setPassNode(static_cast<RDG::RenderPassNode*>(passNode));
+                this->_presentProgram->bind(cmd);
+                context._pendingGfxState->bindDescriptorSet(cmd, this->_presentProgram.get());
                 VkViewport viewport = {0, 0, (float) vkDriver->getViewportSize().width, (float) vkDriver->getViewportSize().height, 0.0f, 1.0f};
                 VkRect2D   scissor  = {{0, 0}, {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height}};
                 vkCmdSetViewportWithCount(cmd, 1, &viewport);

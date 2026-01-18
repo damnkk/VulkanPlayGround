@@ -29,7 +29,8 @@ Renderer::Renderer()
 
     _scene = std::make_unique<SceneManager>();
     // _scene->addScene("D:/repo/downloaded_resources/man/SK_Man_Full_04.gltf");
-    std::filesystem::path modelPath     = ".\\resource\\skybox\\graveyard_pathways_2k.hdr";
+    std::filesystem::path modelPath     = ".\\resource\\skybox\\furstenstein_8k.hdr";
+    // std::filesystem::path modelPath     = ".\\resource\\skybox\\graveyard_pathways_2k.hdr";
     Texture*              skyboxTexture = Texture::Create(modelPath, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, true);
     _scene->addSkyBoxTexture(skyboxTexture);
     _scene->updateDescriptorSet();

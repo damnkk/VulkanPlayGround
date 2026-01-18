@@ -4,7 +4,7 @@
 #include "utils.hpp"
 namespace Play
 {
-class DescriptorSetManager;
+class DescriptorSetBindings;
 class PlayProgram;
 enum class DescriptorEnum : uint32_t
 {
@@ -33,7 +33,7 @@ public:
     ~DescriptorBufferManagerExt();
     void init(VkPhysicalDevice physicalDevice, VkDevice device);
     void deinit();
-    void updateDescSetBindingOffset(DescriptorSetManager* manager);
+    // void updateDescSetBindingOffset(DescriptorSetManager* manager);
 
     void updateDescriptor(uint32_t setIdx, uint32_t bindingIdx, VkDescriptorType descriptorType, uint32_t descriptorCount, Buffer* buffers);
 
@@ -70,7 +70,7 @@ public:
     DescriptorSetCache() {}
     ~DescriptorSetCache();
     void                deInit();
-    VkDescriptorSet     requestDescriptorSet(DescriptorSetManager& setManager, uint32_t setIdx);
+    VkDescriptorSet     requestDescriptorSet(DescriptorSetBindings* setManager, uint32_t setIdx);
     CommonDescriptorSet getEngineDescriptorSet()
     {
         return _globalDescriptorSet;
@@ -113,8 +113,8 @@ private:
         std::unordered_map<size_t, CachedSet> descriptorSetMap;
         std::vector<PoolNode>                 pools;
     };
-    VkDescriptorSet      createDescriptorSet(CacheNode& cacheNode, DescriptorSetManager& setManager, uint32_t setIdx);
-    CacheNode::CachedSet createDescriptorSetImplement(CacheNode& cacheNode, DescriptorSetManager& setManager, uint32_t setIdx);
+    VkDescriptorSet                                          createDescriptorSet(CacheNode& cacheNode, DescriptorSetBindings* setManager);
+    CacheNode::CachedSet                                     createDescriptorSetImplement(CacheNode& cacheNode, DescriptorSetBindings* setManager);
     std::unordered_map<uint64_t, std::shared_ptr<CacheNode>> _descriptorPoolMap;
     CommonDescriptorSet                                      _globalDescriptorSet  = {VK_NULL_HANDLE, VK_NULL_HANDLE};
     VkDescriptorPool                                         _globalDescriptorPool = VK_NULL_HANDLE;

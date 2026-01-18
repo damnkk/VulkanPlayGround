@@ -6,6 +6,7 @@
 #include <list>
 #include <unordered_set>
 #include "VulkanDriver.h"
+#include "RDG/RDGPasses.hpp"
 namespace Play
 {
 DataWriter* sqliteWriter = nullptr;
@@ -406,7 +407,7 @@ VkPipeline PipelineCacheManager::getOrCreateGraphicsPipeline(RenderProgram* prog
 
     if (vkDriver->_enableDynamicRendering)
     {
-        DynamicRenderPass* dRenderPass                           = dynamic_cast<DynamicRenderPass*>(program->getRenderPass());
+        DynamicRenderPass* dRenderPass                           = dynamic_cast<DynamicRenderPass*>(program->getPassNode()->getRenderPass());
         _gfxPipelineCreator.renderingState.depthAttachmentFormat = dRenderPass->getDepthAttachmentFormat();
         _gfxPipelineCreator.colorFormats                         = dRenderPass->getColorAttachmentFormats();
     }

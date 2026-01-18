@@ -259,6 +259,23 @@ Texture* TexturePool::alloc(const void* data, size_t dataSize, uint32_t width, u
 
 Texture* TexturePool::alloc(const std::filesystem::path& imagePath, VkImageLayout finalLayout, uint32_t mipLevels, bool isSrgb)
 {
+    if( stbi_is_hdr(nvutils::utf8FromPath(imagePath).c_str()) )
+    {
+        int width,height,channels;
+        float* data = stbi_loadf( nvutils::utf8FromPath(imagePath).c_str(), &width, &height, &channels, 4);
+        if( !data )
+        {
+            LOGW("Failed to load hdr image: %s\n", nvutils::utf8FromPath(imagePath).c_str());
+            return nullptr;
+        }
+        VkDeviceSize buffer_size = static_cast<VkDeviceSize>(width) * height * sizeof(float) * 4;
+        Texture*     texture = 
+            alloc(data, buffer_size, (uint32_t)width, (uint32_t)height, VK_FORMAT_R32G32B32A32_SFLOAT,
+                  VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, mipLevels, finalLayout);
+        texture->DebugName() = nvutils::utf8FromPath(imagePath);
+        stbi_image_free(data);
+        return texture;
+    }
     const std::string imageFileContents = nvutils::loadFile(imagePath);
     if (imageFileContents.empty())
     {

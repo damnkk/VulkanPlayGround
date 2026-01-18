@@ -13,17 +13,22 @@
 #include "PConstantType.h.slang"
 namespace Play
 {
+namespace RDG
+{
+class PassNode;
+class RenderPassNode;
+} // namespace RDG
 using ShaderID = uint32_t;
 
 struct BindInfo
 {
-    uint32_t           setIdx;
     uint32_t           bindingIdx;
     uint32_t           descriptorCount;
     VkDescriptorType   descriptorType;
     VkShaderStageFlags shaderStageFlags;
 };
 #include "PConstantType.h.slang"
+
 class PushConstantManager
 {
 public:
@@ -95,19 +100,73 @@ private:
     std::vector<uint8_t>                          _constantData;
 };
 
-class DescriptorSetManager
+union DescriptorInfo
+{
+    VkDescriptorBufferInfo     buffer;
+    VkDescriptorImageInfo      image;
+    VkAccelerationStructureKHR accel;
+};
+
+class DescriptorSetBindings : public nvvk::DescriptorBindings
 {
 public:
-    DescriptorSetManager(VkDevice device);
+    DescriptorSetBindings();
+    ~DescriptorSetBindings();
+    DescriptorSetBindings& addBinding(uint32_t bindingIdx, uint32_t descriptorCount, VkDescriptorType descriptorType,
+                                      VkShaderStageFlags shaderStageFlags);
+    DescriptorSetBindings& addBinding(const BindInfo& bindingInfo);
+    void                   setDescInfo(uint32_t bindingIdx, const nvvk::Buffer& buffer, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE);
+    void                   setDescInfo(uint32_t bindingIdx, const nvvk::AccelerationStructure& accel);
+    void                   setDescInfo(uint32_t bindingIdx, const nvvk::Image& image);
+    void                   setDescInfo(uint32_t bindingIdx, VkBuffer buffer, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE);
+    void                   setDescInfo(uint32_t bindingIdx, const VkDescriptorBufferInfo& bufferInfo);
+    void                   setDescInfo(uint32_t bindingIdx, VkImageView imageView, VkImageLayout imageLayout, VkSampler sampler = nullptr);
+    void                   setDescInfo(uint32_t bindingIdx, const VkDescriptorImageInfo& imageInfo);
+    void                   setDescInfo(uint32_t bindingIdx, VkAccelerationStructureKHR accel);
+
+    // writeSet.descriptorCount many elements
+    void                         setDescInfo(uint32_t bindingIdx, const nvvk::Buffer* buffers, uint32_t count); // offset 0 and VK_WHOLE_SIZE
+    void                         setDescInfo(uint32_t bindingIdx, const nvvk::AccelerationStructure* accels, uint32_t count);
+    void                         setDescInfo(uint32_t bindingIdx, const nvvk::Image* images, uint32_t count);
+    void                         setDescInfo(uint32_t bindingIdx, const VkDescriptorBufferInfo* bufferInfos, uint32_t count);
+    void                         setDescInfo(uint32_t bindingIdx, const VkDescriptorImageInfo* imageInfos, uint32_t count);
+    void                         setDescInfo(uint32_t bindingIdx, const VkAccelerationStructureKHR* accels, uint32_t count);
+    int                          descriptorOffset(uint32_t bindingIdx);
+    uint64_t                     getBindingsHash(); // flush dirty flag
+    uint64_t                     getDescsetLayoutHash();
+    VkDescriptorSetLayout        finalizeLayout(); // flush recorded flag
+    const VkDescriptorSetLayout& getSetLayout()
+    {
+        return _layout;
+    }
+
+    const std::vector<DescriptorInfo>& getDescriptorInfos()
+    {
+        return _descInfos;
+    }
+
+protected:
+    std::vector<BindInfo>       _bindingInfos;
+    uint64_t                    _setBindingHash;
+    VkDescriptorSetLayout       _layout = VK_NULL_HANDLE;
+    std::vector<DescriptorInfo> _descInfos;
+    bool                        _isRecorded = false; // layout changing state
+    uint8_t                     _dirtyFlags = 0;     // descinfo changing state | bit0: binding changed, bit1: constant range changed
+};
+
+class DescriptorSetManager : public DescriptorSetBindings
+{
+public:
+    DescriptorSetManager();
     ~DescriptorSetManager();
-    void                  deinit();
-    DescriptorSetManager& addBinding(uint32_t setIdx, uint32_t bindingIdx, uint32_t descriptorCount, VkDescriptorType descriptorType,
-                                     VkShaderStageFlags shaderStageFlags);
-    DescriptorSetManager& addBinding(const BindInfo& bindingInfo);
-    bool                  finalizeLayout();
+
+    void finalizeLayout();
+
+    // push constants
     template <typename T>
     DescriptorSetManager& addConstantRange(VkShaderStageFlags stage)
     {
+        _dirtyFlags |= 1 << 1;
         _constantRanges.addRange<T>(stage);
         return *this;
     }
@@ -118,83 +177,35 @@ public:
         _constantRanges.setRange(value);
     }
 
-    void pushConstantRanges(VkCommandBuffer cmdBuf, VkPipelineLayout layout)
+    void pushConstantRanges(VkCommandBuffer cmdBuf)
     {
-        _constantRanges.pushConstantRanges(cmdBuf, layout);
+        _constantRanges.pushConstantRanges(cmdBuf, _pipelineLayout);
     }
 
-    VkPipelineLayout                                                                   getPipelineLayout() const;
-    std::array<nvvk::DescriptorBindings, static_cast<size_t>(DescriptorEnum::eCount)>& getSetBindingInfo()
-    {
-        return _descBindSet;
-    }
+    // getter
+    VkPipelineLayout getPipelineLayout() const;
 
     std::array<VkDescriptorSetLayout, static_cast<size_t>(DescriptorEnum::eCount)>& getDescriptorSetLayouts()
     {
         return _descSetLayouts;
     }
 
-    VkDescriptorSetLayout getDescriptorSetLayout(DescriptorEnum setEnum)
+    VkDescriptorSetLayout& getDescriptorSetLayout(DescriptorEnum setEnum)
     {
         assert(setEnum != DescriptorEnum::eCount);
         return _descSetLayouts[uint32_t(setEnum)];
     }
 
-    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::Buffer& buffer, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE);
-    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::AccelerationStructure& accel);
-    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::Image& image);
-    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, VkBuffer buffer, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE);
-    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const VkDescriptorBufferInfo& bufferInfo);
-    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, VkImageView imageView, VkImageLayout imageLayout, VkSampler sampler = nullptr);
-    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const VkDescriptorImageInfo& imageInfo);
-    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, VkAccelerationStructureKHR accel);
-
-    // writeSet.descriptorCount many elements
-    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::Buffer* buffers,
-                     uint32_t count); // offset 0 and VK_WHOLE_SIZE
-    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::AccelerationStructure* accels, uint32_t count);
-    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const nvvk::Image* images, uint32_t count);
-
-    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const VkDescriptorBufferInfo* bufferInfos, uint32_t count);
-    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const VkDescriptorImageInfo* imageInfos, uint32_t count);
-    void setDescInfo(uint32_t setIdx, uint32_t bindingIdx, const VkAccelerationStructureKHR* accels, uint32_t count);
-
-    uint64_t getBindingsHash(uint32_t setIdx);
-    uint64_t getDescsetLayoutHash(uint32_t setIdx);
-    union DescriptorInfo
-    {
-        VkDescriptorBufferInfo     buffer;
-        VkDescriptorImageInfo      image;
-        VkAccelerationStructureKHR accel;
-    };
-
-    std::vector<DescriptorInfo> getDescriptorInfo(uint32_t setIdx);
-
-    int descriptorOffset(uint32_t setIdx, uint32_t bindingIdx) const;
-
 private:
-    DescriptorSetManager& initLayout();
+    void finalizePipelineLayout();
     DescriptorSetManager(const DescriptorSetManager&);
     DescriptorSetManager& operator=(const DescriptorSetManager&);
-
-    VkDevice getDevice() const
-    {
-        return _vkDevice;
-    }
-    bool                  _isRecorded = false; // 记录状态,保证binding有增改之后会调用finish,刷新管线布局
-    std::vector<BindInfo> _bindingInfos;
     PushConstantManager   _constantRanges;
-    std::array<nvvk::DescriptorBindings, static_cast<size_t>(DescriptorEnum::eCount)> _descBindSet;
-    std::array<VkDescriptorSetLayout, static_cast<size_t>(DescriptorEnum::eCount)>    _descSetLayouts = {};
-    VkPipelineLayout                                                                  _pipelineLayout = VK_NULL_HANDLE;
-    VkDevice                                                                          _vkDevice;
-    uint8_t _dirtyFlags = 0; // bit0: binding changed, bit1: constant range changed
 
-    std::array<std::vector<DescriptorInfo>, static_cast<size_t>(DescriptorEnum::eCount) - static_cast<size_t>(DescriptorEnum::ePerPassDescriptorSet)>
-                                                                                                                                   _descInfos;
-    std::array<uint64_t, static_cast<size_t>(DescriptorEnum::eCount) - static_cast<size_t>(DescriptorEnum::ePerPassDescriptorSet)> _setBindingHashs =
-        {};
-};
+    // for binding request merge
+    std::array<VkDescriptorSetLayout, static_cast<size_t>(DescriptorEnum::eCount)> _descSetLayouts = {};
+    VkPipelineLayout                                                               _pipelineLayout = VK_NULL_HANDLE;
+}; // Helper class to manage push constants.
 
 enum class ProgramType
 {
@@ -208,10 +219,10 @@ enum class ProgramType
 class PlayProgram
 {
 public:
-    PlayProgram(VkDevice device) : _descriptorSetManager(device) {}
+    PlayProgram() {}
     virtual ~PlayProgram()
     {
-        _descriptorSetManager.deinit();
+        // _descriptorSetManager.deinit();
     }
 
     PlayProgram(const PlayProgram&);
@@ -254,7 +265,7 @@ protected:
 class RenderProgram : public PlayProgram
 {
 public:
-    RenderProgram(VkDevice device) : PlayProgram(device) {}
+    RenderProgram() : PlayProgram() {}
     ~RenderProgram() override {}
     RenderProgram& setVertexModuleID(ShaderID vertexModuleID);
     ShaderID       getVertexModuleID() const
@@ -272,33 +283,29 @@ public:
     {
         return _programType;
     }
-    void setRenderPass(RenderPass* renderPass)
-    {
-        _renderPass = renderPass;
-    }
-    RenderPass* getRenderPass()
-    {
-        return _renderPass;
-    }
+    void setPassNode(RDG::PassNode* passNode);
+
+    RDG::RenderPassNode* getPassNode();
+
     PSOState& psoState()
     {
         return _psoState;
     }
 
 private:
-    VkPipeline  getOrCreatePipeline(RenderPass* renderPass);
-    ShaderID    _vertexModuleID = ~0U;
-    ShaderID    _fragModuleID   = ~0U;
-    ProgramType _programType    = ProgramType::eRenderProgram;
-    RenderPass* _renderPass     = nullptr;
-    PSOState    _psoState;
+    VkPipeline     getOrCreatePipeline();
+    ShaderID       _vertexModuleID = ~0U;
+    ShaderID       _fragModuleID   = ~0U;
+    ProgramType    _programType    = ProgramType::eRenderProgram;
+    RDG::PassNode* _passNode       = nullptr;
+    PSOState       _psoState;
 };
 
 class ComputeProgram : public PlayProgram
 {
 public:
-    ComputeProgram(VkDevice device) : PlayProgram(device) {}
-    ComputeProgram(VkDevice device, ShaderID computeModuleID) : PlayProgram(device), _computeModuleID(computeModuleID) {}
+    ComputeProgram() {}
+    ComputeProgram(VkDevice device, ShaderID computeModuleID) : _computeModuleID(computeModuleID) {}
     ComputeProgram& setComputeModuleID(ShaderID computeModuleID);
 
     void                bind(VkCommandBuffer cmdBuf) override;
@@ -316,9 +323,9 @@ private:
 class RTProgram : public PlayProgram
 {
 public:
-    RTProgram(VkDevice device) : PlayProgram(device) {}
+    RTProgram() {}
     RTProgram(VkDevice device, ShaderID rayGenID, ShaderID rayCHitID, ShaderID rayMissID)
-        : PlayProgram(device), _rayGenModuleID(rayGenID), _rayCHitModuleID(rayCHitID), _rayMissModuleID(rayMissID)
+        : _rayGenModuleID(rayGenID), _rayCHitModuleID(rayCHitID), _rayMissModuleID(rayMissID)
     {
     }
     RTProgram& setRayGenModuleID(ShaderID rayGenModuleID);
@@ -346,11 +353,8 @@ private:
 class MeshRenderProgram : public PlayProgram
 {
 public:
-    MeshRenderProgram(VkDevice device) : PlayProgram(device) {}
-    MeshRenderProgram(VkDevice device, ShaderID meshModuleID, ShaderID fragModuleID)
-        : PlayProgram(device), _meshModuleID(meshModuleID), _fragModuleID(fragModuleID)
-    {
-    }
+    MeshRenderProgram() {}
+    MeshRenderProgram(VkDevice device, ShaderID meshModuleID, ShaderID fragModuleID) : _meshModuleID(meshModuleID), _fragModuleID(fragModuleID) {}
     MeshRenderProgram& setTaskModuleID(ShaderID taskModuleID);
     MeshRenderProgram& setMeshModuleID(ShaderID meshModuleID);
     MeshRenderProgram& setFragModuleID(ShaderID fragModuleID);

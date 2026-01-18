@@ -80,14 +80,8 @@ void RenderPassNode::initRenderPass()
     std::sort(config.colorAttachments.begin(), config.colorAttachments.end(),
               [](const RenderPassAttachment& a, const RenderPassAttachment& b) { return a.slotIndex < b.slotIndex; });
     _renderPass->init(config);
-    static_cast<RenderProgram*>(this->_program)->setRenderPass(_renderPass.get());
 }
 
-void RenderPassNode::setProgram(PlayProgram* program)
-{
-    _program = program;
-    ((RenderProgram*) program)->setRenderPass(_renderPass.get());
-}
 RenderPassBuilder::RenderPassBuilder(RDGBuilder* builder, RenderPassNodeRef node) : _builder(builder), _node(node), _dag(builder->getDag()) {}
 
 RenderPassBuilder& RenderPassBuilder::color(uint32_t slotIdx, RDGTextureRef texHandle, VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp,

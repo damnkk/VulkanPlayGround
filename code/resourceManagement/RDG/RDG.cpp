@@ -149,7 +149,9 @@ PassNode* BlackBoard::getPass(std::string name)
 
 void PendingState::bindDescriptorSet(VkCommandBuffer cmd, PlayProgram* program)
 {
-    std::array<VkDescriptorSet, 4> sets      = {_globalDescriptorSet, _sceneDescriptorSet, _frameDescriptorSet, _passDescriptorSet};
+    VkDescriptorSet                drawObjectSet = vkDriver->getDescriptorSetCache()->requestDescriptorSet(&program->getDescriptorSetManager(),
+                                                                                                           (uint32_t) DescriptorEnum::eDrawObjectDescriptorSet);
+    std::array<VkDescriptorSet, 5> sets      = {_globalDescriptorSet, _sceneDescriptorSet, _frameDescriptorSet, _passDescriptorSet, drawObjectSet};
     VkPipelineBindPoint            bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     switch (program->getProgramType())
     {
@@ -168,6 +170,7 @@ void PendingState::bindDescriptorSet(VkCommandBuffer cmd, PlayProgram* program)
     }
     vkCmdBindDescriptorSets(cmd, bindPoint, program->getDescriptorSetManager().getPipelineLayout(), (uint32_t) DescriptorEnum::eGlobalDescriptorSet,
                             static_cast<uint32_t>(sets.size()), sets.data(), 0, nullptr);
+    program->getDescriptorSetManager().pushConstantRanges(cmd);
 }
 
 RDGBuilder::RDGBuilder()
@@ -207,24 +210,24 @@ void RDGBuilder::beforePassExecute() {}
 void RDGBuilder::prepareDescriptorSets(RenderContext& context, PassNode* pass)
 {
     DescriptorSetCache* descCache          = vkDriver->getDescriptorSetCache();
-    auto&               programDescManager = pass->getProgram()->getDescriptorSetManager();
+    auto&               programDescManager = pass->_descBindings;
 
     for (auto& [texture, state] : pass->_textureStates)
     {
         if (state.textureStates.front().isAttachment) continue;
         assert(texture->getRHI());
         TextureAccessInfo accessInfo = state.textureStates[0];
-        programDescManager.setDescInfo(uint32_t(DescriptorEnum::ePerPassDescriptorSet), accessInfo.binding, *texture->_rhi);
+        programDescManager.setDescInfo(accessInfo.binding, *texture->_rhi);
     }
 
     for (auto& [buffer, state] : pass->_bufferStates)
     {
         assert(buffer->getRHI());
         BufferAccessInfo bufferInfo = state.bufferState;
-        programDescManager.setDescInfo(uint32_t(DescriptorEnum::ePerPassDescriptorSet), bufferInfo.binding, *buffer->_rhi);
+        programDescManager.setDescInfo(bufferInfo.binding, *buffer->_rhi);
     }
 
-    VkDescriptorSet currPassSet = descCache->requestDescriptorSet(programDescManager, (uint32_t) DescriptorEnum::ePerPassDescriptorSet);
+    VkDescriptorSet currPassSet = descCache->requestDescriptorSet(&programDescManager, (uint32_t) DescriptorEnum::ePerPassDescriptorSet);
     switch (pass->type())
     {
         case PassNode::Type::Render:
@@ -500,18 +503,18 @@ void RDGBuilder::compile()
         {
             TextureAccessInfo& currAccessInfo = state.textureStates.front();
             if (currAccessInfo.isAttachment) continue;
-            passNode->_program->getDescriptorSetManager().addBinding(uint32_t(DescriptorEnum::ePerPassDescriptorSet), currAccessInfo.binding, 1,
-                                                                     currAccessInfo.descriptorType,
-                                                                     inferShaderStageFromPipelineStage(currAccessInfo.stageMask));
+            passNode->_descBindings.addBinding(currAccessInfo.binding, 1, currAccessInfo.descriptorType,
+
+                                               inferShaderStageFromPipelineStage(currAccessInfo.stageMask));
         }
         for (auto& [buffer, state] : passNode->_bufferStates)
         {
             BufferAccessInfo& currAccessInfo = state.bufferState;
-            passNode->_program->getDescriptorSetManager().addBinding(uint32_t(DescriptorEnum::ePerPassDescriptorSet), currAccessInfo.binding, 1,
-                                                                     currAccessInfo.descriptorType,
-                                                                     inferShaderStageFromPipelineStage(currAccessInfo.stageMask));
+            passNode->_descBindings.addBinding(currAccessInfo.binding, 1, currAccessInfo.descriptorType,
+                                               inferShaderStageFromPipelineStage(currAccessInfo.stageMask));
         }
-        passNode->getProgram()->finish();
+
+        passNode->_descBindings.finalizeLayout();
     }
 }
 
@@ -536,7 +539,6 @@ void RDGBuilder::executePass(PassNode* pass)
     {
         prepareRenderPass(pass);
     }
-
     pass->execute(*renderContext);
     if (pass->type() == PassNode::Type::Render)
     {
