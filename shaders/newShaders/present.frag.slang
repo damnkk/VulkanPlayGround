@@ -16,6 +16,6 @@ Texture2D<float4> inputTexture;
 
 [shader("fragment")]
 void main(FragmentInput fragIn, out FragmentOutput fragOut)
-{ 
+{
     fragOut.color = inputTexture.Sample(g_GlobalSampler_Linear, fragIn.uv);
 }

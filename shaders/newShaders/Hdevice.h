@@ -1,4 +1,5 @@
-#pragma once
+#ifndef HDEVICE_H
+#define HDEVICE_H
 #ifdef __cplusplus
 #include "stdint.h"
 using int2     = glm::ivec2;
@@ -25,3 +26,4 @@ struct CameraData
     float2   viewPortSize;
     float    WorldTime;
 };
+#endif // HDEVICE_H

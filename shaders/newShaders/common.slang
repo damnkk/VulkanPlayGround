@@ -1,4 +1,5 @@
-#pragma once
+#ifndef COMMON_SLANG
+#define COMMON_SLANG
 #include "Hdevice.h"
 #include "gltf_scene_io.h.slang"
 
@@ -27,10 +28,5 @@ TextureCube<float4> s_SceneSkyBoxTexture;
 Texture3D<float> s_SceneVolumeFogTexture;
 [vk::binding(3, 1)]
 Texture2D<float4> s_SceneTextures[];
-// [vk::binding(4, 1)]
-// RaytracingAccelerationStructure s_SceneTLAS;
-// Per-Frame bindings (update per frame)
-// [vk::binding(0, 2)]
-// ConstantBuffer<CameraData> s_PlaceHolder;
-[[vk::push_constant]]
-ConstantBuffer<PerFrameConstant> g_PerFrameConstant;
+
+#endif // COMMON_SLANG

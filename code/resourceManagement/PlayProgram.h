@@ -34,7 +34,7 @@ class PushConstantManager
 public:
     PushConstantManager();
     template <typename T>
-    void addRange(VkShaderStageFlags stage)
+    void addRange(VkShaderStageFlags stage = VK_SHADER_STAGE_ALL)
     {
         std::type_index typeIdx(typeid(T));
         auto            it = _typeMap.find(typeIdx);
@@ -164,7 +164,7 @@ public:
 
     // push constants
     template <typename T>
-    DescriptorSetManager& addConstantRange(VkShaderStageFlags stage)
+    DescriptorSetManager& addConstantRange(VkShaderStageFlags stage = VK_SHADER_STAGE_ALL)
     {
         _dirtyFlags |= 1 << 1;
         _constantRanges.addRange<T>(stage);
@@ -253,7 +253,7 @@ public:
     // if you don't want user explicitly call finish(),you should xx it private
     virtual void finish()
     {
-        _descriptorSetManager.addConstantRange<PerFrameConstant>(VK_SHADER_STAGE_ALL);
+        _descriptorSetManager.addConstantRange<PerFrameConstant>();
         _descriptorSetManager.finalizeLayout();
     };
 

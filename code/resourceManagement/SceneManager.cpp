@@ -32,7 +32,7 @@ SceneManager& SceneManager::addScene(std::filesystem::path filename)
     }
     vkScene->init(PlayResourceManager::GetAsAllocator(), PlayResourceManager::GetAsSamplerPool());
     auto cmd = PlayResourceManager::Instance().getTempCommandBuffer();
-    vkScene->create(cmd, *PlayResourceManager::Instance().GetAsStagingUploader(), *cpuScene, true);
+    vkScene->create(cmd, *PlayResourceManager::Instance().GetAsStagingUploader(), *cpuScene, true, false);
     PlayResourceManager::Instance().submitAndWaitTempCmdBuffer(cmd);
     {
         std::lock_guard<std::mutex> lock(_scenesVkMutex);
