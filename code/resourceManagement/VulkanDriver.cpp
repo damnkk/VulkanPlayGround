@@ -51,6 +51,8 @@ VulkanDriver::VulkanDriver(nvapp::Application* app) : _app(app)
     _descriptorSetCache = std::make_unique<DescriptorSetCache>();
 
     _frameData.resize(_app->getFrameCycleSize());
+
+    _lastTickTime = std::chrono::high_resolution_clock::now();
 }
 
 void VulkanDriver::prepareGlobalDescriptorSet()
@@ -120,6 +122,7 @@ void VulkanDriver::init()
     PlayResourceManager::Instance().initialize();
     TexturePool::Instance().init(65535, &PlayResourceManager::Instance());
     BufferPool::Instance().init(65535, &PlayResourceManager::Instance());
+    ProgramPool::Instance().init(65535, &PlayResourceManager::Instance());
     ShaderManager::Instance().init();
 
     if (!_enableDynamicRendering)
@@ -161,6 +164,7 @@ VulkanDriver::~VulkanDriver()
     _descriptorSetCache.reset();
     TexturePool::Instance().deinit();
     BufferPool::Instance().deinit();
+    ProgramPool::Instance().deinit();
     PlayResourceManager::Instance().deInit();
     ShaderManager::Instance().deInit();
 }
@@ -178,6 +182,11 @@ void VulkanDriver::tryCleanupDeferredTasks()
 
 void VulkanDriver::tick()
 {
+    auto                          currentTime = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> diff        = currentTime - _lastTickTime;
+    _deltaTime                                = diff.count();
+    _lastTickTime                             = currentTime;
+
     _frameNum++;
 }
 

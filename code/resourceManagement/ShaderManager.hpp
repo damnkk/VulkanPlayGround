@@ -11,6 +11,8 @@ namespace Play
 namespace BuiltinShaders
 {
 inline const std::string BUILTIN_FULL_SCREEN_QUAD_VERT_SHADER_NAME = "builtin_full_screen_quad_vert";
+inline const std::string BUILTIN_DEFAULT_GBUFFER_VERT_SHADER_NAME  = "builtin_default_gbuffer_vert";
+inline const std::string BUILTIN_DEFAULT_GBUFFER_FRAG_SHADER_NAME  = "builtin_default_gbuffer_frag";
 } // namespace BuiltinShaders
 const uint32_t MaxShaderModules = 1024;
 enum class ShaderStage : uint32_t

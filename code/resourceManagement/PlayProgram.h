@@ -116,17 +116,16 @@ public:
                                       VkShaderStageFlags shaderStageFlags);
     DescriptorSetBindings& addBinding(const BindInfo& bindingInfo);
     void                   setDescInfo(uint32_t bindingIdx, const nvvk::Buffer& buffer, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE);
-    void                   setDescInfo(uint32_t bindingIdx, const nvvk::AccelerationStructure& accel);
-    void                   setDescInfo(uint32_t bindingIdx, const nvvk::Image& image);
-    void                   setDescInfo(uint32_t bindingIdx, VkBuffer buffer, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE);
-    void                   setDescInfo(uint32_t bindingIdx, const VkDescriptorBufferInfo& bufferInfo);
-    void                   setDescInfo(uint32_t bindingIdx, VkImageView imageView, VkImageLayout imageLayout, VkSampler sampler = nullptr);
-    void                   setDescInfo(uint32_t bindingIdx, const VkDescriptorImageInfo& imageInfo);
-    void                   setDescInfo(uint32_t bindingIdx, VkAccelerationStructureKHR accel);
+
+    void setDescInfo(uint32_t bindingIdx, const nvvk::Image& image);
+    void setDescInfo(uint32_t bindingIdx, VkBuffer buffer, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE);
+    void setDescInfo(uint32_t bindingIdx, const VkDescriptorBufferInfo& bufferInfo);
+    void setDescInfo(uint32_t bindingIdx, VkImageView imageView, VkImageLayout imageLayout, VkSampler sampler = nullptr);
+    void setDescInfo(uint32_t bindingIdx, const VkDescriptorImageInfo& imageInfo);
+    void setDescInfo(uint32_t bindingIdx, VkAccelerationStructureKHR accel);
 
     // writeSet.descriptorCount many elements
     void                         setDescInfo(uint32_t bindingIdx, const nvvk::Buffer* buffers, uint32_t count); // offset 0 and VK_WHOLE_SIZE
-    void                         setDescInfo(uint32_t bindingIdx, const nvvk::AccelerationStructure* accels, uint32_t count);
     void                         setDescInfo(uint32_t bindingIdx, const nvvk::Image* images, uint32_t count);
     void                         setDescInfo(uint32_t bindingIdx, const VkDescriptorBufferInfo* bufferInfos, uint32_t count);
     void                         setDescInfo(uint32_t bindingIdx, const VkDescriptorImageInfo* imageInfos, uint32_t count);
@@ -219,7 +218,7 @@ enum class ProgramType
 class PlayProgram
 {
 public:
-    PlayProgram() {}
+    PlayProgram(uint32_t poolID) : poolId(poolID) {}
     virtual ~PlayProgram()
     {
         // _descriptorSetManager.deinit();
@@ -257,6 +256,8 @@ public:
         _descriptorSetManager.finalizeLayout();
     };
 
+    uint32_t poolId = -1;
+
 protected:
     DescriptorSetManager _descriptorSetManager;
     ProgramType          _programType = ProgramType::eUndefined;
@@ -265,7 +266,11 @@ protected:
 class RenderProgram : public PlayProgram
 {
 public:
-    RenderProgram() : PlayProgram() {}
+    RenderProgram(uint32_t id) : PlayProgram(id) {}
+    RenderProgram(uint32_t id, ShaderID vertexModuleID, ShaderID fragModuleID)
+        : PlayProgram(id), _vertexModuleID(vertexModuleID), _fragModuleID(fragModuleID)
+    {
+    }
     ~RenderProgram() override {}
     RenderProgram& setVertexModuleID(ShaderID vertexModuleID);
     ShaderID       getVertexModuleID() const
@@ -304,8 +309,8 @@ private:
 class ComputeProgram : public PlayProgram
 {
 public:
-    ComputeProgram() {}
-    ComputeProgram(VkDevice device, ShaderID computeModuleID) : _computeModuleID(computeModuleID) {}
+    ComputeProgram(uint32_t id) : PlayProgram(id) {}
+    ComputeProgram(uint32_t id, VkDevice device, ShaderID computeModuleID) : PlayProgram(id), _computeModuleID(computeModuleID) {}
     ComputeProgram& setComputeModuleID(ShaderID computeModuleID);
 
     void                bind(VkCommandBuffer cmdBuf) override;
@@ -323,9 +328,9 @@ private:
 class RTProgram : public PlayProgram
 {
 public:
-    RTProgram() {}
-    RTProgram(VkDevice device, ShaderID rayGenID, ShaderID rayCHitID, ShaderID rayMissID)
-        : _rayGenModuleID(rayGenID), _rayCHitModuleID(rayCHitID), _rayMissModuleID(rayMissID)
+    RTProgram(uint32_t id) : PlayProgram(id) {}
+    RTProgram(uint32_t id, VkDevice device, ShaderID rayGenID, ShaderID rayCHitID, ShaderID rayMissID)
+        : PlayProgram(id), _rayGenModuleID(rayGenID), _rayCHitModuleID(rayCHitID), _rayMissModuleID(rayMissID)
     {
     }
     RTProgram& setRayGenModuleID(ShaderID rayGenModuleID);
@@ -353,8 +358,11 @@ private:
 class MeshRenderProgram : public PlayProgram
 {
 public:
-    MeshRenderProgram() {}
-    MeshRenderProgram(VkDevice device, ShaderID meshModuleID, ShaderID fragModuleID) : _meshModuleID(meshModuleID), _fragModuleID(fragModuleID) {}
+    MeshRenderProgram(uint32_t id) : PlayProgram(id) {}
+    MeshRenderProgram(uint32_t id, VkDevice device, ShaderID meshModuleID, ShaderID fragModuleID)
+        : PlayProgram(id), _meshModuleID(meshModuleID), _fragModuleID(fragModuleID)
+    {
+    }
     MeshRenderProgram& setTaskModuleID(ShaderID taskModuleID);
     MeshRenderProgram& setMeshModuleID(ShaderID meshModuleID);
     MeshRenderProgram& setFragModuleID(ShaderID fragModuleID);

@@ -10,7 +10,7 @@ void VolumeSkyPass::init()
 {
     auto skyBoxvId = ShaderManager::Instance().getShaderIdByName(BuiltinShaders::BUILTIN_FULL_SCREEN_QUAD_VERT_SHADER_NAME);
     auto skyBoxfId = ShaderManager::Instance().loadShaderFromFile("skyBoxFragment", "skyBoxProgram.frag.slang", ShaderStage::eFragment);
-    _skyBoxProgram = std::make_unique<RenderProgram>();
+    _skyBoxProgram = ProgramPool::Instance().alloc<RenderProgram>();
     _skyBoxProgram->setFragModuleID(skyBoxfId);
     _skyBoxProgram->setVertexModuleID(skyBoxvId);
     _skyBoxProgram->psoState().rasterizationState.frontFace       = VK_FRONT_FACE_CLOCKWISE;
@@ -43,7 +43,7 @@ void VolumeSkyPass::build(RDG::RDGBuilder* rdgBuilder)
                     this->_skyBoxProgram->setPassNode(static_cast<RDG::RenderPassNode*>(passNode));
                     this->_skyBoxProgram->getDescriptorSetManager().setConstantRange(perFrameConstant);
                     this->_skyBoxProgram->bind(cmd);
-                    context._pendingGfxState->bindDescriptorSet(cmd, this->_skyBoxProgram.get());
+                    context._pendingGfxState->bindDescriptorSet(cmd, this->_skyBoxProgram);
                     VkViewport viewport = {0, 0, (float) vkDriver->getViewportSize().width, (float) vkDriver->getViewportSize().height, 0.0f, 1.0f};
                     VkRect2D   scissor  = {{0, 0}, {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height}};
                     vkCmdSetViewportWithCount(cmd, 1, &viewport);

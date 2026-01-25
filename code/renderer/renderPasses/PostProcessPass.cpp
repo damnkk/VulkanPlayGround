@@ -13,7 +13,7 @@ void PostProcessPass::init()
     uint32_t PostProcessfId = ShaderManager::Instance().loadShaderFromFile("postProcessf", "newShaders/postProcess.frag.slang",
                                                                            ShaderStage::eFragment, ShaderType::eSLANG, "main");
 
-    _postProgram = std::make_unique<RenderProgram>();
+    _postProgram = ProgramPool::Instance().alloc<RenderProgram>();
     _postProgram->setFragModuleID(PostProcessfId).setVertexModuleID(PostProcessvId);
     _postProgram->psoState().rasterizationState.frontFace = VK_FRONT_FACE_CLOCKWISE;
     _postProgram->psoState().rasterizationState.cullMode  = VK_CULL_MODE_NONE;
@@ -45,7 +45,7 @@ void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
                     this->_postProgram->setPassNode(static_cast<RDG::RenderPassNode*>(passNode));
                     this->_postProgram->getDescriptorSetManager().setConstantRange(perFrameConstant);
                     this->_postProgram->bind(cmd);
-                    context._pendingGfxState->bindDescriptorSet(cmd, this->_postProgram.get());
+                    context._pendingGfxState->bindDescriptorSet(cmd, this->_postProgram);
                     VkViewport viewport = {0, 0, (float) vkDriver->getViewportSize().width, (float) vkDriver->getViewportSize().height, 0.0f, 1.0f};
                     VkRect2D   scissor  = {{0, 0}, {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height}};
                     vkCmdSetViewportWithCount(cmd, 1, &viewport);

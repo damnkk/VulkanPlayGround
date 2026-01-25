@@ -18,8 +18,8 @@ public:
 
 private:
     friend class DeferRenderer;
-    std::unique_ptr<RenderProgram> _postProgram;
-    DeferRenderer*                 _ownedRender = nullptr;
+    RenderProgram* _postProgram;
+    DeferRenderer* _ownedRender = nullptr;
 };
 
 } // namespace Play

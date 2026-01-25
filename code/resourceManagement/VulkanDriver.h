@@ -7,6 +7,7 @@
 #include <memory>
 #include <cassert>
 #include <queue>
+#include <chrono>
 #include "core/JobSystem.h"
 
 namespace Play
@@ -190,12 +191,14 @@ public:
     std::queue<std::pair<uint8_t, std::function<void()>>> _deferredDeleteTaskQueue;
 
     // 原始 App 指针 (仅用于获取窗口大小等非 Vulkan 核心信息，如果需要的话)
-    nvapp::Application*               _app                    = nullptr;
-    uint64_t                          _frameNum               = 0;
-    bool                              _enableRayTracing       = true;
-    bool                              _enableDynamicRendering = true;
-    std::unique_ptr<RenderPassCache>  _renderPassCache        = nullptr; // if Dynamic rendering is off, use RenderPassCache to manage render passes
-    std::unique_ptr<FrameBufferCache> _frameBufferCache       = nullptr; // if Dynamic rendering is off, use FrameBufferCache to manage frame buffers
+    nvapp::Application*                            _app       = nullptr;
+    uint64_t                                       _frameNum  = 0;
+    double                                         _deltaTime = 0.0;
+    std::chrono::high_resolution_clock::time_point _lastTickTime;
+    bool                                           _enableRayTracing       = true;
+    bool                                           _enableDynamicRendering = true;
+    std::unique_ptr<RenderPassCache>  _renderPassCache  = nullptr; // if Dynamic rendering is off, use RenderPassCache to manage render passes
+    std::unique_ptr<FrameBufferCache> _frameBufferCache = nullptr; // if Dynamic rendering is off, use FrameBufferCache to manage frame buffers
 };
 extern VulkanDriver* vkDriver;
 

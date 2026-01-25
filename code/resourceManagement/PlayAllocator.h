@@ -12,6 +12,7 @@ class Buffer;
 class Texture;
 class PlayResourceManager;
 class PlayElement;
+class PlayProgram;
 template <typename T>
 class BasePool
 {
@@ -104,6 +105,26 @@ protected:
     // 分配一个空Buffer对象
     Buffer* alloc();
 };
+
+class ProgramPool : public BasePool<PlayProgram>
+{
+public:
+    static ProgramPool& Instance();
+    template <typename T, typename... Args>
+    T*   alloc(Args&&... args);
+    void free(PlayProgram* obj);
+    void deinit() override;
+};
+
+template <typename T, typename... Args>
+T* ProgramPool::alloc(Args&&... args)
+{
+    assert(_availableIndex < _objs.size());
+    std::lock_guard<std::mutex> lock(_mutex);
+    uint32_t                    index = _freeIndices[_availableIndex++];
+    _objs[index]                      = static_cast<T*>(new T(index, std::forward<Args>(args)...));
+    return static_cast<T*>(_objs[index]);
+}
 
 class PlayResourceManager : public nvvk::ResourceAllocatorExport, public nvvk::StagingUploader, public nvvk::SamplerPool
 {

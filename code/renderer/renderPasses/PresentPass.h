@@ -19,8 +19,8 @@ public:
     void build(RDG::RDGBuilder* rdgBuilder) override;
 
 private:
-    PlayElement*                   _element;
-    std::unique_ptr<RenderProgram> _presentProgram = nullptr;
+    PlayElement*   _element;
+    RenderProgram* _presentProgram = nullptr;
 };
 
 } // namespace Play

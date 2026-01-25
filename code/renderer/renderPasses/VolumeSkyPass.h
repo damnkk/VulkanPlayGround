@@ -18,10 +18,10 @@ public:
     virtual void build(RDG::RDGBuilder* rdgBuilder) override;
 
 private:
-    std::unique_ptr<RenderProgram> _skyBoxProgram;
-    std::unique_ptr<RenderProgram> _atmosphereProgram;
-    std::unique_ptr<RenderProgram> _volumetricCloudProgram;
-    DeferRenderer*                 _ownedRender = nullptr;
+    RenderProgram* _skyBoxProgram;
+    RenderProgram* _atmosphereProgram;
+    RenderProgram* _volumetricCloudProgram;
+    DeferRenderer* _ownedRender = nullptr;
 };
 
 } // namespace Play

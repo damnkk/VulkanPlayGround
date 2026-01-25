@@ -1,5 +1,6 @@
 #include "PlayAllocator.h"
 #include "Resource.h"
+#include "PlayProgram.h"
 #include "VulkanDriver.h"
 #include "utils.hpp"
 #include "nvvk/check_error.hpp"
@@ -259,18 +260,18 @@ Texture* TexturePool::alloc(const void* data, size_t dataSize, uint32_t width, u
 
 Texture* TexturePool::alloc(const std::filesystem::path& imagePath, VkImageLayout finalLayout, uint32_t mipLevels, bool isSrgb)
 {
-    if( stbi_is_hdr(nvutils::utf8FromPath(imagePath).c_str()) )
+    if (stbi_is_hdr(nvutils::utf8FromPath(imagePath).c_str()))
     {
-        int width,height,channels;
-        float* data = stbi_loadf( nvutils::utf8FromPath(imagePath).c_str(), &width, &height, &channels, 4);
-        if( !data )
+        int    width, height, channels;
+        float* data = stbi_loadf(nvutils::utf8FromPath(imagePath).c_str(), &width, &height, &channels, 4);
+        if (!data)
         {
             LOGW("Failed to load hdr image: %s\n", nvutils::utf8FromPath(imagePath).c_str());
             return nullptr;
         }
         VkDeviceSize buffer_size = static_cast<VkDeviceSize>(width) * height * sizeof(float) * 4;
-        Texture*     texture = 
-            alloc(data, buffer_size, (uint32_t)width, (uint32_t)height, VK_FORMAT_R32G32B32A32_SFLOAT,
+        Texture*     texture =
+            alloc(data, buffer_size, (uint32_t) width, (uint32_t) height, VK_FORMAT_R32G32B32A32_SFLOAT,
                   VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, mipLevels, finalLayout);
         texture->DebugName() = nvutils::utf8FromPath(imagePath);
         stbi_image_free(data);
@@ -446,6 +447,36 @@ void BufferPool::deinit()
             _manager->destroyBuffer(*obj);
             obj->poolId = -1;
             delete (obj);
+        }
+    }
+}
+
+ProgramPool& ProgramPool::Instance()
+{
+    static ProgramPool pool;
+    return pool;
+}
+
+void ProgramPool::free(PlayProgram* obj)
+{
+    std::lock_guard<std::mutex> lock(_mutex);
+    if (obj == nullptr || !(obj->poolId < _objs.size() && obj->poolId >= 0))
+    {
+        return;
+    }
+    _freeIndices[--_availableIndex] = obj->poolId;
+    delete obj;
+    obj->poolId = -1;
+};
+
+void ProgramPool::deinit()
+{
+    for (auto& obj : _objs)
+    {
+        if (obj && obj->poolId >= 0)
+        {
+            delete obj;
+            obj->poolId = -1;
         }
     }
 }

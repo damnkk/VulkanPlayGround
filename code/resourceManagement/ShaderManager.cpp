@@ -69,6 +69,10 @@ void ShaderManager::registBuiltInShader()
 {
     loadShaderFromFile(BuiltinShaders::BUILTIN_FULL_SCREEN_QUAD_VERT_SHADER_NAME, "builtin_full_screen.vert.slang", ShaderStage::eVertex,
                        ShaderType::eSLANG, "main");
+    loadShaderFromFile(BuiltinShaders::BUILTIN_DEFAULT_GBUFFER_VERT_SHADER_NAME, "DefaultGbuffer.vert.slang", ShaderStage::eVertex,
+                       ShaderType::eSLANG, "main");
+    loadShaderFromFile(BuiltinShaders::BUILTIN_DEFAULT_GBUFFER_FRAG_SHADER_NAME, "DefaultGbuffer.frag.slang", ShaderStage::eFragment,
+                       ShaderType::eSLANG, "main");
     uint32_t RayGenId2    = loadShaderFromFile("rayQuery", "test.frag", ShaderStage::eCompute, ShaderType::eGLSL, "main");
     uint32_t RayGenId     = loadShaderFromFile("slangtesttt", "slangtest.slang", ShaderStage::eFragment, ShaderType::eSLANG, "main");
     uint32_t CompGenRayId = loadShaderFromFile("volumeGenRay", "volumeRender/volumeGenRay.comp", ShaderStage::eCompute, ShaderType::eGLSL, "main");

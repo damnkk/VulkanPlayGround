@@ -177,17 +177,6 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const nvvk::Buffer&
     bufferInfo.range  = range;
 }
 
-void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const nvvk::AccelerationStructure& accel)
-{
-    auto& accelInfo = _descInfos[descriptorOffset(bindingIdx)].accel;
-    if (accelInfo == accel.accel)
-    {
-        return;
-    }
-    _dirtyFlags |= 1 << 0;
-    accelInfo = accel.accel;
-}
-
 void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const nvvk::Image& image)
 {
     auto& imageInfo = _descInfos[descriptorOffset(bindingIdx)];
@@ -271,20 +260,6 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const nvvk::Buffer*
         }
         _dirtyFlags |= 1 << 0;
         bufferInfo.buffer = buffers[i].buffer;
-    }
-}
-
-void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const nvvk::AccelerationStructure* accels, uint32_t count)
-{
-    for (uint32_t i = 0; i < count; ++i)
-    {
-        auto& accelInfo = _descInfos[descriptorOffset(bindingIdx) + i].accel;
-        if (accelInfo == accels[i].accel)
-        {
-            continue;
-        }
-        _dirtyFlags |= 1 << 0;
-        accelInfo = accels[i].accel;
     }
 }
 
