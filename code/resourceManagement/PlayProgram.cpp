@@ -71,7 +71,7 @@ DescriptorSetBindings::DescriptorSetBindings() {}
 DescriptorSetBindings::~DescriptorSetBindings() {}
 DescriptorSetBindings& DescriptorSetBindings::addBinding(const BindInfo& bindingInfo)
 {
-    _isRecorded = false;
+    _setLayoutDirty = true;
     for (int i = 0; i < _bindingInfos.size(); i++)
     {
         if (_bindingInfos[i].bindingIdx == bindingInfo.bindingIdx)
@@ -93,15 +93,12 @@ DescriptorSetBindings& DescriptorSetBindings::addBinding(const BindInfo& binding
 DescriptorSetBindings& DescriptorSetBindings::addBinding(uint32_t bindingIdx, uint32_t descriptorCount, VkDescriptorType descriptorType,
                                                          VkShaderStageFlags shaderStageFlags)
 {
-    _isRecorded          = false;
     BindInfo bindingInfo = {bindingIdx, descriptorCount, descriptorType, shaderStageFlags};
     return addBinding(bindingInfo);
 }
 
-void DescriptorSetManager::finalizePipelineLayout()
+void DescriptorSetManager::finalizePipelineLayoutImpl()
 {
-    if (!_isRecorded) return;
-
     if (_pipelineLayout != VK_NULL_HANDLE) vkDestroyPipelineLayout(vkDriver->getDevice(), _pipelineLayout, nullptr);
 
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
@@ -114,15 +111,10 @@ void DescriptorSetManager::finalizePipelineLayout()
     return;
 }
 
-void DescriptorSetManager::finalizeLayout()
+void DescriptorSetManager::finalizePipelineLayout()
 {
-    if (_isRecorded) return; // if no addBinding(s) called after last layout finalization, just return
-    if (_descSetLayouts[(uint32_t) DescriptorEnum::eDrawObjectDescriptorSet] != VK_NULL_HANDLE)
-    {
-        vkDestroyDescriptorSetLayout(vkDriver->getDevice(), _descSetLayouts[(uint32_t) DescriptorEnum::eDrawObjectDescriptorSet], nullptr);
-        _descSetLayouts[(uint32_t) DescriptorEnum::eDrawObjectDescriptorSet] = VK_NULL_HANDLE;
-    }
-
+    if (!_pipelineLayoutDirty) return; // if no addBinding(s) called after last layout finalization, just return
+    // prepare desc set layouts
     _descSetLayouts[uint32_t(DescriptorEnum::eGlobalDescriptorSet)] = vkDriver->getDescriptorSetCache()->getEngineDescriptorSet().layout;
     _descSetLayouts[uint32_t(DescriptorEnum::eSceneDescriptorSet)]  = vkDriver->getDescriptorSetCache()->getSceneDescriptorSet().layout;
     _descSetLayouts[uint32_t(DescriptorEnum::eFrameDescriptorSet)]  = vkDriver->getDescriptorSetCache()->getFrameDescriptorSet().layout;
@@ -131,14 +123,15 @@ void DescriptorSetManager::finalizeLayout()
     {
         nvvk::DescriptorBindings::addBinding(bindings.bindingIdx, bindings.descriptorType, bindings.descriptorCount, bindings.shaderStageFlags);
     }
-    _descSetLayouts[(uint32_t) DescriptorEnum::eDrawObjectDescriptorSet] = DescriptorSetBindings::finalizeLayout(); // finalize curr set layout
-    finalizePipelineLayout();
+    _descSetLayouts[(uint32_t) DescriptorEnum::eDrawObjectDescriptorSet] = finalizeLayout(); // finalize curr set layout
+    finalizePipelineLayoutImpl();
+    _pipelineLayoutDirty = 0;
     return;
 }
 
 VkPipelineLayout DescriptorSetManager::getPipelineLayout() const
 {
-    if (!_isRecorded)
+    if (_pipelineLayoutDirty)
     {
         LOGE("Pipeline layout is not created, check finish() is called");
         return VK_NULL_HANDLE;
@@ -152,7 +145,12 @@ VkPipelineLayout DescriptorSetManager::getPipelineLayout() const
 
 VkDescriptorSetLayout DescriptorSetBindings::finalizeLayout()
 {
-    _isRecorded              = true;
+    if (!_setLayoutDirty) return _layout;
+    if (_layout != VK_NULL_HANDLE)
+    {
+        vkDestroyDescriptorSetLayout(vkDriver->getDevice(), _layout, nullptr);
+        _layout = VK_NULL_HANDLE;
+    }
     uint32_t descriptorCount = 0;
     for (const auto& binding : _bindingInfos)
     {
@@ -161,6 +159,7 @@ VkDescriptorSetLayout DescriptorSetBindings::finalizeLayout()
     }
     _descInfos.resize(descriptorCount);
     createDescriptorSetLayout(vkDriver->getDevice(), 0, &_layout);
+    _setLayoutDirty = false;
     return _layout;
 }
 
@@ -171,7 +170,7 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const nvvk::Buffer&
     {
         return;
     }
-    _dirtyFlags |= 1 << 0;
+    _descInfoDirty |= 1 << 0;
     bufferInfo.buffer = buffer.buffer;
     bufferInfo.offset = offset;
     bufferInfo.range  = range;
@@ -185,7 +184,7 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const nvvk::Image& 
     {
         return;
     }
-    _dirtyFlags |= 1 << 0;
+    _descInfoDirty |= 1 << 0;
     imageInfo.image = image.descriptor;
 }
 
@@ -196,7 +195,7 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, VkBuffer buffer, Vk
     {
         return;
     }
-    _dirtyFlags |= 1 << 0;
+    _descInfoDirty |= 1 << 0;
     bufferInfo.buffer = buffer;
     bufferInfo.offset = offset;
     bufferInfo.range  = range;
@@ -209,7 +208,7 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const VkDescriptorB
     {
         return;
     }
-    _dirtyFlags |= 1 << 0;
+    _descInfoDirty |= 1 << 0;
     destBufferInfo = bufferInfo;
 }
 
@@ -220,7 +219,7 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, VkImageView imageVi
     {
         return;
     }
-    _dirtyFlags |= 1 << 0;
+    _descInfoDirty |= 1 << 0;
     imageInfo.imageLayout = imageLayout;
     imageInfo.imageView   = imageView;
     imageInfo.sampler     = sampler;
@@ -234,7 +233,7 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const VkDescriptorI
     {
         return;
     }
-    _dirtyFlags |= 1 << 0;
+    _descInfoDirty |= 1 << 0;
     destImageInfo = imageInfo;
 }
 
@@ -245,7 +244,7 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, VkAccelerationStruc
     {
         return;
     }
-    _dirtyFlags |= 1 << 0;
+    _descInfoDirty |= 1 << 0;
     accelInfo = accel;
 }
 
@@ -258,7 +257,7 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const nvvk::Buffer*
         {
             continue;
         }
-        _dirtyFlags |= 1 << 0;
+        _descInfoDirty |= 1 << 0;
         bufferInfo.buffer = buffers[i].buffer;
     }
 }
@@ -273,7 +272,7 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const nvvk::Image* 
         {
             continue;
         }
-        _dirtyFlags |= 1 << 0;
+        _descInfoDirty |= 1 << 0;
         imageInfo = images[i].descriptor;
     }
 }
@@ -288,7 +287,7 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const VkDescriptorB
         {
             continue;
         }
-        _dirtyFlags |= 1 << 0;
+        _descInfoDirty |= 1 << 0;
         destBufferInfo = bufferInfos[i];
     }
 }
@@ -303,7 +302,7 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const VkDescriptorI
         {
             continue;
         }
-        _dirtyFlags |= 1 << 0;
+        _descInfoDirty |= 1 << 0;
         imageInfo = imageInfos[i];
     }
 }
@@ -317,7 +316,7 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const VkAcceleratio
         {
             continue;
         }
-        _dirtyFlags |= 1 << 0;
+        _descInfoDirty |= 1 << 0;
         accelInfo = accels[i];
     }
 }
@@ -342,11 +341,11 @@ int DescriptorSetBindings::descriptorOffset(uint32_t bindingIdx)
 
 uint64_t DescriptorSetBindings::getBindingsHash()
 {
-    if (_dirtyFlags)
+    if (_descInfoDirty)
     {
         _setBindingHash = memoryHash(_descInfos);
 
-        _dirtyFlags = 0;
+        _descInfoDirty = 0;
     }
     return _setBindingHash;
 }
@@ -362,8 +361,8 @@ DescriptorSetManager::DescriptorSetManager(const DescriptorSetManager&) {}
 
 void RenderProgram::setPassNode(RDG::PassNode* passNode)
 {
-    _passNode                                                                           = passNode;
-    _descriptorSetManager.getDescriptorSetLayout(DescriptorEnum::ePerPassDescriptorSet) = _passNode->getDescriptorBindings().getSetLayout();
+    _passNode = passNode;
+    _descriptorSetManager.setDescriptorSetLayout(DescriptorEnum::ePerPassDescriptorSet, _passNode->getDescriptorBindings().getSetLayout());
     finish();
 }
 

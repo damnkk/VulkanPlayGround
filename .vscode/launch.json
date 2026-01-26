@@ -5,7 +5,19 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "(Windows) 启动",
+            "name": "(Windows) 启动 Release",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/_bin/Release/VulkanPlayGround.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "integratedTerminal",
+            "preLaunchTask": "CMake: 生成"
+        },
+        {
+            "name": "(Windows) 启动 Debug",
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/_bin/Debug/VulkanPlayGround.exe",

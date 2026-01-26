@@ -149,8 +149,10 @@ protected:
     uint64_t                    _setBindingHash;
     VkDescriptorSetLayout       _layout = VK_NULL_HANDLE;
     std::vector<DescriptorInfo> _descInfos;
-    bool                        _isRecorded = false; // layout changing state
-    uint8_t                     _dirtyFlags = 0;     // descinfo changing state | bit0: binding changed, bit1: constant range changed
+
+private:
+    bool    _setLayoutDirty = true; // layout changing state
+    uint8_t _descInfoDirty  = 0;    // descinfo changing state | bit0: binding changed, bit1: constant range changed
 };
 
 class DescriptorSetManager : public DescriptorSetBindings
@@ -159,13 +161,13 @@ public:
     DescriptorSetManager();
     ~DescriptorSetManager();
 
-    void finalizeLayout();
+    void finalizePipelineLayout();
 
     // push constants
     template <typename T>
     DescriptorSetManager& addConstantRange(VkShaderStageFlags stage = VK_SHADER_STAGE_ALL)
     {
-        _dirtyFlags |= 1 << 1;
+        _pipelineLayoutDirty |= 1 << 1;
         _constantRanges.addRange<T>(stage);
         return *this;
     }
@@ -184,26 +186,35 @@ public:
     // getter
     VkPipelineLayout getPipelineLayout() const;
 
-    std::array<VkDescriptorSetLayout, static_cast<size_t>(DescriptorEnum::eCount)>& getDescriptorSetLayouts()
+    const std::array<VkDescriptorSetLayout, static_cast<size_t>(DescriptorEnum::eCount)>& getDescriptorSetLayouts()
     {
         return _descSetLayouts;
     }
 
-    VkDescriptorSetLayout& getDescriptorSetLayout(DescriptorEnum setEnum)
+    const VkDescriptorSetLayout& getDescriptorSetLayout(DescriptorEnum setEnum)
     {
         assert(setEnum != DescriptorEnum::eCount);
         return _descSetLayouts[uint32_t(setEnum)];
     }
 
+    void setDescriptorSetLayout(DescriptorEnum setEnum, VkDescriptorSetLayout layout)
+    {
+        assert(setEnum != DescriptorEnum::eCount);
+        if (_descSetLayouts[uint32_t(setEnum)] == layout) return;
+        _pipelineLayoutDirty |= 1 << 1;
+        _descSetLayouts[uint32_t(setEnum)] = layout;
+    }
+
 private:
-    void finalizePipelineLayout();
+    void finalizePipelineLayoutImpl();
     DescriptorSetManager(const DescriptorSetManager&);
     DescriptorSetManager& operator=(const DescriptorSetManager&);
     PushConstantManager   _constantRanges;
 
     // for binding request merge
-    std::array<VkDescriptorSetLayout, static_cast<size_t>(DescriptorEnum::eCount)> _descSetLayouts = {};
-    VkPipelineLayout                                                               _pipelineLayout = VK_NULL_HANDLE;
+    std::array<VkDescriptorSetLayout, static_cast<size_t>(DescriptorEnum::eCount)> _descSetLayouts      = {};
+    VkPipelineLayout                                                               _pipelineLayout      = VK_NULL_HANDLE;
+    uint8_t                                                                        _pipelineLayoutDirty = 0;
 }; // Helper class to manage push constants.
 
 enum class ProgramType
@@ -253,7 +264,7 @@ public:
     virtual void finish()
     {
         _descriptorSetManager.addConstantRange<PerFrameConstant>();
-        _descriptorSetManager.finalizeLayout();
+        _descriptorSetManager.finalizePipelineLayout();
     };
 
     uint32_t poolId = -1;

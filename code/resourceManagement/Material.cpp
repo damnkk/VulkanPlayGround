@@ -9,6 +9,8 @@ FixedMaterial::FixedMaterial(const std::string& name) : Material(name)
     _program = getCommonFixedProgram();
 }
 
+FixedMaterial::~FixedMaterial() {}
+
 PlayProgram* FixedMaterial::getCommonFixedProgram()
 {
     static ShaderID     vertexShaderID     = ShaderManager::Instance().getShaderIdByName(BuiltinShaders::BUILTIN_DEFAULT_GBUFFER_VERT_SHADER_NAME);
