@@ -38,6 +38,7 @@ SceneManager& SceneManager::addScene(std::filesystem::path filename)
         std::lock_guard<std::mutex> lock(_scenesVkMutex);
         vkScene->setTextureOffset(static_cast<uint32_t>(_sceneImages.size()));
         _sceneImages.insert(_sceneImages.end(), vkScene->textures().begin(), vkScene->textures().end());
+        vkScene->fillDefaultMaterials(*cpuScene);
     }
     return *this;
 }

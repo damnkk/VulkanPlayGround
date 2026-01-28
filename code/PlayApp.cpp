@@ -103,7 +103,7 @@ void PlayElement::onPreRender()
 
 void PlayElement::onRender(VkCommandBuffer cmd)
 {
-    vkDriver->getCurrentFrameData().reset(vkDriver->_device);
+    vkDriver->getCurrentFrameData().reset();
 
     _renderer->RenderFrame();
     _renderer->OnPostRender();

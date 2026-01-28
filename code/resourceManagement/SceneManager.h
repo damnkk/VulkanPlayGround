@@ -14,11 +14,23 @@ class SceneManager
 {
 public:
     SceneManager();
-    SceneManager& addScene(std::filesystem::path filename);
-    SceneManager& addScenes(std::vector<std::filesystem::path> filenames);
-    void          addSkyBoxTexture(Texture* texture);
-    void          updateDescriptorSet();
-    void          update();
+    SceneManager&                 addScene(std::filesystem::path filename);
+    SceneManager&                 addScenes(std::vector<std::filesystem::path> filenames);
+    std::vector<nvvkgltf::Scene>& getCpuScene()
+    {
+        return _scenes;
+    }
+    std::vector<RenderScene>& getVkScene()
+    {
+        return _scenesVk;
+    }
+    std::vector<RTScene>& getRtxScene()
+    {
+        return _scenesRTX;
+    }
+    void addSkyBoxTexture(Texture* texture);
+    void updateDescriptorSet();
+    void update();
 
     ~SceneManager();
 

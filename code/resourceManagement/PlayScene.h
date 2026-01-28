@@ -4,6 +4,7 @@
 #include <nvvkgltf/scene_rtx.hpp>
 namespace Play
 {
+class Material;
 class RenderScene : public nvvkgltf::SceneVk
 {
 public:
@@ -17,8 +18,15 @@ public:
         textureOffset = offset;
     }
 
+    void                    fillDefaultMaterials(nvvkgltf::Scene& scene);
+    std::vector<Material*>& getDefaultMaterials()
+    {
+        return _defaultMaterials;
+    }
+
 private:
-    uint32_t textureOffset = 0;
+    std::vector<Material*> _defaultMaterials;
+    uint32_t               textureOffset = 0;
 }; // class RenderScene
 
 class RTScene : public nvvkgltf::SceneRtx

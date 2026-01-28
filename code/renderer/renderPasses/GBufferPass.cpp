@@ -1,6 +1,8 @@
 #include "GBufferPass.h"
 #include "RDG/RDG.h"
 #include "VulkanDriver.h"
+#include "MeshCollector.h"
+#include "DeferRendering.h"
 namespace Play
 {
 
@@ -60,7 +62,13 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
                                                     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
                                              .depthStencil(DepthRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
                                                            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-                                             .execute([this](RDG::PassNode* passNode, RDG::RenderContext& context) {})
+                                             .execute(
+                                                 [this](RDG::PassNode* passNode, RDG::RenderContext& context)
+                                                 {
+                                                     int                     a = 0;
+                                                     MeshCollector           meshCollector(this->_ownedRender);
+                                                     std::vector<MeshBatch>& meshBatches = meshCollector.collectMeshBatches();
+                                                 })
                                              .finish();
 }
 

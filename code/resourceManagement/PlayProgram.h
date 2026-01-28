@@ -263,7 +263,6 @@ public:
     // if you don't want user explicitly call finish(),you should xx it private
     virtual void finish()
     {
-        _descriptorSetManager.addConstantRange<PerFrameConstant>();
         _descriptorSetManager.finalizePipelineLayout();
     };
 

@@ -25,20 +25,25 @@ class Material
 public:
     Material(std::string name = "Default Material") : _name(name) {};
     virtual ~Material() = default;
+    PlayProgram* getProgram()
+    {
+        return _program;
+    }
 
 protected:
     std::string  _name;
     PlayProgram* _program = nullptr;
 };
 
-class FixedMaterial : private Material
+class FixedMaterial : public Material
 {
 public:
-    FixedMaterial(const std::string& name = "Fixed Material");
     ~FixedMaterial();
 
+    static FixedMaterial* Create();
+
 private:
-    static PlayProgram* getCommonFixedProgram();
+    FixedMaterial();
 };
 
 class CustomMaterial : public Material

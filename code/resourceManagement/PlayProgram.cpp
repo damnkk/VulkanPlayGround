@@ -47,7 +47,11 @@ void PushConstantManager::pushConstantRanges(VkCommandBuffer cmdBuf, VkPipelineL
     }
 }
 
-DescriptorSetManager::DescriptorSetManager() {}
+DescriptorSetManager::DescriptorSetManager()
+{
+    // DescriptorSetManager is always been used by program,so,PerFrameConstant is needed absolutely
+    addConstantRange<PerFrameConstant>();
+}
 
 DescriptorSetManager::~DescriptorSetManager()
 {

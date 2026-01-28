@@ -37,7 +37,11 @@ public:
         return _cameras[_activeCameraIdx].get();
     }
 
-    Buffer* getCurrentCameraBuffer() const;
+    Buffer*       getCurrentCameraBuffer() const;
+    SceneManager* getSceneManager()
+    {
+        return _scene.get();
+    }
 
 protected:
     std::unique_ptr<SceneManager>            _scene;

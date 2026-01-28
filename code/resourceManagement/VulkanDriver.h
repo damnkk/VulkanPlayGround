@@ -17,28 +17,26 @@ class DescriptorSetCache;
 class RenderPassCache;
 class FrameBufferCache;
 class PipelineCacheManager;
+struct CommandPool
+{
+    CommandPool() {}
+    ~CommandPool() {}
+    VkCommandBuffer              allocCommandBuffer();
+    void                         reset();
+    VkCommandPool                vkHandle = VK_NULL_HANDLE;
+    std::vector<VkCommandBuffer> cmdBuffers;
+    uint32_t                     currCmdBufferIdx = 0;
+};
 struct PlayFrameData
 {
-    VkCommandPool                graphicsCmdPool;
-    VkCommandPool                computeCmdPool;
-    std::vector<VkCommandBuffer> cmdBuffersGfx;
-    std::vector<VkCommandBuffer> cmdBuffersCompute;
-    VkSemaphore                  semaphore;
-    uint64_t                     timelineValue = 0;
-    void                         reset(VkDevice device)
+    CommandPool graphicsCmdPool;
+    CommandPool computeCmdPool;
+    VkSemaphore semaphore;
+    uint64_t    timelineValue = 0;
+    void        reset()
     {
-        if (!cmdBuffersGfx.empty())
-        {
-            vkFreeCommandBuffers(device, graphicsCmdPool, (uint32_t) cmdBuffersGfx.size(), cmdBuffersGfx.data());
-            cmdBuffersGfx.clear();
-        }
-        if (!cmdBuffersCompute.empty())
-        {
-            vkFreeCommandBuffers(device, computeCmdPool, (uint32_t) cmdBuffersCompute.size(), cmdBuffersCompute.data());
-            cmdBuffersCompute.clear();
-        }
-        vkResetCommandPool(device, graphicsCmdPool, 0);
-        vkResetCommandPool(device, computeCmdPool, 0);
+        graphicsCmdPool.reset();
+        computeCmdPool.reset();
     }
 };
 

@@ -695,15 +695,10 @@ RenderContext* RDGBuilder::prepareRenderContext(PassNode* pass)
     [[unlikely]]
     if (!(_renderContext->_prevPassNode))
     {
-        VkCommandPool cmdPool = isAsyncCompute(pass) ? _renderContext->_frameData->computeCmdPool : _renderContext->_frameData->graphicsCmdPool;
-        VkCommandBufferAllocateInfo allocInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
-        allocInfo.commandPool        = cmdPool;
-        allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocInfo.commandBufferCount = 1;
-        NVVK_CHECK(vkAllocateCommandBuffers(vkDriver->_device, &allocInfo, &_renderContext->_currCmdBuffer));
+        CommandPool& cmdPool = isAsyncCompute(pass) ? _renderContext->_frameData->computeCmdPool : _renderContext->_frameData->graphicsCmdPool;
+        _renderContext->_currCmdBuffer = cmdPool.allocCommandBuffer();
         VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         vkBeginCommandBuffer(_renderContext->_currCmdBuffer, &beginInfo);
-        _renderContext->_frameData->cmdBuffersGfx.push_back(_renderContext->_currCmdBuffer);
     }
     else
     {
@@ -782,15 +777,10 @@ RenderContext* RDGBuilder::prepareRenderContext(PassNode* pass)
             submitInfo.pSignalSemaphoreInfos    = &signalInfo;
 
             _submitInfos.push_back({submitInfo, isPrevPassAsync ? 1 : 0});
-            VkCommandPool cmdPool = isCurrPassAsync ? _renderContext->_frameData->computeCmdPool : _renderContext->_frameData->graphicsCmdPool;
-            VkCommandBufferAllocateInfo allocInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
-            allocInfo.commandPool        = cmdPool;
-            allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-            allocInfo.commandBufferCount = 1;
-            NVVK_CHECK(vkAllocateCommandBuffers(vkDriver->_device, &allocInfo, &_renderContext->_currCmdBuffer));
+            CommandPool& cmdPool = isCurrPassAsync ? _renderContext->_frameData->computeCmdPool : _renderContext->_frameData->graphicsCmdPool;
+            _renderContext->_currCmdBuffer = cmdPool.allocCommandBuffer();
             VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
             vkBeginCommandBuffer(_renderContext->_currCmdBuffer, &beginInfo);
-            _renderContext->_frameData->cmdBuffersCompute.push_back(_renderContext->_currCmdBuffer);
         }
     }
 

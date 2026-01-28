@@ -3,12 +3,35 @@
 #include "RenderPassCache.h"
 #include "FrameBufferCache.h"
 #include "PipelineCacheManager.h"
+#include "Material.h"
 #include <nvvk/check_error.hpp>
 #include <nvvk/debug_util.hpp>
 #include <nvutils/parallel_work.hpp>
 #include <stdexcept>
 namespace Play
 {
+
+VkCommandBuffer CommandPool::allocCommandBuffer()
+{
+    if (currCmdBufferIdx >= cmdBuffers.size())
+    {
+        VkCommandBufferAllocateInfo allocInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+        allocInfo.commandPool        = vkHandle;
+        allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandBufferCount = 1;
+
+        VkCommandBuffer cmdBuffer;
+        NVVK_CHECK(vkAllocateCommandBuffers(vkDriver->getDevice(), &allocInfo, &cmdBuffer));
+        cmdBuffers.push_back(cmdBuffer);
+    }
+    return cmdBuffers[currCmdBufferIdx++];
+}
+
+void CommandPool::reset()
+{
+    std::for_each(cmdBuffers.begin(), cmdBuffers.end(), [](VkCommandBuffer cmdBuffer) { vkResetCommandBuffer(cmdBuffer, 0); });
+    currCmdBufferIdx = 0;
+}
 
 VulkanDriver* vkDriver = nullptr;
 
@@ -135,9 +158,10 @@ void VulkanDriver::init()
     {
         VkCommandPoolCreateInfo cmdPoolCI{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
         cmdPoolCI.queueFamilyIndex = _queueGraphics.familyIndex;
-        NVVK_CHECK(vkCreateCommandPool(_device, &cmdPoolCI, nullptr, &_frameData[i].graphicsCmdPool));
+        cmdPoolCI.flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        NVVK_CHECK(vkCreateCommandPool(_device, &cmdPoolCI, nullptr, &_frameData[i].graphicsCmdPool.vkHandle));
         cmdPoolCI.queueFamilyIndex = _queueCompute.familyIndex;
-        NVVK_CHECK(vkCreateCommandPool(_device, &cmdPoolCI, nullptr, &_frameData[i].computeCmdPool));
+        NVVK_CHECK(vkCreateCommandPool(_device, &cmdPoolCI, nullptr, &_frameData[i].computeCmdPool.vkHandle));
         VkSemaphoreTypeCreateInfo timelineCreateInfo{VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO};
         timelineCreateInfo.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
         timelineCreateInfo.initialValue  = 0;
@@ -158,8 +182,8 @@ VulkanDriver::~VulkanDriver()
     for (auto& frame : _frameData)
     {
         vkDestroySemaphore(_device, frame.semaphore, nullptr);
-        vkDestroyCommandPool(_device, frame.graphicsCmdPool, nullptr);
-        vkDestroyCommandPool(_device, frame.computeCmdPool, nullptr);
+        vkDestroyCommandPool(_device, frame.graphicsCmdPool.vkHandle, nullptr);
+        vkDestroyCommandPool(_device, frame.computeCmdPool.vkHandle, nullptr);
     }
     _descriptorSetCache.reset();
     TexturePool::Instance().deinit();
