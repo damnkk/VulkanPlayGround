@@ -4,6 +4,8 @@
 #include "renderpasses/PostProcessPass.h"
 #include "renderPasses/PresentPass.h"
 #include "renderPasses/VolumeSkyPass.h"
+#include "renderPasses/GBufferPass.h"
+#include "renderPasses/LightPass.h"
 #include "core/PlayCamera.h"
 #include "VulkanDriver.h"
 namespace Play
@@ -47,6 +49,8 @@ void DeferRenderer::OnResize(int width, int height)
     _outputTexture = _view->getUITexture();
     // add logic pass
     _passes.push_back(std::make_unique<VolumeSkyPass>(this));
+    _passes.push_back(std::make_unique<GBufferPass>(this));
+    _passes.push_back(std::make_unique<LightPass>(this));
     _passes.push_back(std::make_unique<PostProcessPass>(this));
     _passes.push_back(std::make_unique<PresentPass>(_view));
     for (auto& pass : _passes)

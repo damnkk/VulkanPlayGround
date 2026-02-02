@@ -6,6 +6,13 @@
 namespace Play
 {
 
+VolumeSkyPass::~VolumeSkyPass()
+{
+    ProgramPool::Instance().free(_skyBoxProgram);
+    ProgramPool::Instance().free(_atmosphereProgram);
+    ProgramPool::Instance().free(_volumetricCloudProgram);
+}
+
 void VolumeSkyPass::init()
 {
     auto skyBoxvId = ShaderManager::Instance().getShaderIdByName(BuiltinShaders::BUILTIN_FULL_SCREEN_QUAD_VERT_SHADER_NAME);
@@ -13,6 +20,7 @@ void VolumeSkyPass::init()
     _skyBoxProgram = ProgramPool::Instance().alloc<RenderProgram>();
     _skyBoxProgram->setFragModuleID(skyBoxfId);
     _skyBoxProgram->setVertexModuleID(skyBoxvId);
+    _skyBoxProgram->getDescriptorSetManager().initPushConstant<PerFrameConstant>();
     _skyBoxProgram->psoState().rasterizationState.frontFace       = VK_FRONT_FACE_CLOCKWISE;
     _skyBoxProgram->psoState().rasterizationState.cullMode        = VK_CULL_MODE_NONE;
     _skyBoxProgram->psoState().depthStencilState.depthWriteEnable = VK_FALSE;
@@ -37,18 +45,17 @@ void VolumeSkyPass::build(RDG::RDGBuilder* rdgBuilder)
             .execute(
                 [this, ownedRender](RDG::PassNode* passNode, RDG::RenderContext& context)
                 {
-                    VkCommandBuffer  cmd = context._currCmdBuffer;
-                    PerFrameConstant perFrameConstant;
-                    perFrameConstant.cameraBufferDeviceAddress = ownedRender->getCurrentCameraBuffer()->address;
+                    VkCommandBuffer   cmd              = context._currCmdBuffer;
+                    PerFrameConstant* perFrameConstant = this->_skyBoxProgram->getDescriptorSetManager().getPushConstantData<PerFrameConstant>();
+                    perFrameConstant->cameraBufferDeviceAddress = ownedRender->getCurrentCameraBuffer()->address;
                     this->_skyBoxProgram->setPassNode(static_cast<RDG::RenderPassNode*>(passNode));
-                    this->_skyBoxProgram->getDescriptorSetManager().setConstantRange(perFrameConstant);
                     this->_skyBoxProgram->bind(cmd);
                     context._pendingGfxState->bindDescriptorSet(cmd, this->_skyBoxProgram);
                     VkViewport viewport = {0, 0, (float) vkDriver->getViewportSize().width, (float) vkDriver->getViewportSize().height, 0.0f, 1.0f};
                     VkRect2D   scissor  = {{0, 0}, {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height}};
                     vkCmdSetViewportWithCount(cmd, 1, &viewport);
                     vkCmdSetScissorWithCount(cmd, 1, &scissor);
-                    vkCmdDraw(context._currCmdBuffer, 3, 1, 0, 0);
+                    vkCmdDraw(cmd, 3, 1, 0, 0);
                 });
 }
 

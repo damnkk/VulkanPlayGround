@@ -38,6 +38,7 @@ struct RenderPassConfig
 {
     std::vector<RenderPassAttachment>   colorAttachments;
     std::optional<RenderPassAttachment> depthStencilAttachment;
+    bool                                needMultiThreadRecording;
     // Future extensions for multiview, layers, etc.
 };
 
@@ -68,6 +69,16 @@ public:
     bool isDirty() const
     {
         return _isDirty;
+    }
+
+    RenderPassConfig& getConfig()
+    {
+        return m_config;
+    }
+
+    void setMultiThreadRecordingState(bool enable)
+    {
+        m_config.needMultiThreadRecording = enable;
     }
 
 protected:
@@ -123,6 +134,11 @@ public:
     VkFormat getDepthAttachmentFormat() const
     {
         return m_vkDepthAttachmentFormat;
+    }
+
+    VkFormat getStencilAttachmentFormat() const
+    {
+        return m_config.depthStencilAttachment.has_value() ? m_config.depthStencilAttachment->format : VK_FORMAT_UNDEFINED;
     }
 
 private:

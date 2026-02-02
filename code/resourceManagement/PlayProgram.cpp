@@ -12,12 +12,6 @@ namespace Play
 PushConstantManager::PushConstantManager()
 {
     _maxSize = vkDriver->_physicalDeviceProperties2.properties.limits.maxPushConstantsSize;
-    _constantData.resize(_maxSize, 0);
-}
-
-const std::vector<VkPushConstantRange>& PushConstantManager::getRanges() const
-{
-    return _ranges;
 }
 
 uint32_t PushConstantManager::getMaxSize() const
@@ -27,31 +21,17 @@ uint32_t PushConstantManager::getMaxSize() const
 
 void PushConstantManager::clear()
 {
-    _currOffset = 0;
-    _ranges.clear();
+    // Do not clear _ranges as it holds the layout
     std::fill(_constantData.begin(), _constantData.end(), 0);
-    _typeMap.clear();
 }
 
 void PushConstantManager::pushConstantRanges(VkCommandBuffer cmdBuf, VkPipelineLayout layout)
 {
-    VkPushConstantsInfo pushConstantsInfo{VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO};
-    pushConstantsInfo.layout = layout;
-    for (const auto& range : _ranges)
-    {
-        pushConstantsInfo.offset     = range.offset;
-        pushConstantsInfo.size       = range.size;
-        pushConstantsInfo.stageFlags = range.stageFlags;
-        pushConstantsInfo.pValues    = _constantData.data();
-        vkCmdPushConstants(cmdBuf, layout, range.stageFlags, range.offset, range.size, _constantData.data());
-    }
+    // Push the fixed size (128 bytes)
+    vkCmdPushConstants(cmdBuf, layout, _range.stageFlags, _range.offset, _range.size, _constantData.data());
 }
 
-DescriptorSetManager::DescriptorSetManager()
-{
-    // DescriptorSetManager is always been used by program,so,PerFrameConstant is needed absolutely
-    addConstantRange<PerFrameConstant>();
-}
+DescriptorSetManager::DescriptorSetManager() {}
 
 DescriptorSetManager::~DescriptorSetManager()
 {
@@ -60,14 +40,12 @@ DescriptorSetManager::~DescriptorSetManager()
         vkDestroyPipelineLayout(vkDriver->getDevice(), _pipelineLayout, nullptr);
         _pipelineLayout = VK_NULL_HANDLE;
     }
-    for (size_t i = (size_t) DescriptorEnum::ePerPassDescriptorSet; i < (size_t) DescriptorEnum::eCount; ++i)
+
+    auto& layout = _descSetLayouts[(uint32_t) DescriptorEnum::eDrawObjectDescriptorSet];
+    if (layout != VK_NULL_HANDLE)
     {
-        auto& layout = _descSetLayouts[i];
-        if (layout != VK_NULL_HANDLE)
-        {
-            vkDestroyDescriptorSetLayout(vkDriver->getDevice(), layout, nullptr);
-            layout = VK_NULL_HANDLE;
-        }
+        vkDestroyDescriptorSetLayout(vkDriver->getDevice(), layout, nullptr);
+        layout = VK_NULL_HANDLE;
     }
 }
 
@@ -108,8 +86,8 @@ void DescriptorSetManager::finalizePipelineLayoutImpl()
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
     pipelineLayoutCreateInfo.setLayoutCount         = static_cast<uint32_t>(_descSetLayouts.size());
     pipelineLayoutCreateInfo.pSetLayouts            = _descSetLayouts.data();
-    pipelineLayoutCreateInfo.pushConstantRangeCount = static_cast<uint32_t>(_constantRanges.getRanges().size());
-    pipelineLayoutCreateInfo.pPushConstantRanges    = _constantRanges.getRanges().data();
+    pipelineLayoutCreateInfo.pushConstantRangeCount = _constantRanges.haveRange() ? 1 : 0;
+    pipelineLayoutCreateInfo.pPushConstantRanges    = &_constantRanges.getRange();
     NVVK_CHECK(vkCreatePipelineLayout(vkDriver->getDevice(), &pipelineLayoutCreateInfo, nullptr, &_pipelineLayout));
 
     return;
@@ -361,9 +339,7 @@ uint64_t DescriptorSetBindings::getDescsetLayoutHash()
 
 DescriptorSetManager::DescriptorSetManager(const DescriptorSetManager&) {}
 
-// DescriptorSetManager& DescriptorSetManager::operator=(const DescriptorSetManager&) {}
-
-void RenderProgram::setPassNode(RDG::PassNode* passNode)
+void PlayProgram::setPassNode(RDG::PassNode* passNode)
 {
     _passNode = passNode;
     _descriptorSetManager.setDescriptorSetLayout(DescriptorEnum::ePerPassDescriptorSet, _passNode->getDescriptorBindings().getSetLayout());

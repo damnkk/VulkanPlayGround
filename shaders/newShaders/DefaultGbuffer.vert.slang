@@ -15,8 +15,11 @@ struct VertexOutput
 };
 
 [shader("vertex")]
-VertexOutput main()
+VertexOutput main(VertexInput vin)
 {
     VertexOutput vout;
+    vout.uv       = float2((vin.vertexId << 1) & 2, vin.vertexId & 2);
+    vout.position = float4(vout.uv * 2.0f - 1.0f, 0.0f, 1.0f);
     return vout;
 }
+

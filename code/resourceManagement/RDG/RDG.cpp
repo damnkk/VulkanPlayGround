@@ -12,12 +12,6 @@
 #include "nvvk/debug_util.hpp"
 namespace Play::RDG
 {
-void RDGTextureCache::regist(Texture* texture) {}
-
-RDGTexture* RDGTextureCache::request(Texture* texture)
-{
-    return nullptr;
-}
 
 RDGTextureBuilder& RDGTextureBuilder::Import(Texture* texture)
 {
@@ -115,6 +109,19 @@ RDGBufferBuilder& RDGBufferBuilder::Location(bool isDeviceLocal)
 RDGBufferRef RDGBufferBuilder::finish()
 {
     return _bufferNode;
+}
+
+BlackBoard::~BlackBoard()
+{
+    for (auto& [name, texture] : _textureMap)
+    {
+        delete texture;
+    }
+    for (auto& [name, buffer] : _bufferMap)
+    {
+        delete buffer;
+    }
+    _passMap.clear();
 }
 
 void BlackBoard::registTexture(RDGTextureRef texture)

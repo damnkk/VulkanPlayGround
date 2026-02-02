@@ -208,8 +208,11 @@ DescriptorSetCache::~DescriptorSetCache()
     vkDestroyDescriptorPool(vkDriver->_device, _sceneDescriptorPool, nullptr);
     vkDestroyDescriptorPool(vkDriver->_device, _frameDescriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(vkDriver->_device, _globalDescriptorSet.layout, nullptr);
+    _globalDescriptorSet.layout = VK_NULL_HANDLE;
     vkDestroyDescriptorSetLayout(vkDriver->_device, _sceneDescriptorSet.layout, nullptr);
+    _sceneDescriptorSet.layout = VK_NULL_HANDLE;
     vkDestroyDescriptorSetLayout(vkDriver->_device, _frameDescriptorSet.layout, nullptr);
+    _frameDescriptorSet.layout = VK_NULL_HANDLE;
 }
 
 VkDescriptorSet DescriptorSetCache::requestDescriptorSet(DescriptorSetBindings* setManager, uint32_t setIdx)
@@ -323,9 +326,9 @@ DescriptorSetCache::CacheNode::CachedSet DescriptorSetCache::createDescriptorSet
                 uint32_t                            offset     = setManager->descriptorOffset(binding.binding);
                 std::vector<VkDescriptorImageInfo>& imageInfos = imageInfosArray.emplace_back(binding.descriptorCount);
 
-                for (int i = offset; i < binding.descriptorCount; ++i)
+                for (int i = 0; i < binding.descriptorCount; ++i)
                 {
-                    imageInfos[i]         = descriptorInfo[i].image;
+                    imageInfos[i]         = descriptorInfo[i + offset].image;
                     imageInfos[i].sampler = VK_NULL_HANDLE;
                 }
                 writeSet.pImageInfo = imageInfos.data();

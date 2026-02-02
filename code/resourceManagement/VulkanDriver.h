@@ -9,7 +9,7 @@
 #include <queue>
 #include <chrono>
 #include "core/JobSystem.h"
-
+#include "pch.h"
 namespace Play
 {
 
@@ -19,24 +19,78 @@ class FrameBufferCache;
 class PipelineCacheManager;
 struct CommandPool
 {
-    CommandPool() {}
-    ~CommandPool() {}
+    CommandPool(uint32_t queueFamilyIndex = 0) {}
+    void init(uint32_t queueFamilyIndex = 0, VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+    void cleanup() {};
+    ~CommandPool();
     VkCommandBuffer              allocCommandBuffer();
     void                         reset();
     VkCommandPool                vkHandle = VK_NULL_HANDLE;
+    VkCommandBufferLevel         level    = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     std::vector<VkCommandBuffer> cmdBuffers;
     uint32_t                     currCmdBufferIdx = 0;
 };
+template <int N = MAX_SUB_RENDER_THREAD>
+class WorkerCommandContext
+{
+public:
+    ~WorkerCommandContext()
+    {
+        cleanup();
+    }
+    void init(uint32_t queueFamilyIndex = 0, uint32_t threadCount = N)
+    {
+        _pools.resize(threadCount);
+        for (auto& pool : _pools)
+        {
+            // 关键：初始化为 SECONDARY
+            pool.init(queueFamilyIndex, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+        }
+    }
+
+    void cleanup()
+    {
+        for (auto& pool : _pools) pool.cleanup();
+        _pools.clear();
+    }
+
+    void reset()
+    {
+        for (auto& pool : _pools) pool.reset();
+    }
+
+    // 根据线程索引获取 Buffer
+    VkCommandBuffer getCommandBuffer(uint32_t threadIndex, void* inheritanceInfo = nullptr)
+    {
+        // 安全检查
+        if (threadIndex >= _pools.size()) return VK_NULL_HANDLE;
+        return _pools[threadIndex].allocCommandBuffer();
+    }
+
+    // 获取当前有效的 Pool 数量（用于验证或遍历）
+    size_t getPoolCount() const
+    {
+        return _pools.size();
+    }
+
+private:
+    std::vector<CommandPool> _pools;
+};
+
 struct PlayFrameData
 {
-    CommandPool graphicsCmdPool;
-    CommandPool computeCmdPool;
-    VkSemaphore semaphore;
-    uint64_t    timelineValue = 0;
-    void        reset()
+    PlayFrameData();
+    ~PlayFrameData();
+    CommandPool            graphicsCmdPool;
+    CommandPool            computeCmdPool;
+    WorkerCommandContext<> workerGraphicsPools;
+    VkSemaphore            semaphore;
+    uint64_t               timelineValue = 0;
+    void                   reset()
     {
         graphicsCmdPool.reset();
         computeCmdPool.reset();
+        workerGraphicsPools.reset();
     }
 };
 

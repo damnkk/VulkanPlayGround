@@ -82,15 +82,21 @@ std::vector<MeshBatch>& MeshCollector::collectMeshBatches()
     std::vector<nvvkgltf::Scene>& scenes        = sceneMgr->getCpuScene();
 
     _meshBatches.clear();
-    std::vector<std::vector<MeshBatch>> sceneMeshBatches(scenes.size());
+    // 使用 Map 加速查找: key = (sceneID << 32) | materialID, value = index in _meshBatches
+    // 预估一个大小避免 rehash，例如场景里可能有 100 种材质
+    std::unordered_map<uint64_t, size_t> batchMap;
+    batchMap.reserve(128);
 
     for (int i = 0; i < scenes.size(); ++i)
     {
         nvvkgltf::Scene& scene = scenes[i];
         for (int j = 0; j < scene.getRenderNodes().size(); ++j)
         {
-            const nvvkgltf::RenderNode& renderNode = scene.getRenderNodes()[j];
-            // if(renderNode.)
+            const nvvkgltf::RenderNode& renderNode  = scene.getRenderNodes()[j];
+            uint32_t                    materialID  = renderNode.materialID;
+            Material*                   materialRef = sceneMgr->getVkScene()[i].getDefaultMaterials()[materialID];
+
+            // check visibility FIRST
             glm::vec3 minValues = {0.f, 0.f, 0.f};
             glm::vec3 maxValues = {0.f, 0.f, 0.f};
 
@@ -100,17 +106,45 @@ std::vector<MeshBatch>& MeshCollector::collectMeshBatches()
             if (!accessor.maxValues.empty()) maxValues = glm::vec3(accessor.maxValues[0], accessor.maxValues[1], accessor.maxValues[2]);
             nvutils::Bbox bbox(minValues, maxValues);
             bbox = bbox.transform(renderNode.worldMatrix);
+
             if (!isAabbInsideFrustum(bbox, frustumPlanes))
             {
                 continue;
             }
 
-            MeshBatch batch{};
-            batch.renderNodeID = j;
-            batch.sceneID      = i;
-            _meshBatches.push_back(batch);
+            // Only proceed to batch collection if visible
+            // Generate unique key for scene + material combination
+            uint64_t   key   = (static_cast<uint64_t>(i) << 32) | (uint64_t) materialRef;
+            MeshBatch* batch = nullptr;
+
+            auto it = batchMap.find(key);
+            if (it != batchMap.end())
+            {
+                // Found existing batch
+                batch = &_meshBatches[it->second];
+            }
+            else
+            {
+                // Create new batch
+                MeshBatch newBatch{};
+                newBatch.sceneID    = i;
+                newBatch.materialID = materialID;
+
+                // Record index
+                batchMap[key] = _meshBatches.size();
+                _meshBatches.push_back(newBatch);
+
+                batch = &_meshBatches.back();
+            }
+
+            batch->renderNodeIDs.push_back(j);
         }
     }
+
+    // No need to remove empty batches anymore, as we only create them for visible nodes.
+    // However, if strict correctness is required for edge cases (should be none here):
+    // _meshBatches.erase(...)
+
     return _meshBatches;
 }
 

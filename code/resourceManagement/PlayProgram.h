@@ -11,6 +11,7 @@
 #include "DescriptorManager.h"
 #include "RenderPass.h"
 #include "PConstantType.h.slang"
+#include "VulkanDriver.h"
 namespace Play
 {
 namespace RDG
@@ -34,70 +35,45 @@ class PushConstantManager
 public:
     PushConstantManager();
     template <typename T>
-    void addRange(VkShaderStageFlags stage = VK_SHADER_STAGE_ALL)
+    void registConstantType(VkShaderStageFlags stage = VK_SHADER_STAGE_ALL)
     {
-        std::type_index typeIdx(typeid(T));
-        auto            it = _typeMap.find(typeIdx);
-        if (it != _typeMap.end())
-        {
-            // 如果存在，合并 stageFlags
-            _ranges[it->second].stageFlags |= stage;
-            return;
-        }
-
         uint32_t size = static_cast<uint32_t>(sizeof(T));
 
-        // 4字节对齐 (Vulkan Spec 要求 offset 必须是 4 的倍数)
-        uint32_t alignedOffset = static_cast<uint32_t>((_currOffset + 3) & ~3);
-
-        // 3. 检查剩余空间
-        if (alignedOffset + size > _maxSize)
+        if (size > _maxSize)
         {
-            LOGE(("Push constant size limit exceeded! Max: " + std::to_string(_maxSize) + ", Requested end: " + std::to_string(alignedOffset + size))
-                     .c_str());
+            LOGE(("Push constant size limit exceeded! Max: " + std::to_string(_maxSize) + ", Requested: " + std::to_string(size)).c_str());
         }
 
-        // 4. 创建新 Range
-        VkPushConstantRange range{};
-        range.stageFlags = stage;
-        range.offset     = alignedOffset;
-        range.size       = size;
-
-        _ranges.emplace_back(stage, alignedOffset, size);
-
-        // 记录映射关系
-        _typeMap[typeIdx] = static_cast<uint32_t>(_ranges.size() - 1);
-
-        // 更新当前偏移量
-        _currOffset = alignedOffset + size;
+        _range            = {};
+        _range.stageFlags = stage;
+        _range.offset     = 0;
+        _range.size       = size;
+        _constantData.resize(size, 0);
     }
+
     template <typename T>
-    void setRange(const T& value)
+    T* getData()
     {
-        std::type_index typeIdx(typeid(T));
-        auto            it = _typeMap.find(typeIdx);
-        if (it == _typeMap.end())
-        {
-            LOGW("PushConstantManager::getRange: Type not found");
-            return;
-        }
-        *reinterpret_cast<T*>(&_constantData[_ranges[it->second].offset]) = value;
+        return reinterpret_cast<T*>(_constantData.data());
     }
 
-    void pushConstantRanges(VkCommandBuffer cmdBuf, VkPipelineLayout layout);
-
-    const std::vector<VkPushConstantRange>& getRanges() const;
+    void                 pushConstantRanges(VkCommandBuffer cmdBuf, VkPipelineLayout layout);
+    VkPushConstantRange& getRange()
+    {
+        return _range;
+    }
 
     uint32_t getMaxSize() const;
-
-    void clear();
+    void     clear();
+    bool     haveRange() const
+    {
+        return !_constantData.empty();
+    }
 
 private:
-    uint32_t                                      _maxSize;
-    size_t                                        _currOffset = 0;
-    std::vector<VkPushConstantRange>              _ranges;
-    std::unordered_map<std::type_index, uint32_t> _typeMap;
-    std::vector<uint8_t>                          _constantData;
+    uint32_t             _maxSize;
+    VkPushConstantRange  _range = {};
+    std::vector<uint8_t> _constantData;
 };
 
 union DescriptorInfo
@@ -165,22 +141,22 @@ public:
 
     // push constants
     template <typename T>
-    DescriptorSetManager& addConstantRange(VkShaderStageFlags stage = VK_SHADER_STAGE_ALL)
+    DescriptorSetManager& initPushConstant(VkShaderStageFlags stage = VK_SHADER_STAGE_ALL)
     {
         _pipelineLayoutDirty |= 1 << 1;
-        _constantRanges.addRange<T>(stage);
+        _constantRanges.registConstantType<T>(stage);
         return *this;
     }
 
     template <typename T>
-    void setConstantRange(const T& value)
+    T* getPushConstantData()
     {
-        _constantRanges.setRange(value);
+        return _constantRanges.getData<T>();
     }
 
     void pushConstantRanges(VkCommandBuffer cmdBuf)
     {
-        _constantRanges.pushConstantRanges(cmdBuf, _pipelineLayout);
+        if (_constantRanges.haveRange()) _constantRanges.pushConstantRanges(cmdBuf, _pipelineLayout);
     }
 
     // getter
@@ -212,7 +188,7 @@ private:
     PushConstantManager   _constantRanges;
 
     // for binding request merge
-    std::array<VkDescriptorSetLayout, static_cast<size_t>(DescriptorEnum::eCount)> _descSetLayouts      = {};
+    std::array<VkDescriptorSetLayout, static_cast<size_t>(DescriptorEnum::eCount)> _descSetLayouts      = {VK_NULL_HANDLE};
     VkPipelineLayout                                                               _pipelineLayout      = VK_NULL_HANDLE;
     uint8_t                                                                        _pipelineLayoutDirty = 0;
 }; // Helper class to manage push constants.
@@ -238,6 +214,7 @@ public:
     PlayProgram(const PlayProgram&);
     PlayProgram&          operator=(const PlayProgram&);
     virtual ProgramType   getProgramType() const = 0;
+    virtual void          setPassNode(RDG::PassNode* passNode);
     DescriptorSetManager& getDescriptorSetManager()
     {
         return _descriptorSetManager;
@@ -269,6 +246,7 @@ public:
     uint32_t poolId = -1;
 
 protected:
+    RDG::PassNode*       _passNode = nullptr;
     DescriptorSetManager _descriptorSetManager;
     ProgramType          _programType = ProgramType::eUndefined;
 };
@@ -298,7 +276,6 @@ public:
     {
         return _programType;
     }
-    void setPassNode(RDG::PassNode* passNode);
 
     RDG::RenderPassNode* getPassNode();
 
@@ -308,12 +285,12 @@ public:
     }
 
 private:
-    VkPipeline     getOrCreatePipeline();
-    ShaderID       _vertexModuleID = ~0U;
-    ShaderID       _fragModuleID   = ~0U;
-    ProgramType    _programType    = ProgramType::eRenderProgram;
-    RDG::PassNode* _passNode       = nullptr;
-    PSOState       _psoState;
+    VkPipeline  getOrCreatePipeline();
+    ShaderID    _vertexModuleID = ~0U;
+    ShaderID    _fragModuleID   = ~0U;
+    ProgramType _programType    = ProgramType::eRenderProgram;
+
+    PSOState _psoState;
 };
 
 class ComputeProgram : public PlayProgram

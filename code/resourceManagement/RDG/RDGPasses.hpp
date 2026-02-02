@@ -44,6 +44,7 @@ class PassNode : public Node
 {
 public:
     PassNode(size_t id, std::string name, NodeType type) : Node(id, type), _name(std::move(name)) {}
+    ~PassNode() override;
 
     void setFunc(std::function<void(PassNode* passNode, RenderContext& context)> func)
     {
@@ -105,8 +106,18 @@ public:
     {
         return _renderPass.get();
     }
+    bool isEnableMultiThreadRecording() const
+    {
+        return _needMultiThreadRecording;
+    }
+
+    void setMultiThreadRecordingState(bool enable)
+    {
+        _needMultiThreadRecording = enable;
+    }
 
 private:
+    bool _needMultiThreadRecording = false;
     friend class RenderPassBuilder;
     friend class RDGBuilder;
     std::unique_ptr<RenderPass> _renderPass = nullptr;

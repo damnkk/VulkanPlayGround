@@ -21,7 +21,6 @@ struct ScopeTimer
     {
         auto end     = std::chrono::high_resolution_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-        std::cout << "Scene traversal time: " << elapsed.count() << " ms" << std::endl;
     }
 };
 PlayElement::PlayElement(Info info) : _info(info) {}

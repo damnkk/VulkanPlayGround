@@ -5,7 +5,10 @@
 namespace Play
 {
 
-PresentPass::~PresentPass() {}
+PresentPass::~PresentPass()
+{
+    ProgramPool::Instance().free(_presentProgram);
+}
 
 void PresentPass::init()
 {

@@ -147,7 +147,7 @@ Texture* TexturePool::alloc(uint32_t width, uint32_t height, uint32_t depth, VkF
         .viewType         = depth == 1 ? VK_IMAGE_VIEW_TYPE_2D : VK_IMAGE_VIEW_TYPE_3D,
         .format           = format,
         .components       = {VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A},
-        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, 1},
+        .subresourceRange = {inferImageAspectFlags(format, usage), 0, mipLevels, 0, 1},
     };
     if (_manager->createImage(*texture, imageInfo, viewInfo) != VK_SUCCESS)
     {
@@ -370,7 +370,15 @@ Buffer* BufferPool::alloc()
 {
     assert(_availableIndex < _objs.size());
     uint32_t index = _freeIndices[_availableIndex++];
-    _objs[index]   = static_cast<Buffer*>(new Buffer(index));
+    if (_objs[index] != nullptr)
+    {
+        _objs[index]->poolId = index;
+        return _objs[index];
+    }
+    else
+    {
+        _objs[index] = static_cast<Buffer*>(new Buffer(index));
+    }
     return _objs[index];
 }
 
@@ -465,8 +473,9 @@ void ProgramPool::free(PlayProgram* obj)
         return;
     }
     _freeIndices[--_availableIndex] = obj->poolId;
+    _objs[obj->poolId]              = nullptr;
+    obj->poolId                     = -1;
     delete obj;
-    obj->poolId = -1;
 };
 
 void ProgramPool::deinit()
@@ -475,8 +484,8 @@ void ProgramPool::deinit()
     {
         if (obj && obj->poolId >= 0)
         {
-            delete obj;
             obj->poolId = -1;
+            delete obj;
         }
     }
 }

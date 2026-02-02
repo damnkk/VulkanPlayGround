@@ -25,19 +25,6 @@ struct PlayFrameData;
 namespace Play::RDG
 {
 
-// we can reuse some texture here, to save some gpu memory
-class RDGTextureCache
-{
-public:
-    RDGTextureCache()  = default;
-    ~RDGTextureCache() = default;
-    void        regist(Texture* texture);
-    RDGTexture* request(Texture* texture);
-
-private:
-    std::unordered_map<RDGTexture::TextureDesc, std::list<RDGTexture*>> _textureMap;
-};
-
 class RDGBuilder;
 class RDGTextureBuilder
 {
@@ -76,8 +63,8 @@ private:
 class BlackBoard
 {
 public:
-    BlackBoard()  = default;
-    ~BlackBoard() = default;
+    BlackBoard() = default;
+    ~BlackBoard();
     void          registTexture(RDGTextureRef texture);
     void          registBuffer(RDGBufferRef buffer);
     void          registPass(PassNode* pass);

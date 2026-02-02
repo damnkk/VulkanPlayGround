@@ -5,6 +5,8 @@
 #include "ShaderManager.hpp"
 #include "VulkanDriver.h"
 #include "resourceManagement/PconstantType.h.slang"
+
+#include "GBufferConfig.h"
 namespace Play
 {
 void PostProcessPass::init()
@@ -15,13 +17,14 @@ void PostProcessPass::init()
 
     _postProgram = ProgramPool::Instance().alloc<RenderProgram>();
     _postProgram->setFragModuleID(PostProcessfId).setVertexModuleID(PostProcessvId);
+    _postProgram->getDescriptorSetManager().initPushConstant<PerFrameConstant>();
     _postProgram->psoState().rasterizationState.frontFace = VK_FRONT_FACE_CLOCKWISE;
     _postProgram->psoState().rasterizationState.cullMode  = VK_CULL_MODE_NONE;
 }
 
 void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
 {
-    auto inputTexture = rdgBuilder->getTexture("SkyBoxRT");
+    auto inputTexture = rdgBuilder->getTexture("LightPassOutput");
     auto outputTexRef = rdgBuilder->createTexture("outputTexture")
                             .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
                             .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
@@ -39,11 +42,10 @@ void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
             .execute(
                 [ownedRender, this](RDG::PassNode* passNode, RDG::RenderContext& context)
                 {
-                    VkCommandBuffer  cmd = context._currCmdBuffer;
-                    PerFrameConstant perFrameConstant;
-                    perFrameConstant.cameraBufferDeviceAddress = ownedRender->getCurrentCameraBuffer()->address;
+                    VkCommandBuffer   cmd              = context._currCmdBuffer;
+                    PerFrameConstant* perFrameConstant = this->_postProgram->getDescriptorSetManager().getPushConstantData<PerFrameConstant>();
+                    perFrameConstant->cameraBufferDeviceAddress = ownedRender->getCurrentCameraBuffer()->address;
                     this->_postProgram->setPassNode(static_cast<RDG::RenderPassNode*>(passNode));
-                    this->_postProgram->getDescriptorSetManager().setConstantRange(perFrameConstant);
                     this->_postProgram->bind(cmd);
                     context._pendingGfxState->bindDescriptorSet(cmd, this->_postProgram);
                     VkViewport viewport = {0, 0, (float) vkDriver->getViewportSize().width, (float) vkDriver->getViewportSize().height, 0.0f, 1.0f};
@@ -55,6 +57,9 @@ void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
             .finish();
 }
 
-PostProcessPass::~PostProcessPass() {}
+PostProcessPass::~PostProcessPass()
+{
+    ProgramPool::Instance().free(_postProgram);
+}
 
 } // namespace Play

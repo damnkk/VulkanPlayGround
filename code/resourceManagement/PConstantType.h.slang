@@ -3,7 +3,6 @@
 struct PerFrameConstant
 {
     uint64_t cameraBufferDeviceAddress;
-    uint64_t sceneAnimationBufferDeviceAddress;
 };
 
 struct SceneConstant
@@ -11,5 +10,11 @@ struct SceneConstant
     uint64_t sceneDescAddress;
     uint32_t renderNodeId;
     uint32_t textureOffset;
+};
+
+struct GBufferPushConstant
+{
+    PerFrameConstant perFrameConstant;
+    SceneConstant    sceneConstant;
 };
 #endif // P_CONSTANT_TYPE_H

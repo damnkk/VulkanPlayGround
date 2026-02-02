@@ -5,6 +5,11 @@
 
 namespace Play::RDG
 {
+PassNode::~PassNode()
+{
+    VkDescriptorSetLayout layout = this->_descBindings.getSetLayout();
+    vkDestroyDescriptorSetLayout(vkDriver->getDevice(), layout, nullptr);
+}
 const uint32_t ATTACHMENT_DEPTH_STENCIL = 0xFFFFFFFF;
 RenderPassNode::RenderPassNode(uint32_t id, std::string name) : PassNode(id, std::move(name), NodeType::eRenderPass) {}
 void RenderPassNode::initRenderPass()
@@ -20,6 +25,7 @@ void RenderPassNode::initRenderPass()
         _renderPass = std::make_unique<LegacyRenderPass>(this);
     }
     RenderPassConfig config;
+    config.needMultiThreadRecording = _needMultiThreadRecording;
     for (auto& [texture, state] : _textureStates)
     {
         const TextureAccessInfo& accessInfo = state.textureStates[0];

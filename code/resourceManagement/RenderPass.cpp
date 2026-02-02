@@ -23,6 +23,7 @@ void LegacyRenderPass::destroy() {}
 void DynamicRenderPass::init(const RenderPassConfig& config)
 {
     if (!_isDirty) return;
+    m_config = config;
     for (const auto& attachment : config.colorAttachments)
     {
         auto& colorAttachment       = m_vkColorAttachments.emplace_back(VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO);
@@ -48,13 +49,16 @@ void DynamicRenderPass::init(const RenderPassConfig& config)
     m_vkRenderingInfo.pColorAttachments    = m_vkColorAttachments.data();
     if (config.depthStencilAttachment)
     {
-        m_vkRenderingInfo.pDepthAttachment = &m_vkDepthAttachment;
+        m_vkRenderingInfo.pDepthAttachment   = &m_vkDepthAttachment;
+        m_vkRenderingInfo.pStencilAttachment = &m_vkDepthAttachment;
     }
     else
     {
-        m_vkRenderingInfo.pDepthAttachment = nullptr;
+        m_vkRenderingInfo.pDepthAttachment   = nullptr;
+        m_vkRenderingInfo.pStencilAttachment = nullptr;
     }
-    _isDirty = false;
+    m_vkRenderingInfo.flags = config.needMultiThreadRecording ? VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT : 0;
+    _isDirty                = false;
 }
 
 void DynamicRenderPass::begin(VkCommandBuffer cmd, const VkRect2D& renderArea)
@@ -70,6 +74,7 @@ void DynamicRenderPass::begin(VkCommandBuffer cmd, const VkRect2D& renderArea)
     batchBarrier.cmdPipelineBarrier(cmd, 0);
     m_vkRenderingInfo.renderArea = renderArea;
     m_vkRenderingInfo.layerCount = 1;
+
     vkCmdBeginRendering(cmd, &m_vkRenderingInfo);
 }
 

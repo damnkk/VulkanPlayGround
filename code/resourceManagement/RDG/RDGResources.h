@@ -87,6 +87,7 @@ class RDGTexture
 {
 public:
     RDGTexture(std::string name) : _name(std::move(name)) {}
+    ~RDGTexture();
     Texture* getRHI()
     {
         return _rhi;
@@ -137,6 +138,7 @@ class RDGBuffer
 {
 public:
     RDGBuffer(std::string name) : _name(std::move(name)) {}
+    ~RDGBuffer();
     Buffer* getRHI()
     {
         return _rhi;

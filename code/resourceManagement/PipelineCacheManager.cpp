@@ -407,9 +407,10 @@ VkPipeline PipelineCacheManager::getOrCreateGraphicsPipeline(RenderProgram* prog
 
     if (vkDriver->_enableDynamicRendering)
     {
-        DynamicRenderPass* dRenderPass                           = dynamic_cast<DynamicRenderPass*>(program->getPassNode()->getRenderPass());
-        _gfxPipelineCreator.renderingState.depthAttachmentFormat = dRenderPass->getDepthAttachmentFormat();
-        _gfxPipelineCreator.colorFormats                         = dRenderPass->getColorAttachmentFormats();
+        DynamicRenderPass* dRenderPass                             = dynamic_cast<DynamicRenderPass*>(program->getPassNode()->getRenderPass());
+        _gfxPipelineCreator.renderingState.depthAttachmentFormat   = dRenderPass->getDepthAttachmentFormat();
+        _gfxPipelineCreator.renderingState.stencilAttachmentFormat = dRenderPass->getDepthAttachmentFormat();
+        _gfxPipelineCreator.colorFormats                           = dRenderPass->getColorAttachmentFormats();
     }
     else
     {
