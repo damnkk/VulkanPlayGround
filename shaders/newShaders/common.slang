@@ -2,6 +2,7 @@
 #define COMMON_SLANG
 #include "Hdevice.h"
 #include "gltf_scene_io.h.slang"
+#include "tonemap_io.h.slang" 
 
 // shader extension
 #extension GL_EXT_scalar_block_layout : enable
@@ -18,7 +19,7 @@ SamplerState g_GlobalSampler_Point; // nearest / point sampling
 [vk::binding(3, 0)]
 SamplerState g_GlobalSampler_Linear; // linear filtering
 [vk::binding(4, 0)]
-ConstantBuffer<EngineConfig> g_EngineConfigBuffer;
+ConstantBuffer<TonemapperData> g_TonemapperDataBuffer;
 // Per-Scene bindings(update per view)
 [vk::binding(0, 1)]
 Texture2D<float4> s_SceneSkyTexture;

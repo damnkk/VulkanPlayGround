@@ -10,6 +10,8 @@
 #include <chrono>
 #include "core/JobSystem.h"
 #include "pch.h"
+#include "nvgui/tonemapper.hpp"
+#include "controlComponent/controlComponent.h"
 namespace Play
 {
 
@@ -209,6 +211,10 @@ public:
             return false;
         }
     }
+    ToneMappingControlComponent& getTonemapperControlComponent()
+    {
+        return *_tonemapperControlComponent;
+    }
 
     void                        updateFrameDescriptorSet();
     VkPhysicalDeviceProperties2 _physicalDeviceProperties2;
@@ -251,6 +257,8 @@ public:
     bool                                           _enableDynamicRendering = true;
     std::unique_ptr<RenderPassCache>  _renderPassCache  = nullptr; // if Dynamic rendering is off, use RenderPassCache to manage render passes
     std::unique_ptr<FrameBufferCache> _frameBufferCache = nullptr; // if Dynamic rendering is off, use FrameBufferCache to manage frame buffers
+
+    std::unique_ptr<ToneMappingControlComponent> _tonemapperControlComponent;
 };
 extern VulkanDriver* vkDriver;
 

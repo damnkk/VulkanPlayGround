@@ -23,7 +23,5 @@ Texture2D<float4> inputVelocity;
 [shader("fragment")]
 void main(FragmentInput input, out FragmentOutput output)
 {
-    output.color   = inputPBR.Sample(g_GlobalSampler_Linear, input.uv);
-    output.color.a = 1.0;
-    // output.color.g = 1.0;
+    output.color = inputAlbedo.Sample(g_GlobalSampler_Linear, input.uv);
 }

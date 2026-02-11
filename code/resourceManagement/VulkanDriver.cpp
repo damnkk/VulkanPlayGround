@@ -142,7 +142,11 @@ void VulkanDriver::updateGlobalDescriptorSet()
     samplerCreateInfo.minFilter = VK_FILTER_LINEAR;
     PlayResourceManager::Instance().acquireSampler(samplerList[1], samplerCreateInfo);
     imageInfoList.push_back({samplerList[1]});
-    std::vector<VkWriteDescriptorSet> writeSet(2, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET});
+    VkDescriptorBufferInfo toneMappingBufferInfo{};
+    toneMappingBufferInfo.buffer = _tonemapperControlComponent->getGPUBuffer()->buffer;
+    toneMappingBufferInfo.offset = 0;
+    toneMappingBufferInfo.range  = VK_WHOLE_SIZE;
+    std::vector<VkWriteDescriptorSet> writeSet(3, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET});
     writeSet[0].dstSet          = _descriptorSetCache->getEngineDescriptorSet().set;
     writeSet[0].dstBinding      = 2;
     writeSet[0].descriptorCount = 1;
@@ -153,6 +157,11 @@ void VulkanDriver::updateGlobalDescriptorSet()
     writeSet[1].descriptorCount = 1;
     writeSet[1].descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLER;
     writeSet[1].pImageInfo      = &imageInfoList[1];
+    writeSet[2].dstSet          = _descriptorSetCache->getEngineDescriptorSet().set;
+    writeSet[2].dstBinding      = 4;
+    writeSet[2].descriptorCount = 1;
+    writeSet[2].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    writeSet[2].pBufferInfo     = &toneMappingBufferInfo;
 
     vkUpdateDescriptorSets(vkDriver->_device, static_cast<uint32_t>(writeSet.size()), writeSet.data(), 0, nullptr);
 }
@@ -188,6 +197,7 @@ void VulkanDriver::init()
         _frameBufferCache = std::make_unique<FrameBufferCache>();
     }
     _frameData.resize(_app->getFrameCycleSize());
+    _tonemapperControlComponent = std::make_unique<ToneMappingControlComponent>();
     prepareGlobalDescriptorSet();
     prepareFrameDescriptorSet();
 }

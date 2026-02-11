@@ -88,6 +88,7 @@ void PlayElement::onUIRender()
     ImGui::Begin("Viewport");
     ImGui::Image((ImTextureID) _uiTextureDescriptor, ImGui::GetContentRegionAvail());
     ImGui::End();
+    vkDriver->getTonemapperControlComponent().onGUI();
     _renderer->OnGUI();
 }
 

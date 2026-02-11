@@ -8,6 +8,7 @@
 #include "PlayAllocator.h"
 #include "resourceManagement/Resource.h"
 #include "SceneManager.h"
+
 namespace Play
 {
 class Renderer;
@@ -81,7 +82,6 @@ private:
     nvapp::Application*        _app{};
     nvutils::ProfilerTimeline* _profilerTimeline{};
     nvvk::ProfilerGpuTimer     _profilerGpuTimer{};
-    // SceneManager*              _sceneManager;
 };
 
 } //    namespace Play

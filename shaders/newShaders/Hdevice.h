@@ -10,9 +10,6 @@ using float4x4 = glm::mat4;
 using uint     = unsigned int;
 #endif
 #include "PConstantType.h.slang"
-struct EngineConfig
-{
-};
 
 struct CameraData
 {

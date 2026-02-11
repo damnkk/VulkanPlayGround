@@ -64,22 +64,24 @@ void RenderPassNode::initRenderPass()
             depthStencilAttachment.loadOp    = accessInfo.loadOp;
             depthStencilAttachment.storeOp   = accessInfo.storeOp;
             // 这里是一个通用数据结构体，必须填写accessInfo记录的layout信息，因为vkRenderPass对initlayout的准度要求更高，而barrier有时可用undefineLayout。
-            depthStencilAttachment.initialLayout = accessInfo.layout;
-            depthStencilAttachment.finalLayout   = accessInfo.attachFinalLayout;
-            config.depthStencilAttachment        = depthStencilAttachment;
+            depthStencilAttachment.initialLayout           = accessInfo.layout;
+            depthStencilAttachment.finalLayout             = accessInfo.attachFinalLayout;
+            depthStencilAttachment.clearValue.depthStencil = {1.0f, 0};
+            config.depthStencilAttachment                  = depthStencilAttachment;
         }
         else
         {
             RenderPassAttachment colorAttachment;
-            colorAttachment.image         = texture->getRHI()->image;
-            colorAttachment.imageView     = texture->getRHI()->descriptor.imageView;
-            colorAttachment.format        = texture->getRHI()->format;
-            colorAttachment.samples       = texture->getRHI()->SampleCount();
-            colorAttachment.slotIndex     = accessInfo.attachSlotIdx;
-            colorAttachment.loadOp        = accessInfo.loadOp;
-            colorAttachment.storeOp       = accessInfo.storeOp;
-            colorAttachment.initialLayout = accessInfo.layout;
-            colorAttachment.finalLayout   = accessInfo.attachFinalLayout;
+            colorAttachment.image            = texture->getRHI()->image;
+            colorAttachment.imageView        = texture->getRHI()->descriptor.imageView;
+            colorAttachment.format           = texture->getRHI()->format;
+            colorAttachment.samples          = texture->getRHI()->SampleCount();
+            colorAttachment.slotIndex        = accessInfo.attachSlotIdx;
+            colorAttachment.loadOp           = accessInfo.loadOp;
+            colorAttachment.storeOp          = accessInfo.storeOp;
+            colorAttachment.initialLayout    = accessInfo.layout;
+            colorAttachment.finalLayout      = accessInfo.attachFinalLayout;
+            colorAttachment.clearValue.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
             config.colorAttachments.emplace_back(colorAttachment);
         }
     }

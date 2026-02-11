@@ -60,15 +60,15 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
         rdgBuilder->createRenderPass("GBufferPass")
             .color(0, BaseColorRT, VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-            .color(1, WorldNormalRT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .color(1, WorldNormalRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-            .color(2, PBRRT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .color(2, PBRRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-            .color(3, VelocityRT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .color(3, VelocityRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-            .color(4, Custom1RT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .color(4, Custom1RT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-            .depthStencil(DepthRT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            .depthStencil(DepthRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
             .execute(
                 [this](RDG::PassNode* node, RDG::RenderContext& context)
@@ -140,13 +140,17 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
                                 VkRect2D scissor = {{0, 0}, {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height}};
                                 vkCmdSetViewportWithCount(subCmdBuffer, 1, &viewport);
                                 vkCmdSetScissorWithCount(subCmdBuffer, 1, &scissor);
+                                vkCmdSetDepthWriteEnable(subCmdBuffer, VK_FALSE);
+                                vkCmdSetDepthTestEnable(subCmdBuffer, VK_FALSE);
                                 program->bind(subCmdBuffer);
                                 context._pendingGfxState->bindDescriptorSet(subCmdBuffer, program);
                                 for (int i = 0; i < batch.renderNodeIDs.size(); ++i)
                                 {
                                     nvvkgltf::Scene&                 scene = sceneManager->getCpuScene()[batch.sceneID];
+                                    RenderScene&                     gpuScene = sceneManager->getVkScene()[batch.sceneID];
                                     const nvvkgltf::RenderNode&      renderNode = scene.getRenderNodes()[batch.renderNodeIDs[i]];
                                     const nvvkgltf::RenderPrimitive& renderPrimitive = scene.getRenderPrimitives()[renderNode.renderPrimID];
+                                    auto&                            indexBuffer = gpuScene.indices()[renderNode.renderPrimID];
                                     int                              indexCount = renderPrimitive.indexCount;
                                     GBufferPushConstant* constant = program->getDescriptorSetManager().getPushConstantData<GBufferPushConstant>();
                                     constant->perFrameConstant.cameraBufferDeviceAddress = _ownedRender->getCurrentCameraBuffer()->address;
@@ -154,7 +158,8 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
                                     constant->sceneConstant.renderNodeId  = batch.renderNodeIDs[i];
                                     constant->sceneConstant.textureOffset = gpuScene.getTextureOffset();
                                     program->getDescriptorSetManager().pushConstantRanges(subCmdBuffer);
-                                    vkCmdBindIndexBuffer2(subCmdBuffer, VK_NULL_HANDLE, 0, 0, VkIndexType::VK_INDEX_TYPE_UINT32);
+                                    vkCmdBindIndexBuffer2(subCmdBuffer, indexBuffer.buffer, 0, indexBuffer.bufferSize,
+                                                                                             VkIndexType::VK_INDEX_TYPE_UINT32);
                                     vkCmdDrawIndexed(subCmdBuffer, indexCount, 1, 0, 0, 0);
                                 }
                             }

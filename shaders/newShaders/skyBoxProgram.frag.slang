@@ -38,9 +38,5 @@ void main(FragmentInput fragIn, out FragmentOutput fragOut)
     fragOut.color     = float4(skyUV, 0.0, 1.0);
     fragOut.color     = s_SceneSkyTexture.Sample(g_GlobalSampler_Linear, skyUV);
     fragOut.color.xyz = toLinear(fragOut.color.xyz);
-    float exposure    = 300.0;
-    fragOut.color.xyz = fragOut.color.xyz * exposure;
-
-    fragOut.color.xyz = tonemapAgX(fragOut.color.xyz);
 }
 
