@@ -116,9 +116,9 @@ public:
         std::string           _debugName;
     } _info;
 
-    TextureAccessInfo* getAttachmentFinalAccessInfo()
+    TextureAccessInfo* getFinalAccessInfo()
     {
-        return _attachmentFinalAccessInfo;
+        return _externalState;
     }
 
 private:
@@ -127,7 +127,7 @@ private:
     uint32_t           _refCount = 0;
     Texture*           _rhi      = nullptr;
     ProducerInfo       _producerInfo;
-    TextureAccessInfo* _attachmentFinalAccessInfo = nullptr;
+    TextureAccessInfo* _externalState = nullptr;
     // latest access info for each sub resource
     TextureSubresourceAccessInfo _subResourceAccessInfos;
     std::string                  _name;

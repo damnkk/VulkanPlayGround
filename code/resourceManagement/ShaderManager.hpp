@@ -47,12 +47,12 @@ struct ShaderModule
 {
     ShaderModule(uint32_t id) : _poolId(id) {}
 
-    VkShaderModule       _shaderModule;
-    uint32_t             _poolId;
-    ShaderType           _type;
-    std::vector<uint8_t> _spvCode;
-    std::string          _name;
-    std::string          _entryPoint;
+    VkShaderModule        _shaderModule;
+    uint32_t              _poolId;
+    ShaderType            _type;
+    std::vector<uint32_t> _spvCode;
+    std::string           _name;
+    std::string           _entryPoint;
 };
 
 class ShaderPool : public BasePool<ShaderModule>

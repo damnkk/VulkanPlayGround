@@ -161,7 +161,7 @@ public:
     PipelineCacheManager();
     virtual ~PipelineCacheManager();
     VkPipeline getOrCreateGraphicsPipeline(RenderProgram* program);
-    VkPipeline getOrCreateComputePipeline(ComputePipelineState& computeState);
+    VkPipeline getOrCreateComputePipeline(ComputeProgram* program);
     VkPipeline getOrCreateRTPipeline(RTPipelineState& rtState);
     VkPipeline getOrCreateMeshPipeline(PSOState& psoState, RenderPass* renderPass, ShaderID mShaderID, ShaderID fShaderID, ShaderID tShaderID = ~0U);
 

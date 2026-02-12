@@ -428,9 +428,32 @@ VkPipeline PipelineCacheManager::getOrCreateGraphicsPipeline(RenderProgram* prog
     return pipeline;
 }
 
-VkPipeline PipelineCacheManager::getOrCreateComputePipeline(ComputePipelineState& computeState)
+VkPipeline PipelineCacheManager::getOrCreateComputePipeline(ComputeProgram* program)
 {
-    return VK_NULL_HANDLE;
+    uint64_t key = program->getComputeModuleID();
+    if (_pipelineMap.find(key) != _pipelineMap.end())
+    {
+        return _pipelineMap[key];
+    }
+    auto                        cShaderModule = ShaderManager::Instance().getShaderById(program->getComputeModuleID());
+    VkComputePipelineCreateInfo createInfo{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+    createInfo.stage        = {};
+    createInfo.stage.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    createInfo.stage.module = cShaderModule->_shaderModule;
+    createInfo.stage.pName  = cShaderModule->_entryPoint.c_str();
+    createInfo.stage.stage  = VK_SHADER_STAGE_COMPUTE_BIT;
+    createInfo.layout       = program->getDescriptorSetManager().getPipelineLayout();
+    createInfo.flags        = 0;
+    auto       block        = _cacheBlockManager->getOrCreateBlock(key);
+    VkPipeline pipeline;
+    block->createPipeline(
+        [pipelineCreatorPtr = &createInfo, program, pipelinePtr = &pipeline](PplCacheBlock* block)
+        {
+            vkCreateComputePipelines(vkDriver->getDevice(), block->_vkHandle, 1, pipelineCreatorPtr, nullptr, pipelinePtr);
+            return *pipelinePtr;
+        });
+    _pipelineMap[key] = pipeline;
+    return pipeline;
 }
 
 VkPipeline PipelineCacheManager::getOrCreateRTPipeline(RTPipelineState& rtState)

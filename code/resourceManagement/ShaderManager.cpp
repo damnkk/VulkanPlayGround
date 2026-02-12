@@ -304,18 +304,19 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
                 std::streamsize size = file.tellg();
                 file.seekg(0, std::ios::beg);
 
-                std::vector<uint8_t> buffer(size);
-                if (file.read(reinterpret_cast<char*>(buffer.data()), size))
+                const size_t          wordCount = static_cast<size_t>(size) / sizeof(uint32_t);
+                std::vector<uint32_t> buffer(wordCount);
+                if (file.read(reinterpret_cast<char*>(buffer.data()), wordCount * sizeof(uint32_t)))
                 {
                     ShaderModule* module = _shaderPool.alloc();
-                    module->_spvCode     = buffer;
+                    module->_spvCode     = std::move(buffer);
                     module->_type        = ShaderType::eSLANG;
                     module->_name        = name;
                     module->_entryPoint  = entry;
 
                     VkShaderModuleCreateInfo createInfo{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-                    createInfo.codeSize = module->_spvCode.size();
-                    createInfo.pCode    = reinterpret_cast<const uint32_t*>(module->_spvCode.data());
+                    createInfo.codeSize = module->_spvCode.size() * sizeof(uint32_t);
+                    createInfo.pCode    = module->_spvCode.data();
 
                     NVVK_CHECK(vkCreateShaderModule(vkDriver->_device, &createInfo, nullptr, &module->_shaderModule));
                     _nameIdMap[name] = module->_poolId;
@@ -337,14 +338,16 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
         {
             LOGW("Compilation succeeded with warnings: %s\n", warningMessages.c_str());
         }
-        module->_type = ShaderType::eSLANG;
-        module->_name = name;
-        module->_spvCode.resize(_slangCompiler.getSpirvSize());
+        module->_type               = ShaderType::eSLANG;
+        module->_name               = name;
+        const size_t spirvByteSize  = _slangCompiler.getSpirvSize();
+        const size_t spirvWordCount = spirvByteSize / sizeof(uint32_t);
+        module->_spvCode.resize(spirvWordCount);
         module->_entryPoint = entry;
-        std::memcpy(module->_spvCode.data(), _slangCompiler.getSpirv(), _slangCompiler.getSpirvSize());
+        std::memcpy(module->_spvCode.data(), _slangCompiler.getSpirv(), spirvWordCount * sizeof(uint32_t));
         VkShaderModuleCreateInfo createInfo{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-        createInfo.codeSize = module->_spvCode.size();
-        createInfo.pCode    = reinterpret_cast<const uint32_t*>(module->_spvCode.data());
+        createInfo.codeSize = module->_spvCode.size() * sizeof(uint32_t);
+        createInfo.pCode    = module->_spvCode.data();
         NVVK_CHECK(vkCreateShaderModule(vkDriver->_device, &createInfo, nullptr, &module->_shaderModule));
         _nameIdMap[name] = module->_poolId;
         std::ofstream spvFile(fullSpvPath, std::ios::binary);
@@ -375,20 +378,20 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
                     std::streamsize size = file.tellg();
                     file.seekg(0, std::ios::beg);
 
-                    std::vector<uint8_t> buffer(size);
-                    if (file.read(reinterpret_cast<char*>(buffer.data()), size))
+                    const size_t          wordCount = static_cast<size_t>(size) / sizeof(uint32_t);
+                    std::vector<uint32_t> buffer(wordCount);
+                    if (file.read(reinterpret_cast<char*>(buffer.data()), wordCount * sizeof(uint32_t)))
                     {
                         ShaderModule* module = _shaderPool.alloc();
-                        module->_spvCode.resize(buffer.size() / sizeof(uint8_t));
-                        std::memcpy(module->_spvCode.data(), buffer.data(), buffer.size());
+                        module->_spvCode     = std::move(buffer);
 
                         module->_type       = ShaderType::eGLSL;
                         module->_name       = name;
                         module->_entryPoint = entry;
 
                         VkShaderModuleCreateInfo createInfo{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-                        createInfo.codeSize = module->_spvCode.size() * sizeof(uint8_t);
-                        createInfo.pCode    = reinterpret_cast<const uint32_t*>(module->_spvCode.data());
+                        createInfo.codeSize = module->_spvCode.size() * sizeof(uint32_t);
+                        createInfo.pCode    = module->_spvCode.data();
 
                         NVVK_CHECK(vkCreateShaderModule(vkDriver->_device, &createInfo, nullptr, &module->_shaderModule));
                         _nameIdMap[name] = module->_poolId;
@@ -404,8 +407,10 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
                 LOGE(result.GetErrorMessage().c_str());
                 return -1;
             }
-            module->_spvCode.resize(_glslCCompiler.getSpirvSize(result));
-            std::memcpy(module->_spvCode.data(), _glslCCompiler.getSpirv(result), _glslCCompiler.getSpirvSize(result));
+            const size_t spirvByteSize  = _glslCCompiler.getSpirvSize(result);
+            const size_t spirvWordCount = spirvByteSize / sizeof(uint32_t);
+            module->_spvCode.resize(spirvWordCount);
+            std::memcpy(module->_spvCode.data(), _glslCCompiler.getSpirv(result), spirvWordCount * sizeof(uint32_t));
             module->_type                       = ShaderType::eGLSL;
             module->_name                       = name;
             module->_entryPoint                 = entry;
@@ -417,7 +422,7 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
             std::ofstream spvFile(fullSpvPath, std::ios::binary);
             if (spvFile.is_open())
             {
-                spvFile.write(reinterpret_cast<const char*>(module->_spvCode.data()), module->_spvCode.size());
+                spvFile.write(reinterpret_cast<const char*>(module->_spvCode.data()), module->_spvCode.size() * sizeof(uint32_t));
                 spvFile.close();
             }
             return module->_poolId;

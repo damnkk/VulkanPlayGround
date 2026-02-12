@@ -380,11 +380,15 @@ ComputeProgram& ComputeProgram::setComputeModuleID(ShaderID computeModuleID)
     return *this;
 }
 
-void ComputeProgram::bind(VkCommandBuffer cmdBuf) {}
+void ComputeProgram::bind(VkCommandBuffer cmdBuf)
+{
+    VkPipeline computePipeline = getOrCreatePipeline();
+    vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
+}
 
 VkPipeline ComputeProgram::getOrCreatePipeline()
 {
-    return VK_NULL_HANDLE;
+    return vkDriver->_pipelineCacheManager->getOrCreateComputePipeline(this);
 }
 
 RTProgram& RTProgram::setRayGenModuleID(ShaderID rayGenModuleID)

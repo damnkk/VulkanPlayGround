@@ -272,7 +272,18 @@ void RDGBuilder::prepareResourceBarrier(RenderContext& context, PassNode* pass)
             texture->setRHI(ptr);
             nvvk::DebugUtil::getInstance().setObjectName(texture->getRHI()->image, texture->name().c_str());
         }
-        if (accessInfo.isAttachment || !Play::isImageBarrierValid(state.barrierInfo)) continue;
+        if (accessInfo.isAttachment) continue;
+        // resource frame loop dependency
+        if (!Play::isImageBarrierValid(state.barrierInfo))
+        {
+            state.barrierInfo.dstAccessMask    = accessInfo.accessMask;
+            state.barrierInfo.srcAccessMask    = texture->getFinalAccessInfo()->accessMask;
+            state.barrierInfo.dstStageMask     = accessInfo.stageMask;
+            state.barrierInfo.srcStageMask     = texture->getFinalAccessInfo()->stageMask;
+            state.barrierInfo.newLayout        = accessInfo.layout;
+            state.barrierInfo.oldLayout        = texture->getFinalAccessInfo()->layout;
+            state.barrierInfo.subresourceRange = {texture->_info._aspectFlags, 0, texture->_info._mipmapLevel, 0, texture->_info._layerCount};
+        }
         state.barrierInfo.image = texture->getRHI()->image;
         barrierContainer.appendOptionalLayoutTransition(*texture->getRHI(), state.barrierInfo);
     }
@@ -397,10 +408,8 @@ void RDGBuilder::compile()
                 }
             }
             // Todo: RT got finalAccessInfo or persisent image resource got finalAccessInfo?
-            if (currAccessInfo.isAttachment)
-            {
-                texture->_attachmentFinalAccessInfo = &currAccessInfo;
-            }
+
+            texture->_externalState = &currAccessInfo;
 
             if (state.textureStates.front().accessMask &
                 (VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT))
@@ -663,15 +672,9 @@ RenderContext* RDGBuilder::prepareRenderContext(PassNode* pass)
             auto& sceneDescriptorSet  = _renderContext->_pendingComputeState->_sceneDescriptorSet;
             auto& frameDescriptorSet  = _renderContext->_pendingComputeState->_frameDescriptorSet;
 
-            globalDescriptorSet = globalDescriptorSet == vkDriver->getDescriptorSetCache()->getEngineDescriptorSet().set
-                                      ? vkDriver->getDescriptorSetCache()->getEngineDescriptorSet().set
-                                      : globalDescriptorSet;
-            sceneDescriptorSet  = sceneDescriptorSet == vkDriver->getDescriptorSetCache()->getSceneDescriptorSet().set
-                                      ? vkDriver->getDescriptorSetCache()->getSceneDescriptorSet().set
-                                      : sceneDescriptorSet;
-            frameDescriptorSet  = frameDescriptorSet == vkDriver->getDescriptorSetCache()->getFrameDescriptorSet().set
-                                      ? vkDriver->getDescriptorSetCache()->getFrameDescriptorSet().set
-                                      : frameDescriptorSet;
+            globalDescriptorSet = vkDriver->getDescriptorSetCache()->getEngineDescriptorSet().set;
+            sceneDescriptorSet  = vkDriver->getDescriptorSetCache()->getSceneDescriptorSet().set;
+            frameDescriptorSet  = vkDriver->getDescriptorSetCache()->getFrameDescriptorSet().set;
             break;
         }
         case PassNode::Type::RayTracing:
@@ -680,15 +683,9 @@ RenderContext* RDGBuilder::prepareRenderContext(PassNode* pass)
             auto& sceneDescriptorSet  = _renderContext->_pendingRTState->_sceneDescriptorSet;
             auto& frameDescriptorSet  = _renderContext->_pendingRTState->_frameDescriptorSet;
 
-            globalDescriptorSet = globalDescriptorSet == vkDriver->getDescriptorSetCache()->getEngineDescriptorSet().set
-                                      ? vkDriver->getDescriptorSetCache()->getEngineDescriptorSet().set
-                                      : globalDescriptorSet;
-            sceneDescriptorSet  = sceneDescriptorSet == vkDriver->getDescriptorSetCache()->getSceneDescriptorSet().set
-                                      ? vkDriver->getDescriptorSetCache()->getSceneDescriptorSet().set
-                                      : sceneDescriptorSet;
-            frameDescriptorSet  = frameDescriptorSet == vkDriver->getDescriptorSetCache()->getFrameDescriptorSet().set
-                                      ? vkDriver->getDescriptorSetCache()->getFrameDescriptorSet().set
-                                      : frameDescriptorSet;
+            globalDescriptorSet = vkDriver->getDescriptorSetCache()->getEngineDescriptorSet().set;
+            sceneDescriptorSet  = vkDriver->getDescriptorSetCache()->getSceneDescriptorSet().set;
+            frameDescriptorSet  = vkDriver->getDescriptorSetCache()->getFrameDescriptorSet().set;
             break;
         }
         default:

@@ -3,14 +3,15 @@
 #include "RenderPass.h"
 #include <memory>
 #include <nvvk/graphics_pipeline.hpp>
+#include <nvshaders_host/tonemapper.hpp>
 namespace Play
 {
-class RenderProgram;
+class ComputeProgram;
 class DeferRenderer;
 class PostProcessPass : public BasePass
 {
 public:
-    PostProcessPass(DeferRenderer* ownedRender) : _ownedRender(ownedRender) {}
+    PostProcessPass(DeferRenderer* ownedRender);
     ~PostProcessPass() override;
 
     void init() override;
@@ -18,8 +19,9 @@ public:
 
 private:
     friend class DeferRenderer;
-    RenderProgram* _postProgram;
-    DeferRenderer* _ownedRender = nullptr;
+    ComputeProgram*       _postProgram;
+    DeferRenderer*        _ownedRender = nullptr;
+    nvshaders::Tonemapper _tonemapper;
 };
 
 } // namespace Play

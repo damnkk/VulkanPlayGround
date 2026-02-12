@@ -34,7 +34,7 @@ void RenderPassNode::initRenderPass()
         // if curr attachment's barrier is invalid, that means this is a Frame-to-Frame Dependency
         // RDG::Compile()can't infer barrier in this situation with only one invocation
         bool               isFrameToFrameDependency = !isImageBarrierValid(barrierInfo);
-        TextureAccessInfo* finalAccessInfo          = texture->getAttachmentFinalAccessInfo();
+        TextureAccessInfo* finalAccessInfo          = texture->getFinalAccessInfo();
         // so we made the right barrier info at here
         if (isFrameToFrameDependency)
         {

@@ -299,6 +299,10 @@ public:
     ComputeProgram(uint32_t id) : PlayProgram(id) {}
     ComputeProgram(uint32_t id, VkDevice device, ShaderID computeModuleID) : PlayProgram(id), _computeModuleID(computeModuleID) {}
     ComputeProgram& setComputeModuleID(ShaderID computeModuleID);
+    ShaderID        getComputeModuleID() const
+    {
+        return _computeModuleID;
+    }
 
     void                bind(VkCommandBuffer cmdBuf) override;
     virtual ProgramType getProgramType() const override
