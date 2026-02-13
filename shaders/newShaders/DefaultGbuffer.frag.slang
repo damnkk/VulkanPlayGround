@@ -35,6 +35,7 @@ FragmentOutput main(FragmentInput fragIn)
     {
         GltfTextureInfo texInfo = scene->textureInfos[material.pbrBaseColorTexture];
         albedo = s_SceneTextures[texInfo.index + g_gBufferPushConstant.sceneConstant.textureOffset].SampleLevel(g_GlobalSampler_Linear, fragIn.uv, 0);
+        albedo.xyz = toLinear(albedo.xyz);
     }
     float4 worldNormal = float4(0.0);
     if (material.normalTexture != 0)

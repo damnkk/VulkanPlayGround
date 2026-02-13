@@ -219,6 +219,7 @@ int main(int argc, char** argv)
         .deviceExtensions =
             {
                 {VK_KHR_SWAPCHAIN_EXTENSION_NAME},
+                {VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME},
                 {VK_KHR_RAY_QUERY_EXTENSION_NAME, &rayQueryFeatures},
                 {VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME},
                 {VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME},
