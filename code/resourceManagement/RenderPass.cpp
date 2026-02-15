@@ -50,7 +50,7 @@ void DynamicRenderPass::init(const RenderPassConfig& config)
     if (config.depthStencilAttachment)
     {
         m_vkRenderingInfo.pDepthAttachment   = &m_vkDepthAttachment;
-        m_vkRenderingInfo.pStencilAttachment = &m_vkDepthAttachment;
+        m_vkRenderingInfo.pStencilAttachment = nullptr;
     }
     else
     {

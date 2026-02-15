@@ -6,61 +6,80 @@ namespace Play
 {
 
 /*
- * 高精度 GBuffer 配置(High Precision / Cinematic Profile):
+ * 弹性 GBuffer 配置（Dynamic Shading Model）:
  * ---------------------------------------------------------
- * 目标: 极致画质，无视显存与带宽开销 (适用于 24G VRAM+ 高端硬件)
- * 策略: 全管线采用 16-bit Floating Point (Half) 或更高，彻底消除色带(Banding)和精度误差。
- * 这里的原则是：除了 Swapchain Present 是 8-bit，中间计算全部保持至少 16-bit 浮点精度。
+ * 借鉴 UE5 设计：使用 ShadingModelID 动态解释 GCustomData 内容
+ * 优势：显存高效（仅 5 个彩色 RT），支持所有 nvpro PbrMaterial 高级特性
+ * 策略：全管线 16-bit Float，4090D 显卡保证精度无损
  *
- * RT0: GBufferA (BaseColor / Albedo)
+ * === 固定布局（所有材质共享）===
+ *
+ * RT0: GBaseColor - BaseColor & AO
  * - Format: VK_FORMAT_R16G16B16A16_SFLOAT
- * - Util: 即使 BaseColor 通常在 [0,1]，16F 允许存储超高动态范围的 Emissive 或保留极高精度的线性颜色数据，
- *         避免多次伽马校正带来的累计误差。
- * - Channels:
- *   - RGB: Base Color (High Precision Linear)
- *   - A:   PerObject Data / AO (16-bit precision)
+ * - Channels: RGB = baseColor (linear), A = AO/Occlusion
  *
- * RT1: GBufferB (WorldNormal)
+ * RT1: GNormal - WorldNormal & Metallic
  * - Format: VK_FORMAT_R16G16B16A16_SFLOAT
- * - Util: 相比 10bit，16F 法线能完美表达微表面和高精模型细节，彻底消除几何边缘和高光处的锯齿与量化噪声。
- *         不再需要复杂的法线压缩编码。
- * - Channels:
- *   - RGB: World Space Normal (直接存储 [-1, 1] 或 [0, 1])
- *   - A:   Subsurface / Anisotropy Data
+ * - Channels: RG = Normal.xy (Octahedron encode), B = metallic, A = opacity
+ * - Note: Normal.z 从 xy 解码; T, B 通过 orthonormalBasis(N) 恢复
  *
- * RT2: GBufferC (Material Attributes / PBR)
+ * RT2: GPBR - Roughness & Specular
  * - Format: VK_FORMAT_R16G16B16A16_SFLOAT
- * - Util: Roughness 和 Metallic 在极低或极高值时，8-bit 可能导致非物理的截断，16F 保证光照计算的连续性。
- * - Channels:
- *   - R: Metallic
- *   - G: Specular
- *   - B: Roughness
- *   - A: Shading Model ID (虽然ID是整数，但作为Float存储也没问题，或用于混合权重)
+ * - Channels: R = roughness.x (tangent), G = roughness.y (bitangent), B = specular, A = padding
  *
- * RT3: GBufferD (Custom Data) - 可选
+ * RT3: GEmissive - Emissive & ShadingModelID
  * - Format: VK_FORMAT_R16G16B16A16_SFLOAT
- * - Channels:
- *   - RGBA: High Precision Custom Data (ClearCoat Normal, Transmission, Skin Profile 等)
+ * - Channels: RGB = emissive (HDR), A = ShadingModelID (as float)
  *
- * RT4: SceneDepth (Depth/Stencil)
+ * === 弹性布局（根据 ShadingModelID 动态解释）===
+ *
+ * RT4: GCustomData - 自定义数据槽
+ * - Format: VK_FORMAT_R16G16B16A16_SFLOAT
+ * - Channels: **根据 ShadingModelID 动态解释**（见下方表格）
+ *
+ * | ShadingModel | CustomData.r | CustomData.g | CustomData.b | CustomData.a |
+ * |--------------|--------------|--------------|--------------|---------------|
+ * | DefaultLit   | (unused)     | (unused)     | (unused)     | (unused)      |
+ * | ClearCoat    | clearcoat    | clearcoatRoughness | ClearCoatNormal.x | ClearCoatNormal.y |
+ * | Cloth        | sheenColor.r | sheenColor.g | sheenColor.b | sheenRoughness |
+ * | Subsurface   | transmission | attenuationColor.r | attenuationColor.g | attenuationColor.b |
+ * | Iridescence  | iridescence  | iridescenceIor | iridescenceThickness | (unused) |
+ *
+ * === 辅助数据 ===
+ *
+ * RT5: GVelocity - Motion Vectors
+ * - Format: VK_FORMAT_R16G16_SFLOAT
+ * - Channels: RG = screenSpaceVelocity (用于TAA)
+ *
+ * Depth: GSceneDepth
  * - Format: VK_FORMAT_D32_SFLOAT_S8_UINT
- * - Usage: 保持 32-bit 浮点深度以配合高精度管线。
  *
- * Extra RT: Velocity (Motion Vectors)
- * - Format: VK_FORMAT_R16G16_SFLOAT (最低要求) 或 VK_FORMAT_R32G32_SFLOAT (为了极致精度)
- * - Channels:
- *   - RG: Screen Space Velocity
+ * === 带宽估算（4K分辨率）===
+ * - 5个RT @ R16G16B16A16 + 1个R16G16 + 1个D32S8 ≈ 336 MB (绑定)/672 MB (往返)
+ * - 相比完全分离方案节省 50% 显存
  */
 
-// GBuffer Attachment 索引定义
+// Shading Model 枚举 - 决定 GCustomData 的解释方式
+enum class ShadingModel : uint32_t
+{
+    DefaultLit  = 0, // 标准 PBR（BaseColor + Normal + Metallic + Roughness）
+    ClearCoat   = 1, // 车漆/涂层（增加 ClearCoat 层）
+    Cloth       = 2, // 布料/丝绸（Sheen 效果）
+    Subsurface  = 3, // 次表面/透射（Transmission + Attenuation）
+    Iridescence = 4, // 彩虹色/肥皂泡（Iridescence）
+    Count
+};
+
+// GBuffer Attachment 索引定义 - 弹性 RT 布局
 enum class GBufferType : int
 {
-    GBaseColor = 0, // BaseColor
-    GWorldNormal,   // WorldNormal
-    GPBR,           // PBR
-    GVelocity,      // Motion Objects
-    GSceneDepth,    // Depth Stencil
-    GCustom1,       // Custom Data
+    GBaseColor = 0, // RT0: BaseColor + AO
+    GNormal,        // RT1: WorldNormal (encoded) + Metallic + Opacity
+    GPBR,           // RT2: Roughness (anisotropic) + Specular
+    GEmissive,      // RT3: Emissive (HDR) + ShadingModelID
+    GCustomData,    // RT4: 弹性槽位（根据 ShadingModelID 动态解释）
+    GVelocity,      // RT5: Motion Vectors
+    GSceneDepth,    // Depth/Stencil (separate attachment)
     Count           // 计数
 };
 
@@ -79,9 +98,9 @@ struct GBufferRTParam
 
 struct GBufferConfig
 {
-    static constexpr int RT_COUNT = static_cast<int>(GBufferType::Count);
+    static constexpr int RT_COUNT = static_cast<int>(GBufferType::GSceneDepth); // 不包含 Depth 的 Color RT 数量
 
-    // 获取指定 Attachmenet 的配置
+    // 获取指定 Attachment 的配置
     static GBufferRTParam Get(GBufferType type)
     {
         VkImageUsageFlags colorUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
@@ -90,21 +109,34 @@ struct GBufferConfig
         switch (type)
         {
             case GBufferType::GBaseColor:
-                return {type, "GBufferA_BaseColor", VK_FORMAT_R16G16B16A16_SFLOAT, colorUsage};
-            case GBufferType::GWorldNormal:
-                return {type, "GBufferB_WorldNormal", VK_FORMAT_R16G16B16A16_SFLOAT, colorUsage};
+                return {type, "GBuffer_BaseColor_AO", VK_FORMAT_R16G16B16A16_SFLOAT, colorUsage};
+            case GBufferType::GNormal:
+                return {type, "GBuffer_Normal_Metallic_Opacity", VK_FORMAT_R16G16B16A16_SFLOAT, colorUsage};
             case GBufferType::GPBR:
-                return {type, "GBufferC_PBR", VK_FORMAT_R16G16B16A16_SFLOAT, colorUsage};
-            case GBufferType::GCustom1:
-                return {type, "GBufferD_Custom", VK_FORMAT_R16G16B16A16_SFLOAT, colorUsage};
+                return {type, "GBuffer_Roughness_Specular", VK_FORMAT_R16G16B16A16_SFLOAT, colorUsage};
+            case GBufferType::GEmissive:
+                return {type, "GBuffer_Emissive_ShadingModelID", VK_FORMAT_R16G16B16A16_SFLOAT, colorUsage};
+            case GBufferType::GCustomData:
+                return {type, "GBuffer_CustomData_Dynamic", VK_FORMAT_R16G16B16A16_SFLOAT, colorUsage};
             case GBufferType::GVelocity:
-                // TAA通常只需要 R16G16, 但为了匹配"极致精度"要求，这里也可以选 R32G32 (视需求而定，暂定 R16G16)
                 return {type, "GBuffer_Velocity", VK_FORMAT_R16G16_SFLOAT, colorUsage};
             case GBufferType::GSceneDepth:
-                return {type, "SceneDepth", VK_FORMAT_D32_SFLOAT_S8_UINT, depthUsage};
+                return {type, "SceneDepth", VK_FORMAT_D32_SFLOAT, depthUsage};
             default:
                 return {GBufferType::Count, "Invalid", VK_FORMAT_UNDEFINED, 0};
         }
+    }
+
+    // 辅助函数：将 ShadingModel 编码到 float
+    static float EncodeShadingModel(ShadingModel model)
+    {
+        return static_cast<float>(model) / 255.0f;
+    }
+
+    // 辅助函数：从 float 解码 ShadingModel
+    static ShadingModel DecodeShadingModel(float encoded)
+    {
+        return static_cast<ShadingModel>(static_cast<uint32_t>(encoded * 255.0f + 0.5f));
     }
 };
 

@@ -15,10 +15,10 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
 {
     RDG::RDGTextureRef BaseColorRT = rdgBuilder->getTexture("SkyBoxRT");
     rdgBuilder->registTexture(BaseColorRT);
-    RDG::RDGTextureRef WorldNormalRT = rdgBuilder->createTexture(GBufferConfig::Get(GBufferType::GWorldNormal).debugName)
+    RDG::RDGTextureRef WorldNormalRT = rdgBuilder->createTexture(GBufferConfig::Get(GBufferType::GNormal).debugName)
                                            .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
                                            .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
-                                           .Format(GBufferConfig::Get(GBufferType::GWorldNormal).format)
+                                           .Format(GBufferConfig::Get(GBufferType::GNormal).format)
                                            .UsageFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
                                            .MipmapLevel(1)
                                            .finish();
@@ -31,6 +31,23 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
                                    .MipmapLevel(1)
                                    .finish();
     rdgBuilder->registTexture(PBRRT);
+
+    RDG::RDGTextureRef EmissiveRT = rdgBuilder->createTexture(GBufferConfig::Get(GBufferType::GEmissive).debugName)
+                                        .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
+                                        .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
+                                        .Format(GBufferConfig::Get(GBufferType::GEmissive).format)
+                                        .UsageFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
+                                        .MipmapLevel(1)
+                                        .finish();
+    rdgBuilder->registTexture(EmissiveRT);
+    RDG::RDGTextureRef Custom1RT = rdgBuilder->createTexture(GBufferConfig::Get(GBufferType::GCustomData).debugName)
+                                       .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
+                                       .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
+                                       .Format(GBufferConfig::Get(GBufferType::GCustomData).format)
+                                       .UsageFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
+                                       .MipmapLevel(1)
+                                       .finish();
+    rdgBuilder->registTexture(Custom1RT);
     RDG::RDGTextureRef VelocityRT = rdgBuilder->createTexture(GBufferConfig::Get(GBufferType::GVelocity).debugName)
                                         .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
                                         .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
@@ -39,17 +56,9 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
                                         .MipmapLevel(1)
                                         .finish();
     rdgBuilder->registTexture(VelocityRT);
-    RDG::RDGTextureRef Custom1RT = rdgBuilder->createTexture(GBufferConfig::Get(GBufferType::GCustom1).debugName)
-                                       .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
-                                       .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
-                                       .Format(GBufferConfig::Get(GBufferType::GCustom1).format)
-                                       .UsageFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
-                                       .MipmapLevel(1)
-                                       .finish();
-    rdgBuilder->registTexture(Custom1RT);
     RDG::RDGTextureRef DepthRT = rdgBuilder->createTexture(GBufferConfig::Get(GBufferType::GSceneDepth).debugName)
                                      .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
-                                     .AspectFlags(VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
+                                     .AspectFlags(VK_IMAGE_ASPECT_DEPTH_BIT)
                                      .Format(GBufferConfig::Get(GBufferType::GSceneDepth).format)
                                      .UsageFlags(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
                                      .MipmapLevel(1)
@@ -64,9 +73,11 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
             .color(2, PBRRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-            .color(3, VelocityRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .color(3, EmissiveRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
             .color(4, Custom1RT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+            .color(5, VelocityRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
             .depthStencil(DepthRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
@@ -88,8 +99,7 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
                     renderingInfo.pColorAttachmentFormats = colorFormats.data();
                     renderingInfo.depthAttachmentFormat =
                         renderPassConfig.depthStencilAttachment.has_value() ? renderPassConfig.depthStencilAttachment->format : VK_FORMAT_UNDEFINED;
-                    renderingInfo.stencilAttachmentFormat =
-                        renderPassConfig.depthStencilAttachment.has_value() ? renderPassConfig.depthStencilAttachment->format : VK_FORMAT_UNDEFINED;
+                    renderingInfo.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
 
                     renderingInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 

@@ -15,16 +15,16 @@ FixedMaterial* FixedMaterial::Create()
     static FixedMaterial  fixedMaterial      = {};
     commonFixedProgram->getDescriptorSetManager().initPushConstant<GBufferPushConstant>();
     commonFixedProgram->psoState().colorWriteMasks.resize(
-        GBufferConfig::RT_COUNT - 1, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
-    commonFixedProgram->psoState().colorBlendEnables.resize(GBufferConfig::RT_COUNT - 1, VK_FALSE);
-    commonFixedProgram->psoState().colorBlendEquations.resize(GBufferConfig::RT_COUNT - 1, {
-                                                                                               .srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
-                                                                                               .dstColorBlendFactor = VK_BLEND_FACTOR_ZERO,
-                                                                                               .colorBlendOp        = VK_BLEND_OP_ADD,
-                                                                                               .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
-                                                                                               .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
-                                                                                               .alphaBlendOp        = VK_BLEND_OP_ADD,
-                                                                                           });
+        GBufferConfig::RT_COUNT, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
+    commonFixedProgram->psoState().colorBlendEnables.resize(GBufferConfig::RT_COUNT, VK_FALSE);
+    commonFixedProgram->psoState().colorBlendEquations.resize(GBufferConfig::RT_COUNT, {
+                                                                                           .srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
+                                                                                           .dstColorBlendFactor = VK_BLEND_FACTOR_ZERO,
+                                                                                           .colorBlendOp        = VK_BLEND_OP_ADD,
+                                                                                           .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+                                                                                           .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+                                                                                           .alphaBlendOp        = VK_BLEND_OP_ADD,
+                                                                                       });
     commonFixedProgram->psoState().rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
     fixedMaterial._program                                     = commonFixedProgram;
     return &fixedMaterial;

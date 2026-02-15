@@ -69,7 +69,7 @@ public:
     }
     bool isDepth() const
     {
-        return aspectFlags & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
+        return aspectFlags & (VK_IMAGE_ASPECT_DEPTH_BIT);
     }
     VkImageLayout& Layout()
     {

@@ -138,7 +138,7 @@ public:
 
     VkFormat getStencilAttachmentFormat() const
     {
-        return m_config.depthStencilAttachment.has_value() ? m_config.depthStencilAttachment->format : VK_FORMAT_UNDEFINED;
+        return VK_FORMAT_UNDEFINED;
     }
 
 private:

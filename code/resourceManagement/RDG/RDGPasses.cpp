@@ -123,6 +123,7 @@ RenderPassBuilder& RenderPassBuilder::depthStencil(RDGTextureRef texHandle, VkAt
     accessInfo.attachSlotIdx                = ATTACHMENT_DEPTH_STENCIL;
     accessInfo.layout                       = initLayout;
     accessInfo.attachFinalLayout            = finalLayout;
+    accessInfo.queueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
     accessInfo.stageMask                    = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
     _node->_textureStates[texHandle]        = {subResources, {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2}};
     return *this;

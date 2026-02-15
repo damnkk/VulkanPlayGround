@@ -109,7 +109,7 @@ public:
         VkImageType           _type        = VK_IMAGE_TYPE_2D;
         VkExtent3D            _extent      = {1, 1, 1};
         VkImageUsageFlags     _usageFlags  = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-        VkImageAspectFlags    _aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
+        VkImageAspectFlags    _aspectFlags = VK_IMAGE_ASPECT_NONE;
         VkSampleCountFlagBits _sampleCount = VK_SAMPLE_COUNT_1_BIT;
         uint32_t              _mipmapLevel = 1;
         uint32_t              _layerCount  = 1;

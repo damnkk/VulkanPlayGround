@@ -24,11 +24,14 @@ void LightPass::init()
 
 void LightPass::build(RDG::RDGBuilder* rdgBuilder)
 {
-    RDG::RDGTextureRef inputAlbedo = rdgBuilder->getTexture("SkyBoxRT");
-    RDG::RDGTextureRef inputNormal = rdgBuilder->getTexture(GBufferConfig::Get(GBufferType::GWorldNormal).debugName);
-    RDG::RDGTextureRef inputPBR    = rdgBuilder->getTexture(GBufferConfig::Get(GBufferType::GPBR).debugName);
-    RDG::RDGTextureRef velocityRT  = rdgBuilder->getTexture(GBufferConfig::Get(GBufferType::GVelocity).debugName);
-    RDG::RDGTextureRef outputLight = rdgBuilder->createTexture("LightPassOutput")
+    RDG::RDGTextureRef inputAlbedo   = rdgBuilder->getTexture("SkyBoxRT");
+    RDG::RDGTextureRef inputNormal   = rdgBuilder->getTexture(GBufferConfig::Get(GBufferType::GNormal).debugName);
+    RDG::RDGTextureRef inputPBR      = rdgBuilder->getTexture(GBufferConfig::Get(GBufferType::GPBR).debugName);
+    RDG::RDGTextureRef inputEmissive = rdgBuilder->getTexture(GBufferConfig::Get(GBufferType::GEmissive).debugName);
+    RDG::RDGTextureRef inputCustom1  = rdgBuilder->getTexture(GBufferConfig::Get(GBufferType::GCustomData).debugName);
+    RDG::RDGTextureRef velocityRT    = rdgBuilder->getTexture(GBufferConfig::Get(GBufferType::GVelocity).debugName);
+    RDG::RDGTextureRef depthRT       = rdgBuilder->getTexture(GBufferConfig::Get(GBufferType::GSceneDepth).debugName);
+    RDG::RDGTextureRef outputLight   = rdgBuilder->createTexture("LightPassOutput")
                                          .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
                                          .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
                                          .Format(VK_FORMAT_R16G16B16A16_SFLOAT)
@@ -41,7 +44,10 @@ void LightPass::build(RDG::RDGBuilder* rdgBuilder)
             .read(0, inputAlbedo, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
             .read(1, inputNormal, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
             .read(2, inputPBR, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
-            .read(3, velocityRT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
+            .read(3, inputEmissive, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
+            .read(4, inputCustom1, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
+            .read(5, velocityRT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
+            .read(6, depthRT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
             .color(0, outputLight, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
             .execute(

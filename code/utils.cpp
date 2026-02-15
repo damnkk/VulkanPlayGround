@@ -73,7 +73,7 @@ bool isBufferBarrierValid(const VkBufferMemoryBarrier2& barrier)
     return barrier.srcAccessMask | barrier.dstAccessMask | barrier.dstStageMask | barrier.srcStageMask | barrier.dstQueueFamilyIndex |
            barrier.srcQueueFamilyIndex;
 }
-VkImageAspectFlags inferImageAspectFlags(VkFormat format, VkImageUsageFlags usage)
+VkImageAspectFlags inferImageAspectFlags(VkFormat format, bool forImageView)
 {
     VkImageAspectFlags aspectFlags = 0;
 
@@ -84,7 +84,14 @@ VkImageAspectFlags inferImageAspectFlags(VkFormat format, VkImageUsageFlags usag
         case VK_FORMAT_D16_UNORM_S8_UINT:
         case VK_FORMAT_D24_UNORM_S8_UINT:
         case VK_FORMAT_D32_SFLOAT_S8_UINT:
-            aspectFlags = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+            if (forImageView)
+            {
+                aspectFlags = VK_IMAGE_ASPECT_DEPTH_BIT;
+            }
+            else
+            {
+                aspectFlags = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+            }
             break;
 
         // 仅深度
