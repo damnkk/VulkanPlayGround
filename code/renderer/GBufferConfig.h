@@ -121,7 +121,7 @@ struct GBufferConfig
             case GBufferType::GVelocity:
                 return {type, "GBuffer_Velocity", VK_FORMAT_R16G16_SFLOAT, colorUsage};
             case GBufferType::GSceneDepth:
-                return {type, "SceneDepth", VK_FORMAT_D32_SFLOAT, depthUsage};
+                return {type, "SceneDepth", VK_FORMAT_D32_SFLOAT_S8_UINT, depthUsage};
             default:
                 return {GBufferType::Count, "Invalid", VK_FORMAT_UNDEFINED, 0};
         }

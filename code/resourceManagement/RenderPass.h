@@ -37,7 +37,8 @@ struct RenderPassAttachment
 struct RenderPassConfig
 {
     std::vector<RenderPassAttachment>   colorAttachments;
-    std::optional<RenderPassAttachment> depthStencilAttachment;
+    std::optional<RenderPassAttachment> depthAttachment;
+    std::optional<RenderPassAttachment> stencilAttachment;
     bool                                needMultiThreadRecording;
     // Future extensions for multiview, layers, etc.
 };
@@ -138,7 +139,7 @@ public:
 
     VkFormat getStencilAttachmentFormat() const
     {
-        return VK_FORMAT_UNDEFINED;
+        return m_vkStencilAttachmentFormat;
     }
 
 private:
@@ -152,6 +153,8 @@ private:
     std::vector<VkFormat>                  m_vkColorAttachmentFormats;
     VkRenderingAttachmentInfo              m_vkDepthAttachment{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
     VkFormat                               m_vkDepthAttachmentFormat{VK_FORMAT_UNDEFINED};
+    VkRenderingAttachmentInfo              m_vkStencilAttachment{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
+    VkFormat                               m_vkStencilAttachmentFormat{VK_FORMAT_UNDEFINED};
     VkRenderingInfo                        m_vkRenderingInfo{VK_STRUCTURE_TYPE_RENDERING_INFO};
     RDG::RenderPassNode*                   m_ownerPass{nullptr};
 };

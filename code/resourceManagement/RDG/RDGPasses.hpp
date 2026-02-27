@@ -30,13 +30,24 @@ class RTPassBuilder;
 
 struct RDGTextureState
 {
+    RDGTextureState(RDGTextureRef textureRef, TextureSubresourceAccessInfo states, VkImageMemoryBarrier2 barrier)
+        : texture(textureRef), textureStates(states), barrierInfo(barrier)
+    {
+    }
+    RDGTextureRef                texture;
     TextureSubresourceAccessInfo textureStates;
     VkImageMemoryBarrier2        barrierInfo{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
 };
 
 struct RDGBufferState
 {
+    RDGBufferState(RDGBufferRef bufferRef, BufferAccessInfo state, VkBufferMemoryBarrier2 barrier)
+        : buffer(bufferRef), bufferState(state), barrierInfo(barrier)
+    {
+    }
+    RDGBufferRef           buffer;
     BufferAccessInfo       bufferState;
+    ProducerInfo           _producerInfo;
     VkBufferMemoryBarrier2 barrierInfo{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2};
 };
 
@@ -73,13 +84,31 @@ public:
     };
     virtual Type type() const = 0;
 
-    std::unordered_map<RDGTexture*, RDGTextureState>& getTextureStates()
+    std::vector<RDGTextureState>& getTextureStates()
     {
         return _textureStates;
     }
-    std::unordered_map<RDGBuffer*, RDGBufferState>& getBufferStates()
+    std::vector<RDGBufferState>& getBufferStates()
     {
         return _bufferStates;
+    }
+
+    // Helper functions to find texture/buffer state in vector
+    RDGTextureState* findTextureState(RDGTextureRef texture)
+    {
+        for (auto& state : _textureStates)
+        {
+            if (state.texture == texture) return &state;
+        }
+        return nullptr;
+    }
+    RDGBufferState* findBufferState(RDGBufferRef buffer)
+    {
+        for (auto& state : _bufferStates)
+        {
+            if (state.buffer == buffer) return &state;
+        }
+        return nullptr;
     }
 
 protected:
@@ -88,8 +117,8 @@ protected:
     std::string                                                     _name;
     DescriptorSetBindings                                           _descBindings;
     Type                                                            _type;
-    std::unordered_map<RDGTexture*, RDGTextureState>                _textureStates;
-    std::unordered_map<RDGBuffer*, RDGBufferState>                  _bufferStates;
+    std::vector<RDGTextureState>                                    _textureStates;
+    std::vector<RDGBufferState>                                     _bufferStates;
 };
 
 class RenderPassNode : public PassNode
@@ -175,10 +204,14 @@ public:
                                           VkAttachmentStoreOp storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
                                           VkImageLayout       initLayout  = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                                           VkImageLayout       finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    RenderPassBuilder&              depthStencil(RDGTextureRef texHandle, VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                                                 VkAttachmentStoreOp storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
-                                                 VkImageLayout       initLayout  = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                                                 VkImageLayout       finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+    RenderPassBuilder&              depth(RDGTextureRef texHandle, VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                                          VkAttachmentStoreOp storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
+                                          VkImageLayout       initLayout  = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                                          VkImageLayout       finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+    RenderPassBuilder&              stencil(RDGTextureRef texHandle, VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                                            VkAttachmentStoreOp storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
+                                            VkImageLayout       initLayout  = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                                            VkImageLayout       finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
     RenderPassBuilder&              read(uint32_t binding, RDGTextureRef texture, VkPipelineStageFlagBits2 stage,
                                          uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
     RenderPassBuilder&              read(uint32_t binding, RDGBufferRef buffer, VkPipelineStageFlagBits2 stage,

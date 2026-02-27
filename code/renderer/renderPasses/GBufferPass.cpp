@@ -79,8 +79,8 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
             .color(5, VelocityRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-            .depthStencil(DepthRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+            .depth(DepthRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
             .execute(
                 [this](RDG::PassNode* node, RDG::RenderContext& context)
                 {
@@ -98,8 +98,10 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
                     renderingInfo.colorAttachmentCount    = static_cast<uint32_t>(colorFormats.size());
                     renderingInfo.pColorAttachmentFormats = colorFormats.data();
                     renderingInfo.depthAttachmentFormat =
-                        renderPassConfig.depthStencilAttachment.has_value() ? renderPassConfig.depthStencilAttachment->format : VK_FORMAT_UNDEFINED;
-                    renderingInfo.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
+                        renderPassConfig.depthAttachment.has_value() ? renderPassConfig.depthAttachment->format : VK_FORMAT_UNDEFINED;
+                    renderingInfo.stencilAttachmentFormat =
+                        renderPassConfig.stencilAttachment.has_value() ? renderPassConfig.stencilAttachment->format : VK_FORMAT_UNDEFINED;
+                    ;
 
                     renderingInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 

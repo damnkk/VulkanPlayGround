@@ -10,7 +10,8 @@ PassNode::~PassNode()
     VkDescriptorSetLayout layout = this->_descBindings.getSetLayout();
     vkDestroyDescriptorSetLayout(vkDriver->getDevice(), layout, nullptr);
 }
-const uint32_t ATTACHMENT_DEPTH_STENCIL = 0xFFFFFFFF;
+const uint32_t ATTACHMENT_DEPTH   = 0xFFFFFFFF;
+const uint32_t ATTACHMENT_STENCIL = 0xFFFFFFFF;
 RenderPassNode::RenderPassNode(uint32_t id, std::string name) : PassNode(id, std::move(name), NodeType::eRenderPass) {}
 void RenderPassNode::initRenderPass()
 {
@@ -26,8 +27,9 @@ void RenderPassNode::initRenderPass()
     }
     RenderPassConfig config;
     config.needMultiThreadRecording = _needMultiThreadRecording;
-    for (auto& [texture, state] : _textureStates)
+    for (auto& state : _textureStates)
     {
+        RDGTexture*              texture    = state.texture;
         const TextureAccessInfo& accessInfo = state.textureStates[0];
         if (!accessInfo.isAttachment) continue;
         const VkImageMemoryBarrier2& barrierInfo = state.barrierInfo;
@@ -53,7 +55,7 @@ void RenderPassNode::initRenderPass()
             imageBarrier.image                  = texture->getRHI()->image;
         }
 
-        if (accessInfo.attachSlotIdx == ATTACHMENT_DEPTH_STENCIL)
+        if (accessInfo.attachSlotIdx == ATTACHMENT_DEPTH)
         {
             RenderPassAttachment depthStencilAttachment;
             depthStencilAttachment.image     = texture->getRHI()->image;
@@ -67,7 +69,23 @@ void RenderPassNode::initRenderPass()
             depthStencilAttachment.initialLayout           = accessInfo.layout;
             depthStencilAttachment.finalLayout             = accessInfo.attachFinalLayout;
             depthStencilAttachment.clearValue.depthStencil = {1.0f, 0};
-            config.depthStencilAttachment                  = depthStencilAttachment;
+            config.depthAttachment                         = depthStencilAttachment;
+        }
+        else if (accessInfo.attachSlotIdx == ATTACHMENT_STENCIL)
+        {
+            RenderPassAttachment stencilAttachment;
+            stencilAttachment.image     = texture->getRHI()->image;
+            stencilAttachment.imageView = texture->getRHI()->descriptor.imageView;
+            stencilAttachment.format    = texture->getRHI()->format;
+            stencilAttachment.samples   = texture->getRHI()->SampleCount();
+            stencilAttachment.slotIndex = accessInfo.attachSlotIdx;
+            stencilAttachment.loadOp    = accessInfo.loadOp;
+            stencilAttachment.storeOp   = accessInfo.storeOp;
+            // 这里是一个通用数据结构体，必须填写accessInfo记录的layout信息，因为vkRenderPass对initlayout的准度要求更高，而barrier有时可用undefineLayout。
+            stencilAttachment.initialLayout           = accessInfo.layout;
+            stencilAttachment.finalLayout             = accessInfo.attachFinalLayout;
+            stencilAttachment.clearValue.depthStencil = {1.0f, 0};
+            config.stencilAttachment                  = stencilAttachment;
         }
         else
         {
@@ -106,13 +124,13 @@ RenderPassBuilder& RenderPassBuilder::color(uint32_t slotIdx, RDGTextureRef texH
     accessInfo.attachFinalLayout            = finalLayout;
     accessInfo.queueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
     accessInfo.stageMask                    = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    _node->_textureStates[texHandle]        = {subResource, {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2}};
+    _node->_textureStates.emplace_back(texHandle, subResource, VkImageMemoryBarrier2{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2});
 
     return *this;
 }
 
-RenderPassBuilder& RenderPassBuilder::depthStencil(RDGTextureRef texHandle, VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp,
-                                                   VkImageLayout initLayout, VkImageLayout finalLayout)
+RenderPassBuilder& RenderPassBuilder::depth(RDGTextureRef texHandle, VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp, VkImageLayout initLayout,
+                                            VkImageLayout finalLayout)
 {
     TextureSubresourceAccessInfo subResources;
     TextureAccessInfo&           accessInfo = subResources.emplace_back();
@@ -120,12 +138,30 @@ RenderPassBuilder& RenderPassBuilder::depthStencil(RDGTextureRef texHandle, VkAt
     accessInfo.accessMask                   = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
     accessInfo.loadOp                       = loadOp;
     accessInfo.storeOp                      = storeOp;
-    accessInfo.attachSlotIdx                = ATTACHMENT_DEPTH_STENCIL;
+    accessInfo.attachSlotIdx                = ATTACHMENT_DEPTH;
     accessInfo.layout                       = initLayout;
     accessInfo.attachFinalLayout            = finalLayout;
     accessInfo.queueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
     accessInfo.stageMask                    = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-    _node->_textureStates[texHandle]        = {subResources, {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2}};
+    _node->_textureStates.emplace_back(texHandle, subResources, VkImageMemoryBarrier2{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2});
+    return *this;
+}
+
+RenderPassBuilder& RenderPassBuilder::stencil(RDGTextureRef texHandle, VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp,
+                                              VkImageLayout initLayout, VkImageLayout finalLayout)
+{
+    TextureSubresourceAccessInfo subResources;
+    TextureAccessInfo&           accessInfo = subResources.emplace_back();
+    accessInfo.isAttachment                 = true;
+    accessInfo.accessMask                   = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    accessInfo.loadOp                       = loadOp;
+    accessInfo.storeOp                      = storeOp;
+    accessInfo.attachSlotIdx                = ATTACHMENT_STENCIL;
+    accessInfo.layout                       = initLayout;
+    accessInfo.attachFinalLayout            = finalLayout;
+    accessInfo.queueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+    accessInfo.stageMask                    = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+    _node->_textureStates.emplace_back(texHandle, subResources, VkImageMemoryBarrier2{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2});
     return *this;
 }
 
@@ -141,7 +177,7 @@ RenderPassBuilder& RenderPassBuilder::read(uint32_t binding, RDGTextureRef textu
     accessInfo.accessMask                   = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
     accessInfo.stageMask                    = stage;
     accessInfo.queueFamilyIndex             = queueFamilyIndex;
-    _node->_textureStates[texture]          = {subResource, {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2}};
+    _node->_textureStates.emplace_back(texture, subResource, VkImageMemoryBarrier2{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2});
     return *this;
 }
 
@@ -149,15 +185,15 @@ RenderPassBuilder& RenderPassBuilder::read(uint32_t binding, RDGBufferRef buffer
                                            uint32_t offset, size_t size)
 {
     BufferAccessInfo accessInfo;
-    accessInfo.accessMask        = VK_ACCESS_2_UNIFORM_READ_BIT;
-    accessInfo.stageMask         = stage;
-    accessInfo.descriptorType    = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    accessInfo.set               = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
-    accessInfo.binding           = binding;
-    accessInfo.queueFamilyIndex  = queueFamilyIndex;
-    accessInfo.offset            = offset;
-    accessInfo.size              = size;
-    _node->_bufferStates[buffer] = {accessInfo, {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2}};
+    accessInfo.accessMask       = VK_ACCESS_2_UNIFORM_READ_BIT;
+    accessInfo.stageMask        = stage;
+    accessInfo.descriptorType   = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    accessInfo.set              = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
+    accessInfo.binding          = binding;
+    accessInfo.queueFamilyIndex = queueFamilyIndex;
+    accessInfo.offset           = offset;
+    accessInfo.size             = size;
+    _node->_bufferStates.emplace_back(buffer, accessInfo, VkBufferMemoryBarrier2{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2});
     return *this;
 }
 
@@ -172,7 +208,7 @@ RenderPassBuilder& RenderPassBuilder::readWrite(uint32_t binding, RDGTextureRef 
     accessInfo.accessMask                   = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
     accessInfo.layout                       = VK_IMAGE_LAYOUT_GENERAL;
     accessInfo.queueFamilyIndex             = queueFamilyIndex;
-    _node->_textureStates[texture]          = {subResource, {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2}};
+    _node->_textureStates.emplace_back(texture, subResource, VkImageMemoryBarrier2{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2});
     return *this;
 }
 
@@ -188,7 +224,7 @@ RenderPassBuilder& RenderPassBuilder::readWrite(uint32_t binding, RDGBufferRef b
     bufferAccess.queueFamilyIndex = queueFamilyIndex;
     bufferAccess.offset           = offset;
     bufferAccess.size             = size;
-    _node->_bufferStates[buffer]  = {bufferAccess, {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2}};
+    _node->_bufferStates.emplace_back(buffer, bufferAccess, VkBufferMemoryBarrier2{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2});
     return *this;
 }
 
@@ -212,7 +248,7 @@ ComputePassBuilder& ComputePassBuilder::read(uint32_t binding, RDGTextureRef tex
     accessInfo.accessMask                   = VK_ACCESS_2_SHADER_READ_BIT;
     accessInfo.stageMask                    = stage;
     accessInfo.queueFamilyIndex             = queueFamilyIndex;
-    _node->_textureStates[texture]          = {subResource, {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2}};
+    _node->_textureStates.emplace_back(texture, subResource, VkImageMemoryBarrier2{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2});
     return *this;
 }
 
@@ -225,11 +261,11 @@ ComputePassBuilder& ComputePassBuilder::read(uint32_t binding, RDGBufferRef buff
     accessInfo.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     accessInfo.accessMask =
         buffer->_info._usageFlags & VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT ? VK_ACCESS_2_UNIFORM_READ_BIT : VK_ACCESS_2_SHADER_READ_BIT;
-    accessInfo.stageMask         = stage;
-    accessInfo.queueFamilyIndex  = queueFamilyIndex;
-    accessInfo.offset            = offset;
-    accessInfo.size              = size;
-    _node->_bufferStates[buffer] = {accessInfo, {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2}};
+    accessInfo.stageMask        = stage;
+    accessInfo.queueFamilyIndex = queueFamilyIndex;
+    accessInfo.offset           = offset;
+    accessInfo.size             = size;
+    _node->_bufferStates.emplace_back(buffer, accessInfo, VkBufferMemoryBarrier2{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2});
     return *this;
 }
 
@@ -245,7 +281,7 @@ ComputePassBuilder& ComputePassBuilder::readWrite(uint32_t binding, RDGTextureRe
     accessInfo.accessMask                   = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
     accessInfo.stageMask                    = stage;
     accessInfo.queueFamilyIndex             = queueFamilyIndex;
-    _node->_textureStates[texture]          = {subResource, {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2}};
+    _node->_textureStates.emplace_back(texture, subResource, VkImageMemoryBarrier2{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2});
     return *this;
 }
 
@@ -261,7 +297,7 @@ ComputePassBuilder& ComputePassBuilder::readWrite(uint32_t binding, RDGBufferRef
     bufferAccess.queueFamilyIndex = queueFamilyIndex;
     bufferAccess.offset           = offset;
     bufferAccess.size             = size;
-    _node->_bufferStates[buffer]  = {bufferAccess, {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2}};
+    _node->_bufferStates.emplace_back(buffer, bufferAccess, VkBufferMemoryBarrier2{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2});
     return *this;
 }
 
@@ -291,7 +327,7 @@ RTPassBuilder& RTPassBuilder::read(uint32_t binding, RDGTextureRef texture, VkPi
     accessInfo.accessMask                   = VK_ACCESS_2_SHADER_READ_BIT;
     accessInfo.stageMask                    = stage;
     accessInfo.queueFamilyIndex             = queueFamilyIndex;
-    _node->_textureStates[texture]          = {subResource, {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2}};
+    _node->_textureStates.emplace_back(texture, subResource, VkImageMemoryBarrier2{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2});
     return *this;
 }
 
@@ -299,15 +335,15 @@ RTPassBuilder& RTPassBuilder::read(uint32_t binding, RDGBufferRef buffer, VkPipe
                                    size_t size)
 {
     BufferAccessInfo accessInfo;
-    accessInfo.accessMask        = VK_ACCESS_2_UNIFORM_READ_BIT;
-    accessInfo.stageMask         = stage;
-    accessInfo.descriptorType    = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    accessInfo.set               = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
-    accessInfo.binding           = binding;
-    accessInfo.queueFamilyIndex  = queueFamilyIndex;
-    accessInfo.offset            = offset;
-    accessInfo.size              = size;
-    _node->_bufferStates[buffer] = {accessInfo, {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2}};
+    accessInfo.accessMask       = VK_ACCESS_2_UNIFORM_READ_BIT;
+    accessInfo.stageMask        = stage;
+    accessInfo.descriptorType   = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    accessInfo.set              = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
+    accessInfo.binding          = binding;
+    accessInfo.queueFamilyIndex = queueFamilyIndex;
+    accessInfo.offset           = offset;
+    accessInfo.size             = size;
+    _node->_bufferStates.emplace_back(buffer, accessInfo, VkBufferMemoryBarrier2{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2});
     return *this;
 }
 
@@ -323,7 +359,7 @@ RTPassBuilder& RTPassBuilder::readWrite(uint32_t binding, RDGTextureRef texture,
     accessInfo.accessMask                   = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
     accessInfo.stageMask                    = stage;
     accessInfo.queueFamilyIndex             = queueFamilyIndex;
-    _node->_textureStates[texture]          = {subResource, {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2}};
+    _node->_textureStates.emplace_back(texture, subResource, VkImageMemoryBarrier2{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2});
     return *this;
 }
 
@@ -339,7 +375,7 @@ RTPassBuilder& RTPassBuilder::readWrite(uint32_t binding, RDGBufferRef buffer, V
     bufferAccess.queueFamilyIndex = queueFamilyIndex;
     bufferAccess.offset           = offset;
     bufferAccess.size             = size;
-    _node->_bufferStates[buffer]  = {bufferAccess, {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2}};
+    _node->_bufferStates.emplace_back(buffer, bufferAccess, VkBufferMemoryBarrier2{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2});
     return *this;
 }
 

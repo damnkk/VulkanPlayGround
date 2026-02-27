@@ -219,19 +219,19 @@ void RDGBuilder::prepareDescriptorSets(RenderContext& context, PassNode* pass)
     DescriptorSetCache* descCache          = vkDriver->getDescriptorSetCache();
     auto&               programDescManager = pass->_descBindings;
 
-    for (auto& [texture, state] : pass->_textureStates)
+    for (auto& state : pass->_textureStates)
     {
         if (state.textureStates.front().isAttachment) continue;
-        assert(texture->getRHI());
+        assert(state.texture->getRHI());
         TextureAccessInfo accessInfo = state.textureStates[0];
-        programDescManager.setDescInfo(accessInfo.binding, *texture->_rhi);
+        programDescManager.setDescInfo(accessInfo.binding, *state.texture->_rhi);
     }
 
-    for (auto& [buffer, state] : pass->_bufferStates)
+    for (auto& state : pass->_bufferStates)
     {
-        assert(buffer->getRHI());
+        assert(state.buffer->getRHI());
         BufferAccessInfo bufferInfo = state.bufferState;
-        programDescManager.setDescInfo(bufferInfo.binding, *buffer->_rhi);
+        programDescManager.setDescInfo(bufferInfo.binding, *state.buffer->_rhi);
     }
 
     VkDescriptorSet currPassSet = descCache->requestDescriptorSet(&programDescManager, (uint32_t) DescriptorEnum::ePerPassDescriptorSet);
@@ -261,8 +261,9 @@ void RDGBuilder::prepareDescriptorSets(RenderContext& context, PassNode* pass)
 void RDGBuilder::prepareResourceBarrier(RenderContext& context, PassNode* pass)
 {
     nvvk::BarrierContainer barrierContainer;
-    for (auto& [texture, state] : pass->_textureStates)
+    for (auto& state : pass->_textureStates)
     {
+        RDGTexture*              texture    = state.texture;
         RDGTexture::TextureDesc& info       = texture->_info;
         TextureAccessInfo        accessInfo = state.textureStates[0];
         if (!texture->getRHI())
@@ -288,9 +289,10 @@ void RDGBuilder::prepareResourceBarrier(RenderContext& context, PassNode* pass)
         barrierContainer.appendOptionalLayoutTransition(*texture->getRHI(), state.barrierInfo);
     }
 
-    for (auto& [buffer, state] : pass->_bufferStates)
+    for (auto& state : pass->_bufferStates)
     {
-        RDGBuffer::BufferDesc& info = buffer->_info;
+        RDGBuffer*             buffer = state.buffer;
+        RDGBuffer::BufferDesc& info   = buffer->_info;
         if (!buffer->getRHI())
         {
             buffer->setRHI(Buffer::Create(info._debugName, info._size, info._usageFlags,
@@ -361,8 +363,9 @@ void RDGBuilder::compile()
     // dependency update
     for (auto& passNode : _passes)
     {
-        for (auto& [texture, state] : passNode->_textureStates)
+        for (auto& state : passNode->_textureStates)
         {
+            RDGTexture*        texture        = state.texture;
             auto&              producerInfo   = texture->_producerInfo;
             TextureAccessInfo& currAccessInfo = state.textureStates.front();
             if (producerInfo.accessMask != VK_ACCESS_2_NONE)
@@ -372,12 +375,14 @@ void RDGBuilder::compile()
                 if (producerInfo.lastReadOnlyAccesser == nullptr)
                 {
                     // this is rdg connection, but not equivalent to a barrier relationship,
-                    Edge* edge     = _dag->createEdge(producerInfo.lastProducer, passNode);
-                    lastAccessInfo = &producerInfo.lastProducer->_textureStates[texture].textureStates.front();
+                    Edge*            edge             = _dag->createEdge(producerInfo.lastProducer, passNode);
+                    RDGTextureState* lastTextureState = producerInfo.lastProducer->findTextureState(texture);
+                    lastAccessInfo                    = &lastTextureState->textureStates.front();
                 }
                 else
                 {
-                    lastAccessInfo = &producerInfo.lastReadOnlyAccesser->_textureStates[texture].textureStates.front();
+                    RDGTextureState* lastTextureState = producerInfo.lastReadOnlyAccesser->findTextureState(texture);
+                    lastAccessInfo                    = &lastTextureState->textureStates.front();
                 }
 
                 if (*lastAccessInfo == currAccessInfo)
@@ -424,9 +429,9 @@ void RDGBuilder::compile()
                 producerInfo.accessMask           = state.textureStates.front().accessMask;
             }
         }
-        for (auto& [buffer, state] : passNode->_bufferStates)
+        for (auto& state : passNode->_bufferStates)
         {
-            auto& producerInfo = buffer->_producerInfo;
+            auto& producerInfo = state._producerInfo;
             if (producerInfo.accessMask != VK_ACCESS_2_NONE)
             {
                 BufferAccessInfo* lastAccessInfo = nullptr;
@@ -436,11 +441,11 @@ void RDGBuilder::compile()
                 // this is rdg connection, but not equivalent to a barrier relationship,
                 {
                     Edge* edge     = _dag->createEdge(producerInfo.lastProducer, passNode);
-                    lastAccessInfo = &producerInfo.lastProducer->_bufferStates[buffer].bufferState;
+                    lastAccessInfo = &producerInfo.lastProducer->findBufferState(state.buffer)->bufferState;
                 }
                 else
                 {
-                    lastAccessInfo = &producerInfo.lastReadOnlyAccesser->_bufferStates[buffer].bufferState;
+                    lastAccessInfo = &producerInfo.lastReadOnlyAccesser->findBufferState(state.buffer)->bufferState;
                 }
 
                 BufferAccessInfo& currAccessInfo = state.bufferState;
@@ -515,7 +520,7 @@ void RDGBuilder::compile()
     for (auto& passNode : _passes)
     {
         if (passNode->isCull()) continue;
-        for (auto& [texture, state] : passNode->_textureStates)
+        for (auto& state : passNode->_textureStates)
         {
             TextureAccessInfo& currAccessInfo = state.textureStates.front();
             if (currAccessInfo.isAttachment) continue;
@@ -523,7 +528,7 @@ void RDGBuilder::compile()
 
                                                inferShaderStageFromPipelineStage(currAccessInfo.stageMask));
         }
-        for (auto& [buffer, state] : passNode->_bufferStates)
+        for (auto& state : passNode->_bufferStates)
         {
             BufferAccessInfo& currAccessInfo = state.bufferState;
             passNode->_descBindings.addBinding(currAccessInfo.binding, 1, currAccessInfo.descriptorType,

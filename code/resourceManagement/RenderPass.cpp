@@ -35,28 +35,31 @@ void DynamicRenderPass::init(const RenderPassConfig& config)
         colorAttachment.resolveMode = VK_RESOLVE_MODE_NONE;
         m_vkColorAttachmentFormats.push_back(attachment.format);
     }
-    if (config.depthStencilAttachment)
+    if (config.depthAttachment)
     {
-        m_vkDepthAttachment.clearValue  = config.depthStencilAttachment->clearValue;
-        m_vkDepthAttachment.imageView   = config.depthStencilAttachment->imageView;
-        m_vkDepthAttachment.imageLayout = config.depthStencilAttachment->initialLayout;
-        m_vkDepthAttachment.loadOp      = config.depthStencilAttachment->loadOp;
-        m_vkDepthAttachment.storeOp     = config.depthStencilAttachment->storeOp;
-        m_vkDepthAttachment.resolveMode = VK_RESOLVE_MODE_NONE;
-        m_vkDepthAttachmentFormat       = config.depthStencilAttachment->format;
+        m_vkDepthAttachment.clearValue     = config.depthAttachment->clearValue;
+        m_vkDepthAttachment.imageView      = config.depthAttachment->imageView;
+        m_vkDepthAttachment.imageLayout    = config.depthAttachment->initialLayout;
+        m_vkDepthAttachment.loadOp         = config.depthAttachment->loadOp;
+        m_vkDepthAttachment.storeOp        = config.depthAttachment->storeOp;
+        m_vkDepthAttachment.resolveMode    = VK_RESOLVE_MODE_NONE;
+        m_vkDepthAttachmentFormat          = config.depthAttachment->format;
+        m_vkRenderingInfo.pDepthAttachment = &m_vkDepthAttachment;
+    }
+    if (config.stencilAttachment)
+    {
+        m_vkStencilAttachment.clearValue     = config.stencilAttachment->clearValue;
+        m_vkStencilAttachment.imageView      = config.stencilAttachment->imageView;
+        m_vkStencilAttachment.imageLayout    = config.stencilAttachment->initialLayout;
+        m_vkStencilAttachment.loadOp         = config.stencilAttachment->loadOp;
+        m_vkStencilAttachment.storeOp        = config.stencilAttachment->storeOp;
+        m_vkStencilAttachment.resolveMode    = VK_RESOLVE_MODE_NONE;
+        m_vkStencilAttachmentFormat          = config.stencilAttachment->format;
+        m_vkRenderingInfo.pStencilAttachment = &m_vkStencilAttachment;
     }
     m_vkRenderingInfo.colorAttachmentCount = static_cast<uint32_t>(m_vkColorAttachments.size());
     m_vkRenderingInfo.pColorAttachments    = m_vkColorAttachments.data();
-    if (config.depthStencilAttachment)
-    {
-        m_vkRenderingInfo.pDepthAttachment   = &m_vkDepthAttachment;
-        m_vkRenderingInfo.pStencilAttachment = nullptr;
-    }
-    else
-    {
-        m_vkRenderingInfo.pDepthAttachment   = nullptr;
-        m_vkRenderingInfo.pStencilAttachment = nullptr;
-    }
+
     m_vkRenderingInfo.flags = config.needMultiThreadRecording ? VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT : 0;
     _isDirty                = false;
 }
@@ -64,12 +67,12 @@ void DynamicRenderPass::init(const RenderPassConfig& config)
 void DynamicRenderPass::begin(VkCommandBuffer cmd, const VkRect2D& renderArea)
 {
     nvvk::BarrierContainer batchBarrier;
-    for (auto& [texture, state] : m_ownerPass->getTextureStates())
+    for (auto& state : m_ownerPass->getTextureStates())
     {
         auto& accessInfo = state.textureStates[0];
         if (!accessInfo.isAttachment) continue;
-        state.barrierInfo.oldLayout = texture->getRHI()->Layout();
-        batchBarrier.appendOptionalLayoutTransition(*texture->getRHI(), state.barrierInfo);
+        state.barrierInfo.oldLayout = state.texture->getRHI()->Layout();
+        batchBarrier.appendOptionalLayoutTransition(*state.texture->getRHI(), state.barrierInfo);
     }
     batchBarrier.cmdPipelineBarrier(cmd, 0);
     m_vkRenderingInfo.renderArea = renderArea;
