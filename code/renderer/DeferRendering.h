@@ -34,8 +34,6 @@ public:
     }
 
 protected:
-    void updateCameraBuffer();
-
 private:
     std::unique_ptr<RDG::RDGBuilder>         _rdgBuilder;
     Texture*                                 _outputTexture = nullptr;

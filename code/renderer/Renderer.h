@@ -47,6 +47,7 @@ public:
     }
 
 protected:
+    void                                     updateCameraBuffer();
     std::unique_ptr<SceneManager>            _scene;
     std::vector<std::unique_ptr<PlayCamera>> _cameras;
     uint32_t                                 _activeCameraIdx = 0;

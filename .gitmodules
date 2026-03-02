@@ -16,3 +16,6 @@
 [submodule "External/Crc32"]
 	path = External/Crc32
 	url = https://github.com/google/crc32c.git
+[submodule "External/miniply"]
+	path = External/miniply
+	url = https://github.com/vilya/miniply.git

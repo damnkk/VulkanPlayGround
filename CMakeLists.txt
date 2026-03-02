@@ -37,6 +37,9 @@ set(CMAKE_CXX_STANDARD 20)
 FILE(GLOB_RECURSE SOURCE_FILES
   ${CMAKE_CURRENT_LIST_DIR}/code/*.cpp
 )
+list(APPEND SOURCE_FILES
+  ${CMAKE_CURRENT_LIST_DIR}/External/miniply/miniply.cpp
+)
 
 source_group("Source Files" FILES ${SOURCE_FILES})
 #####################################################################################
@@ -60,6 +63,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/code/resourceManagement
   ${CMAKE_CURRENT_LIST_DIR}/External/spv_reflect/include
   ${CMAKE_CURRENT_LIST_DIR}/External/Crc32/include
+  ${CMAKE_CURRENT_LIST_DIR}/External/miniply
   ${CMAKE_CURRENT_LIST_DIR}/External/sqlite3
   ${CMAKE_CURRENT_LIST_DIR}/shaders
 

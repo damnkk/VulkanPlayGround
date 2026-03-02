@@ -14,7 +14,9 @@ class SceneManager
 {
 public:
     SceneManager();
-    SceneManager&                 addScene(std::filesystem::path filename);
+    template <typename T>
+    SceneManager& addScene(std::filesystem::path filename);
+    template <typename T>
     SceneManager&                 addScenes(std::vector<std::filesystem::path> filenames);
     std::vector<nvvkgltf::Scene>& getCpuScene()
     {
@@ -27,6 +29,10 @@ public:
     std::vector<RTScene>& getRtxScene()
     {
         return _scenesRTX;
+    }
+    std::vector<GaussianScene>& getGaussianScenes()
+    {
+        return _gaussianScenes;
     }
     void addSkyBoxTexture(Texture* texture);
     void updateDescriptorSet();
@@ -45,6 +51,9 @@ private:
     std::vector<nvvk::Image>     _sceneImages; // all scene images
     nvvk::DescriptorBindings     _sceneDescriptorBindings;
     std::vector<Texture*>        _sceneSkyTexture;
+
+    // for gaussian scene
+    std::vector<GaussianScene> _gaussianScenes;
 };
 
 } // namespace Play

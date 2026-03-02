@@ -4,6 +4,7 @@
 #include <backends/imgui_impl_vulkan.h>
 #include "stb_image.h"
 #include "DeferRendering.h"
+#include "GaussianRenderer.h"
 #include "resourceManagement/Resource.h"
 #include "ShaderManager.hpp"
 #include "PlayAllocator.h"
@@ -43,12 +44,16 @@ void PlayElement::onAttach(nvapp::Application* app)
     _profilerTimeline = _info.profilerManager->createTimeline({"graphics"});
     _profilerGpuTimer.init(_profilerTimeline, app->getDevice(), app->getPhysicalDevice(), app->getQueue(0).familyIndex, true);
     createGraphicsDescriptResource();
-
     switch (_renderMode)
     {
         case eDeferRendering:
         {
             _renderer = std::make_unique<DeferRenderer>(*this);
+            break;
+        }
+        case eGaussianRendering:
+        {
+            _renderer = std::make_unique<GaussianRenderer>(*this);
             break;
         }
         default:

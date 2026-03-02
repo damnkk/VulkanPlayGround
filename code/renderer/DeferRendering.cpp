@@ -14,6 +14,13 @@ namespace Play
 DeferRenderer::DeferRenderer(PlayElement& view)
 {
     _view = &view;
+    _scene->addScene<nvvkgltf::Scene>("D:/repo/downloaded_resources/man/SK_Man_Full_04.gltf");
+    // _scene->addScene("D:/repo/VulkanPlayGround/resource/models/rimac-nevera-r-2025-wwwvecarzcom/scene.gltf");
+    std::filesystem::path modelPath = ".\\resource\\skybox\\graveyard_pathways_2k.hdr";
+    // std::filesystem::path modelPath     = ".\\resource\\skybox\\graveyard_pathways_2k.hdr";
+    Texture* skyboxTexture = Texture::Create(modelPath, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, true);
+    _scene->addSkyBoxTexture(skyboxTexture);
+    _scene->updateDescriptorSet();
 }
 DeferRenderer::~DeferRenderer()
 {
@@ -62,25 +69,6 @@ void DeferRenderer::OnResize(int width, int height)
         pass->build(_rdgBuilder.get());
     }
     _rdgBuilder->compile();
-}
-
-void DeferRenderer::updateCameraBuffer()
-{
-    // update curr activated camera into camera buffer
-    PlayCamera* camera = getActiveCamera();
-    camera->update(ImGui::FindWindowByName("Viewport"));
-    CameraData data{};
-    data.cameraPosition    = camera->getCameraManipulator()->getEye();
-    data.projMatrix        = camera->getCameraManipulator()->getPerspectiveMatrix();
-    data.viewMatrix        = camera->getCameraManipulator()->getViewMatrix();
-    data.viewPortSize      = {vkDriver->getApp()->getViewportSize().width, vkDriver->getApp()->getViewportSize().height};
-    data.viewProjMatrix    = data.projMatrix * data.viewMatrix;
-    data.invViewMatrix     = glm::inverse(data.viewMatrix);
-    data.invProjMatrix     = glm::inverse(data.projMatrix);
-    data.invViewProjMatrix = glm::inverse(data.viewProjMatrix);
-
-    memcpy(getCurrentCameraBuffer()->mapping, &data, sizeof(CameraData));
-    PlayResourceManager::Instance().flushBuffer(*getCurrentCameraBuffer(), 0, VK_WHOLE_SIZE);
 }
 
 } // namespace Play

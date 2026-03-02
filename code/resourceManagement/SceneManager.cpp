@@ -3,6 +3,7 @@
 #include "Resource.h"
 #include "VulkanDriver.h"
 #include "DescriptorManager.h"
+
 namespace Play
 {
 
@@ -17,35 +18,45 @@ SceneManager::SceneManager()
     vkDriver->getDescriptorSetCache()->initSceneDescriptorSets(_sceneDescriptorBindings);
 }
 
+template <typename T>
 SceneManager& SceneManager::addScene(std::filesystem::path filename)
 {
-    nvvkgltf::Scene* cpuScene = nullptr;
+    if (typeid(T) == typeid(GaussianScene))
     {
-        std::lock_guard<std::mutex> lock(_sceneMutex);
-        cpuScene = &_scenes.emplace_back();
+        GaussianScene& gaussianScene = _gaussianScenes.emplace_back();
+        gaussianScene.load(filename);
     }
-    cpuScene->load(filename);
-    RenderScene* vkScene = nullptr;
+    else if (typeid(T) == typeid(nvvkgltf::Scene))
     {
-        std::lock_guard<std::mutex> lock(_scenesVkMutex);
-        vkScene = &_scenesVk.emplace_back();
-    }
-    vkScene->init(PlayResourceManager::GetAsAllocator(), PlayResourceManager::GetAsSamplerPool());
-    auto cmd = PlayResourceManager::Instance().getTempCommandBuffer();
-    vkScene->create(cmd, *PlayResourceManager::Instance().GetAsStagingUploader(), *cpuScene, true, false);
-    PlayResourceManager::Instance().submitAndWaitTempCmdBuffer(cmd);
-    {
-        std::lock_guard<std::mutex> lock(_scenesVkMutex);
-        vkScene->setTextureOffset(static_cast<uint32_t>(_sceneImages.size()));
-        _sceneImages.insert(_sceneImages.end(), vkScene->textures().begin(), vkScene->textures().end());
-        vkScene->fillDefaultMaterials(*cpuScene);
+        nvvkgltf::Scene* cpuScene = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(_sceneMutex);
+            cpuScene = &_scenes.emplace_back();
+        }
+        cpuScene->load(filename);
+        RenderScene* vkScene = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(_scenesVkMutex);
+            vkScene = &_scenesVk.emplace_back();
+        }
+        vkScene->init(PlayResourceManager::GetAsAllocator(), PlayResourceManager::GetAsSamplerPool());
+        auto cmd = PlayResourceManager::Instance().getTempCommandBuffer();
+        vkScene->create(cmd, *PlayResourceManager::Instance().GetAsStagingUploader(), *cpuScene, true, false);
+        PlayResourceManager::Instance().submitAndWaitTempCmdBuffer(cmd);
+        {
+            std::lock_guard<std::mutex> lock(_scenesVkMutex);
+            vkScene->setTextureOffset(static_cast<uint32_t>(_sceneImages.size()));
+            _sceneImages.insert(_sceneImages.end(), vkScene->textures().begin(), vkScene->textures().end());
+            vkScene->fillDefaultMaterials(*cpuScene);
+        }
     }
     return *this;
 }
 
+template <typename T>
 SceneManager& SceneManager::addScenes(std::vector<std::filesystem::path> filenames)
 {
-    nvutils::parallel_batches<8>(filenames.size(), [&](size_t i) { addScene(filenames[i]); }, 4);
+    nvutils::parallel_batches<8>(filenames.size(), [&](size_t i) { addScene<T>(filenames[i]); }, 4);
     return *this;
 }
 
@@ -108,5 +119,10 @@ SceneManager::~SceneManager()
         rtScene.deinit();
     }
 }
+
+template SceneManager& SceneManager::addScene<nvvkgltf::Scene>(std::filesystem::path);
+template SceneManager& SceneManager::addScenes<nvvkgltf::Scene>(std::vector<std::filesystem::path>);
+template SceneManager& SceneManager::addScene<GaussianScene>(std::filesystem::path);
+template SceneManager& SceneManager::addScenes<GaussianScene>(std::vector<std::filesystem::path>);
 
 } // namespace Play

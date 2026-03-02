@@ -58,6 +58,7 @@ public:
         eVolumeRendering,
         eShadingRateRendering,
         eDeferRendering,
+        eGaussianRendering,
         eRCount
     } _renderMode = eDeferRendering;
 
@@ -77,6 +78,7 @@ private:
     friend class RTRenderer;
     friend class VolumeRenderer;
     friend class ShadingRateRenderer;
+    friend class GaussianRenderer;
     friend class RDG::RenderDependencyGraph;
     friend class SceneManager;
     nvapp::Application*        _app{};
