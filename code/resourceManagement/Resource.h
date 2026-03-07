@@ -130,7 +130,7 @@ public:
 
     struct BufferMetaData
     {
-        VkBufferUsageFlags    _usageFlags;
+        VkBufferUsageFlags2   _usageFlags;
         VkDeviceSize          _size;
         VkDeviceSize          _range = VK_WHOLE_SIZE;
         VkMemoryPropertyFlags _property;
@@ -146,7 +146,7 @@ public:
     {
         return debugName;
     }
-    VkBufferUsageFlags& UsageFlags()
+    VkBufferUsageFlags2& UsageFlags()
     {
         return usageFlags;
     }
@@ -183,7 +183,7 @@ public:
 
 protected:
     friend class BufferPool;
-    VkBufferUsageFlags    usageFlags = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    VkBufferUsageFlags2   usageFlags = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT;
     VkDeviceSize          range      = VK_WHOLE_SIZE;
     VkDeviceSize          size       = 0;
     std::string           debugName;

@@ -3,6 +3,8 @@
 #include "core/PlayCamera.h"
 #include "SceneManager.h"
 #include "VulkanDriver.h"
+#include "RDG/RDG.h"
+#include "renderPasses/RenderPass.h"
 namespace Play
 {
 
@@ -34,7 +36,9 @@ Renderer::Renderer()
         _cameraUniformData[i] = Buffer::Create("cameraInfoBuf" + std::to_string(i), VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT, sizeof(CameraData),
                                                VkMemoryPropertyFlagBits::VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
     }
-};
+}
+
+Renderer::~Renderer() = default;
 
 void Renderer::updateCameraBuffer()
 {
@@ -53,6 +57,50 @@ void Renderer::updateCameraBuffer()
 
     memcpy(getCurrentCameraBuffer()->mapping, &data, sizeof(CameraData));
     PlayResourceManager::Instance().flushBuffer(*getCurrentCameraBuffer(), 0, VK_WHOLE_SIZE);
+}
+
+void Renderer::OnPreRender()
+{
+    updateCameraBuffer();
+    _scene->update();
+}
+
+void Renderer::RenderFrame()
+{
+    _rdgBuilder->execute();
+}
+
+void Renderer::OnPostRender() {}
+
+void Renderer::SetScene(SceneManager* scene) {}
+
+Texture* Renderer::getOutputTexture()
+{
+    return _outputTexture;
+}
+
+void Renderer::OnResize(int width, int height)
+{
+    for (auto& camera : _cameras)
+    {
+        camera->onResize({(uint32_t)width, (uint32_t)height});
+    }
+    _passes.clear();
+    _rdgBuilder.reset();
+    _rdgBuilder = std::make_unique<RDG::RDGBuilder>();
+    _outputTexture = _view->getUITexture();
+
+    setupPasses();
+
+    for (auto& pass : _passes)
+    {
+        pass->init();
+    }
+    for (auto& pass : _passes)
+    {
+        pass->build(_rdgBuilder.get());
+    }
+    _rdgBuilder->compile();
 }
 
 } // namespace Play

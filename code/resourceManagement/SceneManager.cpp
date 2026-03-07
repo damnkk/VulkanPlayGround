@@ -23,8 +23,7 @@ SceneManager& SceneManager::addScene(std::filesystem::path filename)
 {
     if (typeid(T) == typeid(GaussianScene))
     {
-        GaussianScene& gaussianScene = _gaussianScenes.emplace_back();
-        gaussianScene.load(filename);
+        _gaussianScene.load(filename);
     }
     else if (typeid(T) == typeid(nvvkgltf::Scene))
     {

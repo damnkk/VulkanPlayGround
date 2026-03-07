@@ -5,9 +5,12 @@
 #include "miniply.h"
 #include <vector>
 #include <filesystem>
+#include "newshaders/gaussian/gaussianLib.h.slang"
+
 namespace Play
 {
 class Material;
+class Buffer;
 class RenderScene : public nvvkgltf::SceneVk
 {
 public:
@@ -36,28 +39,7 @@ class RTScene : public nvvkgltf::SceneRtx
 {
 }; // class RTScene
 
-// Per-vertex data layout matching the PLY binary format exactly (56 bytes)
-struct GaussianVertex
-{
-    float x, y, z;
-    float f_dc_0, f_dc_1, f_dc_2;
-    float opacity;
-    float scale_0, scale_1, scale_2;
-    float rot_0, rot_1, rot_2, rot_3;
-};
 static_assert(sizeof(GaussianVertex) == 56, "GaussianVertex size mismatch");
-
-// Camera metadata embedded in the PLY file
-struct GaussianSceneMeta
-{
-    float    extrinsic[16]; // 4x4 camera extrinsic matrix
-    float    intrinsic[9];  // 3x3 camera intrinsic matrix
-    uint32_t imageSize[2];  // width, height
-    int32_t  frame[2];
-    float    disparity[2]; // min, max disparity
-    uint8_t  colorSpace;
-    uint8_t  version[3];
-};
 
 class GaussianScene
 {
@@ -77,8 +59,20 @@ public:
         return static_cast<uint32_t>(_vertices.size());
     }
 
+    Buffer* getSplatGPUBuffer()
+    {
+        return _splatBuffer;
+    }
+
+    Buffer* getSplatMetaGPUBuffer()
+    {
+        return _splatMetaBuffer;
+    }
+
 private:
     std::vector<GaussianVertex> _vertices;
+    Buffer*                     _splatBuffer;
+    Buffer*                     _splatMetaBuffer;
     GaussianSceneMeta           _meta{};
 }; // class GaussianScene
 

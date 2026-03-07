@@ -30,9 +30,9 @@ public:
     {
         return _scenesRTX;
     }
-    std::vector<GaussianScene>& getGaussianScenes()
+    GaussianScene& getGaussianScene()
     {
-        return _gaussianScenes;
+        return _gaussianScene;
     }
     void addSkyBoxTexture(Texture* texture);
     void updateDescriptorSet();
@@ -53,7 +53,7 @@ private:
     std::vector<Texture*>        _sceneSkyTexture;
 
     // for gaussian scene
-    std::vector<GaussianScene> _gaussianScenes;
+    GaussianScene _gaussianScene;
 };
 
 } // namespace Play

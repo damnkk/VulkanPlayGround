@@ -156,9 +156,9 @@ public:
 
     struct BufferDesc
     {
-        VkBufferUsageFlags _usageFlags = VK_BUFFER_USAGE_2_TRANSFER_DST_BIT | VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT;
-        VkDeviceSize       _size       = 8;
-        VkDeviceSize       _range      = VK_WHOLE_SIZE;
+        VkBufferUsageFlags2 _usageFlags = VK_BUFFER_USAGE_2_TRANSFER_DST_BIT | VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT;
+        VkDeviceSize        _size       = 8;
+        VkDeviceSize        _range      = VK_WHOLE_SIZE;
         enum class MemoryLocation : uint8_t
         {
             eDeviceLocal,
@@ -171,7 +171,7 @@ private:
     friend class RDGBuilder;
     friend class RDGBufferBuilder;
     uint32_t         _refCount = 0;
-    Buffer*          _rhi;
+    Buffer*          _rhi      = nullptr;
     ProducerInfo     _producerInfo;
     BufferAccessInfo _latestAccessInfo;
     std::string      _name;

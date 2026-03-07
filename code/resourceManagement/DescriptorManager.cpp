@@ -338,11 +338,11 @@ DescriptorSetCache::CacheNode::CachedSet DescriptorSetCache::createDescriptorSet
             case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
             case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
             {
-                uint32_t                            offset = setManager->descriptorOffset(binding.binding);
-                std::vector<VkDescriptorBufferInfo> bufferInfos(binding.descriptorCount);
-                for (int i = offset; i < binding.descriptorCount; ++i)
+                uint32_t                             offset      = setManager->descriptorOffset(binding.binding);
+                std::vector<VkDescriptorBufferInfo>& bufferInfos = bufferInfosArray.emplace_back(binding.descriptorCount);
+                for (int i = 0; i < binding.descriptorCount; ++i)
                 {
-                    bufferInfos[i] = descriptorInfo[i].buffer;
+                    bufferInfos[i] = descriptorInfo[i + offset].buffer;
                 }
 
                 writeSet.pBufferInfo = bufferInfos.data();

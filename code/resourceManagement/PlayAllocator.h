@@ -85,7 +85,7 @@ public:
     static BufferPool& Instance();
 
     // 按大小和用法分配Buffer
-    Buffer* alloc(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
+    Buffer* alloc(VkDeviceSize size, VkBufferUsageFlags2 usage, VkMemoryPropertyFlags properties);
 
     // 按初始数据分配Buffer
     Buffer* alloc(const void* data, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);

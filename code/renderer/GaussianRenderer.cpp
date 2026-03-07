@@ -1,6 +1,5 @@
 #include "GaussianRenderer.h"
-#include "renderPasses/RenderPass.h"
-#include "core/PlayCamera.h"
+#include "GaussianPass/GaussianSortPass.h"
 namespace Play
 {
 
@@ -8,20 +7,16 @@ GaussianRenderer::GaussianRenderer(PlayElement& element)
 {
     _outputTexture = element.getUITexture();
     _view          = &element;
+    _scene->addScene<GaussianScene>("D:/repo/ml-sharp/output/test.ply");
 }
+
 GaussianRenderer::~GaussianRenderer() {}
 
 void GaussianRenderer::OnGUI() {}
-void GaussianRenderer::OnPreRender()
+
+void GaussianRenderer::setupPasses()
 {
-    updateCameraBuffer();
+    _passes.emplace_back(std::make_unique<GaussianSortPass>(this));
 }
-
-void GaussianRenderer::RenderFrame() {}
-
-void GaussianRenderer::OnPostRender() {}
-void GaussianRenderer::SetScene(SceneManager* scene) {}
-
-void GaussianRenderer::OnResize(int width, int height) {}
 
 } // namespace Play

@@ -383,7 +383,7 @@ Buffer* BufferPool::alloc()
     return _objs[index];
 }
 
-Buffer* BufferPool::alloc(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties)
+Buffer* BufferPool::alloc(VkDeviceSize size, VkBufferUsageFlags2 usage, VkMemoryPropertyFlags properties)
 {
     std::lock_guard<std::mutex> lock(_mutex);
     Buffer*                     buffer = alloc();

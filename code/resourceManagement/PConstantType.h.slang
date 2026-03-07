@@ -17,4 +17,16 @@ struct GBufferPushConstant
     PerFrameConstant perFrameConstant;
     SceneConstant    sceneConstant;
 };
+
+struct GaussianSceneConstant
+{
+    uint64_t splatBufferDeviceAddress;
+    uint64_t MetaDataAddress;
+};
+
+struct GaussianPushConstant
+{
+    PerFrameConstant      perFrameConstant;
+    GaussianSceneConstant sceneConstant;
+};
 #endif // P_CONSTANT_TYPE_H

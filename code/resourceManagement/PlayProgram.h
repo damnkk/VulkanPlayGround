@@ -297,7 +297,7 @@ class ComputeProgram : public PlayProgram
 {
 public:
     ComputeProgram(uint32_t id) : PlayProgram(id) {}
-    ComputeProgram(uint32_t id, VkDevice device, ShaderID computeModuleID) : PlayProgram(id), _computeModuleID(computeModuleID) {}
+    ComputeProgram(uint32_t id, ShaderID computeModuleID) : PlayProgram(id), _computeModuleID(computeModuleID) {}
     ComputeProgram& setComputeModuleID(ShaderID computeModuleID);
     ShaderID        getComputeModuleID() const
     {

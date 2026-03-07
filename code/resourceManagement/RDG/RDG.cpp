@@ -95,7 +95,7 @@ RDGBufferBuilder& RDGBufferBuilder::Range(VkDeviceSize range)
 
 RDGBufferBuilder& RDGBufferBuilder::UsageFlags(VkBufferUsageFlags usageFlags)
 {
-    _bufferNode->_info._usageFlags = usageFlags;
+    _bufferNode->_info._usageFlags |= usageFlags;
     return *this;
 }
 
@@ -295,7 +295,7 @@ void RDGBuilder::prepareResourceBarrier(RenderContext& context, PassNode* pass)
         RDGBuffer::BufferDesc& info   = buffer->_info;
         if (!buffer->getRHI())
         {
-            buffer->setRHI(Buffer::Create(info._debugName, info._size, info._usageFlags,
+            buffer->setRHI(Buffer::Create(info._debugName, info._usageFlags, info._size,
                                           info._location == RDGBuffer::BufferDesc::MemoryLocation::eDeviceLocal
                                               ? VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
                                               : VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
