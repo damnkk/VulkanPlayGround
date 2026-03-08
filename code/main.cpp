@@ -213,11 +213,26 @@ int main(int argc, char** argv)
     VkPhysicalDeviceRayQueryFeaturesKHR         rayQueryFeatures = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR, nullptr, VK_TRUE};
     VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptorBufferFeatures = {
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT, nullptr, VK_TRUE, VK_TRUE, VK_TRUE, VK_TRUE};
+    VkPhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures = {
+        .sType      = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT,
+        .pNext      = nullptr,
+        .taskShader = VK_TRUE,
+        .meshShader = VK_TRUE,
+    };
+    VkPhysicalDeviceFragmentShadingRateFeaturesKHR fsrFeatures = {
+        .sType                         = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR,
+        .pNext                         = nullptr,
+        .pipelineFragmentShadingRate   = VK_TRUE,
+        .primitiveFragmentShadingRate  = VK_TRUE,
+        .attachmentFragmentShadingRate = VK_TRUE,
+    };
     nvvk::ContextInitInfo vkSetup{
         .instanceExtensions = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME},
 
         .deviceExtensions =
             {
+                {VK_EXT_MESH_SHADER_EXTENSION_NAME, &meshShaderFeatures, true},
+                {VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME, &fsrFeatures, true},
                 {VK_KHR_SWAPCHAIN_EXTENSION_NAME},
                 {VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME},
                 {VK_KHR_RAY_QUERY_EXTENSION_NAME, &rayQueryFeatures},

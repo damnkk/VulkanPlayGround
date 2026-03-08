@@ -1,5 +1,6 @@
 #include "GaussianRenderer.h"
 #include "GaussianPass/GaussianSortPass.h"
+#include "GaussianPass/GaussianDrawMeshPass.h"
 namespace Play
 {
 
@@ -17,6 +18,7 @@ void GaussianRenderer::OnGUI() {}
 void GaussianRenderer::setupPasses()
 {
     _passes.emplace_back(std::make_unique<GaussianSortPass>(this));
+    _passes.emplace_back(std::make_unique<GaussianDrawMeshPass>(this));
 }
 
 } // namespace Play

@@ -101,7 +101,6 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
                         renderPassConfig.depthAttachment.has_value() ? renderPassConfig.depthAttachment->format : VK_FORMAT_UNDEFINED;
                     renderingInfo.stencilAttachmentFormat =
                         renderPassConfig.stencilAttachment.has_value() ? renderPassConfig.stencilAttachment->format : VK_FORMAT_UNDEFINED;
-                    ;
 
                     renderingInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 

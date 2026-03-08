@@ -39,29 +39,43 @@ class RTScene : public nvvkgltf::SceneRtx
 {
 }; // class RTScene
 
-static_assert(sizeof(GaussianVertex) == 56, "GaussianVertex size mismatch");
-
 class GaussianScene
 {
 public:
     bool load(const std::filesystem::path& path);
 
-    const std::vector<GaussianVertex>& getVertices() const
+    const std::vector<float3>& getPositions() const
     {
-        return _vertices;
+        return _positions;
     }
+
+    const std::vector<float3>& getColors() const
+    {
+        return _colors;
+    }
+
+    const std::vector<float>& getOpacities() const
+    {
+        return _opacities;
+    }
+
+    const std::vector<float3>& getScales() const
+    {
+        return _scales;
+    }
+
+    const std::vector<float4>& getRotations() const
+    {
+        return _rotations;
+    }
+
     const GaussianSceneMeta& getMeta() const
     {
         return _meta;
     }
     uint32_t getVertexCount() const
     {
-        return static_cast<uint32_t>(_vertices.size());
-    }
-
-    Buffer* getSplatGPUBuffer()
-    {
-        return _splatBuffer;
+        return static_cast<uint32_t>(_positions.size());
     }
 
     Buffer* getSplatMetaGPUBuffer()
@@ -69,11 +83,45 @@ public:
         return _splatMetaBuffer;
     }
 
+    Buffer* getPositionGPUBuffer()
+    {
+        return _positionBuffer;
+    }
+
+    Buffer* getColorGPUBuffer()
+    {
+        return _colorBuffer;
+    }
+
+    Buffer* getOpacityGPUBuffer()
+    {
+        return _opacityBuffer;
+    }
+
+    Buffer* getScaleGPUBuffer()
+    {
+        return _scaleBuffer;
+    }
+
+    Buffer* getRotationGPUBuffer()
+    {
+        return _rotationBuffer;
+    }
+
 private:
-    std::vector<GaussianVertex> _vertices;
-    Buffer*                     _splatBuffer;
-    Buffer*                     _splatMetaBuffer;
-    GaussianSceneMeta           _meta{};
+    std::vector<float3> _positions;
+    std::vector<float3> _colors;
+    std::vector<float>  _opacities;
+    std::vector<float3> _scales;
+    std::vector<float4> _rotations;
+
+    Buffer*           _positionBuffer   = nullptr;
+    Buffer*           _colorBuffer      = nullptr;
+    Buffer*           _opacityBuffer    = nullptr;
+    Buffer*           _scaleBuffer      = nullptr;
+    Buffer*           _rotationBuffer   = nullptr;
+    Buffer*           _splatMetaBuffer  = nullptr;
+    GaussianSceneMeta _meta{};
 }; // class GaussianScene
 
 } // namespace Play

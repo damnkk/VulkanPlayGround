@@ -51,6 +51,21 @@ option (CRC32C_USE_GLOG OFF)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/External/Crc32)
 
 #####################################################################################
+# vrdx (vk_radix_sort)
+
+set(VRDX_DIR ${CMAKE_CURRENT_SOURCE_DIR}/External/vrdx)
+if(NOT EXISTS ${VRDX_DIR}/CMakeLists.txt)
+  message(FATAL_ERROR "vrdx dependency missing at External/vrdx")
+endif()
+add_subdirectory(${VRDX_DIR})
+
+set_property(TARGET vk_radix_sort PROPERTY FOLDER "ThirdParty/vrdx")
+set_property(TARGET spine_slang PROPERTY FOLDER "ThirdParty/vrdx")
+set_property(TARGET downsweep_slang PROPERTY FOLDER "ThirdParty/vrdx")
+set_property(TARGET downsweep_key_value_slang PROPERTY FOLDER "ThirdParty/vrdx")
+set_property(TARGET upsweep_slang PROPERTY FOLDER "ThirdParty/vrdx")
+
+#####################################################################################
 # Executable
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES})
@@ -64,7 +79,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/External/spv_reflect/include
   ${CMAKE_CURRENT_LIST_DIR}/External/Crc32/include
   ${CMAKE_CURRENT_LIST_DIR}/External/miniply
-  ${CMAKE_CURRENT_LIST_DIR}/External/VkRadixSort/include
+  ${CMAKE_CURRENT_LIST_DIR}/External/vrdx/include
   ${CMAKE_CURRENT_LIST_DIR}/External/sqlite3
   ${CMAKE_CURRENT_LIST_DIR}/shaders
 
@@ -82,6 +97,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   nvpro2::nvvk
   nvpro2::nvvkglsl
   nvpro2::nvvkgltf
+  vk_radix_sort
   spirv-reflect-static
   crc32c
   "${CMAKE_CURRENT_SOURCE_DIR}/External/sqlite3/libsqlite3.lib"

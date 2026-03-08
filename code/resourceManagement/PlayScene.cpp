@@ -144,6 +144,62 @@ void parseMetaFromCurrentElement(miniply::PLYReader& reader, const miniply::PLYE
     extractNamedPairU32(reader, elem, meta.imageSize);
     extractNamedPairF32(reader, elem, "min_disparity", "max_disparity", meta.disparity);
 }
+
+template <size_t N, size_t K>
+bool findPropertyPattern(const miniply::PLYElement* elem, const std::array<std::array<const char*, N>, K>& patterns, std::array<uint32_t, N>& outIdx)
+{
+    if (elem == nullptr) return false;
+
+    for (const auto& pattern : patterns)
+    {
+        bool matched = true;
+        for (size_t i = 0; i < N; i++)
+        {
+            outIdx[i] = elem->find_property(pattern[i]);
+            if (outIdx[i] == kInvalidIndex)
+            {
+                matched = false;
+                break;
+            }
+        }
+
+        if (matched) return true;
+    }
+
+    return false;
+}
+
+template <size_t N, size_t K>
+bool extractFloatComponents(miniply::PLYReader& reader, const miniply::PLYElement* elem, const std::array<std::array<const char*, N>, K>& patterns,
+                            std::vector<float>& outComps)
+{
+    std::array<uint32_t, N> propIdxs{};
+    if (!findPropertyPattern(elem, patterns, propIdxs)) return false;
+
+    const uint32_t rowCount = reader.num_rows();
+    outComps.resize(static_cast<size_t>(rowCount) * N);
+    return reader.extract_properties(propIdxs.data(), static_cast<uint32_t>(N), PLYPropertyType::Float, outComps.data());
+}
+
+void unpackFloat3(const std::vector<float>& src, std::vector<float3>& dst)
+{
+    const size_t rowCount = dst.size();
+    for (size_t i = 0; i < rowCount; i++)
+    {
+        const size_t base = i * 3;
+        dst[i]            = float3(src[base + 0], src[base + 1], src[base + 2]);
+    }
+}
+
+void unpackFloat4(const std::vector<float>& src, std::vector<float4>& dst)
+{
+    const size_t rowCount = dst.size();
+    for (size_t i = 0; i < rowCount; i++)
+    {
+        const size_t base = i * 4;
+        dst[i]            = float4(src[base + 0], src[base + 1], src[base + 2], src[base + 3]);
+    }
+}
 } // namespace
 
 void RenderScene::fillDefaultMaterials(nvvkgltf::Scene& scene)
@@ -155,7 +211,17 @@ void RenderScene::fillDefaultMaterials(nvvkgltf::Scene& scene)
 
 bool GaussianScene::load(const std::filesystem::path& filename)
 {
-    _vertices.clear();
+    auto resetSceneData = [this]()
+    {
+        _positions.clear();
+        _colors.clear();
+        _opacities.clear();
+        _scales.clear();
+        _rotations.clear();
+        _meta = {};
+    };
+
+    resetSceneData();
     _meta = {};
 
     const std::string  filenameString = filename.string();
@@ -178,38 +244,81 @@ bool GaussianScene::load(const std::filesystem::path& filename)
         {
             if (!reader.load_element())
             {
-                _vertices.clear();
-                _meta = {};
+                resetSceneData();
                 return false;
             }
         }
 
         if (isVertexElement)
         {
-            std::array<uint32_t, 14> propIdxs{};
-            if (!reader.find_properties(propIdxs.data(), static_cast<uint32_t>(propIdxs.size()), "x", "y", "z", "f_dc_0", "f_dc_1", "f_dc_2",
-                                        "opacity", "scale_0", "scale_1", "scale_2", "rot_0", "rot_1", "rot_2", "rot_3"))
-            {
-                _vertices.clear();
-                _meta = {};
-                return false;
-            }
-
             const uint32_t rowCount = reader.num_rows();
             if (rowCount == 0)
             {
-                _vertices.clear();
-                _meta = {};
+                resetSceneData();
                 return false;
             }
 
-            _vertices.resize(rowCount);
-            if (!reader.extract_properties_with_stride(propIdxs.data(), static_cast<uint32_t>(propIdxs.size()), PLYPropertyType::Float,
-                                                       _vertices.data(), static_cast<uint32_t>(sizeof(GaussianVertex))))
+            _positions.resize(rowCount);
+            _colors.resize(rowCount, float3(1.0f));
+            _opacities.resize(rowCount, 1.0f);
+            _scales.resize(rowCount, float3(1.0f));
+            _rotations.resize(rowCount, float4(0.0f, 0.0f, 0.0f, 1.0f));
+
+            std::vector<float> components;
+
+            const std::array<std::array<const char*, 3>, 3> positionPatterns = {
+                std::array<const char*, 3>{"x", "y", "z"},
+                std::array<const char*, 3>{"pos_x", "pos_y", "pos_z"},
+                std::array<const char*, 3>{"position_0", "position_1", "position_2"},
+            };
+            if (!extractFloatComponents(reader, elem, positionPatterns, components))
             {
-                _vertices.clear();
-                _meta = {};
+                resetSceneData();
                 return false;
+            }
+            unpackFloat3(components, _positions);
+
+            const std::array<std::array<const char*, 3>, 4> colorPatterns = {
+                std::array<const char*, 3>{"f_dc_0", "f_dc_1", "f_dc_2"},
+                std::array<const char*, 3>{"red", "green", "blue"},
+                std::array<const char*, 3>{"r", "g", "b"},
+                std::array<const char*, 3>{"color_0", "color_1", "color_2"},
+            };
+            if (extractFloatComponents(reader, elem, colorPatterns, components))
+            {
+                unpackFloat3(components, _colors);
+            }
+
+            const std::array<std::array<const char*, 1>, 2> opacityPatterns = {
+                std::array<const char*, 1>{"opacity"},
+                std::array<const char*, 1>{"alpha"},
+            };
+            if (extractFloatComponents(reader, elem, opacityPatterns, components))
+            {
+                for (size_t i = 0; i < _opacities.size(); i++)
+                {
+                    _opacities[i] = components[i];
+                }
+            }
+
+            const std::array<std::array<const char*, 3>, 3> scalePatterns = {
+                std::array<const char*, 3>{"scale_0", "scale_1", "scale_2"},
+                std::array<const char*, 3>{"scale_x", "scale_y", "scale_z"},
+                std::array<const char*, 3>{"sx", "sy", "sz"},
+            };
+            if (extractFloatComponents(reader, elem, scalePatterns, components))
+            {
+                unpackFloat3(components, _scales);
+            }
+
+            const std::array<std::array<const char*, 4>, 3> rotationPatterns = {
+                std::array<const char*, 4>{"rot_0", "rot_1", "rot_2", "rot_3"},
+                std::array<const char*, 4>{"rotation_0", "rotation_1", "rotation_2", "rotation_3"},
+                std::array<const char*, 4>{"qx", "qy", "qz", "qw"},
+            };
+            if (extractFloatComponents(reader, elem, rotationPatterns, components))
+            {
+                unpackFloat4(components, _rotations);
             }
 
             gotVertices = true;
@@ -224,18 +333,38 @@ bool GaussianScene::load(const std::filesystem::path& filename)
 
     if (!gotVertices)
     {
-        _vertices.clear();
-        _meta = {};
+        resetSceneData();
         return false;
     }
 
-    _meta.splatCount = static_cast<uint32_t>(_vertices.size());
+    _meta.splatCount = static_cast<uint32_t>(_positions.size());
 
-    const VkDeviceSize bufferSize = _vertices.size() * sizeof(GaussianVertex);
-    _splatBuffer  = Buffer::Create("GaussianSplatBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, bufferSize,
-                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     auto* manager = &PlayResourceManager::Instance();
-    manager->appendBuffer(*_splatBuffer, 0, std::span(_vertices));
+
+    const VkDeviceSize positionBufferSize = _positions.size() * sizeof(float3);
+    _positionBuffer = Buffer::Create("GaussianSplatPositionBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                     positionBufferSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    manager->appendBuffer(*_positionBuffer, 0, std::span(_positions));
+
+    const VkDeviceSize colorBufferSize = _colors.size() * sizeof(float3);
+    _colorBuffer = Buffer::Create("GaussianSplatColorBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, colorBufferSize,
+                                  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    manager->appendBuffer(*_colorBuffer, 0, std::span(_colors));
+
+    const VkDeviceSize opacityBufferSize = _opacities.size() * sizeof(float);
+    _opacityBuffer = Buffer::Create("GaussianSplatOpacityBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                    opacityBufferSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    manager->appendBuffer(*_opacityBuffer, 0, std::span(_opacities));
+
+    const VkDeviceSize scaleBufferSize = _scales.size() * sizeof(float3);
+    _scaleBuffer = Buffer::Create("GaussianSplatScaleBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, scaleBufferSize,
+                                  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    manager->appendBuffer(*_scaleBuffer, 0, std::span(_scales));
+
+    const VkDeviceSize rotationBufferSize = _rotations.size() * sizeof(float4);
+    _rotationBuffer = Buffer::Create("GaussianSplatRotationBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                     rotationBufferSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    manager->appendBuffer(*_rotationBuffer, 0, std::span(_rotations));
 
     _splatMetaBuffer = Buffer::Create("GaussianSplatMetaBuffer", VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                       sizeof(GaussianSceneMeta), VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
@@ -245,6 +374,6 @@ bool GaussianScene::load(const std::filesystem::path& filename)
     manager->cmdUploadAppended(cmd);
     manager->submitAndWaitTempCmdBuffer(cmd);
 
-    return !_vertices.empty();
+    return !_positions.empty();
 }
 } // namespace Play

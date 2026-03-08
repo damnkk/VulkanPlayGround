@@ -5,7 +5,6 @@ static const uint32_t kMaxSplatCount = 256;
 
 [vk_binding(0, 3)]
 RWStructuredBuffer<uint32_t> distances;
-
 [vk_binding(1, 3)]
 RWStructuredBuffer<IndrectBuffer> indirectBuffer;
 [vk_binding(2, 3)]
@@ -28,15 +27,14 @@ void main(uint3 dispatchThreadID: SV_DispatchThreadID)
 {
     uint32_t           invocationID = dispatchThreadID.x;
     CameraData*        camera       = (CameraData*) gaussianPushConstant.perFrameConstant.cameraBufferDeviceAddress;
-    GaussianVertex*    vertices     = (GaussianVertex*) gaussianPushConstant.sceneConstant.splatBufferDeviceAddress;
-    GaussianSceneMeta* sceneMeta    = (GaussianSceneMeta*) gaussianPushConstant.sceneConstant.MetaDataAddress;
+    float3*            positions    = (float3*) gaussianPushConstant.sceneConstant.positionBufferDeviceAddress;
+    GaussianSceneMeta* sceneMeta    = (GaussianSceneMeta*) gaussianPushConstant.sceneConstant.metaDataAddress;
     uint32_t           splatCount   = sceneMeta->splatCount;
     if (invocationID >= splatCount)
     {
         return;
     }
-    GaussianVertex vertex   = vertices[invocationID];
-    float4         splatPos = float4(vertex.position, 1.0);
+    float4 splatPos = float4(positions[invocationID], 1.0);
     float4         viewPos  = mul(splatPos, camera->viewMatrix);
     float4         ndcPos   = mul(viewPos, camera->projMatrix);
     ndcPos                  = ndcPos / ndcPos.w;

@@ -60,7 +60,7 @@ public:
         eDeferRendering,
         eGaussianRendering,
         eRCount
-    } _renderMode = eDeferRendering;
+    } _renderMode = eGaussianRendering;
 
 protected:
     // SceneManager

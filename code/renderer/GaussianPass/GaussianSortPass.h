@@ -2,6 +2,7 @@
 #define GAUSSIAN_SORT_PASS_H
 #include "renderpasses/RenderPass.h"
 #include "RDG/RDG.h"
+#include "vk_radix_sort.h"
 namespace Play
 {
 class ComputeProgram;
@@ -16,8 +17,10 @@ public:
     void build(RDG::RDGBuilder* rdgBuilder) override;
 
 private:
-    GaussianRenderer* _ownedRenderer;
-    ComputeProgram*   _distanceProgram;
+    VrdxSorter                    _sorter = VK_NULL_HANDLE;
+    VrdxSorterStorageRequirements _sortRequirements;
+    GaussianRenderer*             _ownedRenderer;
+    ComputeProgram*               _distanceProgram;
 };
 
 } // namespace Play

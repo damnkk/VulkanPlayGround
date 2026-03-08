@@ -19,6 +19,3 @@
 [submodule "External/miniply"]
 	path = External/miniply
 	url = https://github.com/vilya/miniply.git
-[submodule "External/VkRadixSort"]
-	path = External/VkRadixSort
-	url = https://github.com/jaesung-cs/vulkan_radix_sort.git

@@ -20,8 +20,17 @@ struct GBufferPushConstant
 
 struct GaussianSceneConstant
 {
-    uint64_t splatBufferDeviceAddress;
-    uint64_t MetaDataAddress;
+    uint64_t positionBufferDeviceAddress;
+    uint64_t colorBufferDeviceAddress;
+    uint64_t opacityBufferDeviceAddress;
+    uint64_t scaleBufferDeviceAddress;
+    uint64_t rotationBufferDeviceAddress;
+    uint32_t positionStride;
+    uint32_t colorStride;
+    uint32_t opacityStride;
+    uint32_t scaleStride;
+    uint32_t rotationStride;
+    uint64_t metaDataAddress;
 };
 
 struct GaussianPushConstant
