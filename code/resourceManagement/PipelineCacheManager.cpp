@@ -428,6 +428,57 @@ VkPipeline PipelineCacheManager::getOrCreateGraphicsPipeline(RenderProgram* prog
     return pipeline;
 }
 
+VkPipeline PipelineCacheManager::getOrCreateGraphicsPipeline(MeshRenderProgram* program)
+{
+    uint64_t key = program->psoState().getPipelineKey();
+    nvutils::hashCombine(key, program->getMeshModuleID());
+    nvutils::hashCombine(key, program->getFragModuleID());
+    nvutils::hashCombine(key, program->getTaskModuleID());
+    if (_pipelineMap.find(key) != _pipelineMap.end())
+    {
+        return _pipelineMap[key];
+    }
+
+    auto mShaderModule = ShaderManager::Instance().getShaderById(program->getMeshModuleID());
+    auto fShaderModule = ShaderManager::Instance().getShaderById(program->getFragModuleID());
+    _gfxPipelineCreator.clearShaders();
+
+    if (program->getTaskModuleID() != ~0U)
+    {
+        auto tShaderModule = ShaderManager::Instance().getShaderById(program->getTaskModuleID());
+        _gfxPipelineCreator.addShader(VK_SHADER_STAGE_TASK_BIT_EXT, tShaderModule->_entryPoint.c_str(), tShaderModule->_shaderModule);
+    }
+
+    _gfxPipelineCreator.addShader(VK_SHADER_STAGE_MESH_BIT_EXT, mShaderModule->_entryPoint.c_str(), mShaderModule->_shaderModule);
+    _gfxPipelineCreator.addShader(VK_SHADER_STAGE_FRAGMENT_BIT, fShaderModule->_entryPoint.c_str(), fShaderModule->_shaderModule);
+
+    _gfxPipelineCreator.pipelineInfo.layout = program->getDescriptorSetManager().getPipelineLayout();
+
+    if (vkDriver->_enableDynamicRendering)
+    {
+        DynamicRenderPass* dRenderPass                             = dynamic_cast<DynamicRenderPass*>(program->getPassNode()->getRenderPass());
+        _gfxPipelineCreator.renderingState.depthAttachmentFormat   = dRenderPass->getDepthAttachmentFormat();
+        _gfxPipelineCreator.renderingState.stencilAttachmentFormat = dRenderPass->getStencilAttachmentFormat();
+        _gfxPipelineCreator.colorFormats                           = dRenderPass->getColorAttachmentFormats();
+    }
+    else
+    {
+        LOGE("Not support general render pass");
+    }
+
+    auto       block = _cacheBlockManager->getOrCreateBlock(key);
+    VkPipeline pipeline;
+    block->createPipeline(
+        [pipelineCreatorPtr = &_gfxPipelineCreator, program, pipelinePtr = &pipeline](PplCacheBlock* block)
+        {
+            pipelineCreatorPtr->createGraphicsPipeline(vkDriver->getDevice(), block->_vkHandle, program->psoState(), pipelinePtr);
+            return *pipelinePtr;
+        });
+
+    _pipelineMap[key] = pipeline;
+    return pipeline;
+}
+
 VkPipeline PipelineCacheManager::getOrCreateComputePipeline(ComputeProgram* program)
 {
     uint64_t key = program->getComputeModuleID();

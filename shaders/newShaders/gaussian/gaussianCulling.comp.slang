@@ -34,11 +34,11 @@ void main(uint3 dispatchThreadID: SV_DispatchThreadID)
     {
         return;
     }
-    float4 splatPos = float4(positions[invocationID], 1.0);
-    float4         viewPos  = mul(splatPos, camera->viewMatrix);
-    float4         ndcPos   = mul(viewPos, camera->projMatrix);
-    ndcPos                  = ndcPos / ndcPos.w;
-    const float depth       = ndcPos.z;
+    float4 splatPos   = float4(positions[invocationID], 1.0);
+    float4 viewPos    = mul(splatPos, camera->viewMatrix);
+    float4 ndcPos     = mul(viewPos, camera->projMatrix);
+    ndcPos            = ndcPos / ndcPos.w;
+    const float depth = ndcPos.z;
     uint32_t    original;
     InterlockedAdd(indirectBuffer[0].instanceCount, 1, original);
     const uint instance_index     = original;

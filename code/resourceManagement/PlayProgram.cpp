@@ -446,10 +446,19 @@ MeshRenderProgram& MeshRenderProgram::setFragModuleID(ShaderID fragModuleID)
     return *this;
 }
 
-void MeshRenderProgram::bind(VkCommandBuffer cmdBuf) {}
+void MeshRenderProgram::bind(VkCommandBuffer cmdBuf)
+{
+    VkPipeline meshPipeline = getOrCreatePipeline();
+    vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, meshPipeline);
+}
+
+RDG::RenderPassNode* MeshRenderProgram::getPassNode()
+{
+    return static_cast<RDG::RenderPassNode*>(_passNode);
+}
 
 VkPipeline MeshRenderProgram::getOrCreatePipeline()
 {
-    return VK_NULL_HANDLE;
+    return vkDriver->_pipelineCacheManager->getOrCreateGraphicsPipeline(this);
 }
 } // namespace Play

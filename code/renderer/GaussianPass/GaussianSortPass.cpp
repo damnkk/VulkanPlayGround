@@ -52,12 +52,6 @@ void GaussianSortPass::build(RDG::RDGBuilder* rdgBuilder)
                                           .UsageFlags(VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT)
                                           .finish();
     rdgBuilder->registBuffer(indicesBuffer);
-    RDG::RDGBufferRef centersBuffer = rdgBuilder->createBuffer("centersBuffer")
-                                          .Location(true)
-                                          .Range(VK_WHOLE_SIZE)
-                                          .Size(sizeof(float) * 3 * _ownedRenderer->getSceneManager()->getGaussianScene().getVertexCount())
-                                          .UsageFlags(VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT)
-                                          .finish();
 
     RDG::RDGBufferRef sortStorageBuffer = rdgBuilder->createBuffer("sortStorageBuffer")
                                               .Location(true)
@@ -71,25 +65,24 @@ void GaussianSortPass::build(RDG::RDGBuilder* rdgBuilder)
             .readWrite(0, distanceBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
             .readWrite(1, indirectBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
             .readWrite(2, indicesBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-            .readWrite(3, centersBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
             .execute(
                 [this, indirectBuffer](RDG::PassNode* node, RDG::RenderContext& context)
                 {
                     IndrectBuffer ibuffer{};
                     vkCmdUpdateBuffer(context._currCmdBuffer, indirectBuffer->getRHI()->buffer, 0, sizeof(ibuffer), (void*) &ibuffer);
-                    GaussianScene&      gaussianScene = _ownedRenderer->getSceneManager()->getGaussianScene();
-                    GaussianPushConstant* pushConstant = _distanceProgram->getDescriptorSetManager().getPushConstantData<GaussianPushConstant>();
-                    pushConstant->sceneConstant.positionBufferDeviceAddress = gaussianScene.getPositionGPUBuffer()->address;
-                    pushConstant->sceneConstant.colorBufferDeviceAddress    = gaussianScene.getColorGPUBuffer()->address;
-                    pushConstant->sceneConstant.opacityBufferDeviceAddress  = gaussianScene.getOpacityGPUBuffer()->address;
-                    pushConstant->sceneConstant.scaleBufferDeviceAddress    = gaussianScene.getScaleGPUBuffer()->address;
-                    pushConstant->sceneConstant.rotationBufferDeviceAddress = gaussianScene.getRotationGPUBuffer()->address;
-                    pushConstant->sceneConstant.positionStride              = static_cast<uint32_t>(sizeof(float3));
-                    pushConstant->sceneConstant.colorStride                 = static_cast<uint32_t>(sizeof(float3));
-                    pushConstant->sceneConstant.opacityStride               = static_cast<uint32_t>(sizeof(float));
-                    pushConstant->sceneConstant.scaleStride                 = static_cast<uint32_t>(sizeof(float3));
-                    pushConstant->sceneConstant.rotationStride              = static_cast<uint32_t>(sizeof(float4));
-                    pushConstant->sceneConstant.metaDataAddress             = gaussianScene.getSplatMetaGPUBuffer()->address;
+                    GaussianScene&        gaussianScene = _ownedRenderer->getSceneManager()->getGaussianScene();
+                    GaussianPushConstant* pushConstant  = _distanceProgram->getDescriptorSetManager().getPushConstantData<GaussianPushConstant>();
+                    pushConstant->sceneConstant.positionBufferDeviceAddress  = gaussianScene.getPositionGPUBuffer()->address;
+                    pushConstant->sceneConstant.colorBufferDeviceAddress     = gaussianScene.getColorGPUBuffer()->address;
+                    pushConstant->sceneConstant.opacityBufferDeviceAddress   = gaussianScene.getOpacityGPUBuffer()->address;
+                    pushConstant->sceneConstant.scaleBufferDeviceAddress     = gaussianScene.getScaleGPUBuffer()->address;
+                    pushConstant->sceneConstant.rotationBufferDeviceAddress  = gaussianScene.getRotationGPUBuffer()->address;
+                    pushConstant->sceneConstant.positionStride               = static_cast<uint32_t>(sizeof(float3));
+                    pushConstant->sceneConstant.colorStride                  = static_cast<uint32_t>(sizeof(float3));
+                    pushConstant->sceneConstant.opacityStride                = static_cast<uint32_t>(sizeof(float));
+                    pushConstant->sceneConstant.scaleStride                  = static_cast<uint32_t>(sizeof(float3));
+                    pushConstant->sceneConstant.rotationStride               = static_cast<uint32_t>(sizeof(float4));
+                    pushConstant->sceneConstant.metaDataAddress              = gaussianScene.getSplatMetaGPUBuffer()->address;
                     pushConstant->perFrameConstant.cameraBufferDeviceAddress = _ownedRenderer->getCurrentCameraBuffer()->address;
                     _distanceProgram->setPassNode(static_cast<RDG::RenderPassNode*>(node));
                     _distanceProgram->bind(context._currCmdBuffer);

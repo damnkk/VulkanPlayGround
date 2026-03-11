@@ -357,6 +357,25 @@ public:
     MeshRenderProgram& setTaskModuleID(ShaderID taskModuleID);
     MeshRenderProgram& setMeshModuleID(ShaderID meshModuleID);
     MeshRenderProgram& setFragModuleID(ShaderID fragModuleID);
+    ShaderID           getTaskModuleID() const
+    {
+        return _taskModuleID;
+    }
+    ShaderID getMeshModuleID() const
+    {
+        return _meshModuleID;
+    }
+    ShaderID getFragModuleID() const
+    {
+        return _fragModuleID;
+    }
+
+    RDG::RenderPassNode* getPassNode();
+
+    PSOState& psoState()
+    {
+        return _psoState;
+    }
 
     void                bind(VkCommandBuffer cmdBuf) override;
     virtual ProgramType getProgramType() const override
@@ -370,6 +389,7 @@ private:
     ShaderID    _meshModuleID = ~0U;
     ShaderID    _fragModuleID = ~0U;
     ProgramType _programType  = ProgramType::eMeshRenderProgram;
+    PSOState    _psoState;
 };
 } // namespace Play
 

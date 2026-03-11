@@ -37,6 +37,7 @@ void GaussianDrawMeshPass::init()
 
 void GaussianDrawMeshPass::build(RDG::RDGBuilder* rdgBuilder)
 {
+    RDG::RDGBufferRef  indirectBuffer  = rdgBuilder->getBuffer("indirectBuffer");
     RDG::RDGTextureRef colorAttachment = rdgBuilder->createTexture("meshDrawColorAttachment")
                                              .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
                                              .UsageFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
@@ -51,16 +52,29 @@ void GaussianDrawMeshPass::build(RDG::RDGBuilder* rdgBuilder)
                                              .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
                                              .finish();
     rdgBuilder->registTexture(depthAttachment);
-    [[maybe_unused]] RDG::RenderPassNodeRef meshDrawPass = rdgBuilder->createRenderPass("MeshDrawPass")
-                                                               .color(0, colorAttachment, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE)
-                                                               .depth(depthAttachment, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE)
-                                                               .execute(
-                                                                   [](RDG::PassNode* node, RDG::RenderContext& context)
-                                                                   {
-                                                                       int a = 0;
-                                                                       int b = 0;
-                                                                   })
-                                                               .finish();
+    [[maybe_unused]] RDG::RenderPassNodeRef meshDrawPass =
+        rdgBuilder->createRenderPass("MeshDrawPass")
+            .color(0, colorAttachment, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE)
+            .depth(depthAttachment, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE)
+            .readWrite(0, indirectBuffer, VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT)
+            .execute(
+                [this, indirectBuffer](RDG::PassNode* node, RDG::RenderContext& context)
+                {
+                    VkCommandBuffer cmd = context._currCmdBuffer;
+                    _meshRenderProgram->setPassNode(static_cast<RDG::RenderPassNode*>(node));
+                    _meshRenderProgram->bind(cmd);
+                    context._pendingGfxState->bindDescriptorSet(cmd, _meshRenderProgram);
+                    VkViewport viewport = {
+                        0,    0,    static_cast<float>(vkDriver->getViewportSize().width), static_cast<float>(vkDriver->getViewportSize().height),
+                        0.0f, 1.0f,
+                    };
+                    VkRect2D scissor = {{0, 0}, {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height}};
+                    vkCmdSetViewportWithCount(cmd, 1, &viewport);
+                    vkCmdSetScissorWithCount(cmd, 1, &scissor);
+                    vkCmdDrawMeshTasksIndirectEXT(cmd, indirectBuffer->getRHI()->buffer, offsetof(IndrectBuffer, groupCountX), 1,
+                                                  sizeof(VkDrawMeshTasksIndirectCommandEXT));
+                })
+            .finish();
 
     auto outputTexRef = rdgBuilder->createTexture("outputTexture").Import(_ownedRenderer->getOutputTexture()).finish();
     [[maybe_unused]] RDG::RenderPassNodeRef presentPass =
