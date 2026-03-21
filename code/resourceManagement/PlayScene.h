@@ -1,4 +1,4 @@
-#ifndef RENDER_SCENE_H
+﻿#ifndef RENDER_SCENE_H
 #define RENDER_SCENE_H
 #include <nvvkgltf/scene_vk.hpp>
 #include <nvvkgltf/scene_rtx.hpp>
@@ -49,24 +49,19 @@ public:
         return _positions;
     }
 
-    const std::vector<float3>& getColors() const
+    const std::vector<float4>& getColors() const
     {
         return _colors;
     }
 
-    const std::vector<float>& getOpacities() const
+    const std::vector<float>& getCovariances() const
     {
-        return _opacities;
+        return _covariances;
     }
 
-    const std::vector<float3>& getScales() const
+    const std::vector<float>& getShRestCoefficients() const
     {
-        return _scales;
-    }
-
-    const std::vector<float4>& getRotations() const
-    {
-        return _rotations;
+        return _shRestCoefficients;
     }
 
     const GaussianSceneMeta& getMeta() const
@@ -93,34 +88,34 @@ public:
         return _colorBuffer;
     }
 
-    Buffer* getOpacityGPUBuffer()
+    Buffer* getCovarianceGPUBuffer()
     {
-        return _opacityBuffer;
+        return _covarianceBuffer;
     }
 
-    Buffer* getScaleGPUBuffer()
+    Buffer* getShRestGPUBuffer()
     {
-        return _scaleBuffer;
+        return _shRestBuffer;
     }
 
-    Buffer* getRotationGPUBuffer()
+    Buffer* getSceneUniformBuffer()
     {
-        return _rotationBuffer;
+        return _sceneUniformBuffer;
     }
 
 private:
     std::vector<float3> _positions;
-    std::vector<float3> _colors;
-    std::vector<float>  _opacities;
-    std::vector<float3> _scales;
-    std::vector<float4> _rotations;
+    std::vector<float4> _colors;
+    std::vector<float>  _covariances;
+    std::vector<float>  _shRestCoefficients;
 
-    Buffer*           _positionBuffer   = nullptr;
-    Buffer*           _colorBuffer      = nullptr;
-    Buffer*           _opacityBuffer    = nullptr;
-    Buffer*           _scaleBuffer      = nullptr;
-    Buffer*           _rotationBuffer   = nullptr;
-    Buffer*           _splatMetaBuffer  = nullptr;
+    Buffer* _positionBuffer   = nullptr;
+    Buffer* _colorBuffer      = nullptr;
+    Buffer* _covarianceBuffer = nullptr;
+    Buffer* _shRestBuffer     = nullptr;
+    Buffer* _splatMetaBuffer  = nullptr;
+
+    Buffer*           _sceneUniformBuffer = nullptr;
     GaussianSceneMeta _meta{};
 }; // class GaussianScene
 

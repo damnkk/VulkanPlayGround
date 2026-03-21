@@ -3,6 +3,7 @@
 #include <array>
 #include <nvvkgltf/scene.hpp>
 #include <string>
+#include <nvutils/parallel_work.hpp>
 
 namespace Play
 {
@@ -181,6 +182,52 @@ bool extractFloatComponents(miniply::PLYReader& reader, const miniply::PLYElemen
     return reader.extract_properties(propIdxs.data(), static_cast<uint32_t>(N), PLYPropertyType::Float, outComps.data());
 }
 
+bool collectIndexedProperties(const miniply::PLYElement* elem, const char* prefix, std::vector<uint32_t>& outIdx)
+{
+    outIdx.clear();
+    if (elem == nullptr || prefix == nullptr) return false;
+
+    const std::string                          prefixString(prefix);
+    std::vector<std::pair<uint32_t, uint32_t>> numberedProps;
+    numberedProps.reserve(elem->properties.size());
+
+    for (uint32_t propIndex = 0; propIndex < static_cast<uint32_t>(elem->properties.size()); propIndex++)
+    {
+        const std::string& propName = elem->properties[propIndex].name;
+        if (propName.rfind(prefixString, 0) != 0) continue;
+
+        const char* numberBegin = propName.c_str() + prefixString.size();
+        const char* numberEnd   = propName.c_str() + propName.size();
+        if (numberBegin == numberEnd) continue;
+
+        uint32_t indexedSuffix = 0;
+        const auto [ptr, ec]   = std::from_chars(numberBegin, numberEnd, indexedSuffix);
+        if (ec != std::errc() || ptr != numberEnd) continue;
+
+        numberedProps.emplace_back(indexedSuffix, propIndex);
+    }
+
+    if (numberedProps.empty()) return false;
+
+    std::sort(numberedProps.begin(), numberedProps.end(), [](const auto& lhs, const auto& rhs) { return lhs.first < rhs.first; });
+
+    outIdx.reserve(numberedProps.size());
+    for (const auto& [_, propIndex] : numberedProps)
+    {
+        outIdx.push_back(propIndex);
+    }
+
+    return true;
+}
+
+bool extractFloatComponents(miniply::PLYReader& reader, const std::vector<uint32_t>& propIdxs, std::vector<float>& outComps)
+{
+    if (propIdxs.empty()) return false;
+
+    const uint32_t rowCount = reader.num_rows();
+    outComps.resize(static_cast<size_t>(rowCount) * propIdxs.size());
+    return reader.extract_properties(propIdxs.data(), static_cast<uint32_t>(propIdxs.size()), PLYPropertyType::Float, outComps.data());
+}
 void unpackFloat3(const std::vector<float>& src, std::vector<float3>& dst)
 {
     const size_t rowCount = dst.size();
@@ -215,9 +262,8 @@ bool GaussianScene::load(const std::filesystem::path& filename)
     {
         _positions.clear();
         _colors.clear();
-        _opacities.clear();
-        _scales.clear();
-        _rotations.clear();
+        _covariances.clear();
+        _shRestCoefficients.clear();
         _meta = {};
     };
 
@@ -259,10 +305,10 @@ bool GaussianScene::load(const std::filesystem::path& filename)
             }
 
             _positions.resize(rowCount);
-            _colors.resize(rowCount, float3(1.0f));
-            _opacities.resize(rowCount, 1.0f);
-            _scales.resize(rowCount, float3(1.0f));
-            _rotations.resize(rowCount, float4(0.0f, 0.0f, 0.0f, 1.0f));
+            _colors.resize(rowCount, float4(1.0f));
+
+            std::vector<float3> scales(rowCount, float3(1.0f));
+            std::vector<float4> rotations(rowCount, float4(0.0f, 0.0f, 0.0f, 1.0f));
 
             std::vector<float> components;
 
@@ -286,7 +332,23 @@ bool GaussianScene::load(const std::filesystem::path& filename)
             };
             if (extractFloatComponents(reader, elem, colorPatterns, components))
             {
-                unpackFloat3(components, _colors);
+                for (size_t i = 0; i < _colors.size(); i++)
+                {
+                    const size_t base = i * 3;
+                    _colors[i].x      = components[base + 0];
+                    _colors[i].y      = components[base + 1];
+                    _colors[i].z      = components[base + 2];
+                }
+            }
+
+            std::vector<uint32_t> shRestPropIdxs;
+            if (collectIndexedProperties(elem, "f_rest_", shRestPropIdxs))
+            {
+                if (!extractFloatComponents(reader, shRestPropIdxs, _shRestCoefficients))
+                {
+                    resetSceneData();
+                    return false;
+                }
             }
 
             const std::array<std::array<const char*, 1>, 2> opacityPatterns = {
@@ -295,9 +357,9 @@ bool GaussianScene::load(const std::filesystem::path& filename)
             };
             if (extractFloatComponents(reader, elem, opacityPatterns, components))
             {
-                for (size_t i = 0; i < _opacities.size(); i++)
+                for (size_t i = 0; i < _colors.size(); i++)
                 {
-                    _opacities[i] = components[i];
+                    _colors[i].w = components[i];
                 }
             }
 
@@ -308,7 +370,7 @@ bool GaussianScene::load(const std::filesystem::path& filename)
             };
             if (extractFloatComponents(reader, elem, scalePatterns, components))
             {
-                unpackFloat3(components, _scales);
+                unpackFloat3(components, scales);
             }
 
             const std::array<std::array<const char*, 4>, 3> rotationPatterns = {
@@ -318,8 +380,30 @@ bool GaussianScene::load(const std::filesystem::path& filename)
             };
             if (extractFloatComponents(reader, elem, rotationPatterns, components))
             {
-                unpackFloat4(components, _rotations);
+                unpackFloat4(components, rotations);
             }
+
+            _covariances.resize(rowCount * 6);
+            nvutils::parallel_batches<512>(rowCount,
+                                           [&](uint32_t i)
+                                           {
+                                               glm::vec3 scale{std::exp(scales[i].x), std::exp(scales[i].y), std::exp(scales[i].z)};
+                                               glm::quat rotation{rotations[i].w, rotations[i].x, rotations[i].y, rotations[i].z};
+                                               rotation = glm::normalize(rotation);
+
+                                               const glm::mat3 scaleMatrix           = glm::mat3(glm::scale(scale));
+                                               const glm::mat3 rotationMatrix        = glm::mat3_cast(rotation);
+                                               const glm::mat3 covarianceMatrix      = rotationMatrix * scaleMatrix;
+                                               glm::mat3       transformedCovariance = covarianceMatrix * glm::transpose(covarianceMatrix);
+
+                                               const uint32_t stride6    = i * 6;
+                                               _covariances[stride6 + 0] = glm::value_ptr(transformedCovariance)[0];
+                                               _covariances[stride6 + 1] = glm::value_ptr(transformedCovariance)[3];
+                                               _covariances[stride6 + 2] = glm::value_ptr(transformedCovariance)[6];
+                                               _covariances[stride6 + 3] = glm::value_ptr(transformedCovariance)[4];
+                                               _covariances[stride6 + 4] = glm::value_ptr(transformedCovariance)[7];
+                                               _covariances[stride6 + 5] = glm::value_ptr(transformedCovariance)[8];
+                                           });
 
             gotVertices = true;
         }
@@ -346,25 +430,21 @@ bool GaussianScene::load(const std::filesystem::path& filename)
                                      positionBufferSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     manager->appendBuffer(*_positionBuffer, 0, std::span(_positions));
 
-    const VkDeviceSize colorBufferSize = _colors.size() * sizeof(float3);
+    const VkDeviceSize colorBufferSize = _colors.size() * sizeof(float4);
     _colorBuffer = Buffer::Create("GaussianSplatColorBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, colorBufferSize,
                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     manager->appendBuffer(*_colorBuffer, 0, std::span(_colors));
 
-    const VkDeviceSize opacityBufferSize = _opacities.size() * sizeof(float);
-    _opacityBuffer = Buffer::Create("GaussianSplatOpacityBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                    opacityBufferSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    manager->appendBuffer(*_opacityBuffer, 0, std::span(_opacities));
+    const VkDeviceSize covarianceBufferSize = _covariances.size() * sizeof(float);
+    _covarianceBuffer = Buffer::Create("GaussianSplatCovarianceBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                       covarianceBufferSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    manager->appendBuffer(*_covarianceBuffer, 0, std::span(_covariances));
 
-    const VkDeviceSize scaleBufferSize = _scales.size() * sizeof(float3);
-    _scaleBuffer = Buffer::Create("GaussianSplatScaleBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, scaleBufferSize,
-                                  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    manager->appendBuffer(*_scaleBuffer, 0, std::span(_scales));
+    const VkDeviceSize shRestBufferSize = std::max<VkDeviceSize>(sizeof(float), _shRestCoefficients.size() * sizeof(float));
+    _shRestBuffer = Buffer::Create("GaussianSplatShRestBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                   shRestBufferSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-    const VkDeviceSize rotationBufferSize = _rotations.size() * sizeof(float4);
-    _rotationBuffer = Buffer::Create("GaussianSplatRotationBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                     rotationBufferSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    manager->appendBuffer(*_rotationBuffer, 0, std::span(_rotations));
+    manager->appendBuffer(*_shRestBuffer, 0, std::span(_shRestCoefficients));
 
     _splatMetaBuffer = Buffer::Create("GaussianSplatMetaBuffer", VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                       sizeof(GaussianSceneMeta), VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
@@ -373,6 +453,22 @@ bool GaussianScene::load(const std::filesystem::path& filename)
     VkCommandBuffer cmd = manager->getTempCommandBuffer();
     manager->cmdUploadAppended(cmd);
     manager->submitAndWaitTempCmdBuffer(cmd);
+    _sceneUniformBuffer = Buffer::Create("GaussianSplatSceneUniformBuffer", VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                         sizeof(GaussianSceneUniform), VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+    GaussianSceneUniform sceneUniform{};
+
+    sceneUniform.colorBufferDeviceAddress      = _colorBuffer->address;
+    sceneUniform.covarianceBufferDeviceAddress = _covarianceBuffer->address;
+    sceneUniform.positionBufferDeviceAddress   = _positionBuffer->address;
+    sceneUniform.shBufferDeviceAddress         = _shRestBuffer->address;
+    sceneUniform.metaDataAddress               = _splatMetaBuffer->address;
+    sceneUniform.colorStride                   = uint32_t(sizeof(float4));
+    sceneUniform.positionStride                = uint32_t(sizeof(float3));
+    sceneUniform.covarianceStride              = uint32_t(sizeof(float3) * 2);
+    sceneUniform.shStride                      = uint32_t(sizeof(float) * _shRestCoefficients.size() / this->getVertexCount());
+    memcpy(_sceneUniformBuffer->mapping, &sceneUniform, sizeof(GaussianSceneUniform));
+    // PlayResourceManager::Instance().flushBuffer(*_sceneUniformBuffer, 0, VK_WHOLE_SIZE);
 
     return !_positions.empty();
 }

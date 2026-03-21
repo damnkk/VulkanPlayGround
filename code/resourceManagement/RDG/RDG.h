@@ -50,6 +50,7 @@ class RDGBufferBuilder
 public:
     RDGBufferBuilder(RDGBuilder* builder, RDGBufferRef node) : _builder(builder), _bufferNode(node) {}
     RDGBufferBuilder& Size(VkDeviceSize size);
+    RDGBufferBuilder& Import(Buffer* buffer);
     RDGBufferBuilder& Range(VkDeviceSize range);
     RDGBufferBuilder& UsageFlags(VkBufferUsageFlags usageFlags);
     RDGBufferBuilder& Location(bool isDeviceLocal);

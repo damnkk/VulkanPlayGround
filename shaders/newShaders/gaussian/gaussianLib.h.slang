@@ -36,8 +36,7 @@ struct IndrectBuffer
 struct GaussianVertex
 {
     float3 position;
-    float3 color;
-    float  opacity;
+    float4 color;
     float3 scale;
     float4 rotation;
 };
@@ -54,4 +53,26 @@ struct GaussianSceneMeta
     uint8_t  version[3];
     uint32_t splatCount;
 };
+struct GaussianSceneUniform
+{
+    uint64_t positionBufferDeviceAddress;
+    uint64_t colorBufferDeviceAddress;
+    uint64_t covarianceBufferDeviceAddress;
+    uint64_t shBufferDeviceAddress;
+    uint64_t metaDataAddress;
+    uint32_t positionStride;
+    uint32_t colorStride;
+    uint32_t covarianceStride;
+    uint32_t shStride;
+};
+
+static const float sqrt8    = sqrt(8.0);
+static const float SH_C1    = 0.4886025119029199f;
+static const float SH_C2[5] = { 1.0925484, -1.0925484, 0.3153916, -1.0925484, 0.5462742 };
+static const float SH_C3[7] = { -0.5900435899266435f, 2.890611442640554f, -0.4570457994644658f, 0.3731763325901154f,
+                                -0.4570457994644658f, 1.445305721320277f, -0.5900435899266435f };
+// todo:
+// void fetchSH(in const GaussianPushConstant& constant, in uint splatIndex, out float4 sh[9]) {
+
+// }
 #endif // GAUSSIAN_LIB_H

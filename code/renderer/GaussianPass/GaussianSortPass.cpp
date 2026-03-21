@@ -26,7 +26,7 @@ void GaussianSortPass::init()
     auto distanceComp = ShaderManager::Instance().loadShaderFromFile("DistanceComp", "./gaussian/gaussianCulling.comp.slang", ShaderStage::eCompute);
     _distanceProgram  = ProgramPool::Instance().alloc<ComputeProgram>();
     _distanceProgram->setComputeModuleID(distanceComp);
-    _distanceProgram->getDescriptorSetManager().initPushConstant<GaussianPushConstant>();
+    _distanceProgram->getDescriptorSetManager().initPushConstant<PerFrameConstant>();
 }
 
 void GaussianSortPass::build(RDG::RDGBuilder* rdgBuilder)
@@ -60,30 +60,28 @@ void GaussianSortPass::build(RDG::RDGBuilder* rdgBuilder)
                                               .UsageFlags(_sortRequirements.usage)
                                               .finish();
     rdgBuilder->registBuffer(sortStorageBuffer);
+
+    RDG::RDGBufferRef sceneUniformBuffer =
+        rdgBuilder->createBuffer("sceneUniformBuffer").Import(_ownedRenderer->getSceneManager()->getGaussianScene().getSceneUniformBuffer()).finish();
+    rdgBuilder->registBuffer(sceneUniformBuffer);
+
     RDG::ComputePassNodeRef distanceCompute =
-        rdgBuilder->createComputePass("DistancePass")
+        rdgBuilder
+            ->createComputePass("DistancePass")
+
             .readWrite(0, distanceBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
             .readWrite(1, indirectBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
             .readWrite(2, indicesBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .read(3, sceneUniformBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
             .execute(
                 [this, indirectBuffer](RDG::PassNode* node, RDG::RenderContext& context)
                 {
                     IndrectBuffer ibuffer{};
                     vkCmdUpdateBuffer(context._currCmdBuffer, indirectBuffer->getRHI()->buffer, 0, sizeof(ibuffer), (void*) &ibuffer);
-                    GaussianScene&        gaussianScene = _ownedRenderer->getSceneManager()->getGaussianScene();
-                    GaussianPushConstant* pushConstant  = _distanceProgram->getDescriptorSetManager().getPushConstantData<GaussianPushConstant>();
-                    pushConstant->sceneConstant.positionBufferDeviceAddress  = gaussianScene.getPositionGPUBuffer()->address;
-                    pushConstant->sceneConstant.colorBufferDeviceAddress     = gaussianScene.getColorGPUBuffer()->address;
-                    pushConstant->sceneConstant.opacityBufferDeviceAddress   = gaussianScene.getOpacityGPUBuffer()->address;
-                    pushConstant->sceneConstant.scaleBufferDeviceAddress     = gaussianScene.getScaleGPUBuffer()->address;
-                    pushConstant->sceneConstant.rotationBufferDeviceAddress  = gaussianScene.getRotationGPUBuffer()->address;
-                    pushConstant->sceneConstant.positionStride               = static_cast<uint32_t>(sizeof(float3));
-                    pushConstant->sceneConstant.colorStride                  = static_cast<uint32_t>(sizeof(float3));
-                    pushConstant->sceneConstant.opacityStride                = static_cast<uint32_t>(sizeof(float));
-                    pushConstant->sceneConstant.scaleStride                  = static_cast<uint32_t>(sizeof(float3));
-                    pushConstant->sceneConstant.rotationStride               = static_cast<uint32_t>(sizeof(float4));
-                    pushConstant->sceneConstant.metaDataAddress              = gaussianScene.getSplatMetaGPUBuffer()->address;
-                    pushConstant->perFrameConstant.cameraBufferDeviceAddress = _ownedRenderer->getCurrentCameraBuffer()->address;
+                    GaussianScene&    gaussianScene = _ownedRenderer->getSceneManager()->getGaussianScene();
+                    PerFrameConstant* pushConstant  = _distanceProgram->getDescriptorSetManager().getPushConstantData<PerFrameConstant>();
+
+                    pushConstant->cameraBufferDeviceAddress = _ownedRenderer->getCurrentCameraBuffer()->address;
                     _distanceProgram->setPassNode(static_cast<RDG::RenderPassNode*>(node));
                     _distanceProgram->bind(context._currCmdBuffer);
                     context._pendingComputeState->bindDescriptorSet(context._currCmdBuffer, _distanceProgram);

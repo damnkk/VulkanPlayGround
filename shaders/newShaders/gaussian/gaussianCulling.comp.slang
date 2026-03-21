@@ -9,8 +9,10 @@ RWStructuredBuffer<uint32_t> distances;
 RWStructuredBuffer<IndrectBuffer> indirectBuffer;
 [vk_binding(2, 3)]
 RWStructuredBuffer<uint32_t> indicesBuffer;
+[vk_binding(3, 3)]
+ConstantBuffer<GaussianSceneUniform> sceneConstant;
 [[vk::push_constant]]
-ConstantBuffer<GaussianPushConstant> gaussianPushConstant;
+ConstantBuffer<PerFrameConstant> perFrameConstant;
 
 uint encodeMinMaxFp32(float val)
 {
@@ -26,9 +28,9 @@ uint encodeMinMaxFp32(float val)
 void main(uint3 dispatchThreadID: SV_DispatchThreadID)
 {
     uint32_t           invocationID = dispatchThreadID.x;
-    CameraData*        camera       = (CameraData*) gaussianPushConstant.perFrameConstant.cameraBufferDeviceAddress;
-    float3*            positions    = (float3*) gaussianPushConstant.sceneConstant.positionBufferDeviceAddress;
-    GaussianSceneMeta* sceneMeta    = (GaussianSceneMeta*) gaussianPushConstant.sceneConstant.metaDataAddress;
+    CameraData*        camera       = (CameraData*) perFrameConstant.cameraBufferDeviceAddress;
+    float3*            positions    = (float3*) sceneConstant.positionBufferDeviceAddress;
+    GaussianSceneMeta* sceneMeta    = (GaussianSceneMeta*) sceneConstant.metaDataAddress;
     uint32_t           splatCount   = sceneMeta->splatCount;
     if (invocationID >= splatCount)
     {

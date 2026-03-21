@@ -16,6 +16,7 @@ namespace Play::RDG
 RDGTextureBuilder& RDGTextureBuilder::Import(Texture* texture)
 {
     _textureNode->setRHI(texture);
+    _textureNode->_ownsRHI         = false;
     _textureNode->_info._aspectFlags = texture->AspectFlags();
     _textureNode->_info._format      = texture->Format();
     _textureNode->_info._extent      = texture->Extent();
@@ -84,6 +85,20 @@ RDGTextureRef RDGTextureBuilder::finish()
 RDGBufferBuilder& RDGBufferBuilder::Size(VkDeviceSize size)
 {
     _bufferNode->_info._size = size;
+    return *this;
+}
+
+RDGBufferBuilder& RDGBufferBuilder::Import(Buffer* buffer)
+{
+    _bufferNode->setRHI(buffer);
+    _bufferNode->_ownsRHI       = false;
+    _bufferNode->_info._range      = buffer->BufferRange();
+    _bufferNode->_info._size       = buffer->BufferSize();
+    _bufferNode->_info._usageFlags = buffer->UsageFlags();
+    _bufferNode->_info._location   = buffer->BufferProperty() & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+                                         ? RDGBuffer::BufferDesc::MemoryLocation::eDeviceLocal
+                                         : RDGBuffer::BufferDesc::MemoryLocation::eHostVisible;
+    _bufferNode->_info._debugName  = buffer->DebugName();
     return *this;
 }
 

@@ -126,6 +126,7 @@ private:
     friend class RDGTextureBuilder;
     uint32_t           _refCount = 0;
     Texture*           _rhi      = nullptr;
+    bool               _ownsRHI  = true;
     ProducerInfo       _producerInfo;
     TextureAccessInfo* _externalState = nullptr;
     // latest access info for each sub resource
@@ -172,6 +173,7 @@ private:
     friend class RDGBufferBuilder;
     uint32_t         _refCount = 0;
     Buffer*          _rhi      = nullptr;
+    bool             _ownsRHI  = true;
     ProducerInfo     _producerInfo;
     BufferAccessInfo _latestAccessInfo;
     std::string      _name;

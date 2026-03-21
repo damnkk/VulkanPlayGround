@@ -7,19 +7,19 @@ namespace Play::RDG
 
 RDGTexture::~RDGTexture()
 {
-    if (_rhi)
+    if (_rhi && _ownsRHI)
     {
         TexturePool::Instance().free(_rhi);
-        _rhi = nullptr;
     }
+    _rhi = nullptr;
 }
 
 RDGBuffer::~RDGBuffer()
 {
-    if (_rhi)
+    if (_rhi && _ownsRHI)
     {
         BufferPool::Instance().free(_rhi);
-        _rhi = nullptr;
     }
+    _rhi = nullptr;
 }
 } // namespace Play::RDG

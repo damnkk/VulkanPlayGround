@@ -23,7 +23,7 @@ void GaussianDrawMeshPass::init()
     _meshRenderProgram = ProgramPool::Instance().alloc<MeshRenderProgram>();
     _meshRenderProgram->setMeshModuleID(meshId);
     _meshRenderProgram->setFragModuleID(fragId);
-    _meshRenderProgram->getDescriptorSetManager().initPushConstant<GaussianPushConstant>();
+    _meshRenderProgram->getDescriptorSetManager().initPushConstant<PerFrameConstant>();
 
     _presentProgram              = ProgramPool::Instance().alloc<RenderProgram>();
     const uint32_t presentVertId = ShaderManager::Instance().getShaderIdByName(BuiltinShaders::BUILTIN_FULL_SCREEN_QUAD_VERT_SHADER_NAME);
@@ -38,6 +38,7 @@ void GaussianDrawMeshPass::init()
 void GaussianDrawMeshPass::build(RDG::RDGBuilder* rdgBuilder)
 {
     RDG::RDGBufferRef  indirectBuffer  = rdgBuilder->getBuffer("indirectBuffer");
+    RDG::RDGBufferRef  indicesBuffer   = rdgBuilder->getBuffer("indicesBuffer");
     RDG::RDGTextureRef colorAttachment = rdgBuilder->createTexture("meshDrawColorAttachment")
                                              .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
                                              .UsageFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
@@ -52,15 +53,23 @@ void GaussianDrawMeshPass::build(RDG::RDGBuilder* rdgBuilder)
                                              .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
                                              .finish();
     rdgBuilder->registTexture(depthAttachment);
+    RDG::RDGBufferRef                       sceneUniformBuffer = rdgBuilder->getBuffer("sceneUniformBuffer");
     [[maybe_unused]] RDG::RenderPassNodeRef meshDrawPass =
         rdgBuilder->createRenderPass("MeshDrawPass")
             .color(0, colorAttachment, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE)
             .depth(depthAttachment, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE)
             .readWrite(0, indirectBuffer, VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT)
+            .readWrite(1, indicesBuffer, VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT)
+            .read(2, sceneUniformBuffer, VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT)
             .execute(
                 [this, indirectBuffer](RDG::PassNode* node, RDG::RenderContext& context)
                 {
                     VkCommandBuffer cmd = context._currCmdBuffer;
+
+                    GaussianScene&    gaussianScene         = _ownedRenderer->getSceneManager()->getGaussianScene();
+                    PerFrameConstant* pushConstant          = _meshRenderProgram->getDescriptorSetManager().getPushConstantData<PerFrameConstant>();
+                    pushConstant->cameraBufferDeviceAddress = _ownedRenderer->getCurrentCameraBuffer()->address;
+
                     _meshRenderProgram->setPassNode(static_cast<RDG::RenderPassNode*>(node));
                     _meshRenderProgram->bind(cmd);
                     context._pendingGfxState->bindDescriptorSet(cmd, _meshRenderProgram);
