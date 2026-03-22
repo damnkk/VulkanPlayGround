@@ -36,7 +36,7 @@ void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
     DeferRenderer* ownedRender = static_cast<DeferRenderer*>(_ownedRender);
     auto           pass        = rdgBuilder->createComputePass("postProcessPass")
                     .read(0, inputTextureRef, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
-                    .readWrite(1, outputTexRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+                    .storageWrite(1, outputTexRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
                     .execute(
                         [inputTextureRef, outputTexRef, this](RDG::PassNode* passNode, RDG::RenderContext& context)
                         {

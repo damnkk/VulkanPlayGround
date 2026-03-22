@@ -69,15 +69,27 @@ void GaussianSortPass::build(RDG::RDGBuilder* rdgBuilder)
         rdgBuilder
             ->createComputePass("DistancePass")
 
-            .readWrite(0, distanceBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-            .readWrite(1, indirectBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-            .readWrite(2, indicesBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .storageWrite(0, distanceBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .storageWrite(1, indirectBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .storageWrite(2, indicesBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
             .read(3, sceneUniformBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
             .execute(
                 [this, indirectBuffer](RDG::PassNode* node, RDG::RenderContext& context)
                 {
-                    IndrectBuffer ibuffer{};
-                    vkCmdUpdateBuffer(context._currCmdBuffer, indirectBuffer->getRHI()->buffer, 0, sizeof(ibuffer), (void*) &ibuffer);
+                    {
+                        IndrectBuffer ibuffer{};
+                        ibuffer.instanceCount = 36;
+                        vkCmdUpdateBuffer(context._currCmdBuffer, indirectBuffer->getRHI()->buffer, 0, sizeof(ibuffer), (void*) &ibuffer);
+                        VkMemoryBarrier barrier = {VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+                        barrier.srcAccessMask   = VK_ACCESS_TRANSFER_WRITE_BIT;
+                        barrier.dstAccessMask   = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+
+                        vkCmdPipelineBarrier(
+                            context._currCmdBuffer, VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
+                            0, 1, &barrier, 0, NULL, 0, NULL);
+                    }
+
                     GaussianScene&    gaussianScene = _ownedRenderer->getSceneManager()->getGaussianScene();
                     PerFrameConstant* pushConstant  = _distanceProgram->getDescriptorSetManager().getPushConstantData<PerFrameConstant>();
 
@@ -87,21 +99,35 @@ void GaussianSortPass::build(RDG::RDGBuilder* rdgBuilder)
                     context._pendingComputeState->bindDescriptorSet(context._currCmdBuffer, _distanceProgram);
                     size_t splatCount = _ownedRenderer->getSceneManager()->getGaussianScene().getVertexCount();
                     vkCmdDispatch(context._currCmdBuffer, nvvk::getGroupCounts(splatCount, 256), 1, 1);
+                    VkMemoryBarrier barrier = {VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+                    barrier.srcAccessMask   = VK_ACCESS_SHADER_WRITE_BIT;
+                    barrier.dstAccessMask   = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+                    vkCmdPipelineBarrier(
+                        context._currCmdBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT, 0,
+                        1, &barrier, 0, NULL, 0, NULL);
                 })
             .finish();
     RDG::ComputePassNodeRef sortPass =
         rdgBuilder->createComputePass("SortPass")
-            .readWrite(0, indirectBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-            .readWrite(1, indicesBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-            .readWrite(2, sortStorageBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-            .readWrite(3, distanceBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .storageRead(0, indirectBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .storageRead(1, indicesBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .storageRead(2, sortStorageBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .storageRead(3, distanceBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
             .execute(
                 [this, indirectBuffer, distanceBuffer, sortStorageBuffer, indicesBuffer](RDG::PassNode* node, RDG::RenderContext& context)
                 {
+                    VkMemoryBarrier barrier = {VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+                    barrier.srcAccessMask   = VK_ACCESS_SHADER_WRITE_BIT;
+                    barrier.dstAccessMask   = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
                     vrdxCmdSortKeyValueIndirect(
                         context._currCmdBuffer, _sorter, _ownedRenderer->getSceneManager()->getGaussianScene().getVertexCount(),
                         indirectBuffer->getRHI()->buffer, offsetof(IndrectBuffer, instanceCount), distanceBuffer->getRHI()->buffer, 0,
                         indicesBuffer->getRHI()->buffer, 0, sortStorageBuffer->getRHI()->buffer, 0, VK_NULL_HANDLE, 0);
+                    vkCmdPipelineBarrier(
+                        context._currCmdBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                        VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT, 0, 1,
+                        &barrier, 0, NULL, 0, NULL);
                 })
             .finish();
 }
