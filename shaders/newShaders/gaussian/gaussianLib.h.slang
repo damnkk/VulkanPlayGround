@@ -1,6 +1,6 @@
 #ifndef GAUSSIAN_LIB_H
 #define GAUSSIAN_LIB_H
-#ifdef _cplusplus
+#ifdef __cplusplus
 #define DEFAULT(val) = val
 #else
 #define DEFAULT(val)

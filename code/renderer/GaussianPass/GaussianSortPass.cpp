@@ -77,8 +77,7 @@ void GaussianSortPass::build(RDG::RDGBuilder* rdgBuilder)
                 [this, indirectBuffer](RDG::PassNode* node, RDG::RenderContext& context)
                 {
                     {
-                        IndrectBuffer ibuffer{};
-                        ibuffer.instanceCount = 36;
+                        IndrectBuffer ibuffer;
                         vkCmdUpdateBuffer(context._currCmdBuffer, indirectBuffer->getRHI()->buffer, 0, sizeof(ibuffer), (void*) &ibuffer);
                         VkMemoryBarrier barrier = {VK_STRUCTURE_TYPE_MEMORY_BARRIER};
                         barrier.srcAccessMask   = VK_ACCESS_TRANSFER_WRITE_BIT;
