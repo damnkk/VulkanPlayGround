@@ -2,6 +2,7 @@
 #define RDG_RESOURCES_H
 #include "Resource.h"
 #include "RDGHandle.h"
+#include "core/RefCounted.h"
 #include "nvvk/pipeline.hpp"
 #include "nvvk/graphics_pipeline.hpp"
 #include "nvvk/compute_pipeline.hpp"
@@ -90,12 +91,12 @@ public:
     ~RDGTexture();
     Texture* getRHI()
     {
-        return _rhi;
+        return _rhi.get();
     }
 
     void setRHI(Texture* rhi)
     {
-        _rhi = rhi;
+        _rhi = RefPtr<Texture>(rhi);
     }
 
     inline std::string name() const
@@ -125,8 +126,8 @@ private:
     friend class RDGBuilder;
     friend class RDGTextureBuilder;
     uint32_t           _refCount = 0;
-    Texture*           _rhi      = nullptr;
-    bool               _ownsRHI  = true;
+    RefPtr<Texture>    _rhi;
+    bool               _ownsRHI = true;
     ProducerInfo       _producerInfo;
     TextureAccessInfo* _externalState = nullptr;
     // latest access info for each sub resource
@@ -142,12 +143,13 @@ public:
     ~RDGBuffer();
     Buffer* getRHI()
     {
-        return _rhi;
+        return _rhi.get();
     }
 
-    void setRHI(Buffer* rhi)
+    void setRHI(Buffer* rhi, bool ownsRHI = true)
     {
-        _rhi = rhi;
+        _rhi     = RefPtr<Buffer>(rhi);
+        _ownsRHI = ownsRHI;
     }
 
     inline std::string name() const
@@ -172,8 +174,8 @@ private:
     friend class RDGBuilder;
     friend class RDGBufferBuilder;
     uint32_t         _refCount = 0;
-    Buffer*          _rhi      = nullptr;
-    bool             _ownsRHI  = true;
+    RefPtr<Buffer>   _rhi;
+    bool             _ownsRHI = true;
     ProducerInfo     _producerInfo;
     BufferAccessInfo _latestAccessInfo;
     std::string      _name;

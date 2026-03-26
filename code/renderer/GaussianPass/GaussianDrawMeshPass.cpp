@@ -9,8 +9,7 @@ GaussianDrawMeshPass::GaussianDrawMeshPass(GaussianRenderer* renderer) : _ownedR
 
 GaussianDrawMeshPass::~GaussianDrawMeshPass()
 {
-    ProgramPool::Instance().free(_meshRenderProgram);
-    ProgramPool::Instance().free(_presentProgram);
+    // RefPtr 自动释放
 }
 
 void GaussianDrawMeshPass::init()
@@ -20,12 +19,12 @@ void GaussianDrawMeshPass::init()
     const auto fragId = ShaderManager::Instance().loadShaderFromFile("gaussianDrawFrag", "./gaussian/gaussianDraw.frag.slang", ShaderStage::eFragment,
                                                                      ShaderType::eSLANG, "main");
 
-    _meshRenderProgram = ProgramPool::Instance().alloc<MeshRenderProgram>();
+    _meshRenderProgram = RefPtr<MeshRenderProgram>(new MeshRenderProgram());
     _meshRenderProgram->setMeshModuleID(meshId);
     _meshRenderProgram->setFragModuleID(fragId);
     _meshRenderProgram->getDescriptorSetManager().initPushConstant<PerFrameConstant>();
 
-    _presentProgram              = ProgramPool::Instance().alloc<RenderProgram>();
+    _presentProgram              = RefPtr<RenderProgram>(new RenderProgram());
     const uint32_t presentVertId = ShaderManager::Instance().getShaderIdByName(BuiltinShaders::BUILTIN_FULL_SCREEN_QUAD_VERT_SHADER_NAME);
     const uint32_t presentFragId = ShaderManager::Instance().loadShaderFromFile("gaussianPresentF", "newShaders/present.frag.slang",
                                                                                 ShaderStage::eFragment, ShaderType::eSLANG, "main");
@@ -72,7 +71,7 @@ void GaussianDrawMeshPass::build(RDG::RDGBuilder* rdgBuilder)
 
                     _meshRenderProgram->setPassNode(static_cast<RDG::RenderPassNode*>(node));
                     _meshRenderProgram->bind(cmd);
-                    context._pendingGfxState->bindDescriptorSet(cmd, _meshRenderProgram);
+                    context._pendingGfxState->bindDescriptorSet(cmd, _meshRenderProgram.get());
                     VkViewport viewport = {
                         0,    0,    static_cast<float>(vkDriver->getViewportSize().width), static_cast<float>(vkDriver->getViewportSize().height),
                         0.0f, 1.0f,
@@ -96,7 +95,7 @@ void GaussianDrawMeshPass::build(RDG::RDGBuilder* rdgBuilder)
                     VkCommandBuffer cmd = context._currCmdBuffer;
                     _presentProgram->setPassNode(static_cast<RDG::RenderPassNode*>(node));
                     _presentProgram->bind(cmd);
-                    context._pendingGfxState->bindDescriptorSet(cmd, _presentProgram);
+                    context._pendingGfxState->bindDescriptorSet(cmd, _presentProgram.get());
 
                     VkViewport viewport = {
                         0,    0,    static_cast<float>(vkDriver->getViewportSize().width), static_cast<float>(vkDriver->getViewportSize().height),

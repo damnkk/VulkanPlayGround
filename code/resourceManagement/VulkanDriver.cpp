@@ -186,9 +186,6 @@ void VulkanDriver::init()
 {
     _pipelineCacheManager = std::make_unique<PipelineCacheManager>();
     PlayResourceManager::Instance().initialize();
-    TexturePool::Instance().init(65535, &PlayResourceManager::Instance());
-    BufferPool::Instance().init(65535, &PlayResourceManager::Instance());
-    ProgramPool::Instance().init(65535, &PlayResourceManager::Instance());
     ShaderManager::Instance().init();
 
     if (!_enableDynamicRendering)
@@ -197,6 +194,7 @@ void VulkanDriver::init()
         _frameBufferCache = std::make_unique<FrameBufferCache>();
     }
     _frameData.resize(_app->getFrameCycleSize());
+    _deferredDestroyQueues.resize(_app->getFrameCycleSize());
     _tonemapperControlComponent = std::make_unique<ToneMappingControlComponent>();
     prepareGlobalDescriptorSet();
     prepareFrameDescriptorSet();
@@ -205,25 +203,71 @@ void VulkanDriver::init()
 VulkanDriver::~VulkanDriver()
 {
     vkQueueWaitIdle(_app->getQueue(0).queue);
-    for (auto& frame : _frameData)
+
+    // 检查并清理泄露的对象
+    std::vector<RefCounted*> leakedObjects;
     {
+        std::lock_guard<std::mutex> lock(_registryMutex);
+        if (!_registeredObjects.empty())
+        {
+            LOGW("VulkanDriver: Detected %zu leaked RefCounted objects! Force cleaning...\n", _registeredObjects.size());
+            leakedObjects.assign(_registeredObjects.begin(), _registeredObjects.end());
+            _registeredObjects.clear();
+        }
     }
+
+    // 在锁外执行销毁，避免双重加锁
+    for (auto* obj : leakedObjects)
+    {
+        if (obj && obj->isAlive())
+        {
+            LOGW("  - Force destroying leaked object at %p (refCount=%u)\n", obj, obj->getRefCount());
+            obj->forceDestroy();
+        }
+    }
+
+    for (auto& queue : _deferredDestroyQueues)
+    {
+        while (!queue.tasks.empty())
+        {
+            queue.tasks.front()();
+            queue.tasks.pop();
+        }
+    }
+
     _descriptorSetCache.reset();
-    TexturePool::Instance().deinit();
-    BufferPool::Instance().deinit();
-    ProgramPool::Instance().deinit();
     PlayResourceManager::Instance().deInit();
     ShaderManager::Instance().deInit();
 }
 
+void VulkanDriver::deferDestroy(std::function<void()> task)
+{
+    uint32_t currentFrame = _app->getFrameCycleIndex();
+    uint32_t targetFrame  = (currentFrame + 1) % _app->getFrameCycleSize();
+    _deferredDestroyQueues[targetFrame].tasks.push(std::move(task));
+}
+
+void VulkanDriver::registerObject(RefCounted* obj)
+{
+    std::lock_guard<std::mutex> lock(_registryMutex);
+    _registeredObjects.insert(obj);
+}
+
+void VulkanDriver::unregisterObject(RefCounted* obj)
+{
+    std::lock_guard<std::mutex> lock(_registryMutex);
+    _registeredObjects.erase(obj);
+}
+
 void VulkanDriver::tryCleanupDeferredTasks()
 {
-    while (!vkDriver->_deferredDeleteTaskQueue.empty())
+    uint32_t currentFrame = _app->getFrameCycleIndex();
+    auto&    queue        = _deferredDestroyQueues[currentFrame];
+
+    while (!queue.tasks.empty())
     {
-        auto& taskPair = vkDriver->_deferredDeleteTaskQueue.front();
-        if ((uint32_t) taskPair.first != _app->getFrameCycleIndex()) break;
-        taskPair.second();
-        vkDriver->_deferredDeleteTaskQueue.pop();
+        queue.tasks.front()();
+        queue.tasks.pop();
     }
 }
 

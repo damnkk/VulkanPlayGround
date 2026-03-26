@@ -1,6 +1,7 @@
 #ifndef POSTPROCESSPASS_H
 #define POSTPROCESSPASS_H
 #include "RenderPass.h"
+#include "core/RefCounted.h"
 #include <memory>
 #include <nvvk/graphics_pipeline.hpp>
 #include <nvshaders_host/tonemapper.hpp>
@@ -19,9 +20,9 @@ public:
 
 private:
     friend class DeferRenderer;
-    ComputeProgram*       _postProgram;
-    DeferRenderer*        _ownedRender = nullptr;
-    nvshaders::Tonemapper _tonemapper;
+    RefPtr<ComputeProgram> _postProgram;
+    DeferRenderer*         _ownedRender = nullptr;
+    nvshaders::Tonemapper  _tonemapper;
 };
 
 } // namespace Play

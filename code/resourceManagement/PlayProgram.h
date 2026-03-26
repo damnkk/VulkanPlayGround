@@ -12,6 +12,7 @@
 #include "RenderPass.h"
 #include "PConstantType.h.slang"
 #include "VulkanDriver.h"
+#include "core/RefCounted.h"
 namespace Play
 {
 namespace RDG
@@ -182,6 +183,7 @@ public:
     }
 
 private:
+    friend class PlayProgram; // 允许 PlayProgram 访问私有成员进行延迟销毁
     void finalizePipelineLayoutImpl();
     DescriptorSetManager(const DescriptorSetManager&);
     DescriptorSetManager& operator=(const DescriptorSetManager&);
@@ -202,17 +204,22 @@ enum class ProgramType
     eUndefined
 };
 
-class PlayProgram
+class PlayProgram : public RefCounted
 {
 public:
-    PlayProgram(uint32_t poolID) : poolId(poolID) {}
+    PlayProgram()
+    {
+        if (vkDriver)
+            vkDriver->registerObject(this);
+    }
     virtual ~PlayProgram()
     {
-        // _descriptorSetManager.deinit();
+        // 由 onDestroy() 处理资源清理
     }
 
-    PlayProgram(const PlayProgram&);
-    PlayProgram&          operator=(const PlayProgram&);
+    PlayProgram(const PlayProgram&) = delete;
+    PlayProgram& operator=(const PlayProgram&) = delete;
+
     virtual ProgramType   getProgramType() const = 0;
     virtual void          setPassNode(RDG::PassNode* passNode);
     DescriptorSetManager& getDescriptorSetManager()
@@ -237,15 +244,14 @@ public:
         return VK_PIPELINE_BIND_POINT_MAX_ENUM;
     }
     virtual void bind(VkCommandBuffer cmdBuf) = 0;
-    // if you don't want user explicitly call finish(),you should xx it private
     virtual void finish()
     {
         _descriptorSetManager.finalizePipelineLayout();
     };
 
-    uint32_t poolId = -1;
-
 protected:
+    void onDestroy() override;
+
     RDG::PassNode*       _passNode = nullptr;
     DescriptorSetManager _descriptorSetManager;
     ProgramType          _programType = ProgramType::eUndefined;
@@ -254,10 +260,14 @@ protected:
 class RenderProgram : public PlayProgram
 {
 public:
-    RenderProgram(uint32_t id) : PlayProgram(id) {}
-    RenderProgram(uint32_t id, ShaderID vertexModuleID, ShaderID fragModuleID)
-        : PlayProgram(id), _vertexModuleID(vertexModuleID), _fragModuleID(fragModuleID)
+    RenderProgram()
     {
+        _programType = ProgramType::eRenderProgram;
+    }
+    RenderProgram(ShaderID vertexModuleID, ShaderID fragModuleID)
+        : _vertexModuleID(vertexModuleID), _fragModuleID(fragModuleID)
+    {
+        _programType = ProgramType::eRenderProgram;
     }
     ~RenderProgram() override {}
     RenderProgram& setVertexModuleID(ShaderID vertexModuleID);
@@ -288,7 +298,6 @@ private:
     VkPipeline  getOrCreatePipeline();
     ShaderID    _vertexModuleID = ~0U;
     ShaderID    _fragModuleID   = ~0U;
-    ProgramType _programType    = ProgramType::eRenderProgram;
 
     PSOState _psoState;
 };
@@ -296,8 +305,14 @@ private:
 class ComputeProgram : public PlayProgram
 {
 public:
-    ComputeProgram(uint32_t id) : PlayProgram(id) {}
-    ComputeProgram(uint32_t id, ShaderID computeModuleID) : PlayProgram(id), _computeModuleID(computeModuleID) {}
+    ComputeProgram()
+    {
+        _programType = ProgramType::eComputeProgram;
+    }
+    ComputeProgram(ShaderID computeModuleID) : _computeModuleID(computeModuleID)
+    {
+        _programType = ProgramType::eComputeProgram;
+    }
     ComputeProgram& setComputeModuleID(ShaderID computeModuleID);
     ShaderID        getComputeModuleID() const
     {
@@ -313,16 +328,19 @@ public:
 private:
     VkPipeline  getOrCreatePipeline();
     ShaderID    _computeModuleID = ~0U;
-    ProgramType _programType     = ProgramType::eComputeProgram;
 };
 
 class RTProgram : public PlayProgram
 {
 public:
-    RTProgram(uint32_t id) : PlayProgram(id) {}
-    RTProgram(uint32_t id, VkDevice device, ShaderID rayGenID, ShaderID rayCHitID, ShaderID rayMissID)
-        : PlayProgram(id), _rayGenModuleID(rayGenID), _rayCHitModuleID(rayCHitID), _rayMissModuleID(rayMissID)
+    RTProgram()
     {
+        _programType = ProgramType::eRTProgram;
+    }
+    RTProgram(VkDevice device, ShaderID rayGenID, ShaderID rayCHitID, ShaderID rayMissID)
+        : _rayGenModuleID(rayGenID), _rayCHitModuleID(rayCHitID), _rayMissModuleID(rayMissID)
+    {
+        _programType = ProgramType::eRTProgram;
     }
     RTProgram& setRayGenModuleID(ShaderID rayGenModuleID);
     RTProgram& setRayCHitModuleID(ShaderID rayCHitModuleID);
@@ -343,16 +361,19 @@ private:
     ShaderID    _rayAHitModuleID      = ~0U;
     ShaderID    _rayMissModuleID      = ~0U;
     ShaderID    _rayIntersectModuleID = ~0U;
-    ProgramType _programType          = ProgramType::eRTProgram;
 };
 
 class MeshRenderProgram : public PlayProgram
 {
 public:
-    MeshRenderProgram(uint32_t id) : PlayProgram(id) {}
-    MeshRenderProgram(uint32_t id, VkDevice device, ShaderID meshModuleID, ShaderID fragModuleID)
-        : PlayProgram(id), _meshModuleID(meshModuleID), _fragModuleID(fragModuleID)
+    MeshRenderProgram()
     {
+        _programType = ProgramType::eMeshRenderProgram;
+    }
+    MeshRenderProgram(VkDevice device, ShaderID meshModuleID, ShaderID fragModuleID)
+        : _meshModuleID(meshModuleID), _fragModuleID(fragModuleID)
+    {
+        _programType = ProgramType::eMeshRenderProgram;
     }
     MeshRenderProgram& setTaskModuleID(ShaderID taskModuleID);
     MeshRenderProgram& setMeshModuleID(ShaderID meshModuleID);
@@ -388,7 +409,6 @@ private:
     ShaderID    _taskModuleID = ~0U;
     ShaderID    _meshModuleID = ~0U;
     ShaderID    _fragModuleID = ~0U;
-    ProgramType _programType  = ProgramType::eMeshRenderProgram;
     PSOState    _psoState;
 };
 } // namespace Play

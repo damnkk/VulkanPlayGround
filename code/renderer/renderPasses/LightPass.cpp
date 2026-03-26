@@ -9,14 +9,14 @@ namespace Play
 
 LightPass::~LightPass()
 {
-    ProgramPool::Instance().free(_lightPassProgram);
+    // RefPtr 自动释放
 }
 
 void LightPass::init()
 {
     auto lightPassFragID  = ShaderManager::Instance().loadShaderFromFile("lightPassFrag", "./DefaultLightPass.frag.slang", ShaderStage::eFragment);
     auto fullScreenVertID = ShaderManager::Instance().getShaderIdByName(BuiltinShaders::BUILTIN_FULL_SCREEN_QUAD_VERT_SHADER_NAME);
-    _lightPassProgram     = ProgramPool::Instance().alloc<RenderProgram>(fullScreenVertID, lightPassFragID);
+    _lightPassProgram     = RefPtr<RenderProgram>(new RenderProgram(fullScreenVertID, lightPassFragID));
     _lightPassProgram->getDescriptorSetManager().initPushConstant<PerFrameConstant>();
     _lightPassProgram->psoState().rasterizationState.frontFace = VK_FRONT_FACE_CLOCKWISE;
     _lightPassProgram->psoState().rasterizationState.cullMode  = VK_CULL_MODE_NONE;
@@ -58,7 +58,7 @@ void LightPass::build(RDG::RDGBuilder* rdgBuilder)
                     perFrameConstant->cameraBufferDeviceAddress = _ownedRender->getCurrentCameraBuffer()->address;
                     this->_lightPassProgram->setPassNode(static_cast<RDG::RenderPassNode*>(node));
                     this->_lightPassProgram->bind(cmd);
-                    context._pendingGfxState->bindDescriptorSet(cmd, this->_lightPassProgram);
+                    context._pendingGfxState->bindDescriptorSet(cmd, this->_lightPassProgram.get());
                     VkViewport viewport = {0, 0, (float) vkDriver->getViewportSize().width, (float) vkDriver->getViewportSize().height, 0.0f, 1.0f};
                     VkRect2D   scissor  = {{0, 0}, {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height}};
                     vkCmdSetViewportWithCount(cmd, 1, &viewport);

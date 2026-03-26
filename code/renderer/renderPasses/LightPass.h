@@ -2,6 +2,7 @@
 #define LIGHTPASS_H
 #include "RDG/RDG.h"
 #include "RenderPass.h"
+#include "core/RefCounted.h"
 namespace Play
 {
 class DeferRenderer;
@@ -16,8 +17,8 @@ public:
     virtual void build(RDG::RDGBuilder* rdgBuilder) override;
 
 private:
-    DeferRenderer* _ownedRender      = nullptr;
-    RenderProgram* _lightPassProgram = nullptr;
+    DeferRenderer*        _ownedRender = nullptr;
+    RefPtr<RenderProgram> _lightPassProgram;
 };
 
 } // namespace Play

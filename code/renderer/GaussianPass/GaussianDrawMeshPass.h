@@ -2,11 +2,13 @@
 #define GAUSSIAN_DRAW_MESH_PASS_H
 #include "renderpasses/RenderPass.h"
 #include "RDG/RDG.h"
+#include "core/RefCounted.h"
 
 namespace Play
 {
 class GaussianRenderer;
 class RenderProgram;
+class MeshRenderProgram;
 
 class GaussianDrawMeshPass : public BasePass
 {
@@ -17,9 +19,9 @@ public:
     void build(RDG::RDGBuilder* rdgBuilder) override;
 
 private:
-    GaussianRenderer*  _ownedRenderer     = nullptr;
-    MeshRenderProgram* _meshRenderProgram = nullptr;
-    RenderProgram*     _presentProgram    = nullptr;
+    GaussianRenderer*          _ownedRenderer = nullptr;
+    RefPtr<MeshRenderProgram>  _meshRenderProgram;
+    RefPtr<RenderProgram>      _presentProgram;
 };
 
 } // namespace Play

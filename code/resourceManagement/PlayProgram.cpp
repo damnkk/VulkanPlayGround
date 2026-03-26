@@ -35,17 +35,30 @@ DescriptorSetManager::DescriptorSetManager() {}
 
 DescriptorSetManager::~DescriptorSetManager()
 {
-    if (_pipelineLayout != VK_NULL_HANDLE)
+    // 资源清理已移至 PlayProgram::onDestroy()
+}
+
+void PlayProgram::onDestroy()
+{
+    if (vkDriver)
+        vkDriver->unregisterObject(this);
+
+    // 捕获需要延迟销毁的 Vulkan handles
+    VkPipelineLayout pipelineLayout = _descriptorSetManager._pipelineLayout;
+    VkDescriptorSetLayout descSetLayout = _descriptorSetManager._descSetLayouts[(uint32_t)DescriptorEnum::eDrawObjectDescriptorSet];
+
+    if (pipelineLayout != VK_NULL_HANDLE)
     {
-        vkDestroyPipelineLayout(vkDriver->getDevice(), _pipelineLayout, nullptr);
-        _pipelineLayout = VK_NULL_HANDLE;
+        vkDriver->deferDestroy([pipelineLayout]() {
+            vkDestroyPipelineLayout(vkDriver->getDevice(), pipelineLayout, nullptr);
+        });
     }
 
-    auto& layout = _descSetLayouts[(uint32_t) DescriptorEnum::eDrawObjectDescriptorSet];
-    if (layout != VK_NULL_HANDLE)
+    if (descSetLayout != VK_NULL_HANDLE)
     {
-        vkDestroyDescriptorSetLayout(vkDriver->getDevice(), layout, nullptr);
-        layout = VK_NULL_HANDLE;
+        vkDriver->deferDestroy([descSetLayout]() {
+            vkDestroyDescriptorSetLayout(vkDriver->getDevice(), descSetLayout, nullptr);
+        });
     }
 }
 

@@ -3,6 +3,7 @@
 #include "renderpasses/RenderPass.h"
 #include "RDG/RDG.h"
 #include "vk_radix_sort.h"
+#include "core/RefCounted.h"
 namespace Play
 {
 class ComputeProgram;
@@ -20,7 +21,7 @@ private:
     VrdxSorter                    _sorter = VK_NULL_HANDLE;
     VrdxSorterStorageRequirements _sortRequirements;
     GaussianRenderer*             _ownedRenderer;
-    ComputeProgram*               _distanceProgram;
+    RefPtr<ComputeProgram>        _distanceProgram;
 };
 
 } // namespace Play

@@ -200,9 +200,14 @@ int main(int argc, char** argv)
     nvutils::ParameterRegistry parameterRegistry;
     nvutils::ParameterParser   parameterParser;
 
+    // 命令行配置
+    std::string renderMode = "gaussian";
+    parameterRegistry.add({"rendermode", "rm"}, &renderMode);
+
     Play::PlayElement::Info playInfo = {
         .profilerManager   = &profilerManager,
         .parameterRegistry = &parameterRegistry,
+        .renderMode        = &renderMode,
     };
     // setup logger element, `true` means shown by default
     // we add it early so outputs are captured early on, you might want to defer this to a later

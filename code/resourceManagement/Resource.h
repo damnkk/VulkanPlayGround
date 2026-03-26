@@ -6,26 +6,28 @@
 #include "nvvk/descriptors.hpp"
 #include "PlayAllocator.h"
 #include "ShaderManager.hpp"
+#include "core/RefCounted.h"
 namespace Play
 {
 class PlayAllocator;
 class Texture;
 class Buffer;
+class VulkanDriver;
+extern VulkanDriver* vkDriver;
 
-class Texture : public nvvk::Image
+class Texture : public nvvk::Image, public RefCounted
 {
 public:
-    static Texture* Create();
-    static Texture* Create(std::string name);
-    static Texture* Create(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage,
-                           VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED, uint32_t mipLevels = 1,
-                           VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT);
-    static Texture* Create(uint32_t width, uint32_t height, uint32_t depth, VkFormat format, VkImageUsageFlags usage, VkImageLayout initialLayout,
-                           uint32_t mipLevels = 1);
-    static Texture* Create(uint32_t size, VkFormat format, VkImageUsageFlags usage, VkImageLayout initialLayout, uint32_t mipLevels = 1);
-    static Texture* Create(const std::filesystem::path& imagePath, VkImageLayout finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                           uint32_t mipLevels = 1, bool isSrgb = true);
-    static void     Destroy(Texture* texture);
+    Texture();
+    Texture(std::string name);
+    Texture(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED,
+            uint32_t mipLevels = 1, VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT);
+    Texture(uint32_t width, uint32_t height, uint32_t depth, VkFormat format, VkImageUsageFlags usage, VkImageLayout initialLayout,
+            uint32_t mipLevels = 1);
+    Texture(uint32_t size, VkFormat format, VkImageUsageFlags usage, VkImageLayout initialLayout, uint32_t mipLevels = 1);
+    Texture(const std::filesystem::path& imagePath, VkImageLayout finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, uint32_t mipLevels = 1,
+            bool isSrgb = true);
+
     struct TexMetaData
     {
         VkFormat              format = VK_FORMAT_UNDEFINED;
@@ -38,10 +40,11 @@ public:
         uint32_t              layerCount  = 1;
         std::string           debugName;
     };
-    Texture(int poolID) : poolId(poolID) {};
-    int Id()
+
+    // 移除 poolId 相关
+    std::string& DebugName()
     {
-        return poolId;
+        return debugName;
     }
     VkFormat& Format()
     {
@@ -58,10 +61,6 @@ public:
     VkSampleCountFlagBits& SampleCount()
     {
         return sampleCount;
-    }
-    std::string& DebugName()
-    {
-        return debugName;
     }
     uint32_t& MipLevel()
     {
@@ -111,8 +110,9 @@ public:
     }
 
 protected:
+    void onDestroy() override;
+
     friend class TexturePool;
-    int                   poolId      = -1;
     VkImageType           type        = VK_IMAGE_TYPE_2D;
     VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT;
     std::string           debugName;
@@ -120,13 +120,12 @@ protected:
     VkImageUsageFlags     usageFlags  = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 };
 
-class Buffer : public nvvk::Buffer
+class Buffer : public nvvk::Buffer, public RefCounted
 {
 public:
-    static Buffer* Create();
-    static Buffer* Create(std::string name);
-    static Buffer* Create(std::string name, VkBufferUsageFlags2 usage, VkDeviceSize size, VkMemoryPropertyFlags property);
-    static void    Destroy(Buffer* buffer);
+    Buffer();
+    Buffer(std::string name);
+    Buffer(std::string name, VkBufferUsageFlags2 usage, VkDeviceSize size, VkMemoryPropertyFlags property);
 
     struct BufferMetaData
     {
@@ -135,12 +134,7 @@ public:
         VkDeviceSize          _range = VK_WHOLE_SIZE;
         VkMemoryPropertyFlags _property;
     };
-    Buffer(int poolID) : poolId(poolID) {};
-    int Id()
-    {
-        return poolId;
-    }
-    int                    poolId = -1;
+
     VkDescriptorBufferInfo descriptor;
     std::string&           DebugName()
     {
@@ -182,6 +176,8 @@ public:
     }
 
 protected:
+    void onDestroy() override;
+
     friend class BufferPool;
     VkBufferUsageFlags2   usageFlags = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT;
     VkDeviceSize          range      = VK_WHOLE_SIZE;

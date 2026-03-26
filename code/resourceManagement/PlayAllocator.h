@@ -11,8 +11,7 @@ namespace Play
 class Buffer;
 class Texture;
 class PlayResourceManager;
-class PlayElement;
-class PlayProgram;
+
 template <typename T>
 class BasePool
 {
@@ -37,95 +36,6 @@ public:
     std::mutex            _mutex;
 };
 
-class TexturePool : public BasePool<Texture>
-{
-public:
-    static TexturePool& Instance();
-
-    // 释放纹理对象
-    void free(Texture* obj);
-
-    [[nodiscard]] Texture* alloc(VkImageCreateInfo* imgInfo, VkImageViewCreateInfo* viewInfo);
-
-    // 通用2D纹理分配
-    [[nodiscard]] Texture* alloc(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage,
-                                 VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED, uint32_t mipLevels = 1,
-                                 VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT);
-
-    // 3D纹理分配
-    [[nodiscard]] Texture* alloc(uint32_t width, uint32_t height, uint32_t depth, VkFormat format, VkImageUsageFlags usage,
-                                 VkImageLayout initialLayout, uint32_t mipLevels = 1);
-
-    // 立方体纹理分配
-    [[nodiscard]] Texture* allocCube(uint32_t size, VkFormat format, VkImageUsageFlags usage, VkImageLayout initialLayout, uint32_t mipLevels = 1);
-
-    // 从像素数据分配2D纹理
-    [[nodiscard]] Texture* alloc(const void* data, size_t dataSize, uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage,
-                                 uint32_t mipLevels = 1, VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-    // 分配带采样器的2D纹理
-    [[nodiscard]] Texture* alloc(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkImageLayout initialLayout,
-                                 VkFilter filter, VkSamplerAddressMode addressMode, uint32_t mipLevels = 1);
-
-    // just for png or jpg image
-    [[nodiscard]] Texture* alloc(const std::filesystem::path& imagePath, VkImageLayout finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                 uint32_t mipLevels = 1, bool isSrgb = true);
-
-    void deinit() override;
-
-protected:
-    friend class Texture;
-    // 分配一个空纹理对象
-    Texture* alloc();
-};
-
-class BufferPool : public BasePool<Buffer>
-{
-public:
-    static BufferPool& Instance();
-
-    // 按大小和用法分配Buffer
-    Buffer* alloc(VkDeviceSize size, VkBufferUsageFlags2 usage, VkMemoryPropertyFlags properties);
-
-    // 按初始数据分配Buffer
-    Buffer* alloc(const void* data, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
-
-    Buffer* alloc(VkBufferCreateInfo& bufferInfo);
-
-    // 通过文件路径分配Buffer（如用于上传文件内容到GPU）
-    // Buffer* alloc(const std::filesystem::path& filePath, VkBufferUsageFlags usage,
-    // VkMemoryPropertyFlags properties);
-
-    void free(Buffer* obj);
-
-    void deinit() override;
-
-protected:
-    friend class Buffer;
-    // 分配一个空Buffer对象
-    Buffer* alloc();
-};
-
-class ProgramPool : public BasePool<PlayProgram>
-{
-public:
-    static ProgramPool& Instance();
-    template <typename T, typename... Args>
-    T*   alloc(Args&&... args);
-    void free(PlayProgram* obj);
-    void deinit() override;
-};
-
-template <typename T, typename... Args>
-T* ProgramPool::alloc(Args&&... args)
-{
-    assert(_availableIndex < _objs.size());
-    std::lock_guard<std::mutex> lock(_mutex);
-    uint32_t                    index = _freeIndices[_availableIndex++];
-    _objs[index]                      = static_cast<T*>(new T(index, std::forward<Args>(args)...));
-    return static_cast<T*>(_objs[index]);
-}
-
 class PlayResourceManager : public nvvk::ResourceAllocatorExport, public nvvk::StagingUploader, public nvvk::SamplerPool
 {
 public:
@@ -141,8 +51,6 @@ public:
     void            submitAndWaitTempCmdBuffer(VkCommandBuffer cmd);
 
 private:
-    friend class TexturePool;
-    friend class BufferPool;
     VkCommandPool _tempCmdPool{VK_NULL_HANDLE};
 };
 

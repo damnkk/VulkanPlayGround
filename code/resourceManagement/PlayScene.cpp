@@ -426,35 +426,35 @@ bool GaussianScene::load(const std::filesystem::path& filename)
     auto* manager = &PlayResourceManager::Instance();
 
     const VkDeviceSize positionBufferSize = _positions.size() * sizeof(float3);
-    _positionBuffer = Buffer::Create("GaussianSplatPositionBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                     positionBufferSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    _positionBuffer = RefPtr<Buffer>(new Buffer("GaussianSplatPositionBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                     positionBufferSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
     manager->appendBuffer(*_positionBuffer, 0, std::span(_positions));
 
     const VkDeviceSize colorBufferSize = _colors.size() * sizeof(float4);
-    _colorBuffer = Buffer::Create("GaussianSplatColorBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, colorBufferSize,
-                                  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    _colorBuffer = RefPtr<Buffer>(new Buffer("GaussianSplatColorBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, colorBufferSize,
+                                  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
     manager->appendBuffer(*_colorBuffer, 0, std::span(_colors));
 
     const VkDeviceSize covarianceBufferSize = _covariances.size() * sizeof(float);
-    _covarianceBuffer = Buffer::Create("GaussianSplatCovarianceBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                       covarianceBufferSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    _covarianceBuffer = RefPtr<Buffer>(new Buffer("GaussianSplatCovarianceBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                       covarianceBufferSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
     manager->appendBuffer(*_covarianceBuffer, 0, std::span(_covariances));
 
     const VkDeviceSize shRestBufferSize = std::max<VkDeviceSize>(sizeof(float), _shRestCoefficients.size() * sizeof(float));
-    _shRestBuffer = Buffer::Create("GaussianSplatShRestBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                   shRestBufferSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    _shRestBuffer = RefPtr<Buffer>(new Buffer("GaussianSplatShRestBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                   shRestBufferSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
 
     manager->appendBuffer(*_shRestBuffer, 0, std::span(_shRestCoefficients));
 
-    _splatMetaBuffer = Buffer::Create("GaussianSplatMetaBuffer", VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                      sizeof(GaussianSceneMeta), VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    _splatMetaBuffer = RefPtr<Buffer>(new Buffer("GaussianSplatMetaBuffer", VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                      sizeof(GaussianSceneMeta), VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
     manager->appendBuffer(*_splatMetaBuffer, 0, std::span(&_meta, 1));
 
     VkCommandBuffer cmd = manager->getTempCommandBuffer();
     manager->cmdUploadAppended(cmd);
     manager->submitAndWaitTempCmdBuffer(cmd);
-    _sceneUniformBuffer = Buffer::Create("GaussianSplatSceneUniformBuffer", VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                         sizeof(GaussianSceneUniform), VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    _sceneUniformBuffer = RefPtr<Buffer>(new Buffer("GaussianSplatSceneUniformBuffer", VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                         sizeof(GaussianSceneUniform), VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
 
     GaussianSceneUniform sceneUniform{};
 

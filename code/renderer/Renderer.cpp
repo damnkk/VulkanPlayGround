@@ -22,7 +22,7 @@ void Renderer::setActiveCamera(size_t index)
 
 Buffer* Renderer::getCurrentCameraBuffer() const
 {
-    return _cameraUniformData[vkDriver->getFrameCycleIndex()];
+    return _cameraUniformData[vkDriver->getFrameCycleIndex()].get();
 }
 
 Renderer::Renderer()
@@ -33,8 +33,8 @@ Renderer::Renderer()
 
     for (int i = 0; i < _cameraUniformData.size(); ++i)
     {
-        _cameraUniformData[i] = Buffer::Create("cameraInfoBuf" + std::to_string(i), VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT, sizeof(CameraData),
-                                               VkMemoryPropertyFlagBits::VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        _cameraUniformData[i] = RefPtr<Buffer>(new Buffer("cameraInfoBuf" + std::to_string(i), VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT, sizeof(CameraData),
+                                               VkMemoryPropertyFlagBits::VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT));
     }
 }
 

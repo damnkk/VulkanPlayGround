@@ -6,6 +6,7 @@
 #include "nvvkgltf/scene_rtx.hpp"
 #include "nvvk/descriptors.hpp"
 #include "PlayScene.h"
+#include "core/RefCounted.h"
 namespace Play
 {
 class PlayElement;
@@ -34,7 +35,7 @@ public:
     {
         return _gaussianScene;
     }
-    void addSkyBoxTexture(Texture* texture);
+    void addSkyBoxTexture(const RefPtr<Texture>& texture);
     void updateDescriptorSet();
     void update();
 
@@ -50,7 +51,7 @@ private:
     std::mutex                   _scenesRTXMutex;
     std::vector<nvvk::Image>     _sceneImages; // all scene images
     nvvk::DescriptorBindings     _sceneDescriptorBindings;
-    std::vector<Texture*>        _sceneSkyTexture;
+    std::vector<RefPtr<Texture>> _sceneSkyTexture;
 
     // for gaussian scene
     GaussianScene _gaussianScene;

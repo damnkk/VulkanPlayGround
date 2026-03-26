@@ -24,7 +24,20 @@ struct ScopeTimer
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     }
 };
-PlayElement::PlayElement(Info info) : _info(info) {}
+PlayElement::PlayElement(Info info) : _info(info)
+{
+    // 解析命令行渲染模式
+    if (_info.renderMode && !_info.renderMode->empty())
+    {
+        const std::string& mode = *_info.renderMode;
+        if (mode == "raster") _renderMode = eRasterization;
+        else if (mode == "raytrace") _renderMode = eRayTracing;
+        else if (mode == "volume") _renderMode = eVolumeRendering;
+        else if (mode == "shadingrate") _renderMode = eShadingRateRendering;
+        else if (mode == "defer") _renderMode = eDeferRendering;
+        else if (mode == "gaussian") _renderMode = eGaussianRendering;
+    }
+}
 
 PlayElement::~PlayElement()
 {
@@ -77,12 +90,8 @@ void PlayElement::onDetach()
 void PlayElement::onResize(VkCommandBuffer cmd, const VkExtent2D& size)
 {
     vkQueueWaitIdle(_app->getQueue(0).queue);
-    auto task = [uiTextureDescriptor = _uiTextureDescriptor, uiTexture = _uiTexture]()
-    {
-        ImGui_ImplVulkan_RemoveTexture(uiTextureDescriptor);
-        Texture::Destroy(uiTexture);
-    };
-    vkDriver->_deferredDeleteTaskQueue.push({vkDriver->getFrameCycleIndex(), task});
+    auto task = [uiTextureDescriptor = _uiTextureDescriptor]() { ImGui_ImplVulkan_RemoveTexture(uiTextureDescriptor); };
+    vkDriver->deferDestroy(task);
 
     createGraphicsDescriptResource();
     _renderer->OnResize(size.width, size.height);
@@ -140,8 +149,10 @@ void PlayElement::onLastHeadlessFrame()
 
 void PlayElement::createGraphicsDescriptResource()
 {
-    _uiTexture = Texture::Create(std::max(1u, _app->getViewportSize().width), std::max(1u, _app->getViewportSize().height), VK_FORMAT_R8G8B8A8_UNORM,
-                                 VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
+    _uiTexture              = RefPtr<Texture>(new Texture(std::max(1u, _app->getViewportSize().width), std::max(1u, _app->getViewportSize().height),
+                                                          VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                                                          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1));
+    _uiTexture->DebugName() = "uiTexture";
     PlayResourceManager::Instance().acquireSampler(_uiTexture->descriptor.sampler);
     _uiTextureDescriptor =
         ImGui_ImplVulkan_AddTexture(_uiTexture->descriptor.sampler, _uiTexture->descriptor.imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);

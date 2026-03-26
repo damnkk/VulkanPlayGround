@@ -8,7 +8,10 @@
 #include <cassert>
 #include <queue>
 #include <chrono>
+#include <unordered_set>
+#include <mutex>
 #include "core/JobSystem.h"
+#include "core/RefCounted.h"
 #include "pch.h"
 #include "nvgui/tonemapper.hpp"
 #include "controlComponent/controlComponent.h"
@@ -230,6 +233,13 @@ private:
     nvvk::DescriptorBindings _frameDescriptorBindings;
 
 public:
+    // 提交延迟析构任务（将在下一个循环周期执行）
+    void deferDestroy(std::function<void()> task);
+
+    // 注册/注销引用计数对象（用于泄露检测）
+    void registerObject(RefCounted* obj);
+    void unregisterObject(RefCounted* obj);
+
     void tryCleanupDeferredTasks();
     void tick();
 
@@ -246,7 +256,17 @@ public:
     nvvk::QueueInfo                                       _queueGraphics; // Graphics/Compute/Transfer (Main)
     nvvk::QueueInfo                                       _queueTransfer; // Dedicated Transfer
     nvvk::QueueInfo                                       _queueCompute;  // Dedicated Compute
-    std::queue<std::pair<uint8_t, std::function<void()>>> _deferredDeleteTaskQueue;
+
+    // 延迟析构队列（按帧索引组织）
+    struct DeferredDestroyQueue
+    {
+        std::queue<std::function<void()>> tasks;
+    };
+    std::vector<DeferredDestroyQueue> _deferredDestroyQueues;
+
+    // 引用计数对象注册表（用于泄露检测）
+    std::unordered_set<RefCounted*> _registeredObjects;
+    std::mutex                      _registryMutex;
 
     // 原始 App 指针 (仅用于获取窗口大小等非 Vulkan 核心信息，如果需要的话)
     nvapp::Application*                            _app       = nullptr;

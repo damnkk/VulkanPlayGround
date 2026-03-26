@@ -1,6 +1,7 @@
 #ifndef VOLUMESKYPASS_H
 #define VOLUMESKYPASS_H
 #include "RenderPass.h"
+#include "core/RefCounted.h"
 #include <memory.h>
 #include "PlayProgram.h"
 
@@ -18,10 +19,10 @@ public:
     virtual void build(RDG::RDGBuilder* rdgBuilder) override;
 
 private:
-    RenderProgram* _skyBoxProgram          = nullptr;
-    RenderProgram* _atmosphereProgram      = nullptr;
-    RenderProgram* _volumetricCloudProgram = nullptr;
-    DeferRenderer* _ownedRender            = nullptr;
+    RefPtr<RenderProgram> _skyBoxProgram;
+    RefPtr<RenderProgram> _atmosphereProgram;
+    RefPtr<RenderProgram> _volumetricCloudProgram;
+    DeferRenderer*        _ownedRender = nullptr;
 };
 
 } // namespace Play

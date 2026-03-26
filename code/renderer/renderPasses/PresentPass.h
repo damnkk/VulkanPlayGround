@@ -2,6 +2,7 @@
 #define PLAY_PRESENTPASS_H
 
 #include "RenderPass.h"
+#include "core/RefCounted.h"
 #include <memory>
 namespace Play
 {
@@ -19,8 +20,8 @@ public:
     void build(RDG::RDGBuilder* rdgBuilder) override;
 
 private:
-    PlayElement*   _element;
-    RenderProgram* _presentProgram = nullptr;
+    PlayElement*          _element;
+    RefPtr<RenderProgram> _presentProgram;
 };
 
 } // namespace Play

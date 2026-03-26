@@ -16,7 +16,7 @@ void PostProcessPass::init()
         ShaderManager::Instance().loadShaderFromFile("postProcessComp", "tonemapper.slang", ShaderStage::eCompute, ShaderType::eSLANG, "Tonemap");
     auto shadermodule = ShaderManager::Instance().getShaderById(PostProcesscId);
 
-    _postProgram = ProgramPool::Instance().alloc<ComputeProgram>();
+    _postProgram = RefPtr<ComputeProgram>(new ComputeProgram());
     _postProgram->setComputeModuleID(PostProcesscId);
     _postProgram->getDescriptorSetManager().initPushConstant<PerFrameConstant>();
     _tonemapper.init(&PlayResourceManager::Instance(), {shadermodule->_spvCode});
@@ -52,7 +52,6 @@ PostProcessPass::PostProcessPass(DeferRenderer* ownedRender) : _ownedRender(owne
 
 PostProcessPass::~PostProcessPass()
 {
-    ProgramPool::Instance().free(_postProgram);
     _tonemapper.deinit();
 }
 

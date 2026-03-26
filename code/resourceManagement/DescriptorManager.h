@@ -2,6 +2,7 @@
 #define DESCRIPTOR_MANAGER_H
 #include "Resource.h"
 #include "utils.hpp"
+#include "core/RefCounted.h"
 namespace Play
 {
 class DescriptorSetBindings;
@@ -51,9 +52,9 @@ protected:
     size_t getDescriptorSize(VkDescriptorType descriptorType);
 
 private:
-    Buffer*                                                                                         _descBuffer = nullptr;
-    VkDevice                                                                                        _device;
-    VkPhysicalDevice                                                                                _physicalDevice;
+    RefPtr<Buffer>                                                                                      _descBuffer;
+    VkDevice                                                                                            _device;
+    VkPhysicalDevice                                                                                    _physicalDevice;
     VkPhysicalDeviceDescriptorBufferPropertiesEXT                                                   _descriptorBufferProperties;
     std::array<std::unordered_map<uint32_t, size_t>, static_cast<uint32_t>(DescriptorEnum::eCount)> _descriptorOffsetInfo;
 };

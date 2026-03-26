@@ -6,6 +6,7 @@
 #include <memory>
 #include <vector>
 #include <array>
+#include "core/RefCounted.h"
 
 namespace Play
 {
@@ -56,7 +57,7 @@ protected:
     std::vector<std::unique_ptr<PlayCamera>> _cameras;
     uint32_t                                 _activeCameraIdx = 0;
     std::array<CameraData, 3>                _cameraDatas;
-    std::array<Buffer*, 3>                   _cameraUniformData;
+    std::array<RefPtr<Buffer>, 3>            _cameraUniformData;
 
     std::unique_ptr<RDG::RDGBuilder>         _rdgBuilder;
     std::vector<std::unique_ptr<BasePass>>   _passes;

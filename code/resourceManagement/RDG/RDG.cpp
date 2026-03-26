@@ -16,7 +16,7 @@ namespace Play::RDG
 RDGTextureBuilder& RDGTextureBuilder::Import(Texture* texture)
 {
     _textureNode->setRHI(texture);
-    _textureNode->_ownsRHI         = false;
+    _textureNode->_ownsRHI           = false;
     _textureNode->_info._aspectFlags = texture->AspectFlags();
     _textureNode->_info._format      = texture->Format();
     _textureNode->_info._extent      = texture->Extent();
@@ -90,8 +90,7 @@ RDGBufferBuilder& RDGBufferBuilder::Size(VkDeviceSize size)
 
 RDGBufferBuilder& RDGBufferBuilder::Import(Buffer* buffer)
 {
-    _bufferNode->setRHI(buffer);
-    _bufferNode->_ownsRHI       = false;
+    _bufferNode->setRHI(buffer, false);
     _bufferNode->_info._range      = buffer->BufferRange();
     _bufferNode->_info._size       = buffer->BufferSize();
     _bufferNode->_info._usageFlags = buffer->UsageFlags();
@@ -283,8 +282,8 @@ void RDGBuilder::prepareResourceBarrier(RenderContext& context, PassNode* pass)
         TextureAccessInfo        accessInfo = state.textureStates[0];
         if (!texture->getRHI())
         {
-            auto ptr = Texture::Create(info._extent.width, info._extent.height, info._extent.depth, info._format, info._usageFlags, accessInfo.layout,
-                                       info._mipmapLevel);
+            auto ptr = new Texture(info._extent.width, info._extent.height, info._extent.depth, info._format, info._usageFlags, accessInfo.layout,
+                                   info._mipmapLevel);
             texture->setRHI(ptr);
             nvvk::DebugUtil::getInstance().setObjectName(texture->getRHI()->image, texture->name().c_str());
         }
@@ -310,10 +309,10 @@ void RDGBuilder::prepareResourceBarrier(RenderContext& context, PassNode* pass)
         RDGBuffer::BufferDesc& info   = buffer->_info;
         if (!buffer->getRHI())
         {
-            buffer->setRHI(Buffer::Create(info._debugName, info._usageFlags, info._size,
-                                          info._location == RDGBuffer::BufferDesc::MemoryLocation::eDeviceLocal
-                                              ? VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-                                              : VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
+            buffer->setRHI(new Buffer(info._debugName, info._usageFlags, info._size,
+                                      info._location == RDGBuffer::BufferDesc::MemoryLocation::eDeviceLocal
+                                          ? VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+                                          : VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
         }
         if (!Play::isBufferBarrierValid(state.barrierInfo)) continue;
         state.barrierInfo.buffer = buffer->getRHI()->buffer;

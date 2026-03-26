@@ -2,6 +2,7 @@
 #define CONTROL_COMPONENT_H
 #include "Resource.h"
 #include "nvshaders/tonemap_io.h.slang"
+#include "core/RefCounted.h"
 namespace Play
 {
 // easy place to add some UI controls for testing, like changing the skybox, or some other settings that are not directly related to the renderer or
@@ -17,7 +18,7 @@ public:
     }
     Buffer* getGPUBuffer()
     {
-        return _gpuBuffer;
+        return _gpuBuffer.get();
     }
 
     virtual void onGUI() {};
@@ -29,15 +30,15 @@ public:
     }
 
 protected:
-    T       _cpuData{};
-    Buffer* _gpuBuffer;
+    T              _cpuData{};
+    RefPtr<Buffer> _gpuBuffer;
 };
 
 template <typename T>
 ControlComponent<T>::ControlComponent()
 {
-    _gpuBuffer = Buffer::Create("control uniform", VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT, sizeof(T),
-                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    _gpuBuffer = RefPtr<Buffer>(new Buffer("control uniform", VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT, sizeof(T),
+                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
 }
 
 class ToneMappingControlComponent : public ControlComponent<shaderio::TonemapperData>

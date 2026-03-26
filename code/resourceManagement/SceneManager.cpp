@@ -59,7 +59,7 @@ SceneManager& SceneManager::addScenes(std::vector<std::filesystem::path> filenam
     return *this;
 }
 
-void SceneManager::addSkyBoxTexture(Texture* texture)
+void SceneManager::addSkyBoxTexture(const RefPtr<Texture>& texture)
 {
     _sceneSkyTexture.push_back(texture);
 }

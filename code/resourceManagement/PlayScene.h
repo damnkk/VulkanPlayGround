@@ -6,6 +6,7 @@
 #include <vector>
 #include <filesystem>
 #include "newshaders/gaussian/gaussianLib.h.slang"
+#include "core/RefCounted.h"
 
 namespace Play
 {
@@ -75,32 +76,32 @@ public:
 
     Buffer* getSplatMetaGPUBuffer()
     {
-        return _splatMetaBuffer;
+        return _splatMetaBuffer.get();
     }
 
     Buffer* getPositionGPUBuffer()
     {
-        return _positionBuffer;
+        return _positionBuffer.get();
     }
 
     Buffer* getColorGPUBuffer()
     {
-        return _colorBuffer;
+        return _colorBuffer.get();
     }
 
     Buffer* getCovarianceGPUBuffer()
     {
-        return _covarianceBuffer;
+        return _covarianceBuffer.get();
     }
 
     Buffer* getShRestGPUBuffer()
     {
-        return _shRestBuffer;
+        return _shRestBuffer.get();
     }
 
     Buffer* getSceneUniformBuffer()
     {
-        return _sceneUniformBuffer;
+        return _sceneUniformBuffer.get();
     }
 
 private:
@@ -109,13 +110,13 @@ private:
     std::vector<float>  _covariances;
     std::vector<float>  _shRestCoefficients;
 
-    Buffer* _positionBuffer   = nullptr;
-    Buffer* _colorBuffer      = nullptr;
-    Buffer* _covarianceBuffer = nullptr;
-    Buffer* _shRestBuffer     = nullptr;
-    Buffer* _splatMetaBuffer  = nullptr;
+    RefPtr<Buffer> _positionBuffer;
+    RefPtr<Buffer> _colorBuffer;
+    RefPtr<Buffer> _covarianceBuffer;
+    RefPtr<Buffer> _shRestBuffer;
+    RefPtr<Buffer> _splatMetaBuffer;
 
-    Buffer*           _sceneUniformBuffer = nullptr;
+    RefPtr<Buffer>    _sceneUniformBuffer;
     GaussianSceneMeta _meta{};
 }; // class GaussianScene
 

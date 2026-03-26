@@ -27,16 +27,13 @@ void DescriptorBufferManagerExt::init(VkPhysicalDevice physicalDevice, VkDevice 
 
     _descriptorBufferProperties = descriptorBufferProperties;
 
-    _descBuffer = Buffer::Create("DescBuffer",
-                                 VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_2_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT |
-                                     VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT,
-                                 4096 * 32, (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
+    _descBuffer = RefPtr<Buffer>(new Buffer("DescBuffer",
+                                            VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_2_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT |
+                                                VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT,
+                                            4096 * 32, (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)));
 }
 
-void DescriptorBufferManagerExt::deinit()
-{
-    Buffer::Destroy(_descBuffer);
-}
+void DescriptorBufferManagerExt::deinit() {}
 
 // void DescriptorBufferManagerExt::updateDescSetBindingOffset(DescriptorSetManager* manager)
 // {

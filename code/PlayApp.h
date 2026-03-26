@@ -31,6 +31,7 @@ public:
     {
         nvutils::ProfilerManager*   profilerManager{};
         nvutils::ParameterRegistry* parameterRegistry{};
+        std::string*                renderMode{};
     };
     // Interface
     PlayElement(Info info);
@@ -48,7 +49,7 @@ public:
 
     inline Texture* getUITexture() const
     {
-        return _uiTexture;
+        return _uiTexture.get();
     }
 
     enum RenderMode
@@ -68,7 +69,7 @@ protected:
     // FrameBufferCache
     // PipelineCache
     std::unique_ptr<Renderer> _renderer;
-    Texture*                  _uiTexture;
+    RefPtr<Texture>           _uiTexture;
     VkDescriptorSet           _uiTextureDescriptor;
     VkDescriptorPool          _descriptorPool;
     void                      createGraphicsDescriptResource();

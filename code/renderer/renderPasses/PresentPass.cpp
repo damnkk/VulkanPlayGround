@@ -5,14 +5,12 @@
 namespace Play
 {
 
-PresentPass::~PresentPass()
-{
-    ProgramPool::Instance().free(_presentProgram);
-}
+PresentPass::~PresentPass() {}
 
 void PresentPass::init()
 {
-    _presentProgram     = ProgramPool::Instance().alloc<RenderProgram>();
+    _presentProgram = RefPtr<RenderProgram>(new RenderProgram());
+
     uint32_t presentvID = ShaderManager::Instance().getShaderIdByName(BuiltinShaders::BUILTIN_FULL_SCREEN_QUAD_VERT_SHADER_NAME);
     uint32_t presentfID =
         ShaderManager::Instance().loadShaderFromFile("presentF", "newShaders/present.frag.slang", ShaderStage::eFragment, ShaderType::eSLANG, "main");
@@ -39,7 +37,7 @@ void PresentPass::build(RDG::RDGBuilder* rdgBuilder)
                 VkCommandBuffer cmd = context._currCmdBuffer;
                 this->_presentProgram->setPassNode(static_cast<RDG::RenderPassNode*>(passNode));
                 this->_presentProgram->bind(cmd);
-                context._pendingGfxState->bindDescriptorSet(cmd, this->_presentProgram);
+                context._pendingGfxState->bindDescriptorSet(cmd, this->_presentProgram.get());
                 VkViewport viewport = {0, 0, (float) vkDriver->getViewportSize().width, (float) vkDriver->getViewportSize().height, 0.0f, 1.0f};
                 VkRect2D   scissor  = {{0, 0}, {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height}};
                 vkCmdSetViewportWithCount(cmd, 1, &viewport);

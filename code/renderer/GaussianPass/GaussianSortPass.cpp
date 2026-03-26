@@ -13,7 +13,6 @@ GaussianSortPass::GaussianSortPass(GaussianRenderer* renderer)
 }
 GaussianSortPass::~GaussianSortPass()
 {
-    ProgramPool::Instance().free(_distanceProgram);
     vrdxDestroySorter(_sorter);
 }
 
@@ -24,7 +23,7 @@ void GaussianSortPass::init()
     vrdxGetSorterKeyValueStorageRequirements(_sorter, _ownedRenderer->getSceneManager()->getGaussianScene().getVertexCount(), &_sortRequirements);
 
     auto distanceComp = ShaderManager::Instance().loadShaderFromFile("DistanceComp", "./gaussian/gaussianCulling.comp.slang", ShaderStage::eCompute);
-    _distanceProgram  = ProgramPool::Instance().alloc<ComputeProgram>();
+    _distanceProgram  = RefPtr<ComputeProgram>(new ComputeProgram());
     _distanceProgram->setComputeModuleID(distanceComp);
     _distanceProgram->getDescriptorSetManager().initPushConstant<PerFrameConstant>();
 }
@@ -66,9 +65,7 @@ void GaussianSortPass::build(RDG::RDGBuilder* rdgBuilder)
     rdgBuilder->registBuffer(sceneUniformBuffer);
 
     RDG::ComputePassNodeRef distanceCompute =
-        rdgBuilder
-            ->createComputePass("DistancePass")
-
+        rdgBuilder->createComputePass("DistancePass")
             .storageWrite(0, distanceBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
             .storageWrite(1, indirectBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
             .storageWrite(2, indicesBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
@@ -95,7 +92,7 @@ void GaussianSortPass::build(RDG::RDGBuilder* rdgBuilder)
                     pushConstant->cameraBufferDeviceAddress = _ownedRenderer->getCurrentCameraBuffer()->address;
                     _distanceProgram->setPassNode(static_cast<RDG::RenderPassNode*>(node));
                     _distanceProgram->bind(context._currCmdBuffer);
-                    context._pendingComputeState->bindDescriptorSet(context._currCmdBuffer, _distanceProgram);
+                    context._pendingComputeState->bindDescriptorSet(context._currCmdBuffer, _distanceProgram.get());
                     size_t splatCount = _ownedRenderer->getSceneManager()->getGaussianScene().getVertexCount();
                     vkCmdDispatch(context._currCmdBuffer, nvvk::getGroupCounts(splatCount, 256), 1, 1);
                     VkMemoryBarrier barrier = {VK_STRUCTURE_TYPE_MEMORY_BARRIER};

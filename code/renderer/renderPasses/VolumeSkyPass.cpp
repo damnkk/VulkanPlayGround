@@ -8,16 +8,14 @@ namespace Play
 
 VolumeSkyPass::~VolumeSkyPass()
 {
-    ProgramPool::Instance().free(_skyBoxProgram);
-    ProgramPool::Instance().free(_atmosphereProgram);
-    ProgramPool::Instance().free(_volumetricCloudProgram);
+    // RefPtr 自动释放
 }
 
 void VolumeSkyPass::init()
 {
     auto skyBoxvId = ShaderManager::Instance().getShaderIdByName(BuiltinShaders::BUILTIN_FULL_SCREEN_QUAD_VERT_SHADER_NAME);
     auto skyBoxfId = ShaderManager::Instance().loadShaderFromFile("skyBoxFragment", "skyBoxProgram.frag.slang", ShaderStage::eFragment);
-    _skyBoxProgram = ProgramPool::Instance().alloc<RenderProgram>();
+    _skyBoxProgram = RefPtr<RenderProgram>(new RenderProgram());
     _skyBoxProgram->setFragModuleID(skyBoxfId);
     _skyBoxProgram->setVertexModuleID(skyBoxvId);
     _skyBoxProgram->getDescriptorSetManager().initPushConstant<PerFrameConstant>();
@@ -50,7 +48,7 @@ void VolumeSkyPass::build(RDG::RDGBuilder* rdgBuilder)
                     perFrameConstant->cameraBufferDeviceAddress = ownedRender->getCurrentCameraBuffer()->address;
                     this->_skyBoxProgram->setPassNode(static_cast<RDG::RenderPassNode*>(passNode));
                     this->_skyBoxProgram->bind(cmd);
-                    context._pendingGfxState->bindDescriptorSet(cmd, this->_skyBoxProgram);
+                    context._pendingGfxState->bindDescriptorSet(cmd, this->_skyBoxProgram.get());
                     VkViewport viewport = {0, 0, (float) vkDriver->getViewportSize().width, (float) vkDriver->getViewportSize().height, 0.0f, 1.0f};
                     VkRect2D   scissor  = {{0, 0}, {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height}};
                     vkCmdSetViewportWithCount(cmd, 1, &viewport);
