@@ -195,6 +195,7 @@ private:
 
 int main(int argc, char** argv)
 {
+    nvutils::Logger::getInstance().breakOnError(false);
     auto                       afterMathExtList = Play::NsightDebugger::initInjection();
     nvutils::ProfilerManager   profilerManager;
     nvutils::ParameterRegistry parameterRegistry;
@@ -202,6 +203,7 @@ int main(int argc, char** argv)
 
     // 命令行配置
     std::string renderMode = "gaussian";
+    // std::string renderMode = "defer";
     parameterRegistry.add({"rendermode", "rm"}, &renderMode);
 
     Play::PlayElement::Info playInfo = {

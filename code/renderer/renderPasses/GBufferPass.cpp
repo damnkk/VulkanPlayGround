@@ -14,7 +14,7 @@ void GBufferPass::init() {}
 void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
 {
     RDG::RDGTextureRef BaseColorRT = rdgBuilder->getTexture("SkyBoxRT");
-    rdgBuilder->registTexture(BaseColorRT);
+
     RDG::RDGTextureRef WorldNormalRT = rdgBuilder->createTexture(GBufferConfig::Get(GBufferType::GNormal).debugName)
                                            .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
                                            .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
@@ -22,7 +22,7 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
                                            .UsageFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
                                            .MipmapLevel(1)
                                            .finish();
-    rdgBuilder->registTexture(WorldNormalRT);
+
     RDG::RDGTextureRef PBRRT = rdgBuilder->createTexture(GBufferConfig::Get(GBufferType::GPBR).debugName)
                                    .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
                                    .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
@@ -30,7 +30,6 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
                                    .UsageFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
                                    .MipmapLevel(1)
                                    .finish();
-    rdgBuilder->registTexture(PBRRT);
 
     RDG::RDGTextureRef EmissiveRT = rdgBuilder->createTexture(GBufferConfig::Get(GBufferType::GEmissive).debugName)
                                         .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
@@ -39,7 +38,7 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
                                         .UsageFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
                                         .MipmapLevel(1)
                                         .finish();
-    rdgBuilder->registTexture(EmissiveRT);
+
     RDG::RDGTextureRef Custom1RT = rdgBuilder->createTexture(GBufferConfig::Get(GBufferType::GCustomData).debugName)
                                        .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
                                        .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
@@ -47,7 +46,7 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
                                        .UsageFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
                                        .MipmapLevel(1)
                                        .finish();
-    rdgBuilder->registTexture(Custom1RT);
+
     RDG::RDGTextureRef VelocityRT = rdgBuilder->createTexture(GBufferConfig::Get(GBufferType::GVelocity).debugName)
                                         .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
                                         .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
@@ -55,7 +54,7 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
                                         .UsageFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
                                         .MipmapLevel(1)
                                         .finish();
-    rdgBuilder->registTexture(VelocityRT);
+
     RDG::RDGTextureRef DepthRT = rdgBuilder->createTexture(GBufferConfig::Get(GBufferType::GSceneDepth).debugName)
                                      .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
                                      .AspectFlags(VK_IMAGE_ASPECT_DEPTH_BIT)
@@ -63,7 +62,6 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
                                      .UsageFlags(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
                                      .MipmapLevel(1)
                                      .finish();
-    rdgBuilder->registTexture(DepthRT);
 
     RDG::RenderPassNodeRef gBufferPass =
         rdgBuilder->createRenderPass("GBufferPass")

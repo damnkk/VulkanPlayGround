@@ -38,7 +38,7 @@ void LightPass::build(RDG::RDGBuilder* rdgBuilder)
                                          .UsageFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
                                          .MipmapLevel(1)
                                          .finish();
-    rdgBuilder->registTexture(outputLight);
+
     RDG::RenderPassNodeRef lightPass =
         rdgBuilder->createRenderPass("Lighting Pass")
             .read(0, inputAlbedo, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)

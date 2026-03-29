@@ -2,6 +2,7 @@
 #include "core/PlayCamera.h"
 #include "ShaderManager.hpp"
 #include "GaussianRenderer.h"
+#include "nvutils/alignment.hpp"
 #include "RDG/RDG.h"
 #include "newshaders/gaussian/gaussianLib.h.slang"
 
@@ -30,27 +31,28 @@ void GaussianSortPass::init()
 
 void GaussianSortPass::build(RDG::RDGBuilder* rdgBuilder)
 {
-    RDG::RDGBufferRef distanceBuffer = rdgBuilder->createBuffer("distanceBuffer")
-                                           .Location(true)
-                                           .Range(VK_WHOLE_SIZE)
-                                           .Size(sizeof(uint32_t) * _ownedRenderer->getSceneManager()->getGaussianScene().getVertexCount())
-                                           .UsageFlags(VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT)
-                                           .finish();
-    rdgBuilder->registBuffer(distanceBuffer);
+    RDG::RDGBufferRef distanceBuffer =
+        rdgBuilder->createBuffer("distanceBuffer")
+            .Location(true)
+            .Range(VK_WHOLE_SIZE)
+            .Size(nvutils::align_up(sizeof(uint32_t) * _ownedRenderer->getSceneManager()->getGaussianScene().getVertexCount(), 16))
+            .UsageFlags(VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT)
+            .finish();
+
     RDG::RDGBufferRef indirectBuffer = rdgBuilder->createBuffer("indirectBuffer")
                                            .Location(true)
                                            .Range(VK_WHOLE_SIZE)
                                            .Size(sizeof(IndrectBuffer))
                                            .UsageFlags(VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_2_INDIRECT_BUFFER_BIT)
                                            .finish();
-    rdgBuilder->registBuffer(indirectBuffer);
-    RDG::RDGBufferRef indicesBuffer = rdgBuilder->createBuffer("indicesBuffer")
-                                          .Location(true)
-                                          .Range(VK_WHOLE_SIZE)
-                                          .Size(sizeof(uint32_t) * _ownedRenderer->getSceneManager()->getGaussianScene().getVertexCount())
-                                          .UsageFlags(VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT)
-                                          .finish();
-    rdgBuilder->registBuffer(indicesBuffer);
+
+    RDG::RDGBufferRef indicesBuffer =
+        rdgBuilder->createBuffer("indicesBuffer")
+            .Location(true)
+            .Range(VK_WHOLE_SIZE)
+            .Size(nvutils::align_up(sizeof(uint32_t) * _ownedRenderer->getSceneManager()->getGaussianScene().getVertexCount(), 16))
+            .UsageFlags(VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT)
+            .finish();
 
     RDG::RDGBufferRef sortStorageBuffer = rdgBuilder->createBuffer("sortStorageBuffer")
                                               .Location(true)
@@ -58,11 +60,9 @@ void GaussianSortPass::build(RDG::RDGBuilder* rdgBuilder)
                                               .Size(_sortRequirements.size)
                                               .UsageFlags(_sortRequirements.usage)
                                               .finish();
-    rdgBuilder->registBuffer(sortStorageBuffer);
 
     RDG::RDGBufferRef sceneUniformBuffer =
         rdgBuilder->createBuffer("sceneUniformBuffer").Import(_ownedRenderer->getSceneManager()->getGaussianScene().getSceneUniformBuffer()).finish();
-    rdgBuilder->registBuffer(sceneUniformBuffer);
 
     RDG::ComputePassNodeRef distanceCompute =
         rdgBuilder->createComputePass("DistancePass")

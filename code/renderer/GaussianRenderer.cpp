@@ -9,6 +9,7 @@ GaussianRenderer::GaussianRenderer(PlayElement& element)
     _outputTexture = element.getUITexture();
     _view          = &element;
     _scene->addScene<GaussianScene>("D:/repo/ml-sharp/output/test.ply");
+    // _scene->addScene<GaussianScene>("D:/repo/vk_gaussian_splatting/_downloaded_resources/flowers_1/flowers_1.ply");
 }
 
 GaussianRenderer::~GaussianRenderer() {}

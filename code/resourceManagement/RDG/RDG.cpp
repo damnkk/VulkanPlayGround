@@ -79,6 +79,7 @@ RDGTextureBuilder& RDGTextureBuilder::LayerCount(uint32_t layerCount)
 
 RDGTextureRef RDGTextureBuilder::finish()
 {
+    _builder->registTexture(_textureNode);
     return _textureNode;
 }
 
@@ -122,6 +123,7 @@ RDGBufferBuilder& RDGBufferBuilder::Location(bool isDeviceLocal)
 
 RDGBufferRef RDGBufferBuilder::finish()
 {
+    _builder->registBuffer(_bufferNode);
     return _bufferNode;
 }
 

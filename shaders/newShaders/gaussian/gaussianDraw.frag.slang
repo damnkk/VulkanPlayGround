@@ -4,13 +4,19 @@ struct VertexInput
 {
     float4 position : SV_Position;
 };
-struct PrimitiveInput
+struct MeshPrimitiveInput
 {
     [[vk::location(0)]]
-    float4 outSplatCol : COLOR0;
+    nointerpolation float4 inSplatCol : COLOR0;
 };
-[shader("fragment")]
-float4 main(VertexInput vInput, PrimitiveInput pInput) : SV_Target0
+
+float4 processFragment(float4 inSplatCol)
 {
-    return float4(1.0, 1.0, 1.0, 1.0);
+    return inSplatCol;
+}
+[shader("fragment")]
+float4 main(VertexInput vInput, MeshPrimitiveInput pInput) : SV_Target0
+{
+    // return float4(1.0);
+    return processFragment(pInput.inSplatCol);
 }

@@ -7,7 +7,7 @@
 #include <filesystem>
 #include "newshaders/gaussian/gaussianLib.h.slang"
 #include "core/RefCounted.h"
-
+#include <splat-types.h>
 namespace Play
 {
 class Material;
@@ -60,6 +60,11 @@ public:
         return _covariances;
     }
 
+    const std::vector<float>& getRotations() const
+    {
+        return _rotations;
+    }
+
     const std::vector<float>& getShRestCoefficients() const
     {
         return _shRestCoefficients;
@@ -104,10 +109,13 @@ public:
         return _sceneUniformBuffer.get();
     }
 
+    void convertCoordinates(spz::CoordinateSystem from, spz::CoordinateSystem to);
+
 private:
     std::vector<float3> _positions;
     std::vector<float4> _colors;
     std::vector<float>  _covariances;
+    std::vector<float>  _rotations;
     std::vector<float>  _shRestCoefficients;
 
     RefPtr<Buffer> _positionBuffer;

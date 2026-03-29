@@ -7,6 +7,42 @@
 
 namespace Play
 {
+
+void GaussianScene::convertCoordinates(spz::CoordinateSystem from, spz::CoordinateSystem to)
+{
+    spz::CoordinateConverter c         = coordinateConverter(from, to);
+    const auto               numPoints = _positions.size();
+    for (size_t i = 0; i < _positions.size(); ++i)
+    {
+        _positions[i].x *= c.flipP[0];
+        _positions[i].y *= c.flipP[1];
+        _positions[i].z *= c.flipP[2];
+    }
+    for (size_t i = 0; i < _rotations.size(); i += 4)
+    {
+        // Don't modify the scalar component (index 0)
+        _rotations[i + 1] *= c.flipQ[0];
+        _rotations[i + 2] *= c.flipQ[1];
+        _rotations[i + 3] *= c.flipQ[2];
+    }
+
+    const size_t numCoeffs         = _shRestCoefficients.size() / 3;
+    const size_t numCoeffsPerPoint = numCoeffs / numPoints;
+    size_t       idx               = 0;
+    for (size_t i = 0; i < numPoints; ++i)
+    {
+        // Process R, G, and B coefficients for each point
+        for (size_t j = 0; j < numCoeffsPerPoint; ++j)
+        {
+            const auto flip = c.flipSh[j];
+            _shRestCoefficients[idx + j] *= flip;                         // R
+            _shRestCoefficients[idx + numCoeffsPerPoint + j] *= flip;     // G
+            _shRestCoefficients[idx + numCoeffsPerPoint * 2 + j] *= flip; // B
+        }
+        idx += 3 * numCoeffsPerPoint;
+    }
+}
+
 namespace
 {
 using miniply::kInvalidIndex;
@@ -238,15 +274,6 @@ void unpackFloat3(const std::vector<float>& src, std::vector<float3>& dst)
     }
 }
 
-void unpackFloat4(const std::vector<float>& src, std::vector<float4>& dst)
-{
-    const size_t rowCount = dst.size();
-    for (size_t i = 0; i < rowCount; i++)
-    {
-        const size_t base = i * 4;
-        dst[i]            = float4(src[base + 0], src[base + 1], src[base + 2], src[base + 3]);
-    }
-}
 } // namespace
 
 void RenderScene::fillDefaultMaterials(nvvkgltf::Scene& scene)
@@ -263,6 +290,7 @@ bool GaussianScene::load(const std::filesystem::path& filename)
         _positions.clear();
         _colors.clear();
         _covariances.clear();
+        _rotations.clear();
         _shRestCoefficients.clear();
         _meta = {};
     };
@@ -308,7 +336,11 @@ bool GaussianScene::load(const std::filesystem::path& filename)
             _colors.resize(rowCount, float4(1.0f));
 
             std::vector<float3> scales(rowCount, float3(1.0f));
-            std::vector<float4> rotations(rowCount, float4(0.0f, 0.0f, 0.0f, 1.0f));
+            _rotations.assign(static_cast<size_t>(rowCount) * 4, 0.0f);
+            for (size_t i = 0; i < rowCount; i++)
+            {
+                _rotations[i * 4 + 3] = 1.0f;
+            }
 
             std::vector<float> components;
 
@@ -363,6 +395,16 @@ bool GaussianScene::load(const std::filesystem::path& filename)
                 }
             }
 
+            nvutils::parallel_batches<512>(rowCount,
+                                           [&](uint32_t i)
+                                           {
+                                               const float SH_C0 = 0.28209479177387814f;
+                                               _colors[i].x      = glm::clamp(0.5f + SH_C0 * _colors[i].x, 0.0f, 1.0f);
+                                               _colors[i].y      = glm::clamp(0.5f + SH_C0 * _colors[i].y, 0.0f, 1.0f);
+                                               _colors[i].z      = glm::clamp(0.5f + SH_C0 * _colors[i].z, 0.0f, 1.0f);
+                                               _colors[i].w      = glm::clamp(1.0f / (1.0f + std::exp(-_colors[i].w)), 0.0f, 1.0f);
+                                           });
+
             const std::array<std::array<const char*, 3>, 3> scalePatterns = {
                 std::array<const char*, 3>{"scale_0", "scale_1", "scale_2"},
                 std::array<const char*, 3>{"scale_x", "scale_y", "scale_z"},
@@ -380,15 +422,19 @@ bool GaussianScene::load(const std::filesystem::path& filename)
             };
             if (extractFloatComponents(reader, elem, rotationPatterns, components))
             {
-                unpackFloat4(components, rotations);
+                _rotations = components;
             }
+
+            convertCoordinates(spz::CoordinateSystem::RDF, spz::CoordinateSystem::RUB);
 
             _covariances.resize(rowCount * 6);
             nvutils::parallel_batches<512>(rowCount,
                                            [&](uint32_t i)
                                            {
-                                               glm::vec3 scale{std::exp(scales[i].x), std::exp(scales[i].y), std::exp(scales[i].z)};
-                                               glm::quat rotation{rotations[i].w, rotations[i].x, rotations[i].y, rotations[i].z};
+                                               glm::vec3      scale{std::exp(scales[i].x), std::exp(scales[i].y), std::exp(scales[i].z)};
+                                               const uint32_t rotationBase = i * 4;
+                                               glm::quat      rotation{_rotations[rotationBase + 0], _rotations[rotationBase + 1],
+                                                                  _rotations[rotationBase + 2], _rotations[rotationBase + 3]};
                                                rotation = glm::normalize(rotation);
 
                                                const glm::mat3 scaleMatrix           = glm::mat3(glm::scale(scale));
@@ -427,34 +473,36 @@ bool GaussianScene::load(const std::filesystem::path& filename)
 
     const VkDeviceSize positionBufferSize = _positions.size() * sizeof(float3);
     _positionBuffer = RefPtr<Buffer>(new Buffer("GaussianSplatPositionBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                     positionBufferSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
+                                                positionBufferSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
     manager->appendBuffer(*_positionBuffer, 0, std::span(_positions));
 
     const VkDeviceSize colorBufferSize = _colors.size() * sizeof(float4);
-    _colorBuffer = RefPtr<Buffer>(new Buffer("GaussianSplatColorBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, colorBufferSize,
-                                  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
+    _colorBuffer = RefPtr<Buffer>(new Buffer("GaussianSplatColorBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                             colorBufferSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
     manager->appendBuffer(*_colorBuffer, 0, std::span(_colors));
 
     const VkDeviceSize covarianceBufferSize = _covariances.size() * sizeof(float);
-    _covarianceBuffer = RefPtr<Buffer>(new Buffer("GaussianSplatCovarianceBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                       covarianceBufferSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
+    _covarianceBuffer =
+        RefPtr<Buffer>(new Buffer("GaussianSplatCovarianceBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                  covarianceBufferSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
     manager->appendBuffer(*_covarianceBuffer, 0, std::span(_covariances));
 
     const VkDeviceSize shRestBufferSize = std::max<VkDeviceSize>(sizeof(float), _shRestCoefficients.size() * sizeof(float));
     _shRestBuffer = RefPtr<Buffer>(new Buffer("GaussianSplatShRestBuffer", VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                   shRestBufferSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
+                                              shRestBufferSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
 
     manager->appendBuffer(*_shRestBuffer, 0, std::span(_shRestCoefficients));
 
     _splatMetaBuffer = RefPtr<Buffer>(new Buffer("GaussianSplatMetaBuffer", VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                      sizeof(GaussianSceneMeta), VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
+                                                 sizeof(GaussianSceneMeta), VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
     manager->appendBuffer(*_splatMetaBuffer, 0, std::span(&_meta, 1));
 
     VkCommandBuffer cmd = manager->getTempCommandBuffer();
     manager->cmdUploadAppended(cmd);
     manager->submitAndWaitTempCmdBuffer(cmd);
-    _sceneUniformBuffer = RefPtr<Buffer>(new Buffer("GaussianSplatSceneUniformBuffer", VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                         sizeof(GaussianSceneUniform), VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
+    _sceneUniformBuffer =
+        RefPtr<Buffer>(new Buffer("GaussianSplatSceneUniformBuffer", VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                  sizeof(GaussianSceneUniform), VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
 
     GaussianSceneUniform sceneUniform{};
 

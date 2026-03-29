@@ -66,6 +66,10 @@ set_property(TARGET downsweep_key_value_slang PROPERTY FOLDER "ThirdParty/vrdx")
 set_property(TARGET upsweep_slang PROPERTY FOLDER "ThirdParty/vrdx")
 
 #####################################################################################
+# spz
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/External/spz)
+
+#####################################################################################
 # Executable
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES})
@@ -82,6 +86,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/External/vrdx/include
   ${CMAKE_CURRENT_LIST_DIR}/External/sqlite3
   ${CMAKE_CURRENT_LIST_DIR}/shaders
+  ${CMAKE_CURRENT_LIST_DIR}/External/spz/src/cc
 
 
 )
@@ -101,6 +106,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   spirv-reflect-static
   crc32c
   "${CMAKE_CURRENT_SOURCE_DIR}/External/sqlite3/libsqlite3.lib"
+  spz
 )
 
 add_project_definitions(${PROJECT_NAME})

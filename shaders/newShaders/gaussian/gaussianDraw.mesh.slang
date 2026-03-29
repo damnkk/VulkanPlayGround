@@ -7,6 +7,8 @@ RWStructuredBuffer<IndrectBuffer> indirectBuffer;
 RWStructuredBuffer<uint32_t> indicesBuffer;
 [vk_binding(2, 3)]
 ConstantBuffer<GaussianSceneUniform> sceneConstant;
+[vk_binding(3, 3)]
+RWStructuredBuffer<float4> testStorage;
 [[vk::push_constant]]
 ConstantBuffer<PerFrameConstant> perFrameConstant;
 #define RASTER_MESH_WORKGROUP_SIZE 32
@@ -199,15 +201,7 @@ float3 fetchViewDependentRadiance(in uint splatIndex, in float3 worldViewDir)
 struct PrimitiveOutput
 {
     [[vk::location(0)]]
-    nointerpolation uint splatId : SPLATID;
-    [[vk::location(1)]]
-    nointerpolation float4 splatCol : COLOR0;
-    [[vk::location(2)]]
-    nointerpolation float3 splatPosition : POSITION0;
-    [[vk::location(3)]]
-    nointerpolation float3 splatScale : SCALE0;
-    [[vk::location(4)]]
-    nointerpolation float4 splatRotation : ROTATION0;
+    nointerpolation float4 outSplatCol : COLOR0;
 };
 
 struct VertexOutput
@@ -230,46 +224,54 @@ void main(uint3 groupThreadID: SV_GroupThreadID, uint3 groupID: SV_GroupID, uint
     {
         SetMeshOutputCounts(outputQuadCount * 4, outputQuadCount * 2);
     }
-    // if (baseIndex >= splatCount)
-    // {
-    //     return;
-    // }
-
-    // const int splatIndex           = indicesBuffer[baseIndex];
-    // triangles[localIndex * 2 + 0]  = uint3(0, 2, 1) + localIndex * 4;
-    // triangles[localIndex * 2 + 1]  = uint3(2, 0, 3) + localIndex * 4;
-    // CameraData*    cameraPtr       = (CameraData*) perFrameConstant.cameraBufferDeviceAddress;
-    // const float4x4 modelViewMatrix = cameraPtr->viewMatrix;
-    // float4         splatColor      = fetchColor(sceneConstant.colorBufferDeviceAddress, splatIndex);
-
-    // const float3 splatCenter = fetchCenter(sceneConstant.positionBufferDeviceAddress, splatIndex);
-    // const float4 viewCenter  = mul(float4(splatCenter, 1.0), modelViewMatrix);
-    // const float4 clipCenter  = mul(viewCenter, cameraPtr->projMatrix);
-    // // // for clip
-    // // {
-    // // }
-
-    const float2 positions[4] = { float2(-1.0f, -1.0f), float2(1.0f, -1.0f), float2(1.0f, 1.0f), float2(-1.0f, 1.0f) };
-    // const float3x3 covariance   = fetchCovariance(sceneConstant.covarianceBufferDeviceAddress, splatIndex);
-    // const float3   conv2Dv      = threedgsCovarianceProjection(covariance, viewCenter, float2(1.0), modelViewMatrix);
-    // float2         basisVector1, basisVector2;
-    // if (!threedgsProjectedExtentBasis(conv2Dv, sqrt8, 1.0, splatColor.a, basisVector1, basisVector2))
-    // {
-    //     emitDegeneratedQuad(localIndex, outVerts);
-    //     return;
-    // }
-
-    // const float3 worldViewDirection = normalize(splatCenter - mul(float4(cameraPtr->cameraPosition, 1.0), float4x4(1.0)).xyz);
-    // splatColor.xyz += fetchViewDependentRadiance(splatIndex, worldViewDirection);
-    // const float3 ndcCenter = clipCenter.xyz / clipCenter.w;
-    [unroll]
-    for (uint i = 0; i < 4; ++i)
+    if (baseIndex < splatCount)
     {
-        // const float2 fragPos = positions[i].xy;
+        const int splatIndex           = indicesBuffer[baseIndex];
+        triangles[localIndex * 2 + 0]  = uint3(0, 2, 1) + localIndex * 4;
+        triangles[localIndex * 2 + 1]  = uint3(2, 0, 3) + localIndex * 4;
+        CameraData*    cameraPtr       = (CameraData*) perFrameConstant.cameraBufferDeviceAddress;
+        const float4x4 modelViewMatrix = cameraPtr->viewMatrix;
+        float4         splatColor      = fetchColor(sceneConstant.colorBufferDeviceAddress, splatIndex);
 
-        // const float2 ndcOffset                = float2(fragPos.x * basisVector1 + fragPos.y * basisVector2);
-        // const float4 quadPos                  = float4(ndcCenter.xy + ndcOffset, ndcCenter.z, 1.0);
-        // outVerts[localIndex * 4 + i].position = quadPos;
-        outVerts[localIndex * 4 + i].position = float4(positions[i] * 0.003, 0.0, 1.0);
+        const float3 splatCenter = fetchCenter(sceneConstant.positionBufferDeviceAddress, splatIndex);
+        const float4 viewCenter  = mul(float4(splatCenter, 1.0), modelViewMatrix);
+        const float4 clipCenter  = mul(viewCenter, cameraPtr->projMatrix);
+        // // // for clip
+        // // {
+        // // }
+
+        const float2 positions[4] = { float2(-1.0f, -1.0f), float2(1.0f, -1.0f), float2(1.0f, 1.0f), float2(-1.0f, 1.0f) };
+        const float3x3 covariance = fetchCovariance(sceneConstant.covarianceBufferDeviceAddress, splatIndex);
+        // Convert projection diagonal terms to pixel-space focal lengths.
+        const float2 focal =
+            float2(cameraPtr->projMatrix[0][0] * cameraPtr->viewPortSize.x, cameraPtr->projMatrix[1][1] * cameraPtr->viewPortSize.y) * 0.5f;
+        const float3 conv2Dv = threedgsCovarianceProjection(covariance, viewCenter, focal, modelViewMatrix);
+        float2 basisVector1 = 0.0f;
+        float2 basisVector2 = 0.0f;
+        if (!threedgsProjectedExtentBasis(conv2Dv, sqrt8, 1.0, splatColor.a, basisVector1, basisVector2))
+        {
+            emitDegeneratedQuad(localIndex, outVerts);
+            return;
+        }
+
+        const float3 worldViewDirection = normalize(splatCenter - mul(float4(cameraPtr->cameraPosition, 1.0), float4x4(1.0)).xyz);
+        splatColor.xyz += fetchViewDependentRadiance(splatIndex, worldViewDirection);
+
+        outPrims[localIndex * 2 + 0].outSplatCol = splatColor;
+        outPrims[localIndex * 2 + 1].outSplatCol = splatColor;
+
+        const float3 ndcCenter                                           = clipCenter.xyz / clipCenter.w;
+        testStorage[groupID.x * RASTER_MESH_WORKGROUP_SIZE + localIndex] = float4(clipCenter);
+        [unroll]
+        for (uint i = 0; i < 4; ++i)
+        {
+            const float2 fragPos = positions[i].xy;
+
+            const float2 pixelOffset = float2(fragPos.x * basisVector1 + fragPos.y * basisVector2);
+            const float2 ndcOffset   = pixelOffset * float2(2.0f / cameraPtr->viewPortSize.x, 2.0f / cameraPtr->viewPortSize.y);
+            const float4 quadPos   = float4(ndcCenter.xy + ndcOffset, ndcCenter.z, 1.0);
+            // const float4 quadPos                  = float4(ndcCenter.xy + positions[i].xy * 0.002, ndcCenter.z, 1.0);
+            outVerts[localIndex * 4 + i].position = quadPos;
+        }
     }
 }

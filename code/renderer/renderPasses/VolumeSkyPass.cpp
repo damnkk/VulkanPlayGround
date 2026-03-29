@@ -35,7 +35,7 @@ void VolumeSkyPass::build(RDG::RDGBuilder* rdgBuilder)
                         .UsageFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
                         .MipmapLevel(1)
                         .finish();
-    rdgBuilder->registTexture(SkyBoxRT);
+
     auto skyBoxPass =
         rdgBuilder->createRenderPass("skyBoxPass")
             .color(0, SkyBoxRT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,

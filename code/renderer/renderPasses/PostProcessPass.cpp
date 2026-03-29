@@ -32,7 +32,7 @@ void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
                             .UsageFlags(VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
                             .MipmapLevel(1)
                             .finish();
-    rdgBuilder->registTexture(outputTexRef);
+
     DeferRenderer* ownedRender = static_cast<DeferRenderer*>(_ownedRender);
     auto           pass        = rdgBuilder->createComputePass("postProcessPass")
                     .read(0, inputTextureRef, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
