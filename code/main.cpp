@@ -233,6 +233,11 @@ int main(int argc, char** argv)
         .primitiveFragmentShadingRate  = VK_TRUE,
         .attachmentFragmentShadingRate = VK_TRUE,
     };
+    VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR barycentricFeatures = {
+        .sType                     = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_FEATURES_KHR,
+        .pNext                     = nullptr,
+        .fragmentShaderBarycentric = VK_TRUE,
+    };
     nvvk::ContextInitInfo vkSetup{
         .instanceExtensions = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME},
 
@@ -262,6 +267,11 @@ int main(int argc, char** argv)
 
     // and then parse command line
     parameterParser.parse(argc, argv);
+
+    if (renderMode == "gaussian")
+    {
+        vkSetup.deviceExtensions.push_back({VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME, &barycentricFeatures});
+    }
 
     nvvk::addSurfaceExtensions(vkSetup.instanceExtensions);
     nvvk::Context vkContext;

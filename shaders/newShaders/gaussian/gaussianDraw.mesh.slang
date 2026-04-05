@@ -236,18 +236,15 @@ void main(uint3 groupThreadID: SV_GroupThreadID, uint3 groupID: SV_GroupID, uint
         const float3 splatCenter = fetchCenter(sceneConstant.positionBufferDeviceAddress, splatIndex);
         const float4 viewCenter  = mul(float4(splatCenter, 1.0), modelViewMatrix);
         const float4 clipCenter  = mul(viewCenter, cameraPtr->projMatrix);
-        // // // for clip
-        // // {
-        // // }
 
-        const float2 positions[4] = { float2(-1.0f, -1.0f), float2(1.0f, -1.0f), float2(1.0f, 1.0f), float2(-1.0f, 1.0f) };
-        const float3x3 covariance = fetchCovariance(sceneConstant.covarianceBufferDeviceAddress, splatIndex);
+        const float2   positions[4] = { float2(-1.0f, -1.0f), float2(1.0f, -1.0f), float2(1.0f, 1.0f), float2(-1.0f, 1.0f) };
+        const float3x3 covariance   = fetchCovariance(sceneConstant.covarianceBufferDeviceAddress, splatIndex);
         // Convert projection diagonal terms to pixel-space focal lengths.
         const float2 focal =
             float2(cameraPtr->projMatrix[0][0] * cameraPtr->viewPortSize.x, cameraPtr->projMatrix[1][1] * cameraPtr->viewPortSize.y) * 0.5f;
-        const float3 conv2Dv = threedgsCovarianceProjection(covariance, viewCenter, focal, modelViewMatrix);
-        float2 basisVector1 = 0.0f;
-        float2 basisVector2 = 0.0f;
+        const float3 conv2Dv      = threedgsCovarianceProjection(covariance, viewCenter, focal, modelViewMatrix);
+        float2       basisVector1 = 0.0f;
+        float2       basisVector2 = 0.0f;
         if (!threedgsProjectedExtentBasis(conv2Dv, sqrt8, 1.0, splatColor.a, basisVector1, basisVector2))
         {
             emitDegeneratedQuad(localIndex, outVerts);
@@ -261,16 +258,15 @@ void main(uint3 groupThreadID: SV_GroupThreadID, uint3 groupID: SV_GroupID, uint
         outPrims[localIndex * 2 + 1].outSplatCol = splatColor;
 
         const float3 ndcCenter                                           = clipCenter.xyz / clipCenter.w;
-        testStorage[groupID.x * RASTER_MESH_WORKGROUP_SIZE + localIndex] = float4(clipCenter);
+        testStorage[groupID.x * RASTER_MESH_WORKGROUP_SIZE + localIndex] = float4(localIndex * 2 + 0);
         [unroll]
         for (uint i = 0; i < 4; ++i)
         {
             const float2 fragPos = positions[i].xy;
 
-            const float2 pixelOffset = float2(fragPos.x * basisVector1 + fragPos.y * basisVector2);
-            const float2 ndcOffset   = pixelOffset * float2(2.0f / cameraPtr->viewPortSize.x, 2.0f / cameraPtr->viewPortSize.y);
-            const float4 quadPos   = float4(ndcCenter.xy + ndcOffset, ndcCenter.z, 1.0);
-            // const float4 quadPos                  = float4(ndcCenter.xy + positions[i].xy * 0.002, ndcCenter.z, 1.0);
+            const float2 pixelOffset              = float2(fragPos.x * basisVector1 + fragPos.y * basisVector2);
+            const float2 ndcOffset                = pixelOffset * float2(2.0f / cameraPtr->viewPortSize.x, 2.0f / cameraPtr->viewPortSize.y);
+            const float4 quadPos                  = float4(ndcCenter.xy + ndcOffset, ndcCenter.z, 1.0);
             outVerts[localIndex * 4 + i].position = quadPos;
         }
     }

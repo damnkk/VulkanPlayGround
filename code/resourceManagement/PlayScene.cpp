@@ -514,7 +514,7 @@ bool GaussianScene::load(const std::filesystem::path& filename)
     sceneUniform.colorStride                   = uint32_t(sizeof(float4));
     sceneUniform.positionStride                = uint32_t(sizeof(float3));
     sceneUniform.covarianceStride              = uint32_t(sizeof(float3) * 2);
-    sceneUniform.shStride                      = uint32_t(sizeof(float) * _shRestCoefficients.size() / this->getVertexCount());
+    sceneUniform.shStride                      = uint32_t(_shRestCoefficients.size() / this->getVertexCount());
     memcpy(_sceneUniformBuffer->mapping, &sceneUniform, sizeof(GaussianSceneUniform));
     // PlayResourceManager::Instance().flushBuffer(*_sceneUniformBuffer, 0, VK_WHOLE_SIZE);
 
