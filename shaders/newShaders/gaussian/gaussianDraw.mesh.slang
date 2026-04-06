@@ -116,48 +116,41 @@ void fetchSh(in uint splatIndex, in uint shDegree, out float3 shd[15])
 {
     float* shArray = (float*) sceneConstant.shBufferDeviceAddress;
 
-    const uint shStride = sceneConstant.shStride;
-    const bool hasShD1  = shDegree >= 1;
-    const bool hasShD2  = shDegree >= 2;
-    const bool hasShD3  = shDegree >= 3;
+    const uint shStride         = sceneConstant.shStride;
+    const uint coeffsPerChannel = shStride / 3;
+    const uint splatBase        = splatIndex * shStride;
+    const uint redChannelBase   = splatBase;
+    const uint greenChannelBase = splatBase + coeffsPerChannel;
+    const uint blueChannelBase  = splatBase + coeffsPerChannel * 2;
+    const bool hasShD1          = shDegree >= 1;
+    const bool hasShD2          = shDegree >= 2;
+    const bool hasShD3          = shDegree >= 3;
+
+    // The loader keeps the coefficients in channel-major order:
+    // [R0..Rn, G0..Gn, B0..Bn] for each splat.
     if (hasShD1)
     {
-        shd[0] = float3(shArray[splatIndex * shStride + 3 * 0 + 0], shArray[splatIndex * shStride + 3 * 0 + 1],
-                        shArray[splatIndex * shStride + 3 * 0 + 2]);
-        shd[1] = float3(shArray[splatIndex * shStride + 3 * 1 + 0], shArray[splatIndex * shStride + 3 * 1 + 1],
-                        shArray[splatIndex * shStride + 3 * 1 + 2]);
-        shd[2] = float3(shArray[splatIndex * shStride + 3 * 2 + 0], shArray[splatIndex * shStride + 3 * 2 + 1],
-                        shArray[splatIndex * shStride + 3 * 2 + 2]);
+        shd[0] = float3(shArray[redChannelBase + 0], shArray[greenChannelBase + 0], shArray[blueChannelBase + 0]);
+        shd[1] = float3(shArray[redChannelBase + 1], shArray[greenChannelBase + 1], shArray[blueChannelBase + 1]);
+        shd[2] = float3(shArray[redChannelBase + 2], shArray[greenChannelBase + 2], shArray[blueChannelBase + 2]);
     }
     if (hasShD2)
     {
-        shd[3] = float3(shArray[splatIndex * shStride + 3 * 3 + 0], shArray[splatIndex * shStride + 3 * 3 + 1],
-                        shArray[splatIndex * shStride + 3 * 3 + 2]);
-        shd[4] = float3(shArray[splatIndex * shStride + 3 * 4 + 0], shArray[splatIndex * shStride + 3 * 4 + 1],
-                        shArray[splatIndex * shStride + 3 * 4 + 2]);
-        shd[5] = float3(shArray[splatIndex * shStride + 3 * 5 + 0], shArray[splatIndex * shStride + 3 * 5 + 1],
-                        shArray[splatIndex * shStride + 3 * 5 + 2]);
-        shd[6] = float3(shArray[splatIndex * shStride + 3 * 6 + 0], shArray[splatIndex * shStride + 3 * 6 + 1],
-                        shArray[splatIndex * shStride + 3 * 6 + 2]);
-        shd[7] = float3(shArray[splatIndex * shStride + 3 * 7 + 0], shArray[splatIndex * shStride + 3 * 7 + 1],
-                        shArray[splatIndex * shStride + 3 * 7 + 2]);
+        shd[3] = float3(shArray[redChannelBase + 3], shArray[greenChannelBase + 3], shArray[blueChannelBase + 3]);
+        shd[4] = float3(shArray[redChannelBase + 4], shArray[greenChannelBase + 4], shArray[blueChannelBase + 4]);
+        shd[5] = float3(shArray[redChannelBase + 5], shArray[greenChannelBase + 5], shArray[blueChannelBase + 5]);
+        shd[6] = float3(shArray[redChannelBase + 6], shArray[greenChannelBase + 6], shArray[blueChannelBase + 6]);
+        shd[7] = float3(shArray[redChannelBase + 7], shArray[greenChannelBase + 7], shArray[blueChannelBase + 7]);
     }
     if (hasShD3)
     {
-        shd[8]  = float3(shArray[splatIndex * shStride + 3 * 8 + 0], shArray[splatIndex * shStride + 3 * 8 + 1],
-                         shArray[splatIndex * shStride + 3 * 8 + 2]);
-        shd[9]  = float3(shArray[splatIndex * shStride + 3 * 9 + 0], shArray[splatIndex * shStride + 3 * 9 + 1],
-                         shArray[splatIndex * shStride + 3 * 9 + 2]);
-        shd[10] = float3(shArray[splatIndex * shStride + 3 * 10 + 0], shArray[splatIndex * shStride + 3 * 10 + 1],
-                         shArray[splatIndex * shStride + 3 * 10 + 2]);
-        shd[11] = float3(shArray[splatIndex * shStride + 3 * 11 + 0], shArray[splatIndex * shStride + 3 * 11 + 1],
-                         shArray[splatIndex * shStride + 3 * 11 + 2]);
-        shd[12] = float3(shArray[splatIndex * shStride + 3 * 12 + 0], shArray[splatIndex * shStride + 3 * 12 + 1],
-                         shArray[splatIndex * shStride + 3 * 12 + 2]);
-        shd[13] = float3(shArray[splatIndex * shStride + 3 * 13 + 0], shArray[splatIndex * shStride + 3 * 13 + 1],
-                         shArray[splatIndex * shStride + 3 * 13 + 2]);
-        shd[14] = float3(shArray[splatIndex * shStride + 3 * 14 + 0], shArray[splatIndex * shStride + 3 * 14 + 1],
-                         shArray[splatIndex * shStride + 3 * 14 + 2]);
+        shd[8]  = float3(shArray[redChannelBase + 8], shArray[greenChannelBase + 8], shArray[blueChannelBase + 8]);
+        shd[9]  = float3(shArray[redChannelBase + 9], shArray[greenChannelBase + 9], shArray[blueChannelBase + 9]);
+        shd[10] = float3(shArray[redChannelBase + 10], shArray[greenChannelBase + 10], shArray[blueChannelBase + 10]);
+        shd[11] = float3(shArray[redChannelBase + 11], shArray[greenChannelBase + 11], shArray[blueChannelBase + 11]);
+        shd[12] = float3(shArray[redChannelBase + 12], shArray[greenChannelBase + 12], shArray[blueChannelBase + 12]);
+        shd[13] = float3(shArray[redChannelBase + 13], shArray[greenChannelBase + 13], shArray[blueChannelBase + 13]);
+        shd[14] = float3(shArray[redChannelBase + 14], shArray[greenChannelBase + 14], shArray[blueChannelBase + 14]);
     }
 }
 
@@ -236,6 +229,14 @@ void main(uint3 groupThreadID: SV_GroupThreadID, uint3 groupID: SV_GroupID, uint
         const float3 splatCenter = fetchCenter(sceneConstant.positionBufferDeviceAddress, splatIndex);
         const float4 viewCenter  = mul(float4(splatCenter, 1.0), modelViewMatrix);
         const float4 clipCenter  = mul(viewCenter, cameraPtr->projMatrix);
+        const float3 ndcCenter   = clipCenter.xyz / clipCenter.w;
+
+        if (abs(ndcCenter.x) > 1.0 || abs(ndcCenter.y) > 1.0f || abs(ndcCenter.z) > 1.0f)
+        {
+            // Early return to discard splat
+            emitDegeneratedQuad(localIndex, outVerts);
+            return;
+        }
 
         const float2   positions[4] = { float2(-1.0f, -1.0f), float2(1.0f, -1.0f), float2(1.0f, 1.0f), float2(-1.0f, 1.0f) };
         const float3x3 covariance   = fetchCovariance(sceneConstant.covarianceBufferDeviceAddress, splatIndex);
@@ -257,7 +258,6 @@ void main(uint3 groupThreadID: SV_GroupThreadID, uint3 groupID: SV_GroupID, uint
         outPrims[localIndex * 2 + 0].outSplatCol = splatColor;
         outPrims[localIndex * 2 + 1].outSplatCol = splatColor;
 
-        const float3 ndcCenter                                           = clipCenter.xyz / clipCenter.w;
         testStorage[groupID.x * RASTER_MESH_WORKGROUP_SIZE + localIndex] = float4(localIndex * 2 + 0);
         [unroll]
         for (uint i = 0; i < 4; ++i)
