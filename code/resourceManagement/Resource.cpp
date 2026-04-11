@@ -58,7 +58,7 @@ Texture::Texture(uint32_t width, uint32_t height, VkFormat format, VkImageUsageF
         imageBarrier.dstAccessMask    = inferAccessFlags(layout);
         imageBarrier.srcStageMask     = VK_PIPELINE_STAGE_2_NONE;
         imageBarrier.dstStageMask     = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-        imageBarrier.subresourceRange = {inferImageAspectFlags(format, true), 0, mipLevels, 0, 1};
+        imageBarrier.subresourceRange = {inferImageAspectFlags(format, false), 0, mipLevels, 0, 1};
         VkDependencyInfo info{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
         info.imageMemoryBarrierCount = 1;
         info.pImageMemoryBarriers    = &imageBarrier;
@@ -73,8 +73,7 @@ Texture::Texture(uint32_t width, uint32_t height, VkFormat format, VkImageUsageF
     extent                 = {width, height, 1};
     sampleCount            = samples;
     usageFlags             = imageInfo.usage;
-    aspectFlags =
-        (usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) ? (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT) : VK_IMAGE_ASPECT_COLOR_BIT;
+    aspectFlags = inferImageAspectFlags(format, false);
 }
 
 Texture::Texture(uint32_t width, uint32_t height, uint32_t depth, VkFormat format, VkImageUsageFlags usage, VkImageLayout initialLayout,
@@ -114,7 +113,7 @@ Texture::Texture(uint32_t width, uint32_t height, uint32_t depth, VkFormat forma
         imageBarrier.dstAccessMask       = inferAccessFlags(initialLayout);
         imageBarrier.srcStageMask        = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
         imageBarrier.dstStageMask        = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-        imageBarrier.subresourceRange    = {inferImageAspectFlags(format, usage), 0, mipLevels, 0, 1};
+        imageBarrier.subresourceRange    = {inferImageAspectFlags(format, false), 0, mipLevels, 0, 1};
         imageBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         imageBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         VkDependencyInfo info{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
@@ -131,7 +130,7 @@ Texture::Texture(uint32_t width, uint32_t height, uint32_t depth, VkFormat forma
     extent                 = {width, height, depth};
     sampleCount            = VK_SAMPLE_COUNT_1_BIT;
     usageFlags             = imageInfo.usage;
-    aspectFlags            = (usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+    aspectFlags            = inferImageAspectFlags(format, false);
 }
 
 Texture::Texture(uint32_t size, VkFormat format, VkImageUsageFlags usage, VkImageLayout initialLayout, uint32_t mipLevels) : Texture()
@@ -168,7 +167,7 @@ Texture::Texture(uint32_t size, VkFormat format, VkImageUsageFlags usage, VkImag
         imageBarrier.newLayout        = initialLayout;
         imageBarrier.srcAccessMask    = VK_ACCESS_2_NONE;
         imageBarrier.dstAccessMask    = inferAccessFlags(initialLayout);
-        imageBarrier.subresourceRange = {inferImageAspectFlags(format, usage), 0, mipLevels, 0, 6};
+        imageBarrier.subresourceRange = {inferImageAspectFlags(format, false), 0, mipLevels, 0, 6};
         VkDependencyInfo info{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
         info.imageMemoryBarrierCount = 1;
         info.pImageMemoryBarriers    = &imageBarrier;
@@ -183,8 +182,7 @@ Texture::Texture(uint32_t size, VkFormat format, VkImageUsageFlags usage, VkImag
     extent                 = {size, size, 1};
     sampleCount            = VK_SAMPLE_COUNT_1_BIT;
     usageFlags             = imageInfo.usage;
-    aspectFlags =
-        (usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) ? (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT) : VK_IMAGE_ASPECT_COLOR_BIT;
+    aspectFlags = inferImageAspectFlags(format, false);
 }
 
 Texture::Texture(const std::filesystem::path& imagePath, VkImageLayout finalLayout, uint32_t mipLevels, bool isSrgb) : Texture()

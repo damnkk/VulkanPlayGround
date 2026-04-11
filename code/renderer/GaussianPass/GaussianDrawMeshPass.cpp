@@ -1,6 +1,7 @@
 #include "GaussianDrawMeshPass.h"
 #include "renderer/GaussianRenderer.h"
 #include "ShaderManager.hpp"
+#include "utils.hpp"
 
 namespace Play
 {
@@ -52,10 +53,11 @@ void GaussianDrawMeshPass::build(RDG::RDGBuilder* rdgBuilder)
                                              .Format(VK_FORMAT_R16G16B16A16_SFLOAT)
                                              .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
                                              .finish();
+    constexpr VkFormat meshDepthFormat = VK_FORMAT_D16_UNORM;
     RDG::RDGTextureRef depthAttachment = rdgBuilder->createTexture("meshDrawDepthAttachment")
-                                             .AspectFlags(VK_IMAGE_ASPECT_DEPTH_BIT)
+                                             .AspectFlags(inferImageAspectFlags(meshDepthFormat, false))
                                              .UsageFlags(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
-                                             .Format(VK_FORMAT_D16_UNORM)
+                                             .Format(meshDepthFormat)
                                              .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
                                              .finish();
 

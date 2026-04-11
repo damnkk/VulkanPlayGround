@@ -4,6 +4,7 @@
 #include "VulkanDriver.h"
 #include "MeshCollector.h"
 #include "DeferRendering.h"
+#include "utils.hpp"
 #include "nvutils/parallel_work.hpp"
 #include "pConstantType.h.slang"
 namespace Play
@@ -55,10 +56,11 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
                                         .MipmapLevel(1)
                                         .finish();
 
-    RDG::RDGTextureRef DepthRT = rdgBuilder->createTexture(GBufferConfig::Get(GBufferType::GSceneDepth).debugName)
+    const auto         depthFormat = GBufferConfig::Get(GBufferType::GSceneDepth).format;
+    RDG::RDGTextureRef DepthRT     = rdgBuilder->createTexture(GBufferConfig::Get(GBufferType::GSceneDepth).debugName)
                                      .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
-                                     .AspectFlags(VK_IMAGE_ASPECT_DEPTH_BIT)
-                                     .Format(GBufferConfig::Get(GBufferType::GSceneDepth).format)
+                                     .AspectFlags(inferImageAspectFlags(depthFormat, false))
+                                     .Format(depthFormat)
                                      .UsageFlags(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
                                      .MipmapLevel(1)
                                      .finish();
