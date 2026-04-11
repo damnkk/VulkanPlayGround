@@ -28,5 +28,5 @@ Texture2D<float> inputDepthStencil; // D32_SFLOAT_S8_UINT: 深度为单通道 fl
 void main(FragmentInput input, out FragmentOutput output)
 {
     output.color = inputAlbedo.Sample(g_GlobalSampler_Linear, input.uv);
-    output.color = inputDepthStencil.Sample(g_GlobalSampler_Linear, input.uv).xxxx; // 仅使用深度值，复制到 RGBA 分量
+    // output.color = inputDepthStencil.Sample(g_GlobalSampler_Linear, input.uv).xxxx; // 仅使用深度值，复制到 RGBA 分量
 }

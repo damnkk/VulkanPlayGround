@@ -14,9 +14,9 @@ namespace Play
 DeferRenderer::DeferRenderer(PlayElement& view)
 {
     _view = &view;
-    _scene->addScene<nvvkgltf::Scene>("D:/repo/downloaded_resources/man/SK_Man_Full_04.gltf");
-    std::filesystem::path modelPath = ".\\resource\\skybox\\graveyard_pathways_2k.hdr";
-    RefPtr<Texture> skyboxTexture = RefPtr<Texture>(new Texture(modelPath, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, true));
+    // _scene->addScene<nvvkgltf::Scene>("D:/repo/downloaded_resources/man/SK_Man_Full_04.gltf");
+    std::filesystem::path modelPath     = ".\\resource\\skybox\\graveyard_pathways_2k.hdr";
+    RefPtr<Texture>       skyboxTexture = RefPtr<Texture>(new Texture(modelPath, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, true));
     _scene->addSkyBoxTexture(skyboxTexture);
     _scene->updateDescriptorSet();
 }
@@ -31,6 +31,10 @@ void DeferRenderer::OnGUI()
     ImGui::Begin("Camera Profile");
     nvgui::CameraWidget(getActiveCamera()->getCameraManipulator());
     ImGui::End();
+    for (auto& pass : _passes)
+    {
+        pass->onGUI();
+    }
 }
 
 void DeferRenderer::setupPasses()

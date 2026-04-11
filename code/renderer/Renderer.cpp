@@ -85,17 +85,20 @@ void Renderer::OnResize(int width, int height)
     {
         camera->onResize({(uint32_t)width, (uint32_t)height});
     }
-    _passes.clear();
+
     _rdgBuilder.reset();
     _rdgBuilder = std::make_unique<RDG::RDGBuilder>();
     _outputTexture = _view->getUITexture();
 
-    setupPasses();
-
-    for (auto& pass : _passes)
+    if (_passes.empty())
     {
-        pass->init();
+        setupPasses();
+        for (auto& pass : _passes)
+        {
+            pass->init();
+        }
     }
+
     for (auto& pass : _passes)
     {
         pass->build(_rdgBuilder.get());

@@ -184,6 +184,8 @@ public:
     {
         if (m_ptr != ptr)
         {
+            if (ptr)
+                ptr->addRef();
             if (m_ptr)
                 m_ptr->release();
             m_ptr = ptr;

@@ -1,10 +1,6 @@
 #ifndef GAUSSIAN_LIB_H
 #define GAUSSIAN_LIB_H
-#ifdef __cplusplus
-#define DEFAULT(val) = val
-#else
-#define DEFAULT(val)
-#endif // _cplusplus
+
 #include "../Hdevice.h"
 struct IndrectBuffer
 {
