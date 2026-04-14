@@ -35,8 +35,9 @@ void GaussianDrawMeshPass::init()
 
     _presentProgram              = RefPtr<RenderProgram>(new RenderProgram());
     const uint32_t presentVertId = ShaderManager::Instance().getShaderIdByName(BuiltinShaders::BUILTIN_FULL_SCREEN_QUAD_VERT_SHADER_NAME);
-    const uint32_t presentFragId = ShaderManager::Instance().loadShaderFromFile("gaussianPresentF", "newShaders/present.frag.slang",
-                                                                                ShaderStage::eFragment, ShaderType::eSLANG, "main");
+    const uint32_t presentFragId =
+        ShaderManager::Instance().loadShaderFromFile("gaussianPresentF", "newShaders/deferRenderer/postprocess/present.frag.slang",
+                                                     ShaderStage::eFragment, ShaderType::eSLANG, "main");
     _presentProgram->setVertexModuleID(presentVertId);
     _presentProgram->setFragModuleID(presentFragId);
 

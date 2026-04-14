@@ -5,7 +5,7 @@
 #include "miniply.h"
 #include <vector>
 #include <filesystem>
-#include "newshaders/gaussian/gaussianLib.h.slang"
+#include "newShaders/gaussian/gaussianLib.h.slang"
 #include "core/RefCounted.h"
 #include <splat-types.h>
 namespace Play

@@ -12,8 +12,8 @@ void PresentPass::init()
     _presentProgram = RefPtr<RenderProgram>(new RenderProgram());
 
     uint32_t presentvID = ShaderManager::Instance().getShaderIdByName(BuiltinShaders::BUILTIN_FULL_SCREEN_QUAD_VERT_SHADER_NAME);
-    uint32_t presentfID =
-        ShaderManager::Instance().loadShaderFromFile("presentF", "newShaders/present.frag.slang", ShaderStage::eFragment, ShaderType::eSLANG, "main");
+    uint32_t presentfID = ShaderManager::Instance().loadShaderFromFile("presentF", "newShaders/deferRenderer/postprocess/present.frag.slang",
+                                                                       ShaderStage::eFragment, ShaderType::eSLANG, "main");
     _presentProgram->setFragModuleID(presentfID);
     _presentProgram->setVertexModuleID(presentvID);
     _presentProgram->psoState().rasterizationState.frontFace = VK_FRONT_FACE_CLOCKWISE;

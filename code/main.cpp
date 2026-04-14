@@ -202,8 +202,8 @@ int main(int argc, char** argv)
     nvutils::ParameterParser   parameterParser;
 
     // 命令行配置
-    // std::string renderMode = "gaussian";
-    std::string renderMode = "defer";
+    std::string renderMode = "gaussian";
+    // std::string renderMode = "defer";
     parameterRegistry.add({"rendermode", "rm"}, &renderMode);
 
     Play::PlayElement::Info playInfo = {

@@ -5,6 +5,7 @@
 #include "VulkanDriver.h"
 #include "RDG/RDG.h"
 #include "renderPasses/RenderPass.h"
+#include <algorithm>
 namespace Play
 {
 
@@ -81,6 +82,9 @@ Texture* Renderer::getOutputTexture()
 
 void Renderer::OnResize(int width, int height)
 {
+    width  = std::max(width, 1);
+    height = std::max(height, 1);
+
     for (auto& camera : _cameras)
     {
         camera->onResize({(uint32_t)width, (uint32_t)height});

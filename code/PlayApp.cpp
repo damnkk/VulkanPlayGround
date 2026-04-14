@@ -30,12 +30,18 @@ PlayElement::PlayElement(Info info) : _info(info)
     if (_info.renderMode && !_info.renderMode->empty())
     {
         const std::string& mode = *_info.renderMode;
-        if (mode == "raster") _renderMode = eRasterization;
-        else if (mode == "raytrace") _renderMode = eRayTracing;
-        else if (mode == "volume") _renderMode = eVolumeRendering;
-        else if (mode == "shadingrate") _renderMode = eShadingRateRendering;
-        else if (mode == "defer") _renderMode = eDeferRendering;
-        else if (mode == "gaussian") _renderMode = eGaussianRendering;
+        if (mode == "raster")
+            _renderMode = eRasterization;
+        else if (mode == "raytrace")
+            _renderMode = eRayTracing;
+        else if (mode == "volume")
+            _renderMode = eVolumeRendering;
+        else if (mode == "shadingrate")
+            _renderMode = eShadingRateRendering;
+        else if (mode == "defer")
+            _renderMode = eDeferRendering;
+        else if (mode == "gaussian")
+            _renderMode = eGaussianRendering;
     }
 }
 
@@ -117,6 +123,11 @@ void PlayElement::onPreRender()
 
 void PlayElement::onRender(VkCommandBuffer cmd)
 {
+    if (_app->getViewportSize().width == 0 || _app->getViewportSize().height == 0)
+    {
+        return;
+    }
+
     vkDriver->getCurrentFrameData().reset();
 
     _renderer->RenderFrame();

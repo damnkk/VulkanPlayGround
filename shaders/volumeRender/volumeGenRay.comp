@@ -3,7 +3,7 @@
 #version 450
 #extension GL_GOOGLE_include_directive : enable
 #extension GL_EXT_scalar_block_layout : enable
-#include "common.glsl"
+#include "volumeRender/common.glsl"
 #include "slang_types.h"
 #include "random.h.slang"
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;

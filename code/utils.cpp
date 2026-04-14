@@ -4,6 +4,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "tinygltf/tiny_gltf.h"
 #include <cstring>
+#include <nvutils/file_operations.hpp>
 #include "crc32c/crc32c.h"
 namespace Play
 {
@@ -33,7 +34,15 @@ std::string GetUniqueName()
 
 std::filesystem::path getBaseFilePath()
 {
-    return "./";
+#ifdef TARGET_EXE_TO_SOURCE_DIRECTORY
+    const std::filesystem::path exeDir   = nvutils::getExecutablePath().parent_path();
+    const std::filesystem::path basePath = exeDir / TARGET_EXE_TO_SOURCE_DIRECTORY;
+    std::error_code             ec;
+    const auto                  canonicalPath = std::filesystem::weakly_canonical(basePath, ec);
+    return ec ? basePath.lexically_normal() : canonicalPath;
+#else
+    return std::filesystem::current_path();
+#endif
 }
 
 VkImageCreateInfo makeImage2DCreateInfo(VkExtent2D extent, VkFormat format, VkImageUsageFlags usageFlags, bool mipmap)

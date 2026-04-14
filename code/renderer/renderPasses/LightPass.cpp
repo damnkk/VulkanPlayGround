@@ -14,7 +14,9 @@ LightPass::~LightPass()
 
 void LightPass::init()
 {
-    auto lightPassFragID  = ShaderManager::Instance().loadShaderFromFile("lightPassFrag", "./DefaultLightPass.frag.slang", ShaderStage::eFragment);
+    auto lightPassFragID =
+        ShaderManager::Instance().loadShaderFromFile("lightPassFrag", "newShaders/deferRenderer/lighting/DefaultLightPass.frag.slang",
+                                                     ShaderStage::eFragment);
     auto fullScreenVertID = ShaderManager::Instance().getShaderIdByName(BuiltinShaders::BUILTIN_FULL_SCREEN_QUAD_VERT_SHADER_NAME);
     _lightPassProgram     = RefPtr<RenderProgram>(new RenderProgram(fullScreenVertID, lightPassFragID));
     _lightPassProgram->getDescriptorSetManager().initPushConstant<PerFrameConstant>();

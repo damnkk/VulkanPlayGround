@@ -40,25 +40,20 @@ DescriptorSetManager::~DescriptorSetManager()
 
 void PlayProgram::onDestroy()
 {
-    if (vkDriver)
-        vkDriver->unregisterObject(this);
+    if (vkDriver) vkDriver->unregisterObject(this);
 
     // 捕获需要延迟销毁的 Vulkan handles
-    VkPipelineLayout pipelineLayout = _descriptorSetManager._pipelineLayout;
-    VkDescriptorSetLayout descSetLayout = _descriptorSetManager._descSetLayouts[(uint32_t)DescriptorEnum::eDrawObjectDescriptorSet];
+    VkPipelineLayout      pipelineLayout = _descriptorSetManager._pipelineLayout;
+    VkDescriptorSetLayout descSetLayout  = _descriptorSetManager._descSetLayouts[(uint32_t) DescriptorEnum::eDrawObjectDescriptorSet];
 
     if (pipelineLayout != VK_NULL_HANDLE)
     {
-        vkDriver->deferDestroy([pipelineLayout]() {
-            vkDestroyPipelineLayout(vkDriver->getDevice(), pipelineLayout, nullptr);
-        });
+        vkDriver->deferDestroy([pipelineLayout]() { vkDestroyPipelineLayout(vkDriver->getDevice(), pipelineLayout, nullptr); });
     }
 
     if (descSetLayout != VK_NULL_HANDLE)
     {
-        vkDriver->deferDestroy([descSetLayout]() {
-            vkDestroyDescriptorSetLayout(vkDriver->getDevice(), descSetLayout, nullptr);
-        });
+        vkDriver->deferDestroy([descSetLayout]() { vkDestroyDescriptorSetLayout(vkDriver->getDevice(), descSetLayout, nullptr); });
     }
 }
 

@@ -1,7 +1,7 @@
 #ifndef GAUSSIAN_LIB_H
 #define GAUSSIAN_LIB_H
 
-#include "../Hdevice.h"
+#include "Hdevice.h"
 struct IndrectBuffer
 {
     uint32_t indexCount    DEFAULT(6); // allways = 6 indices for the quad (2 triangles)

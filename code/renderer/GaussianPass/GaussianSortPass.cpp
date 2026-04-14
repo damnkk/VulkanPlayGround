@@ -4,7 +4,7 @@
 #include "GaussianRenderer.h"
 #include "nvutils/alignment.hpp"
 #include "RDG/RDG.h"
-#include "newshaders/gaussian/gaussianLib.h.slang"
+#include "newShaders/gaussian/gaussianLib.h.slang"
 
 namespace Play
 {

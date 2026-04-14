@@ -50,9 +50,12 @@ VolumeSkyPass::~VolumeSkyPass()
 void VolumeSkyPass::init()
 {
     auto skyBoxvId = ShaderManager::Instance().getShaderIdByName(BuiltinShaders::BUILTIN_FULL_SCREEN_QUAD_VERT_SHADER_NAME);
-    auto skyBoxfId = ShaderManager::Instance().loadShaderFromFile("skyBoxFragment", "skyBoxProgram.frag.slang", ShaderStage::eFragment);
-    auto transmittanceComp =
-        ShaderManager::Instance().loadShaderFromFile("transmittanceLutComp", "transmittanceLut.comp.slang", ShaderStage::eCompute);
+    auto skyBoxfId =
+        ShaderManager::Instance().loadShaderFromFile("skyBoxFragment", "newShaders/deferRenderer/atmosphere/skyBoxProgram.frag.slang",
+                                                     ShaderStage::eFragment);
+    auto transmittanceComp = ShaderManager::Instance().loadShaderFromFile("transmittanceLutComp",
+                                                                          "newShaders/deferRenderer/atmosphere/transmittanceLut.comp.slang",
+                                                                          ShaderStage::eCompute);
 
     _transmittanceLutProgram = RefPtr<ComputeProgram>(new ComputeProgram());
     _transmittanceLutProgram->setComputeModuleID(transmittanceComp);

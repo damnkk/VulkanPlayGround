@@ -1,4 +1,3 @@
-#pragma once
 #include "common.slang"
 #include "PConstantType.h.slang"
 #include "constants.h.slang"
