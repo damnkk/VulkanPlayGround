@@ -6,6 +6,90 @@
 #include "nvvk/check_error.hpp"
 #include "nvvk/debug_util.hpp"
 #include "nvaftermath/aftermath.hpp"
+
+namespace
+{
+std::filesystem::path normalizePath(const std::filesystem::path& path)
+{
+    std::error_code ec;
+    const auto      absolutePath = std::filesystem::absolute(path, ec);
+    return (ec ? path : absolutePath).lexically_normal();
+}
+
+std::filesystem::path tryResolvePath(const std::filesystem::path& path)
+{
+    if (path.empty())
+    {
+        return {};
+    }
+
+    std::error_code ec;
+    if (std::filesystem::exists(path, ec) && !ec)
+    {
+        return normalizePath(path);
+    }
+
+    return {};
+}
+
+std::filesystem::path resolveShaderPath(const std::filesystem::path&              requestedPath,
+                                        const std::vector<std::filesystem::path>& searchPaths,
+                                        const std::filesystem::path*              localDirectory,
+                                        bool                                      allowRecursiveFilenameFallback)
+{
+    if (requestedPath.empty())
+    {
+        return {};
+    }
+
+    if (localDirectory != nullptr)
+    {
+        if (auto resolvedPath = tryResolvePath(*localDirectory / requestedPath); !resolvedPath.empty())
+        {
+            return resolvedPath;
+        }
+    }
+
+    if (auto resolvedPath = tryResolvePath(requestedPath); !resolvedPath.empty())
+    {
+        return resolvedPath;
+    }
+
+    for (const auto& searchPath : searchPaths)
+    {
+        if (auto resolvedPath = tryResolvePath(searchPath / requestedPath); !resolvedPath.empty())
+        {
+            return resolvedPath;
+        }
+    }
+
+    if (!allowRecursiveFilenameFallback || requestedPath.has_parent_path())
+    {
+        return {};
+    }
+
+    const std::filesystem::path targetFilename = requestedPath.filename();
+    for (const auto& searchPath : searchPaths)
+    {
+        std::error_code ec;
+        for (std::filesystem::recursive_directory_iterator it(searchPath, ec), end; !ec && it != end; it.increment(ec))
+        {
+            if (!it->is_regular_file())
+            {
+                continue;
+            }
+
+            if (it->path().filename() == targetFilename)
+            {
+                return normalizePath(it->path());
+            }
+        }
+    }
+
+    return {};
+}
+} // namespace
+
 namespace Play
 {
 
@@ -39,10 +123,55 @@ void ShaderPool::free(uint32_t id)
 void ShaderManager::init()
 {
     _shaderPool.init(MaxShaderModules, &PlayResourceManager::Instance());
-    std::filesystem::path shaderBasePath = std::filesystem::path(getBaseFilePath()) / "shaders";
-    _searchPaths = {shaderBasePath, shaderBasePath / "newShaders", std::filesystem::path(getBaseFilePath()) / "External/nvpro_core2/nvshaders",
-                    std::filesystem::path(getBaseFilePath()) / "External/nvpro_core2/",
-                    std::filesystem::path(getBaseFilePath()) / "code/resourceManagement"};
+    const std::filesystem::path projectBasePath = getBaseFilePath();
+    const std::filesystem::path shaderBasePath  = projectBasePath / "shaders";
+    const std::filesystem::path newShaderPath   = shaderBasePath / "newShaders";
+
+    _searchPaths.clear();
+
+    auto appendSearchPath = [this](const std::filesystem::path& path)
+    {
+        std::filesystem::path normalizedPath = normalizePath(path);
+        if (!std::filesystem::exists(normalizedPath))
+        {
+            return;
+        }
+
+        for (const auto& searchPath : _searchPaths)
+        {
+            if (searchPath == normalizedPath)
+            {
+                return;
+            }
+        }
+
+        _searchPaths.push_back(normalizedPath);
+    };
+
+    appendSearchPath(shaderBasePath);
+    appendSearchPath(newShaderPath);
+
+    // Register module directories under newShaders so local includes can stay short.
+    if (std::filesystem::exists(newShaderPath))
+    {
+        std::set<std::filesystem::path> newShaderDirectories;
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(newShaderPath))
+        {
+            if (entry.is_directory())
+            {
+                newShaderDirectories.insert(normalizePath(entry.path()));
+            }
+        }
+
+        for (const auto& path : newShaderDirectories)
+        {
+            appendSearchPath(path);
+        }
+    }
+
+    appendSearchPath(projectBasePath / "External/nvpro_core2/nvshaders");
+    appendSearchPath(projectBasePath / "External/nvpro_core2");
+    appendSearchPath(projectBasePath / "code/resourceManagement");
     _glslCCompiler.addSearchPaths(_searchPaths);
     _glslCCompiler.defaultOptions();
     _glslCCompiler.defaultTarget();
@@ -139,7 +268,29 @@ VkPipelineStageFlags2 spvToVkStageFlags(SpvReflectShaderStageFlagBits flags)
 
 void ShaderManager::addSearchPath(const std::filesystem::path& path)
 {
-    _searchPaths.push_back(path);
+    std::filesystem::path normalizedPath = path;
+    if (!normalizedPath.is_absolute())
+    {
+        normalizedPath = std::filesystem::path(getBaseFilePath()) / normalizedPath;
+    }
+
+    normalizedPath = normalizePath(normalizedPath);
+    if (!std::filesystem::exists(normalizedPath))
+    {
+        return;
+    }
+
+    for (const auto& searchPath : _searchPaths)
+    {
+        if (searchPath == normalizedPath)
+        {
+            return;
+        }
+    }
+
+    _searchPaths.push_back(normalizedPath);
+    _glslCCompiler.addSearchPaths({normalizedPath});
+    _slangCompiler.addSearchPaths({normalizedPath});
 }
 
 shaderc_shader_kind getShaderKind(ShaderStage stage)
@@ -216,16 +367,7 @@ bool ShaderManager::checkShaderUpdate(std::filesystem::path shaderPath, std::fil
     std::vector<std::filesystem::path> toProcess;
 
     // 在_searchPaths下查找shaderPath实际存在的路径
-    std::filesystem::path shaderRealPath;
-    for (const auto& searchPath : _searchPaths)
-    {
-        auto tryPath = searchPath / shaderPath;
-        if (std::filesystem::exists(tryPath))
-        {
-            shaderRealPath = std::filesystem::absolute(tryPath);
-            break;
-        }
-    }
+    std::filesystem::path shaderRealPath = resolveShaderPath(shaderPath, _searchPaths, nullptr, !shaderPath.has_parent_path());
     if (shaderRealPath.empty() || !std::filesystem::exists(shaderRealPath))
     {
         // 主shader文件没找到
@@ -261,16 +403,8 @@ bool ShaderManager::checkShaderUpdate(std::filesystem::path shaderPath, std::fil
                 if (incFile.empty()) continue;
 
                 // 在_searchPaths下查找头文件实际存在的路径
-                std::filesystem::path incRealPath;
-                for (const auto& searchPath : _searchPaths)
-                {
-                    auto tryPath = searchPath / incFile;
-                    if (std::filesystem::exists(tryPath))
-                    {
-                        incRealPath = std::filesystem::absolute(tryPath);
-                        break;
-                    }
-                }
+                std::filesystem::path currentDirectory = curFile.parent_path();
+                std::filesystem::path incRealPath      = resolveShaderPath(incFile, _searchPaths, &currentDirectory, false);
                 if (!incRealPath.empty() && std::filesystem::exists(incRealPath))
                 {
                     toProcess.push_back(incRealPath);
@@ -284,6 +418,13 @@ bool ShaderManager::checkShaderUpdate(std::filesystem::path shaderPath, std::fil
 uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesystem::path& filePath, ShaderStage stage, ShaderType type,
                                            std::string entry)
 {
+    const std::filesystem::path resolvedFilePath = resolveShaderPath(filePath, _searchPaths, nullptr, !filePath.has_parent_path());
+    if (resolvedFilePath.empty())
+    {
+        LOGE("Shader source not found: %s\n", filePath.string().c_str());
+        return ~0U;
+    }
+
     if (type == ShaderType::eSLANG)
     {
         if (_nameIdMap.find(name) != _nameIdMap.end())
@@ -294,7 +435,7 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
         std::filesystem::path spvFileName = name + ".spv";
         std::filesystem::path fullSpvPath = spvPath / spvFileName;
 
-        if (std::filesystem::exists(fullSpvPath) && checkShaderUpdate(filePath, fullSpvPath))
+        if (std::filesystem::exists(fullSpvPath) && checkShaderUpdate(resolvedFilePath, fullSpvPath))
         {
             // Load pre-compiled SPV file
             std::ifstream file(fullSpvPath, std::ios::binary | std::ios::ate);
@@ -324,7 +465,7 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
             }
         }
         ShaderModule* module = _shaderPool.alloc();
-        auto          result = _slangCompiler.compileFile(filePath);
+        auto          result = _slangCompiler.compileFile(resolvedFilePath);
         if (!result)
         {
             const std::string& errorMessages = _slangCompiler.getLastDiagnosticMessage();
@@ -368,7 +509,7 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
             {
                 return _nameIdMap[name];
             }
-            if (std::filesystem::exists(fullSpvPath) && checkShaderUpdate(filePath, fullSpvPath))
+            if (std::filesystem::exists(fullSpvPath) && checkShaderUpdate(resolvedFilePath, fullSpvPath))
             {
                 // Load pre-compiled SPV file
                 std::ifstream file(fullSpvPath, std::ios::binary | std::ios::ate);
@@ -399,7 +540,7 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
                 }
             }
             ShaderModule* module = _shaderPool.alloc();
-            auto          result = _glslCCompiler.compileFile(filePath, getShaderKind(stage));
+            auto          result = _glslCCompiler.compileFile(resolvedFilePath, getShaderKind(stage));
             if (result.GetNumErrors())
             {
                 _shaderPool.free(module->_poolId);

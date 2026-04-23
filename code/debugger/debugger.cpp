@@ -14,8 +14,11 @@ std::vector<nvvk::ExtensionInfo> NsightDebugger::initInjection()
     afterMathTracker.initialize();
     std::vector<nvvk::ExtensionInfo> extensions;
     afterMathTracker.addExtensions(extensions);
-    nvvk::CheckError::getInstance().setCallbackFunction(
-        [&](VkResult result) { afterMathTracker.errorCallback(result); });
+    for (auto& extension : extensions)
+    {
+        extension.required = false;
+    }
+    nvvk::CheckError::getInstance().setCallbackFunction([&](VkResult result) { afterMathTracker.errorCallback(result); });
     return extensions;
 }
 

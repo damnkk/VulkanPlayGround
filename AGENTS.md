@@ -21,6 +21,10 @@ Formatting is defined in `.clang-format`: 4-space indentation, no tabs, Allman b
 
 Match existing naming in the area you edit: PascalCase for types and most engine files (`PlayApp.h`, `GBufferPass.cpp`), descriptive shader names, and existing member-prefix style within each class (`_renderer`, `m_app`, etc.). Keep header/source pairs aligned by name.
 
+## Agent Workflow Preferences
+- Do not proactively run compile or build commands. The user will manually verify whether compilation succeeds.
+- Do not add or adjust standard library includes (such as C/C++ `std` headers) on your own. Assume the user will ensure required headers exist.
+
 ## Testing Guidelines
 There is no top-level automated test suite for the application. Validate changes with:
 - a clean `cmake --build build`

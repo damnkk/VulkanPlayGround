@@ -7,9 +7,10 @@
 
 namespace
 {
-constexpr uint32_t kTransmittanceLutWidth  = 256;
-constexpr uint32_t kTransmittanceLutHeight = 64;
-constexpr uint32_t kTransmittanceGroupSize = 8;
+constexpr uint32_t         kTransmittanceLutWidth  = 256;
+constexpr uint32_t         kTransmittanceLutHeight = 64;
+constexpr uint32_t         kTransmittanceGroupSize = 8;
+const AtmosphereParameters kDefaultAtmosphereParameters{};
 } // namespace
 
 namespace Play
@@ -18,26 +19,52 @@ namespace Play
 void VolumeSkyPass::AtmosControler::onGUI()
 {
     bool changed = false;
-    // if (ImGui::Begin("Atmosphere Profile"))
-    // {
-    //     changed |= ImGui::DragFloat("Sea Level", &_cpuData.seaLevel, 1.0f, 0.0f, 100000.0f, "%.1f");
-    //     changed |= ImGui::DragFloat("Planet Radius", &_cpuData.planetRadius, 100.0f, 0.0f, 100000000.0f, "%.1f");
-    //     changed |= ImGui::DragFloat("Atmosphere Height", &_cpuData.atmosphereHeight, 10.0f, 0.0f, 1000000.0f, "%.1f");
-    //     changed |= ImGui::DragFloat("Sun Intensity", &_cpuData.sunLightIntensity, 0.1f, 0.0f, 100000.0f, "%.3f");
-    //     changed |= ImGui::ColorEdit3("Sun Color", &_cpuData.sunColor.x);
-    //     changed |= ImGui::SliderFloat("Sun Disk Angle", &_cpuData.sunDiskAngle, 0.0f, 90.0f, "%.3f");
-    //     changed |= ImGui::SliderFloat("Sun Azimuth", &_cpuData.sunSit.x, 0.0f, 360.0f, "%.1f deg");
-    //     changed |= ImGui::SliderFloat("Sun Elevation", &_cpuData.sunSit.y, -89.0f, 89.0f, "%.1f deg");
-    //     changed |= ImGui::DragFloat("Rayleigh Scale", &_cpuData.rayleighScatteringScale, 0.01f, 0.0f, 100.0f, "%.3f");
-    //     changed |= ImGui::DragFloat("Rayleigh Height", &_cpuData.rayleighScatteringScalarHeight, 10.0f, 1.0f, 1000000.0f, "%.1f");
-    //     changed |= ImGui::DragFloat("Mie Scale", &_cpuData.mieScatteringScale, 0.01f, 0.0f, 100.0f, "%.3f");
-    //     changed |= ImGui::DragFloat("Mie Height", &_cpuData.mieScatteringScalarHeight, 10.0f, 1.0f, 1000000.0f, "%.1f");
-    //     changed |= ImGui::SliderFloat("Mie Anisotropy", &_cpuData.mieAnisotropy, 0.0f, 0.999f, "%.3f");
-    //     changed |= ImGui::DragFloat("Ozone Scale", &_cpuData.OZoneAbsorptionScale, 0.01f, 0.0f, 100.0f, "%.3f");
-    //     changed |= ImGui::DragFloat("Ozone Center Height", &_cpuData.OZoneLevelCenterHeight, 10.0f, 0.0f, 1000000.0f, "%.1f");
-    //     changed |= ImGui::DragFloat("Ozone Width", &_cpuData.OZoneLevelWidth, 10.0f, 1.0f, 1000000.0f, "%.1f");
-    // }
-    // ImGui::End();
+    if (ImGui::Begin("Atmosphere Profile"))
+    {
+        if (ImGui::Button("Reset To Defaults"))
+        {
+            _cpuData = kDefaultAtmosphereParameters;
+            changed  = true;
+        }
+
+        ImGui::TextUnformatted("Geometry");
+        ImGui::Separator();
+        changed |= ImGui::DragFloat("Bottom Radius (km)", &_cpuData.BottomRadius, 1.0f, 1000.0f, 10000.0f, "%.2f");
+        changed |= ImGui::DragFloat("Top Radius (km)", &_cpuData.TopRadius, 1.0f, 1000.0f, 10000.0f, "%.2f");
+
+        ImGui::TextUnformatted("Rayleigh");
+        ImGui::Separator();
+        changed |= ImGui::DragFloat("Rayleigh Density Exp Scale", &_cpuData.RayleighDensityExpScale, 0.001f, -2.0f, 0.0f, "%.4f");
+        changed |= ImGui::DragFloat3("Rayleigh Scattering", &_cpuData.RayleighScattering.x, 0.0001f, 0.0f, 0.1f, "%.6f");
+
+        ImGui::TextUnformatted("Mie");
+        ImGui::Separator();
+        changed |= ImGui::DragFloat("Mie Density Exp Scale", &_cpuData.MieDensityExpScale, 0.001f, -2.0f, 0.0f, "%.4f");
+        changed |= ImGui::DragFloat3("Mie Scattering", &_cpuData.MieScattering.x, 0.0001f, 0.0f, 0.1f, "%.6f");
+        changed |= ImGui::DragFloat3("Mie Extinction", &_cpuData.MieExtinction.x, 0.0001f, 0.0f, 0.1f, "%.6f");
+        changed |= ImGui::DragFloat3("Mie Absorption", &_cpuData.MieAbsorption.x, 0.0001f, 0.0f, 0.1f, "%.6f");
+        changed |= ImGui::SliderFloat("Mie Phase G", &_cpuData.MiePhaseG, 0.0f, 0.999f, "%.3f");
+
+        ImGui::TextUnformatted("Absorption");
+        ImGui::Separator();
+        changed |= ImGui::DragFloat("Absorption Layer Width (km)", &_cpuData.AbsorptionDensity0LayerWidth, 0.1f, 0.0f, 100.0f, "%.3f");
+        changed |= ImGui::DragFloat("Absorption Density0 Constant", &_cpuData.AbsorptionDensity0ConstantTerm, 0.001f, -10.0f, 10.0f, "%.4f");
+        changed |= ImGui::DragFloat("Absorption Density0 Linear", &_cpuData.AbsorptionDensity0LinearTerm, 0.001f, -1.0f, 1.0f, "%.4f");
+        changed |= ImGui::DragFloat("Absorption Density1 Constant", &_cpuData.AbsorptionDensity1ConstantTerm, 0.001f, -10.0f, 10.0f, "%.4f");
+        changed |= ImGui::DragFloat("Absorption Density1 Linear", &_cpuData.AbsorptionDensity1LinearTerm, 0.001f, -1.0f, 1.0f, "%.4f");
+        changed |= ImGui::DragFloat3("Absorption Extinction", &_cpuData.AbsorptionExtinction.x, 0.0001f, 0.0f, 0.1f, "%.6f");
+
+        ImGui::TextUnformatted("Ground");
+        ImGui::Separator();
+        changed |= ImGui::ColorEdit3("Ground Albedo", &_cpuData.GroundAlbedo.x);
+
+        ImGui::TextUnformatted("Sun");
+        ImGui::Separator();
+        changed |= ImGui::DragFloat3("Solar Irradiance", &_cpuData.solar_irradiance.x, 0.01f, 0.0f, 20.0f, "%.3f");
+        changed |= ImGui::DragFloat("Sun Angular Radius", &_cpuData.sun_angular_radius, 0.0001f, 0.0f, 0.1f, "%.6f");
+        changed |= ImGui::SliderFloat("Mu S Min", &_cpuData.mu_s_min, -1.0f, 1.0f, "%.3f");
+    }
+    ImGui::End();
 
     if (changed) flushToGPU();
 }
@@ -50,15 +77,14 @@ VolumeSkyPass::~VolumeSkyPass()
 void VolumeSkyPass::init()
 {
     auto skyBoxvId = ShaderManager::Instance().getShaderIdByName(BuiltinShaders::BUILTIN_FULL_SCREEN_QUAD_VERT_SHADER_NAME);
-    auto skyBoxfId =
-        ShaderManager::Instance().loadShaderFromFile("skyBoxFragment", "newShaders/deferRenderer/atmosphere/skyBoxProgram.frag.slang",
-                                                     ShaderStage::eFragment);
-    auto transmittanceComp = ShaderManager::Instance().loadShaderFromFile("transmittanceLutComp",
-                                                                          "newShaders/deferRenderer/atmosphere/transmittanceLut.comp.slang",
-                                                                          ShaderStage::eCompute);
+    auto skyBoxfId = ShaderManager::Instance().loadShaderFromFile("skyBoxFragment", "newShaders/deferRenderer/atmosphere/skyBoxProgram.frag.slang",
+                                                                  ShaderStage::eFragment);
+    auto transmittanceComp = ShaderManager::Instance().loadShaderFromFile(
+        "transmittanceLutComp", "newShaders/deferRenderer/atmosphere/transmittanceLut.comp.slang", ShaderStage::eCompute);
 
     _transmittanceLutProgram = RefPtr<ComputeProgram>(new ComputeProgram());
     _transmittanceLutProgram->setComputeModuleID(transmittanceComp);
+    _transmittanceLutProgram->getDescriptorSetManager().initPushConstant<PerFrameConstant>();
 
     _skyBoxProgram = RefPtr<RenderProgram>(new RenderProgram());
     _skyBoxProgram->setFragModuleID(skyBoxfId);
@@ -94,8 +120,11 @@ void VolumeSkyPass::build(RDG::RDGBuilder* rdgBuilder)
             .storageWrite(0, transmittanceLutRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
             .read(1, atmosBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
             .execute(
-                [this](RDG::PassNode* passNode, RDG::RenderContext& context)
+                [this, ownedRender](RDG::PassNode* passNode, RDG::RenderContext& context)
                 {
+                    PerFrameConstant* perFrameConstant =
+                        this->_transmittanceLutProgram->getDescriptorSetManager().getPushConstantData<PerFrameConstant>();
+                    perFrameConstant->cameraBufferDeviceAddress = ownedRender->getCurrentCameraBuffer()->address;
                     _transmittanceLutProgram->setPassNode(passNode);
                     _transmittanceLutProgram->bind(context._currCmdBuffer);
                     context._pendingComputeState->bindDescriptorSet(context._currCmdBuffer, _transmittanceLutProgram.get());
