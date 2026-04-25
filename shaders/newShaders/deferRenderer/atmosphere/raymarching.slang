@@ -88,7 +88,7 @@ float raySphereIntersectNearest(float3 r0, float3 rd, float3 s0, float sR)
     return max(0.0, min(sol0, sol1));
 }
 
-float3 SampleMediumExtinction(float3 WorldPos, AtmosphereParameters Atmosphere)
+float3 SampleMediumExtinction(float3 WorldPos, in AtmosphereParameters Atmosphere)
 {
     const float viewHeight = length(WorldPos) - Atmosphere.BottomRadius;
 

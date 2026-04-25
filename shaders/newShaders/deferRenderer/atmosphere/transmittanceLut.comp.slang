@@ -39,22 +39,23 @@ float3 IntegrateOpticalDepthOnly(in float3 WorldPos, in float3 WorldDir, in Atmo
 
     tMax = min(tMax, 9000000.0f);
 
-    if (tMax <= 0.0f || SampleCount <= 0.0f)
-    {
-        return 0.0f;
-    }
-
+    float       dt             = tMax / SampleCount;
     float3      OpticalDepth   = 0.0f;
     float       t              = 0.0f;
+    float       tPrev          = 0.0;
     const float SampleSegmentT = 0.3f;
     for (float s = 0.0f; s < SampleCount; s += 1.0f)
     {
-        float NewT = tMax * (s + SampleSegmentT) / SampleCount;
-        float dt   = NewT - t;
-        t          = NewT;
+        {
+            float NewT = tMax * (s + SampleSegmentT) / SampleCount;
+            float dt   = NewT - t;
+            t          = NewT;
+        }
 
         float3 P = WorldPos + t * WorldDir;
         OpticalDepth += SampleMediumExtinction(P, Atmosphere) * dt;
+        // OpticalDepth = SampleMediumExtinction(P, Atmosphere);
+        tPrev = t;
     }
 
     return OpticalDepth;
@@ -75,9 +76,9 @@ void main(uint3 dispatchThreadId: SV_DispatchThreadID)
     float  viewHeight;
     float  viewZenithCosAngle;
     UvToLutTransmittanceParams(u_atmosParameter, viewHeight, viewZenithCosAngle, uv);
-    float3      WorldPos      = float3(0.0f, 0.0f, viewHeight);
-    float3      WorldDir      = float3(0.0f, sqrt(1.0 - viewZenithCosAngle * viewZenithCosAngle), viewZenithCosAngle);
-    const float SampleCount   = 40.0f; // Can go a low as 10 sample but energy lost starts to be visible.
-    float3      transmittance = exp(-IntegrateOpticalDepthOnly(WorldPos, WorldDir, u_atmosParameter, SampleCount));
+    float3      WorldPos                          = float3(0.0f, 0.0f, viewHeight);
+    float3      WorldDir                          = float3(0.0f, sqrt(1.0 - viewZenithCosAngle * viewZenithCosAngle), viewZenithCosAngle);
+    const float SampleCount                       = 40.0f; // Can go a low as 10 sample but energy lost starts to be visible.
+    float3      transmittance                     = exp(-IntegrateOpticalDepthOnly(WorldPos, WorldDir, u_atmosParameter, SampleCount));
     g_TransmittanceLutOutput[dispatchThreadId.xy] = float4(transmittance, 1.0);
 }

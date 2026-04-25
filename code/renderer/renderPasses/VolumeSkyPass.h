@@ -11,16 +11,13 @@ struct AtmosphereParameters
     float BottomRadius            DEFAULT(6360.0f);
     float TopRadius               DEFAULT(6460.0f);
     float RayleighDensityExpScale DEFAULT(-0.125);
-    float _padding0               DEFAULT(0.0f);
 
     float3 RayleighScattering DEFAULT(float3(0.005802f, 0.013558f, 0.033100f));
     float MieDensityExpScale  DEFAULT(-0.8333333);
 
     float3 MieScattering DEFAULT(float3(0.003996, 0.003996, 0.003996));
-    float _padding1      DEFAULT(0.0f);
 
     float3 MieExtinction DEFAULT(float3(0.004440, 0.004440, 0.004440));
-    float _padding2      DEFAULT(0.0f);
 
     float3 MieAbsorption DEFAULT(float3(0.000444, 0.000444, 0.000444));
     float MiePhaseG      DEFAULT(0.8f);
@@ -34,7 +31,6 @@ struct AtmosphereParameters
     float3 AbsorptionExtinction        DEFAULT(float3(0.000650, 0.001881, 0.000085));
 
     float3 GroundAlbedo DEFAULT(float3(0.0f, 0.0f, 0.0f));
-    float _padding3     DEFAULT(0.0f);
 
     float3 solar_irradiance  DEFAULT(float3(1.0f));
     float sun_angular_radius DEFAULT(0.004675);
