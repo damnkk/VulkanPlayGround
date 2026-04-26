@@ -46,15 +46,15 @@ float3 IntegrateOpticalDepthOnly(in float3 WorldPos, in float3 WorldDir, in Atmo
     const float SampleSegmentT = 0.3f;
     for (float s = 0.0f; s < SampleCount; s += 1.0f)
     {
-        {
-            float NewT = tMax * (s + SampleSegmentT) / SampleCount;
-            float dt   = NewT - t;
-            t          = NewT;
-        }
+        float NewT = tMax * (s + SampleSegmentT) / SampleCount;
+        dt         = NewT - t;
+        t          = NewT;
 
+        // OpticalDepth = float3(t);
+        // return OpticalDepth;
         float3 P = WorldPos + t * WorldDir;
         OpticalDepth += SampleMediumExtinction(P, Atmosphere) * dt;
-        // OpticalDepth = SampleMediumExtinction(P, Atmosphere);
+
         tPrev = t;
     }
 
