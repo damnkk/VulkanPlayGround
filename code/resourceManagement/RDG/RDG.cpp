@@ -240,7 +240,8 @@ void RDGBuilder::prepareDescriptorSets(RenderContext& context, PassNode* pass)
         if (state.textureStates.front().isAttachment) continue;
         assert(state.texture->getRHI());
         TextureAccessInfo accessInfo = state.textureStates[0];
-        programDescManager.setDescInfo(accessInfo.binding, *state.texture->_rhi);
+        programDescManager.setDescInfo(accessInfo.binding, state.texture->_rhi->descriptor.imageView, accessInfo.layout,
+                                       state.texture->_rhi->descriptor.sampler);
     }
 
     for (auto& state : pass->_bufferStates)

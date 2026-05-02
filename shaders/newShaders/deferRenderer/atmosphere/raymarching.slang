@@ -53,6 +53,24 @@ void UvToLutTransmittanceParams(AtmosphereParameters Atmosphere, out float viewH
     viewZenithCosAngle = clamp(viewZenithCosAngle, -1.0, 1.0);
 }
 
+void LutTransmittanceParamsToUv(AtmosphereParameters Atmosphere, in float viewHeight, in float viewZenithCosAngle, out float2 uv)
+{
+    float H   = sqrt(max(0.0f, Atmosphere.TopRadius * Atmosphere.TopRadius - Atmosphere.BottomRadius * Atmosphere.BottomRadius));
+    float rho = sqrt(max(0.0f, viewHeight * viewHeight - Atmosphere.BottomRadius * Atmosphere.BottomRadius));
+
+    float discriminant = viewHeight * viewHeight * (viewZenithCosAngle * viewZenithCosAngle - 1.0) + Atmosphere.TopRadius * Atmosphere.TopRadius;
+    float d            = max(0.0, (-viewHeight * viewZenithCosAngle + sqrt(discriminant))); // Distance to atmosphere boundary
+
+    float d_min = Atmosphere.TopRadius - viewHeight;
+    float d_max = rho + H;
+    float x_mu  = (d - d_min) / (d_max - d_min);
+    float x_r   = rho / H;
+
+    uv = float2(x_mu, x_r);
+    // uv = float2(fromUnitToSubUvs(uv.x, TRANSMITTANCE_TEXTURE_WIDTH), fromUnitToSubUvs(uv.y, TRANSMITTANCE_TEXTURE_HEIGHT)); // No real impact so
+    // off
+}
+
 // - r0: ray origin
 // - rd: normalized ray direction
 // - s0: sphere center
@@ -103,6 +121,24 @@ float3 SampleMediumExtinction(float3 WorldPos, in AtmosphereParameters Atmospher
     const float3 extinctionOzo = densityOzo * Atmosphere.AbsorptionExtinction;
 
     return extinctionMie + extinctionRay + extinctionOzo;
+}
+
+float3 SampleMediumScattering(float3 WorldPos, in AtmosphereParameters Atmosphere)
+{
+    const float viewHeight = length(WorldPos) - Atmosphere.BottomRadius;
+
+    const float densityMie = exp(Atmosphere.MieDensityExpScale * viewHeight);
+    const float densityRay = exp(Atmosphere.RayleighDensityExpScale * viewHeight);
+    const float densityOzo = saturate(viewHeight < Atmosphere.AbsorptionDensity0LayerWidth
+                                          ? Atmosphere.AbsorptionDensity0LinearTerm * viewHeight + Atmosphere.AbsorptionDensity0ConstantTerm
+                                          : Atmosphere.AbsorptionDensity1LinearTerm * viewHeight + Atmosphere.AbsorptionDensity1ConstantTerm);
+
+    const float3 scatteringMie = densityMie * Atmosphere.MieScattering;
+    const float3 scatteringRay = densityRay * Atmosphere.RayleighScattering;
+    const float3 scatteringOzo = 0.0;
+
+    return scatteringMie + scatteringRay + scatteringOzo;
+     
 }
 
 #endif // ATMOSPHERE_H

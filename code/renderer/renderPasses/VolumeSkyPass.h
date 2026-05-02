@@ -57,6 +57,7 @@ private:
         virtual void onGUI() override;
     } _skyAtmosControler;
     RefPtr<ComputeProgram> _transmittanceLutProgram;
+    RefPtr<ComputeProgram> _multiScatteringLutProgram;
     RefPtr<RenderProgram>  _skyBoxProgram;
     RefPtr<RenderProgram>  _atmosphereProgram;
     RefPtr<RenderProgram>  _volumetricCloudProgram;
@@ -64,6 +65,7 @@ private:
 
     // 常驻资源
     RefPtr<Texture> _transmittanceLut;
+    RefPtr<Texture> _multiScatteringLut;
 };
 
 } // namespace Play
