@@ -116,7 +116,7 @@ void VulkanDriver::prepareGlobalDescriptorSet()
 {
     _globalDescriptorBindings.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_ALL, nullptr);  // g_GlobalTexture
     _globalDescriptorBindings.addBinding(1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_ALL, nullptr);  // g_GlobalLutTexture  for tone map
-    _globalDescriptorBindings.addBinding(2, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_ALL, nullptr);        // g_GlobalSampler_Nerest
+    _globalDescriptorBindings.addBinding(2, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_ALL, nullptr);        // g_GlobalSampler_Linear_Clamp
     _globalDescriptorBindings.addBinding(3, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_ALL, nullptr);        // g_GlobalSampler_Linear
     _globalDescriptorBindings.addBinding(4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr); // g_GlobalSampler_Linear
     _descriptorSetCache->initGlobalDescriptorSets(_globalDescriptorBindings);
@@ -128,11 +128,11 @@ void VulkanDriver::updateGlobalDescriptorSet()
     std::vector<VkSampler>             samplerList(2);
     std::vector<VkDescriptorImageInfo> imageInfoList;
     VkSamplerCreateInfo                samplerCreateInfo{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
-    samplerCreateInfo.magFilter     = VK_FILTER_NEAREST;
-    samplerCreateInfo.minFilter     = VK_FILTER_NEAREST;
-    samplerCreateInfo.addressModeU  = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-    samplerCreateInfo.addressModeV  = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-    samplerCreateInfo.addressModeW  = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+    samplerCreateInfo.magFilter     = VK_FILTER_LINEAR;
+    samplerCreateInfo.minFilter     = VK_FILTER_LINEAR;
+    samplerCreateInfo.addressModeU  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerCreateInfo.addressModeV  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerCreateInfo.addressModeW  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     samplerCreateInfo.mipLodBias    = 0.0f;
     samplerCreateInfo.maxAnisotropy = 1.0f;
     samplerCreateInfo.compareEnable = VK_FALSE;

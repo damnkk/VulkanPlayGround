@@ -80,16 +80,16 @@ MultiScatteringLuminanceResult IntegrateMultiScatteringLuminance(in float3 World
         float        SunZenithCosAngle = dot(SunDir, UpVector);
         float2       uv;
         LutTransmittanceParamsToUv(Atmosphere, pHeight, SunZenithCosAngle, uv);
-        float3 TransmittanceToSun = g_TransmittanceLut.SampleLevel(g_GlobalSampler_Linear, uv, 0).rgb;
+        float3 TransmittanceToSun = g_TransmittanceLut.SampleLevel(g_GlobalSampler_Linear_Clamp, uv, 0).rgb;
 
         float tEarth      = raySphereIntersectNearest(P, SunDir, earthO + PLANET_RADIUS_OFFSET * UpVector, Atmosphere.BottomRadius);
         float earthShadow = tEarth >= 0.0f ? 0.0f : 1.0f;
 
         const float3 scattering = SampleMediumScattering(P, Atmosphere);
         float3       S          = globalL * earthShadow * TransmittanceToSun * scattering * uniformPhase;
-
-        result.MultiScatAs1 += throughput * scattering * dt;
-        return result;
+        float3       MS         = scattering * 1;
+        float3       MSint      = (MS - MS * SampleTransmittance) / extinction;
+        result.MultiScatAs1 += throughput * MSint;
         float3 Sint = (S - S * SampleTransmittance) / extinction;
         L += throughput * Sint;
         throughput *= SampleTransmittance;
@@ -104,7 +104,7 @@ MultiScatteringLuminanceResult IntegrateMultiScatteringLuminance(in float3 World
         float        SunZenithCosAngle = dot(SunDir, UpVector);
         float2       uv;
         LutTransmittanceParamsToUv(Atmosphere, pHeight, SunZenithCosAngle, uv);
-        float3 TransmittanceToSun = g_TransmittanceLut.SampleLevel(g_GlobalSampler_Linear, uv, 0).rgb;
+        float3 TransmittanceToSun = g_TransmittanceLut.SampleLevel(g_GlobalSampler_Linear_Clamp, uv, 0).rgb;
 
         const float NdotL = saturate(dot(normalize(UpVector), normalize(SunDir)));
         L += globalL * TransmittanceToSun * throughput * NdotL * Atmosphere.GroundAlbedo / M_PI;
@@ -135,11 +135,7 @@ void main(uint3 dispatchThreadId: SV_DispatchThreadID)
 
     float3      worldPos            = float3(0.0f, 0.0f, viewHeight);
     float3      worldDir            = float3(0.0f, 0.0f, 1.0f);
-    const bool  ground              = true;
-    const float SampleCountIni      = 20; // a minimum set of step is required for accuracy unfortunately
-    const float DepthBufferValue    = -1.0;
-    const bool  VariableSampleCount = false;
-    const bool  MieRayPhase         = false;
+    const float SampleCountIni      = 20.0; // a minimum set of step is required for accuracy unfortunately
 
     const float SphereSolidAngle = 4.0 * M_PI;
     const float IsotropicPhase   = 1.0 / SphereSolidAngle;
@@ -209,10 +205,12 @@ void main(uint3 dispatchThreadId: SV_DispatchThreadID)
     if (dispatchThreadId.z > 0)
         return;
 
-    float3 MultiScatAs1         = MultiScatAs1SharedMem[0];
+    float3 MultiScatAs1         = MultiScatAs1SharedMem[0] *IsotropicPhase;
     float3 InScatteredLuminance = LSharedMem[0] * IsotropicPhase;
-    float3 MultiScatAs1SQR      = MultiScatAs1 * MultiScatAs1;
-    float3 L = InScatteredLuminance * (1.0 + MultiScatAs1 + MultiScatAs1SQR + MultiScatAs1 * MultiScatAs1SQR + MultiScatAs1SQR * MultiScatAs1SQR);
+    // For a serie, sum_{n=0}^{n=+inf} = 1 + r + r^2 + r^3 + ... + r^n = 1 / (1.0 - r), see https://en.wikipedia.org/wiki/Geometric_series
+    const float3 r                                         = MultiScatAs1;
+    const float3 SumOfAllMultiScatteringEventsContribution = 1.0f / (1.0 - r);
+    float3       L                                         = InScatteredLuminance * SumOfAllMultiScatteringEventsContribution; // Equation 10 Psi_ms
 
-    g_MultiScatteringLutOutput[dispatchThreadId.xy] = float4(MultiScatAs1, 1.0);
+    g_MultiScatteringLutOutput[dispatchThreadId.xy] = float4(L, 1.0);
 }

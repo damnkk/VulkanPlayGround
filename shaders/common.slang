@@ -15,7 +15,7 @@ Texture2D<float4> g_GlobalNoiseTexture;
 [vk::binding(1, 0)]
 Texture2D<float4> g_GlobalLUTTexture;
 [vk::binding(2, 0)]
-SamplerState g_GlobalSampler_Point; // nearest / point sampling
+SamplerState g_GlobalSampler_Linear_Clamp;
 [vk::binding(3, 0)]
 SamplerState g_GlobalSampler_Linear; // linear filtering
 [vk::binding(4, 0)]
