@@ -16,11 +16,6 @@ Texture2D<float4> g_TransmittanceLut;
 [vk::binding(2, 3)]
 ConstantBuffer<AtmosphereParameters> u_atmosParameter;
 
-float fromSubUvsToUnit(float u, float resolution)
-{
-    return (u - 0.5f / resolution) * (resolution / (resolution - 1.0f));
-}
-
 struct MultiScatteringLuminanceResult
 {
     float3 L;

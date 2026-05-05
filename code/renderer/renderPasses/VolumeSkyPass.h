@@ -32,6 +32,7 @@ struct AtmosphereParameters
 
     float3 GroundAlbedo DEFAULT(float3(0.0f, 0.0f, 0.0f));
 
+    float2 sun_dir           DEFAULT(float2(0.0f, 0.45f));
     float3 solar_irradiance  DEFAULT(float3(1.0f));
     float sun_angular_radius DEFAULT(0.004675);
     float mu_s_min           DEFAULT(-0.5);
@@ -58,6 +59,7 @@ private:
     } _skyAtmosControler;
     RefPtr<ComputeProgram> _transmittanceLutProgram;
     RefPtr<ComputeProgram> _multiScatteringLutProgram;
+    RefPtr<ComputeProgram> _skyViewLutProgram;
     RefPtr<RenderProgram>  _skyBoxProgram;
     RefPtr<RenderProgram>  _atmosphereProgram;
     RefPtr<RenderProgram>  _volumetricCloudProgram;
@@ -66,6 +68,7 @@ private:
     // 常驻资源
     RefPtr<Texture> _transmittanceLut;
     RefPtr<Texture> _multiScatteringLut;
+    RefPtr<Texture> _skyViewLut;
 };
 
 } // namespace Play

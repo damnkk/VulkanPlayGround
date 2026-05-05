@@ -8,11 +8,7 @@
 ConstantBuffer<PerFrameConstant> g_PerFrameConstant;
 
 [vk::binding(0, 3)]
-Texture2D<float4> g_TransmittanceLut;
-[vk::binding(1, 3)]
-Texture2D<float4> g_MultiScatteringLut;
-[vk::binding(2, 3)]
-ConstantBuffer<AtmosphereParameters> u_atmosParameter;
+Texture2D<float4> g_SkyViewLut;
 struct FragmentInput
 {
     float2 uv : TEXCOORD0;
@@ -48,7 +44,5 @@ void main(FragmentInput fragIn, out FragmentOutput fragOut)
     fragOut.color.xyz = toLinear(fragOut.color.xyz);
 #endif
 
-    float3 transmittance   = g_TransmittanceLut.Sample(g_GlobalSampler_Linear, fragIn.uv).xyz;
-    float3 multiScattering = g_MultiScatteringLut.Sample(g_GlobalSampler_Linear, fragIn.uv).xyz;
-    fragOut.color.xyz      = multiScattering;
+    fragOut.color.xyz = g_SkyViewLut.Sample(g_GlobalSampler_Linear, fragIn.uv).xyz;
 }
