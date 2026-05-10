@@ -44,37 +44,37 @@ void PlayCamera::update(ImGuiWindow* viewportWindow)
 
         if (ImGui::IsKeyDown(ImGuiKey_W))
         {
-            _cameraManip->keyMotion({keyMotionFactor, 0}, nvutils::CameraManipulator::Dolly);
+            _cameraManip->keyMotion({keyMotionFactor, 0}, nvutils::CameraManipulator::Actions::Dolly);
             inputs.shift = inputs.ctrl = false;
         }
 
         if (ImGui::IsKeyDown(ImGuiKey_S))
         {
-            _cameraManip->keyMotion({-keyMotionFactor, 0}, nvutils::CameraManipulator::Dolly);
+            _cameraManip->keyMotion({-keyMotionFactor, 0}, nvutils::CameraManipulator::Actions::Dolly);
             inputs.shift = inputs.ctrl = false;
         }
 
         if (ImGui::IsKeyDown(ImGuiKey_D) || ImGui::IsKeyDown(ImGuiKey_RightArrow))
         {
-            _cameraManip->keyMotion({keyMotionFactor, 0}, nvutils::CameraManipulator::Pan);
+            _cameraManip->keyMotion({keyMotionFactor, 0}, nvutils::CameraManipulator::Actions::Pan);
             inputs.shift = inputs.ctrl = false;
         }
 
         if (ImGui::IsKeyDown(ImGuiKey_A) || ImGui::IsKeyDown(ImGuiKey_LeftArrow))
         {
-            _cameraManip->keyMotion({-keyMotionFactor, 0}, nvutils::CameraManipulator::Pan);
+            _cameraManip->keyMotion({-keyMotionFactor, 0}, nvutils::CameraManipulator::Actions::Pan);
             inputs.shift = inputs.ctrl = false;
         }
 
         if (ImGui::IsKeyDown(ImGuiKey_UpArrow))
         {
-            _cameraManip->keyMotion({0, keyMotionFactor}, nvutils::CameraManipulator::Pan);
+            _cameraManip->keyMotion({0, keyMotionFactor}, nvutils::CameraManipulator::Actions::Pan);
             inputs.shift = inputs.ctrl = false;
         }
 
         if (ImGui::IsKeyDown(ImGuiKey_DownArrow))
         {
-            _cameraManip->keyMotion({0, -keyMotionFactor}, nvutils::CameraManipulator::Pan);
+            _cameraManip->keyMotion({0, -keyMotionFactor}, nvutils::CameraManipulator::Actions::Pan);
             inputs.shift = inputs.ctrl = false;
         }
     }

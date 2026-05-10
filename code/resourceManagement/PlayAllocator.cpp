@@ -39,7 +39,7 @@ void PlayResourceManager::initialize()
     ::nvvk::ResourceAllocator::init(allocatorInfo);
     ::nvvk::StagingUploader::init(this);
     ::nvvk::SamplerPool::init(allocatorInfo.device);
-    this->m_enableLayoutBarriers = true;
+    this->m_base.enableLayoutBarriers = true;
 }
 
 void PlayResourceManager::deInit()
