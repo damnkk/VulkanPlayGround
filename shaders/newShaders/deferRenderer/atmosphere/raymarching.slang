@@ -39,10 +39,8 @@ struct AtmosphereParameters
     float2 sun_dir;
 };
 
-float fromSubUvsToUnit(float u, float resolution)
-{
-    return (u - 0.5f / resolution) * (resolution / (resolution - 1.0f));
-}
+float fromUnitToSubUvs(float u, float resolution) { return (u + 0.5f / resolution) * (resolution / (resolution + 1.0f)); }
+float fromSubUvsToUnit(float u, float resolution) { return (u - 0.5f / resolution) * (resolution / (resolution - 1.0f)); }
 
 void UvToLutTransmittanceParams(AtmosphereParameters Atmosphere, out float viewHeight, out float viewZenithCosAngle, in float2 uv)
 {
@@ -148,6 +146,7 @@ float3 SampleMediumScattering(float3 WorldPos, in AtmosphereParameters Atmospher
      
 }
 
+#define NONLINEARSKYVIEWLUT 1
 void UvToSkyViewLutParams(AtmosphereParameters Atmosphere, out float viewZenithCosAngle, out float lightViewCosAngle, in float viewHeight, in float2 uv)
 {
     // Constrain uvs to valid sub texel range (avoid zenith derivative issue making LUT usage visible)
@@ -162,20 +161,56 @@ void UvToSkyViewLutParams(AtmosphereParameters Atmosphere, out float viewZenithC
     {
         float coord = 2.0 * uv.y;
         coord       = 1.0 - coord;
+#if NONLINEARSKYVIEWLUT
         coord *= coord;
+#endif
         coord              = 1.0 - coord;
         viewZenithCosAngle = cos(ZenithHorizonAngle * coord);
     }
     else
     {
         float coord = uv.y * 2.0 - 1.0;
+#if NONLINEARSKYVIEWLUT
         coord *= coord;
+#endif
         viewZenithCosAngle = cos(ZenithHorizonAngle + Beta * coord);
     }
 
     float coord = uv.x;
     coord *= coord;
     lightViewCosAngle = -(coord * 2.0 - 1.0);
+}
+
+void SkyViewLutParamsToUv(AtmosphereParameters Atmosphere, in bool IntersectGround, in float viewZenithCosAngle, in float lightViewCosAngle, in float viewHeight, out float2 uv)
+{
+    float Vhorizon           = sqrt(viewHeight * viewHeight - Atmosphere.BottomRadius * Atmosphere.BottomRadius);
+    float CosBeta            = Vhorizon / viewHeight; // GroundToHorizonCos
+    float Beta               = acos(CosBeta);
+    float ZenithHorizonAngle = M_PI - Beta;
+
+    if (!IntersectGround)
+    {
+        float coord = acos(viewZenithCosAngle) / ZenithHorizonAngle;
+        coord       = 1.0 - coord;
+        coord       = sqrt(coord);
+        coord       = 1.0 - coord;
+        uv.y        = coord * 0.5f;
+    }
+    else
+    {
+        float coord = (acos(viewZenithCosAngle) - ZenithHorizonAngle) / Beta;
+        coord       = sqrt(coord);
+        uv.y        = coord * 0.5f + 0.5f;
+    }
+
+    {
+        float coord = -lightViewCosAngle * 0.5f + 0.5f;
+        coord       = sqrt(coord);
+        uv.x        = coord;
+    }
+
+    // Constrain uvs to valid sub texel range (avoid zenith derivative issue making LUT usage visible)
+    uv = float2(fromUnitToSubUvs(uv.x, 192.0f), fromUnitToSubUvs(uv.y, 108.0f));
 }
 
 float3 GetSunDirection(float uiSunPitch, float uiSunYaw)
@@ -187,9 +222,24 @@ float3 GetSunDirection(float uiSunPitch, float uiSunYaw)
 
     return float3(
         cp * sy,
-        cp * cy,
-        sp
+        sp,
+        cp * cy
     );
+}
+
+float3 GetSunLuminance(float3 WorldPos, float3 WorldDir, float3 sun_direction, float PlanetRadius)
+{
+    if (dot(WorldDir, sun_direction) > cos(0.5 * 0.505 * 3.14159 / 180.0))
+    {
+        float t = raySphereIntersectNearest(WorldPos, WorldDir, float3(0.0f, 0.0f, 0.0f), PlanetRadius);
+        if (t < 0.0f) // no intersection
+        {
+            const float3 SunLuminance = 1000000.0; // arbitrary. But fine, not use when comparing the models
+            return SunLuminance;
+        }
+    }
+
+    return 0;
 }
 
 bool MoveToTopAtmosphere(inout float3 WorldPos, in float3 WorldDir, in float AtmosphereTopRadius)

@@ -18,6 +18,15 @@ Texture2D<float4> g_MultiScatteringLut;
 [vk::binding(3, 3)]
 ConstantBuffer<AtmosphereParameters> u_atmosParameter;
 
+float3 GetMultipleScattering(AtmosphereParameters Atmosphere, float3 worlPos, float viewZenithCosAngle)
+{
+    float2 uv = saturate( float2(viewZenithCosAngle * 0.5f + 0.5f, (length(worlPos) - Atmosphere.BottomRadius) / (Atmosphere.TopRadius - Atmosphere.BottomRadius)));
+    uv = float2(fromUnitToSubUvs(uv.x, 32.0), fromUnitToSubUvs(uv.y, 32.0));
+
+    float3 multiScatteredLuminance = g_MultiScatteringLut.SampleLevel(g_GlobalSampler_Linear_Clamp, uv, 0).rgb;
+    return multiScatteredLuminance;
+}
+
 float3 IntegrateScatteredLuminanceSkyViewLutL(in float3 WorldPos, in float3 WorldDir, in float3 SunDir)
 {
     float3 earthO  = float3(0.0f, 0.0f, 0.0f);
@@ -103,12 +112,10 @@ float3 IntegrateScatteredLuminanceSkyViewLutL(in float3 WorldPos, in float3 Worl
 
         float3 multiScatteredLuminance = 0.0f;
         // #if MULTISCATAPPROX_ENABLED
-        //         multiScatteredLuminance = GetMultipleScattering(
-        // 			u_atmosParameter,
-        // 			medium.scattering,
-        // 			medium.extinction,
-        // 			P,
-        // 			SunZenithCosAngle);
+                multiScatteredLuminance = GetMultipleScattering(
+        			u_atmosParameter,
+        			P,
+        			SunZenithCosAngle);
         // #endif
 
         float shadow = 1.0f;
@@ -139,21 +146,28 @@ void main(uint3 dispatchThreadId: SV_DispatchThreadID)
     CameraData* cameraData     = (CameraData*) g_PerFrameConstant.cameraBufferDeviceAddress;
     float4      HViewPos       = mul(cameraData->invProjMatrix, float4(ClipSpace, 1.0));
     float3      WorldDir       = normalize(mul((float3x3) cameraData->invViewMatrix, HViewPos.xyz / HViewPos.w));
-    float3      WorldPos       = cameraData->cameraPosition + float3(0, 0, u_atmosParameter.BottomRadius);
+    float3      WorldPos       = cameraData->cameraPosition + float3(0, u_atmosParameter.BottomRadius, 0);
 
     float  viewHeight      = length(WorldPos);
 
     float  viewZenithCosAngle;
-    float  lightViewCosAngle; 
+    float  lightViewCosAngle;
     UvToSkyViewLutParams(u_atmosParameter, viewZenithCosAngle, lightViewCosAngle, viewHeight, uv);
 
-    float3 sunDir = normalize(GetSunDirection(u_atmosParameter.sun_dir.x, u_atmosParameter.sun_dir.y));
+    float3 sunDir;
+    {
+        float3 sun_direction = normalize(GetSunDirection(u_atmosParameter.sun_dir.x, u_atmosParameter.sun_dir.y));
+        float3 UpVector          = WorldPos / viewHeight;
+        float  sunZenithCosAngle = clamp(dot(UpVector, sun_direction), -1.0, 1.0);
+        float  sunZenithSinAngle = sqrt(max(0.0, 1.0 - sunZenithCosAngle * sunZenithCosAngle));
+        sunDir                   = float3(sunZenithSinAngle, sunZenithCosAngle,0.0);
+    }
 
-    WorldPos                  = float3(0.0, 0.0, viewHeight);
+    WorldPos                  = float3(0.0, viewHeight, 0.0);
     float viewZenithSinAngle  = sqrt(1.0 - viewZenithCosAngle * viewZenithCosAngle);
     WorldDir = float3(viewZenithSinAngle * lightViewCosAngle,
-                    viewZenithSinAngle * sqrt(1.0 - lightViewCosAngle * lightViewCosAngle),
-                    viewZenithCosAngle);
+                    viewZenithCosAngle,
+                    viewZenithSinAngle * sqrt(1.0 - lightViewCosAngle * lightViewCosAngle));
 
     if (!MoveToTopAtmosphere(WorldPos, WorldDir, u_atmosParameter.TopRadius))
     {

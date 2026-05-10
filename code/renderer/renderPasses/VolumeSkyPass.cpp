@@ -202,6 +202,7 @@ void VolumeSkyPass::build(RDG::RDGBuilder* rdgBuilder)
             .color(0, SkyBoxRT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
             .read(0, skyViewLutRef, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
+            .read(1,atmosBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
             .execute(
                 [this, ownedRender](RDG::PassNode* passNode, RDG::RenderContext& context)
                 {

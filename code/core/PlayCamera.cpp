@@ -8,7 +8,7 @@ PlayCamera::PlayCamera()
     _cameraManip = std::make_shared<nvutils::CameraManipulator>();
     // _cameraManip->setFov(120.0f);
     _cameraManip->setClipPlanes({0.1F, 10000.0F});
-    _cameraManip->setLookat({0.0F, 1.0F, 2.0F}, {0.0F, 0.0F, 0.0F}, {0.0F, 1.0F, 0.0F});
+    _cameraManip->setLookat({0.0F, 0.5F, -1.0F}, {0.0F, 0.0F, 0.0F}, {0.0F, 1.0F, 0.0F});
 }
 PlayCamera::~PlayCamera() {}
 void PlayCamera::update(ImGuiWindow* viewportWindow)

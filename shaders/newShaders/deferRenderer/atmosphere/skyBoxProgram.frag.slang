@@ -9,6 +9,9 @@ ConstantBuffer<PerFrameConstant> g_PerFrameConstant;
 
 [vk::binding(0, 3)]
 Texture2D<float4> g_SkyViewLut;
+
+[vk::binding(1, 3)]
+ConstantBuffer<AtmosphereParameters> u_atmosParameter;
 struct FragmentInput
 {
     float2 uv : TEXCOORD0;
@@ -29,20 +32,30 @@ float3 tonemapReinhardJodie(float3 color)
 [shader("fragment")]
 void main(FragmentInput fragIn, out FragmentOutput fragOut)
 {
-    float3      ndc         = float3(fragIn.uv * 2.0 - 1.0, 1.0);
-    CameraData* cameraData  = (CameraData*) g_PerFrameConstant.cameraBufferDeviceAddress;
-    float4      worldVector = mul(mul(float4(ndc, 1.0), cameraData->invProjMatrix), cameraData->invViewMatrix);
-    worldVector /= worldVector.w;
-    float3 dir    = normalize(worldVector.xyz);
-    fragOut.color = float4(0, 0, 0, 1);
-#ifdef USE_SKY_BOX_TEXTURE
-    float2 skyUV;
-    skyUV.x           = -(0.5 + atan2(dir.z, dir.x) / (2.0 * M_PI));
-    skyUV.y           = -(0.5 - asin(dir.y) / M_PI);
-    fragOut.color     = float4(skyUV, 0.0, 1.0);
-    fragOut.color     = s_SceneSkyTexture.Sample(g_GlobalSampler_Linear, skyUV);
-    fragOut.color.xyz = toLinear(fragOut.color.xyz);
-#endif
+    float3      clipSpace  = float3(fragIn.uv * float2(2.0, 2.0) - float2(1.0, 1.0), 1.0);
+    CameraData* cameraData = (CameraData*) g_PerFrameConstant.cameraBufferDeviceAddress;
+    float4      HViewPos   = mul(float4(clipSpace, 1.0), cameraData->invProjMatrix);
+    float3      WorldDir   = normalize(mul(HViewPos.xyz / HViewPos.w, (float3x3) cameraData->invViewMatrix));
+    float3      WorldPos   = cameraData->cameraPosition + float3(0, u_atmosParameter.BottomRadius, 0);
 
-    fragOut.color.xyz = g_SkyViewLut.Sample(g_GlobalSampler_Linear, fragIn.uv).xyz;
+    float  viewHeight = length(WorldPos);
+    float3 L          = 0;
+    if (viewHeight < u_atmosParameter.TopRadius) {
+        float2 skyviewLutUV;
+        float3 UpVector           = normalize(WorldPos);
+        float  viewZenithCosAngle = dot(WorldDir, UpVector);
+        float3 sideVector         = normalize(cross(UpVector, WorldDir));
+        float3 forwardVector      = normalize(cross(sideVector, UpVector));
+        float3 sun_direction      = normalize(GetSunDirection(u_atmosParameter.sun_dir.x, u_atmosParameter.sun_dir.y));
+        float2 lightOnPlane       = normalize(float2(dot(sun_direction, forwardVector), dot(sun_direction, sideVector)));
+        float  lightVieCosAngle   = lightOnPlane.x;
+        bool   intersectGround    = raySphereIntersectNearest(WorldPos, WorldDir, float3(0, 0, 0), u_atmosParameter.BottomRadius) >= 0.0f;
+        SkyViewLutParamsToUv(u_atmosParameter, intersectGround, viewZenithCosAngle, lightVieCosAngle, viewHeight, skyviewLutUV);
+        fragOut.color = float4(g_SkyViewLut.Sample(g_GlobalSampler_Linear_Clamp, skyviewLutUV).rgb + GetSunLuminance(WorldPos, WorldDir, sun_direction, u_atmosParameter.BottomRadius), 1.0);
+        // fragOut.color.xyz = sun_direction;
+        // fragOut.color.xyz = 100.0 * fragOut.color.xyz;
+        // fragOut.color = g_SkyViewLut.Sample(g_GlobalSampler_Linear_Clamp, fragIn.uv)*100;
+        return;
+    }
+    fragOut.color = float4(0.0, 0.0, 0.0, 1.0);
 }
