@@ -15,8 +15,6 @@ GaussianRenderer::GaussianRenderer(RenderSession& session)
 
 GaussianRenderer::~GaussianRenderer() {}
 
-void GaussianRenderer::OnGUI() {}
-
 void GaussianRenderer::setupPasses()
 {
     _passes.emplace_back(std::make_unique<GaussianSortPass>(this));

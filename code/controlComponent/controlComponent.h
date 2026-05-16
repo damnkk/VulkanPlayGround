@@ -21,8 +21,6 @@ public:
         return _gpuBuffer.get();
     }
 
-    virtual void onGUI() {};
-
     void flushToGPU()
     {
         void* data = _gpuBuffer->mapping;
@@ -43,8 +41,6 @@ ControlComponent<T>::ControlComponent()
 
 class ToneMappingControlComponent : public ControlComponent<shaderio::TonemapperData>
 {
-public:
-    virtual void onGUI() override;
 };
 } // namespace Play
 

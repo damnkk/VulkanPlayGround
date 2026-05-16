@@ -14,7 +14,6 @@
 #include "core/JobSystem.h"
 #include "core/RefCounted.h"
 #include "pch.h"
-#include "nvgui/tonemapper.hpp"
 #include "controlComponent/controlComponent.h"
 namespace Play
 {

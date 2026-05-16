@@ -51,13 +51,10 @@ public:
     virtual ~VolumeSkyPass() override;
     virtual void init() override;
     virtual void build(RDG::RDGBuilder* rdgBuilder) override;
-    virtual void onGUI() override;
 
 private:
     struct AtmosControler : public ControlComponent<AtmosphereParameters>
     {
-    public:
-        virtual void onGUI() override;
     } _skyAtmosControler;
     RefPtr<ComputeProgram> _transmittanceLutProgram;
     RefPtr<ComputeProgram> _multiScatteringLutProgram;

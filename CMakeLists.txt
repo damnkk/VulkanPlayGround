@@ -95,7 +95,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 target_link_libraries(${PROJECT_NAME} PRIVATE
   nvpro2::nvapp
   nvpro2::nvaftermath
-  nvpro2::nvgui
   nvpro2::nvimageformats
   nvpro2::nvnsight
   nvpro2::nvshaders_host

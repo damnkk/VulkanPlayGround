@@ -3,7 +3,6 @@
 #include "ShaderManager.hpp"
 #include "RDG/RDG.h"
 #include "DeferRendering.h"
-#include <imgui/imgui.h>
 
 namespace
 {
@@ -15,65 +14,10 @@ constexpr uint32_t         kMultiScatteringLutHeight  = 32;
 constexpr uint32_t         kSkyViewLutWidth           = 192;
 constexpr uint32_t         kSkyViewLutHeight          = 108;
 constexpr uint32_t         kSkyViewGroupSize          = 8;
-const AtmosphereParameters kDefaultAtmosphereParameters{};
 } // namespace
 
 namespace Play
 {
-
-void VolumeSkyPass::AtmosControler::onGUI()
-{
-    bool changed = false;
-    if (ImGui::Begin("Atmosphere Profile"))
-    {
-        if (ImGui::Button("Reset To Defaults"))
-        {
-            _cpuData = kDefaultAtmosphereParameters;
-            changed  = true;
-        }
-
-        ImGui::TextUnformatted("Geometry");
-        ImGui::Separator();
-        changed |= ImGui::DragFloat("Bottom Radius (km)", &_cpuData.BottomRadius, 1.0f, 1000.0f, 10000.0f, "%.2f");
-        changed |= ImGui::DragFloat("Top Radius (km)", &_cpuData.TopRadius, 1.0f, 1000.0f, 10000.0f, "%.2f");
-
-        ImGui::TextUnformatted("Rayleigh");
-        ImGui::Separator();
-        changed |= ImGui::DragFloat("Rayleigh Density Exp Scale", &_cpuData.RayleighDensityExpScale, 0.001f, -2.0f, 0.0f, "%.4f");
-        changed |= ImGui::DragFloat3("Rayleigh Scattering", &_cpuData.RayleighScattering.x, 0.0001f, 0.0f, 0.1f, "%.6f");
-
-        ImGui::TextUnformatted("Mie");
-        ImGui::Separator();
-        changed |= ImGui::DragFloat("Mie Density Exp Scale", &_cpuData.MieDensityExpScale, 0.001f, -2.0f, 0.0f, "%.4f");
-        changed |= ImGui::DragFloat3("Mie Scattering", &_cpuData.MieScattering.x, 0.0001f, 0.0f, 0.1f, "%.6f");
-        changed |= ImGui::DragFloat3("Mie Extinction", &_cpuData.MieExtinction.x, 0.0001f, 0.0f, 0.1f, "%.6f");
-        changed |= ImGui::DragFloat3("Mie Absorption", &_cpuData.MieAbsorption.x, 0.0001f, 0.0f, 0.1f, "%.6f");
-        changed |= ImGui::SliderFloat("Mie Phase G", &_cpuData.MiePhaseG, 0.0f, 0.999f, "%.3f");
-
-        ImGui::TextUnformatted("Absorption");
-        ImGui::Separator();
-        changed |= ImGui::DragFloat("Absorption Layer Width (km)", &_cpuData.AbsorptionDensity0LayerWidth, 0.1f, 0.0f, 100.0f, "%.3f");
-        changed |= ImGui::DragFloat("Absorption Density0 Constant", &_cpuData.AbsorptionDensity0ConstantTerm, 0.001f, -10.0f, 10.0f, "%.4f");
-        changed |= ImGui::DragFloat("Absorption Density0 Linear", &_cpuData.AbsorptionDensity0LinearTerm, 0.001f, -1.0f, 1.0f, "%.4f");
-        changed |= ImGui::DragFloat("Absorption Density1 Constant", &_cpuData.AbsorptionDensity1ConstantTerm, 0.001f, -10.0f, 10.0f, "%.4f");
-        changed |= ImGui::DragFloat("Absorption Density1 Linear", &_cpuData.AbsorptionDensity1LinearTerm, 0.001f, -1.0f, 1.0f, "%.4f");
-        changed |= ImGui::DragFloat3("Absorption Extinction", &_cpuData.AbsorptionExtinction.x, 0.0001f, 0.0f, 0.1f, "%.6f");
-
-        ImGui::TextUnformatted("Ground");
-        ImGui::Separator();
-        changed |= ImGui::ColorEdit3("Ground Albedo", &_cpuData.GroundAlbedo.x);
-
-        ImGui::TextUnformatted("Sun");
-        ImGui::Separator();
-        changed |= ImGui::DragFloat2("Sun Pitch/Yaw", &_cpuData.sun_dir.x, 0.01f, -3.1415926f, 3.1415926f, "%.3f");
-        changed |= ImGui::DragFloat3("Solar Irradiance", &_cpuData.solar_irradiance.x, 0.01f, 0.0f, 20.0f, "%.3f");
-        changed |= ImGui::DragFloat("Sun Angular Radius", &_cpuData.sun_angular_radius, 0.0001f, 0.0f, 0.1f, "%.6f");
-        changed |= ImGui::SliderFloat("Mu S Min", &_cpuData.mu_s_min, -1.0f, 1.0f, "%.3f");
-    }
-    ImGui::End();
-
-    if (changed) flushToGPU();
-}
 
 VolumeSkyPass::~VolumeSkyPass()
 {
@@ -218,11 +162,6 @@ void VolumeSkyPass::build(RDG::RDGBuilder* rdgBuilder)
                     vkCmdSetScissorWithCount(cmd, 1, &scissor);
                     vkCmdDraw(cmd, 3, 1, 0, 0);
                 });
-}
-
-void VolumeSkyPass::onGUI()
-{
-    _skyAtmosControler.onGUI();
 }
 
 } // namespace Play

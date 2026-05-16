@@ -1,5 +1,7 @@
 #include "PlayCamera.h"
-#include <nvgui/window.hpp>
+
+#include "core/runtime/SdlWindow.h"
+
 namespace Play
 {
 
@@ -11,28 +13,27 @@ PlayCamera::PlayCamera()
     _cameraManip->setLookat({0.0F, 0.5F, -1.0F}, {0.0F, 0.0F, 0.0F}, {0.0F, 1.0F, 0.0F});
 }
 PlayCamera::~PlayCamera() {}
-void PlayCamera::update(ImGuiWindow* viewportWindow)
+void PlayCamera::update(const runtime::SdlInputState& input, float deltaSeconds)
 {
     nvutils::CameraManipulator::Inputs inputs; // Mouse and keyboard inputs
 
     _cameraManip->updateAnim(); // This makes the camera to transition smoothly to the new position
 
-    // Check if the mouse cursor is over the "Viewport", check for all inputs that can manipulate the camera.
-    if (!nvgui::isWindowHovered(viewportWindow)) return;
+    // The SDL window is the viewport in the runtime path.
+    if (!input.mouseInWindow) return;
 
-    inputs.lmb      = ImGui::IsMouseDown(ImGuiMouseButton_Left);
-    inputs.rmb      = ImGui::IsMouseDown(ImGuiMouseButton_Right);
-    inputs.mmb      = ImGui::IsMouseDown(ImGuiMouseButton_Middle);
-    inputs.ctrl     = ImGui::IsKeyDown(ImGuiKey_LeftCtrl) || ImGui::IsKeyDown(ImGuiKey_RightCtrl);
-    inputs.shift    = ImGui::IsKeyDown(ImGuiKey_LeftShift) || ImGui::IsKeyDown(ImGuiKey_RightShift);
-    inputs.alt      = ImGui::IsKeyDown(ImGuiKey_LeftAlt) || ImGui::IsKeyDown(ImGuiKey_RightAlt);
-    ImVec2 mousePos = ImGui::GetMousePos();
+    inputs.lmb   = input.lmb;
+    inputs.rmb   = input.rmb;
+    inputs.mmb   = input.mmb;
+    inputs.ctrl  = input.ctrl;
+    inputs.shift = input.shift;
+    inputs.alt   = input.alt;
 
     // None of the modifiers should be pressed for the single key: WASD and arrows
     if (!inputs.alt)
     {
         // Speed of the camera movement when using WASD and arrows
-        float keyMotionFactor = ImGui::GetIO().DeltaTime;
+        float keyMotionFactor = deltaSeconds;
         if (inputs.shift)
         {
             keyMotionFactor *= 5.0F; // Speed up the camera movement
@@ -42,59 +43,57 @@ void PlayCamera::update(ImGuiWindow* viewportWindow)
             keyMotionFactor *= 0.1F; // Slow down the camera movement
         }
 
-        if (ImGui::IsKeyDown(ImGuiKey_W))
+        if (input.keyW)
         {
             _cameraManip->keyMotion({keyMotionFactor, 0}, nvutils::CameraManipulator::Actions::Dolly);
             inputs.shift = inputs.ctrl = false;
         }
 
-        if (ImGui::IsKeyDown(ImGuiKey_S))
+        if (input.keyS)
         {
             _cameraManip->keyMotion({-keyMotionFactor, 0}, nvutils::CameraManipulator::Actions::Dolly);
             inputs.shift = inputs.ctrl = false;
         }
 
-        if (ImGui::IsKeyDown(ImGuiKey_D) || ImGui::IsKeyDown(ImGuiKey_RightArrow))
+        if (input.keyD || input.keyRight)
         {
             _cameraManip->keyMotion({keyMotionFactor, 0}, nvutils::CameraManipulator::Actions::Pan);
             inputs.shift = inputs.ctrl = false;
         }
 
-        if (ImGui::IsKeyDown(ImGuiKey_A) || ImGui::IsKeyDown(ImGuiKey_LeftArrow))
+        if (input.keyA || input.keyLeft)
         {
             _cameraManip->keyMotion({-keyMotionFactor, 0}, nvutils::CameraManipulator::Actions::Pan);
             inputs.shift = inputs.ctrl = false;
         }
 
-        if (ImGui::IsKeyDown(ImGuiKey_UpArrow))
+        if (input.keyUp)
         {
             _cameraManip->keyMotion({0, keyMotionFactor}, nvutils::CameraManipulator::Actions::Pan);
             inputs.shift = inputs.ctrl = false;
         }
 
-        if (ImGui::IsKeyDown(ImGuiKey_DownArrow))
+        if (input.keyDown)
         {
             _cameraManip->keyMotion({0, -keyMotionFactor}, nvutils::CameraManipulator::Actions::Pan);
             inputs.shift = inputs.ctrl = false;
         }
     }
 
-    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) || ImGui::IsMouseClicked(ImGuiMouseButton_Middle) ||
-        ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+    if (input.lmbPressed || input.mmbPressed || input.rmbPressed)
     {
-        _cameraManip->setMousePosition({mousePos.x, mousePos.y});
+        _cameraManip->setMousePosition({input.mouseX, input.mouseY});
     }
 
-    if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 1.0F) || ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 1.0F) ||
-        ImGui::IsMouseDragging(ImGuiMouseButton_Right, 1.0F))
+    if (input.lmb || input.mmb || input.rmb)
     {
-        _cameraManip->mouseMove({mousePos.x, mousePos.y}, inputs);
+        _cameraManip->mouseMove({input.mouseX, input.mouseY}, inputs);
     }
 
     // Mouse Wheel
-    if (ImGui::GetIO().MouseWheel != 0.0F)
+    if (input.wheelY != 0.0F)
     {
-        _cameraManip->wheel(ImGui::GetIO().MouseWheel * -3.f, inputs);
+        _cameraManip->wheel(input.wheelY * -3.0F, inputs);
     }
 }
 

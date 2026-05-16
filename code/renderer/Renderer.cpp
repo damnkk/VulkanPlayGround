@@ -46,7 +46,7 @@ void Renderer::updateCameraBuffer()
 {
     // update curr activated camera into camera buffer
     PlayCamera* camera = getActiveCamera();
-    camera->update(ImGui::FindWindowByName("Viewport"));
+    camera->update(vkDriver->getInputState(), static_cast<float>(vkDriver->getDeltaTime()));
     CameraData data{};
     data.cameraPosition    = camera->getCameraManipulator()->getEye();
     data.projMatrix        = camera->getCameraManipulator()->getPerspectiveMatrix();

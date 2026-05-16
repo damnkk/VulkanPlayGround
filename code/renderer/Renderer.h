@@ -31,7 +31,6 @@ class Renderer
 public:
     Renderer();
     virtual ~Renderer();
-    virtual void     OnGUI()                         = 0;
     virtual void     OnPreRender();
     virtual void     OnPostRender();
     virtual void     RenderFrame();

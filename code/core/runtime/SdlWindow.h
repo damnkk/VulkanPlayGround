@@ -8,6 +8,34 @@
 namespace Play::runtime
 {
 
+struct SdlInputState
+{
+    float mouseX = 0.0F;
+    float mouseY = 0.0F;
+    float wheelY = 0.0F;
+
+    bool mouseInWindow = false;
+    bool lmb           = false;
+    bool mmb           = false;
+    bool rmb           = false;
+    bool lmbPressed    = false;
+    bool mmbPressed    = false;
+    bool rmbPressed    = false;
+
+    bool ctrl  = false;
+    bool shift = false;
+    bool alt   = false;
+
+    bool keyW     = false;
+    bool keyA     = false;
+    bool keyS     = false;
+    bool keyD     = false;
+    bool keyLeft  = false;
+    bool keyRight = false;
+    bool keyUp    = false;
+    bool keyDown  = false;
+};
+
 class SdlWindow
 {
 public:
@@ -43,6 +71,11 @@ public:
         return _pixelSize;
     }
 
+    const SdlInputState& getInputState() const
+    {
+        return _inputState;
+    }
+
     void setTitle(const char* title);
 
     const char* const* getVulkanInstanceExtensions(uint32_t* count) const;
@@ -50,12 +83,15 @@ public:
 
 private:
     void refreshPixelSize();
+    void refreshInputState();
 
-    SDL_Window* _window        = nullptr;
-    VkExtent2D  _pixelSize     = {};
-    bool        _shouldClose   = false;
-    bool        _minimized     = false;
-    bool        _resizePending = false;
+    SDL_Window*          _window             = nullptr;
+    VkExtent2D           _pixelSize          = {};
+    SdlInputState        _inputState         = {};
+    SDL_MouseButtonFlags _mouseButtonFlags   = 0;
+    bool                 _shouldClose        = false;
+    bool                 _minimized          = false;
+    bool                 _resizePending      = false;
 };
 
 } // namespace Play::runtime

@@ -23,6 +23,7 @@ bool SdlWindow::init(const RuntimeConfig& config)
     }
 
     refreshPixelSize();
+    refreshInputState();
     _resizePending = true;
     return true;
 }
@@ -39,6 +40,8 @@ void SdlWindow::deinit()
 
 void SdlWindow::pollEvents()
 {
+    _inputState.wheelY = 0.0F;
+
     SDL_Event event{};
     while (SDL_PollEvent(&event))
     {
@@ -55,6 +58,14 @@ void SdlWindow::pollEvents()
                 if (event.key.key == SDLK_ESCAPE)
                 {
                     _shouldClose = true;
+                }
+                break;
+            }
+            case SDL_EVENT_MOUSE_WHEEL:
+            {
+                if (!_window || event.wheel.windowID == SDL_GetWindowID(_window))
+                {
+                    _inputState.wheelY += event.wheel.y;
                 }
                 break;
             }
@@ -79,6 +90,8 @@ void SdlWindow::pollEvents()
             }
         }
     }
+
+    refreshInputState();
 }
 
 void SdlWindow::setTitle(const char* title)
@@ -116,6 +129,53 @@ void SdlWindow::refreshPixelSize()
     {
         _pixelSize = {};
     }
+}
+
+void SdlWindow::refreshInputState()
+{
+    float mouseX = 0.0F;
+    float mouseY = 0.0F;
+    const SDL_MouseButtonFlags previousMouseButtonFlags = _mouseButtonFlags;
+    _mouseButtonFlags                                  = SDL_GetMouseState(&mouseX, &mouseY);
+
+    int windowWidth  = 0;
+    int windowHeight = 0;
+    if (_window && SDL_GetWindowSize(_window, &windowWidth, &windowHeight) && windowWidth > 0 && windowHeight > 0)
+    {
+        mouseX *= static_cast<float>(_pixelSize.width) / static_cast<float>(windowWidth);
+        mouseY *= static_cast<float>(_pixelSize.height) / static_cast<float>(windowHeight);
+    }
+
+    _inputState.mouseX        = mouseX;
+    _inputState.mouseY        = mouseY;
+    _inputState.mouseInWindow = _window && SDL_GetMouseFocus() == _window;
+
+    _inputState.lmb        = (_mouseButtonFlags & SDL_BUTTON_LMASK) != 0;
+    _inputState.mmb        = (_mouseButtonFlags & SDL_BUTTON_MMASK) != 0;
+    _inputState.rmb        = (_mouseButtonFlags & SDL_BUTTON_RMASK) != 0;
+    _inputState.lmbPressed = _inputState.lmb && (previousMouseButtonFlags & SDL_BUTTON_LMASK) == 0;
+    _inputState.mmbPressed = _inputState.mmb && (previousMouseButtonFlags & SDL_BUTTON_MMASK) == 0;
+    _inputState.rmbPressed = _inputState.rmb && (previousMouseButtonFlags & SDL_BUTTON_RMASK) == 0;
+
+    int         keyCount = 0;
+    const bool* keys     = SDL_GetKeyboardState(&keyCount);
+    auto        keyDown  = [keys, keyCount](SDL_Scancode scancode)
+    {
+        return keys && static_cast<int>(scancode) < keyCount && keys[scancode];
+    };
+
+    _inputState.ctrl  = keyDown(SDL_SCANCODE_LCTRL) || keyDown(SDL_SCANCODE_RCTRL);
+    _inputState.shift = keyDown(SDL_SCANCODE_LSHIFT) || keyDown(SDL_SCANCODE_RSHIFT);
+    _inputState.alt   = keyDown(SDL_SCANCODE_LALT) || keyDown(SDL_SCANCODE_RALT);
+
+    _inputState.keyW     = keyDown(SDL_SCANCODE_W);
+    _inputState.keyA     = keyDown(SDL_SCANCODE_A);
+    _inputState.keyS     = keyDown(SDL_SCANCODE_S);
+    _inputState.keyD     = keyDown(SDL_SCANCODE_D);
+    _inputState.keyLeft  = keyDown(SDL_SCANCODE_LEFT);
+    _inputState.keyRight = keyDown(SDL_SCANCODE_RIGHT);
+    _inputState.keyUp    = keyDown(SDL_SCANCODE_UP);
+    _inputState.keyDown  = keyDown(SDL_SCANCODE_DOWN);
 }
 
 } // namespace Play::runtime

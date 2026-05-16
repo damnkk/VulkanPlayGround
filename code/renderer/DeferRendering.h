@@ -21,7 +21,6 @@ class DeferRenderer : public Renderer
 public:
     explicit DeferRenderer(RenderSession& session);
     ~DeferRenderer() override;
-    void OnGUI() override;
 
 protected:
     void setupPasses() override;

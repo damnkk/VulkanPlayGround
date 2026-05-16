@@ -1,4 +1,3 @@
-#include <nvgui/camera.hpp>
 #include "DeferRendering.h"
 #include "PlayApp.h"
 #include "renderpasses/PostProcessPass.h"
@@ -6,7 +5,6 @@
 #include "renderPasses/VolumeSkyPass.h"
 #include "renderPasses/GBufferPass.h"
 #include "renderPasses/LightPass.h"
-#include "core/PlayCamera.h"
 #include "SceneManager.h"
 #include "VulkanDriver.h"
 namespace Play
@@ -25,17 +23,6 @@ DeferRenderer::DeferRenderer(RenderSession& session)
 DeferRenderer::~DeferRenderer()
 {
     int a = 0;
-}
-
-void DeferRenderer::OnGUI()
-{
-    ImGui::Begin("Camera Profile");
-    nvgui::CameraWidget(getActiveCamera()->getCameraManipulator());
-    ImGui::End();
-    for (auto& pass : _passes)
-    {
-        pass->onGUI();
-    }
 }
 
 void DeferRenderer::setupPasses()

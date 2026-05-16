@@ -182,6 +182,16 @@ public:
         return _windowSize;
     }
 
+    const SdlInputState& getInputState() const
+    {
+        return _window.getInputState();
+    }
+
+    double getDeltaTime() const
+    {
+        return _deltaTime;
+    }
+
     Play::Texture* getCurrentSwapchainTexture();
 
     uint32_t getFrameCycleIndex() const

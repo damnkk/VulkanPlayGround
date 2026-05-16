@@ -10,7 +10,6 @@ class GaussianRenderer : public Renderer
 public:
     explicit GaussianRenderer(RenderSession& session);
     ~GaussianRenderer() override;
-    void OnGUI() override;
 
 protected:
     void setupPasses() override;
