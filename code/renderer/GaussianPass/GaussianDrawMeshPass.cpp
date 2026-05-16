@@ -2,8 +2,10 @@
 #include "renderer/GaussianRenderer.h"
 #include "renderer/renderPasses/PresentPass.h"
 #include "Resource.h"
+#include "SceneManager.h"
 #include "ShaderManager.hpp"
 #include "utils.hpp"
+#include "newShaders/gaussian/gaussianLib.h.slang"
 
 namespace Play
 {

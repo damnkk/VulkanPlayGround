@@ -11,7 +11,7 @@
 namespace Play
 {
 class PlayCamera;
-struct SceneManager;
+class SceneManager;
 class RenderSession;
 class Texture;
 class Buffer;

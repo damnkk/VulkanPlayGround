@@ -1,6 +1,7 @@
 #include "GaussianRenderer.h"
 #include "GaussianPass/GaussianSortPass.h"
 #include "GaussianPass/GaussianDrawMeshPass.h"
+#include "SceneManager.h"
 namespace Play
 {
 

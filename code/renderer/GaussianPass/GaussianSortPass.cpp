@@ -2,6 +2,7 @@
 #include "core/PlayCamera.h"
 #include "ShaderManager.hpp"
 #include "GaussianRenderer.h"
+#include "SceneManager.h"
 #include "nvutils/alignment.hpp"
 #include "RDG/RDG.h"
 #include "newShaders/gaussian/gaussianLib.h.slang"

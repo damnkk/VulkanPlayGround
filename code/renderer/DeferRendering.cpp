@@ -7,6 +7,7 @@
 #include "renderPasses/GBufferPass.h"
 #include "renderPasses/LightPass.h"
 #include "core/PlayCamera.h"
+#include "SceneManager.h"
 #include "VulkanDriver.h"
 namespace Play
 {

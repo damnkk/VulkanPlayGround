@@ -5,6 +5,8 @@
 #include <memory.h>
 #include "PlayProgram.h"
 #include "controlComponent/controlComponent.h"
+#include <glm/glm.hpp>
+#include "Hdevice.h"
 // Keep explicit padding so the CPU-side layout matches the shader constant-buffer packing.
 struct AtmosphereParameters
 {

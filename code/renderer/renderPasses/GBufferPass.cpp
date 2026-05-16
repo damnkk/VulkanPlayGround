@@ -3,6 +3,7 @@
 #include "RDG/RDG.h"
 #include "VulkanDriver.h"
 #include "MeshCollector.h"
+#include "SceneManager.h"
 #include "DeferRendering.h"
 #include "utils.hpp"
 #include "nvutils/parallel_work.hpp"
