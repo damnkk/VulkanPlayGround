@@ -1,7 +1,6 @@
 #pragma once
-
 #include "SdlWindow.h"
-
+#include <memory>
 #include "core/RefCounted.h"
 
 #include <nvvk/context.hpp>
@@ -14,6 +13,7 @@ class DescriptorSetCache;
 class FrameBufferCache;
 class PipelineCacheManager;
 class RefCounted;
+class RenderSession;
 class RenderPassCache;
 class Texture;
 class ToneMappingControlComponent;
@@ -217,6 +217,7 @@ public:
     VkCommandBuffer createTempCmdBuffer();
     void            submitAndWaitTempCmdBuffer(VkCommandBuffer cmd);
     void            addWaitSemaphore(const VkSemaphoreSubmitInfo& signalInfo);
+    std::vector<VkSemaphoreSubmitInfo> consumePendingFrameWaitSemaphores();
 
     void deferDestroy(std::function<void()> task);
     void registerObject(Play::RefCounted* obj);
@@ -259,6 +260,7 @@ private:
     VkCommandBuffer beginCommandRecording();
     void recordBootstrapClear(VkCommandBuffer cmd) const;
     void endFrame(VkCommandBuffer cmd);
+    void signalPresentSemaphore();
     void updateFrameStatsTitle();
     void prepareGlobalDescriptorSet();
     void updateGlobalDescriptorSet();
@@ -281,6 +283,7 @@ private:
     std::vector<DeferredDestroyQueue>     _deferredDestroyQueues{};
     std::vector<Play::RefCounted*>        _registeredObjects{};
     std::vector<VkSemaphoreSubmitInfo>    _pendingFrameWaitSemaphores{};
+    std::unique_ptr<Play::RenderSession>  _renderSession{};
     nvvk::DescriptorBindings              _globalDescriptorBindings{};
     nvvk::DescriptorBindings              _frameDescriptorBindings{};
     Play::DescriptorSetCache*             _descriptorSetCache        = nullptr;

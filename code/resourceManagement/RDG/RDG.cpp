@@ -591,7 +591,8 @@ void RDGBuilder::afterPassExecute()
     VkCommandBufferSubmitInfo cmdInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
     cmdInfo.commandBuffer = _renderContext->_currCmdBuffer;
     cmdInfo.deviceMask    = 0;
-    VkSemaphoreSubmitInfo waitInfo{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
+    std::vector<VkSemaphoreSubmitInfo> waitInfos = vkDriver->consumePendingFrameWaitSemaphores();
+    VkSemaphoreSubmitInfo              waitInfo{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
     waitInfo.semaphore = _renderContext->_frameData->semaphore;
     waitInfo.value     = _renderContext->_frameData->timelineValue;
     switch (_renderContext->_prevPassNode->type())
@@ -617,6 +618,8 @@ void RDGBuilder::afterPassExecute()
             break;
         }
     }
+    waitInfos.push_back(waitInfo);
+
     VkSemaphoreSubmitInfo signalInfo{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
     signalInfo.semaphore = _renderContext->_frameData->semaphore;
     signalInfo.value     = ++_renderContext->_frameData->timelineValue;
@@ -646,8 +649,8 @@ void RDGBuilder::afterPassExecute()
     VkSubmitInfo2 submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
     submitInfo.commandBufferInfoCount   = 1;
     submitInfo.pCommandBufferInfos      = &cmdInfo;
-    submitInfo.waitSemaphoreInfoCount   = 1;
-    submitInfo.pWaitSemaphoreInfos      = &waitInfo;
+    submitInfo.waitSemaphoreInfoCount   = static_cast<uint32_t>(waitInfos.size());
+    submitInfo.pWaitSemaphoreInfos      = waitInfos.empty() ? nullptr : waitInfos.data();
     submitInfo.signalSemaphoreInfoCount = 1;
     submitInfo.pSignalSemaphoreInfos    = &signalInfo;
     _submitInfos.push_back({submitInfo, isAsyncCompute(_renderContext->_prevPassNode) ? 1 : 0});

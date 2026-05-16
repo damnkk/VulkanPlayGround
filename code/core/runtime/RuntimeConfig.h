@@ -1,7 +1,7 @@
 #pragma once
 
 #include "pch.h"
-
+#include <string>
 namespace Play::runtime
 {
 
@@ -13,6 +13,7 @@ struct RuntimeConfig
     bool        vSync       = true;
     bool        validation  = false;
     bool        verbose     = false;
+    std::string renderMode  = "defer";
 };
 
 } // namespace Play::runtime

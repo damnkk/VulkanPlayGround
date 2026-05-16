@@ -1,13 +1,6 @@
 #ifndef PLAYAPP_H
 #define PLAYAPP_H
-#include "nvapp/application.hpp"
-// #include "resourceManagement/ModelLoader.h" // Ensure ModelLoader class is defined in this header
-#include <nvvk/profiler_vk.hpp>
-#include <nvvk/context.hpp>
-#include <nvutils/parameter_parser.hpp>
-#include "PlayAllocator.h"
 #include "resourceManagement/Resource.h"
-#include "SceneManager.h"
 
 namespace Play
 {
@@ -18,33 +11,23 @@ class ShaderInfo;
 class DescriptorSetCache;
 class RenderPassCache;
 class FrameBufferCache;
-namespace RDG
-{
-class RenderDependencyGraph;
-}
+class SceneManager;
 
-class RenderSession : public nvapp::IAppElement
+class RenderSession
 {
 public:
     struct Info
     {
-        nvutils::ProfilerManager*   profilerManager{};
-        nvutils::ParameterRegistry* parameterRegistry{};
-        std::string*                renderMode{};
+        std::string renderMode = "defer";
     };
-    // Interface
     RenderSession(Info info);
-    virtual ~RenderSession();
+    ~RenderSession();
 
-    virtual void onAttach(nvapp::Application* app) override;                     // Called once at start
-    virtual void onDetach() override;                                            // Called before destroying the application
-    virtual void onResize(VkCommandBuffer cmd, const VkExtent2D& size) override; // Called when the viewport size is changing
-    virtual void onUIRender() override;                                          // Called for anything related to UI
-    virtual void onUIMenu() override;                                            // This is the menubar to create
-    virtual void onPreRender() override;                                     // called post onUIRender and prior onRender (looped over all elements)
-    virtual void onRender(VkCommandBuffer cmd) override;                     // For anything to render within a frame
-    virtual void onFileDrop(const std::filesystem::path& filename) override; // For when a file is dragged on top of the window
-    virtual void onLastHeadlessFrame() override;                             // Called at the end of the last frame in headless mode
+    bool init();
+    void destroy();
+    void onResize(const VkExtent2D& size);
+    void beginFrame();
+    void renderFrame();
 
     enum RenderMode
     {
@@ -70,11 +53,8 @@ private:
     friend class VolumeRenderer;
     friend class ShadingRateRenderer;
     friend class GaussianRenderer;
-    friend class RDG::RenderDependencyGraph;
     friend class SceneManager;
-    nvapp::Application*        _app{};
-    nvutils::ProfilerTimeline* _profilerTimeline{};
-    nvvk::ProfilerGpuTimer     _profilerGpuTimer{};
+    bool _initialized = false;
 };
 
 } //    namespace Play

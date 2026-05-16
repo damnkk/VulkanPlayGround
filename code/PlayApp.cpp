@@ -1,64 +1,55 @@
 #include "PlayApp.h"
-#include "nvvk/debug_util.hpp"
-#define IMGUI_DEFINE_MATH_OPERATORS
-#include <backends/imgui_impl_vulkan.h>
-#include "stb_image.h"
+
 #include "DeferRendering.h"
 #include "GaussianRenderer.h"
-#include "resourceManagement/Resource.h"
-#include "ShaderManager.hpp"
-#include "PlayAllocator.h"
-#include "PipelineCacheManager.h"
-#include "RenderPassCache.h"
-#include "FrameBufferCache.h"
 #include "VulkanDriver.h"
-#include "controlComponent/controlComponent.h"
+
+#include <nvutils/logger.hpp>
+
 namespace Play
 {
-struct ScopeTimer
-{
-    std::chrono::high_resolution_clock::time_point start;
-    ScopeTimer() : start(std::chrono::high_resolution_clock::now()) {}
-    ~ScopeTimer()
-    {
-        auto end     = std::chrono::high_resolution_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    }
-};
+
 RenderSession::RenderSession(Info info) : _info(info)
 {
-    // 解析命令行渲染模式
-    if (_info.renderMode && !_info.renderMode->empty())
+    const std::string& mode = _info.renderMode;
+    if (mode == "raster")
     {
-        const std::string& mode = *_info.renderMode;
-        if (mode == "raster")
-            _renderMode = eRasterization;
-        else if (mode == "raytrace")
-            _renderMode = eRayTracing;
-        else if (mode == "volume")
-            _renderMode = eVolumeRendering;
-        else if (mode == "shadingrate")
-            _renderMode = eShadingRateRendering;
-        else if (mode == "defer")
-            _renderMode = eDeferRendering;
-        else if (mode == "gaussian")
-            _renderMode = eGaussianRendering;
+        _renderMode = eRasterization;
+    }
+    else if (mode == "raytrace")
+    {
+        _renderMode = eRayTracing;
+    }
+    else if (mode == "volume")
+    {
+        _renderMode = eVolumeRendering;
+    }
+    else if (mode == "shadingrate")
+    {
+        _renderMode = eShadingRateRendering;
+    }
+    else if (mode == "defer")
+    {
+        _renderMode = eDeferRendering;
+    }
+    else if (mode == "gaussian")
+    {
+        _renderMode = eGaussianRendering;
     }
 }
 
 RenderSession::~RenderSession()
 {
-    // delete _sceneManager;
-    // _sceneManager = nullptr;
+    destroy();
 }
 
-void RenderSession::onAttach(nvapp::Application* app)
+bool RenderSession::init()
 {
-    _app = app;
-    // CameraManip
-    // _sceneManager     = new SceneManager();
-    _profilerTimeline = _info.profilerManager->createTimeline({"graphics"});
-    _profilerGpuTimer.init(_profilerTimeline, app->getDevice(), app->getPhysicalDevice(), app->getQueue(0).familyIndex, true);
+    if (_initialized)
+    {
+        return true;
+    }
+
     switch (_renderMode)
     {
         case eDeferRendering:
@@ -74,65 +65,76 @@ void RenderSession::onAttach(nvapp::Application* app)
         default:
         {
             LOGE("Unsupported render mode, defaulting to DeferRendering");
+            _renderer = std::make_unique<DeferRenderer>(*this);
+            break;
         }
     }
+
+    if (vkDriver)
+    {
+        onResize(vkDriver->getViewportSize());
+    }
+
+    _initialized = true;
+    return true;
 }
 
-void RenderSession::onDetach()
+void RenderSession::destroy()
 {
-    vkQueueWaitIdle(_app->getQueue(0).queue);
-
-    _profilerGpuTimer.deinit();
-    _info.profilerManager->destroyTimeline(_profilerTimeline);
-    _renderer.reset();
-}
-
-void RenderSession::onResize(VkCommandBuffer cmd, const VkExtent2D& size)
-{
-    vkQueueWaitIdle(_app->getQueue(0).queue);
-    _renderer->OnResize(size.width, size.height);
-}
-
-void RenderSession::onUIRender()
-{
-    ImGui::Begin("Viewport");
-    ImGui::End();
-    vkDriver->getTonemapperControlComponent().onGUI();
-    _renderer->OnGUI();
-}
-
-void RenderSession::onUIMenu() {}
-
-void RenderSession::onPreRender()
-{
-    vkDriver->tick();
-    _renderer->OnPreRender();
-    vkDriver->tryCleanupDeferredTasks();
-}
-
-void RenderSession::onRender(VkCommandBuffer cmd)
-{
-    if (_app->getViewportSize().width == 0 || _app->getViewportSize().height == 0)
+    if (!_initialized && !_renderer)
     {
         return;
     }
 
-    vkDriver->getCurrentFrameData().reset();
+    if (vkDriver && vkDriver->getGfxQueue().queue != VK_NULL_HANDLE)
+    {
+        vkDeviceWaitIdle(vkDriver->getDevice());
+    }
+
+    _renderer.reset();
+    _initialized = false;
+}
+
+void RenderSession::onResize(const VkExtent2D& size)
+{
+    if (!_renderer)
+    {
+        return;
+    }
+
+    if (vkDriver && vkDriver->getDevice() != VK_NULL_HANDLE)
+    {
+        vkDeviceWaitIdle(vkDriver->getDevice());
+    }
+
+    _renderer->OnResize(size.width, size.height);
+}
+
+void RenderSession::beginFrame()
+{
+    if (!_renderer)
+    {
+        return;
+    }
+
+    _renderer->OnPreRender();
+}
+
+void RenderSession::renderFrame()
+{
+    if (!_renderer || !vkDriver)
+    {
+        return;
+    }
+
+    const VkExtent2D& viewportSize = vkDriver->getViewportSize();
+    if (viewportSize.width == 0 || viewportSize.height == 0)
+    {
+        return;
+    }
 
     _renderer->RenderFrame();
     _renderer->OnPostRender();
-}
-
-void RenderSession::onFileDrop(const std::filesystem::path& filename)
-{
-    // Handle file drop events here
-    LOGI("File dropped: %s", filename.string().c_str());
-}
-
-void RenderSession::onLastHeadlessFrame()
-{
-    // Handle last frame in headless mode
-    LOGI("Last headless frame");
 }
 
 } // namespace Play

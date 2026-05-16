@@ -9,6 +9,7 @@
 #include "DescriptorManager.h"
 #include "FrameBufferCache.h"
 #include "PipelineCacheManager.h"
+#include "PlayApp.h"
 #include "PlayAllocator.h"
 #include "RenderPassCache.h"
 #include "Resource.h"
@@ -193,6 +194,13 @@ bool VulkanRuntime::init(const RuntimeConfig& config, const nvvk::ContextInitInf
         return false;
     }
 
+    _renderSession = std::make_unique<Play::RenderSession>(Play::RenderSession::Info{.renderMode = _config.renderMode});
+    if (!_renderSession->init())
+    {
+        destroy();
+        return false;
+    }
+
     _initialized = true;
     return true;
 }
@@ -221,9 +229,10 @@ void VulkanRuntime::run()
             continue;
         }
 
-        VkCommandBuffer cmd = beginCommandRecording();
-        recordBootstrapClear(cmd);
-        endFrame(cmd);
+        tick();
+        _renderSession->beginFrame();
+        _renderSession->renderFrame();
+        signalPresentSemaphore();
         presentFrame();
     }
 
@@ -250,6 +259,7 @@ void VulkanRuntime::destroy()
         vkDeviceWaitIdle(_context.getDevice());
     }
 
+    _renderSession.reset();
     clearSwapchainTextures();
     deinitRenderServices();
     destroyFrameSubmission();
@@ -521,10 +531,21 @@ bool VulkanRuntime::rebuildSwapchain()
 
     if (_swapchain.getFramesInFlight() != _frames.size())
     {
-        return createFrameSubmission(_swapchain.getFramesInFlight());
+        if (!createFrameSubmission(_swapchain.getFramesInFlight()))
+        {
+            return false;
+        }
+    }
+    else
+    {
+        _frameIndex = 0;
     }
 
-    _frameIndex = 0;
+    refreshCurrentSwapchainTexture();
+    if (_renderSession)
+    {
+        _renderSession->onResize(_windowSize);
+    }
     return true;
 }
 
@@ -595,6 +616,13 @@ bool VulkanRuntime::prepareFrame()
         return false;
     }
 
+    const VkSemaphoreSubmitInfo acquireWaitInfo{
+        .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+        .semaphore = _swapchain.getAcquireSemaphore(),
+        .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+    };
+    addWaitSemaphore(acquireWaitInfo);
+
     refreshCurrentSwapchainTexture();
     return true;
 }
@@ -652,13 +680,7 @@ void VulkanRuntime::endFrame(VkCommandBuffer cmd)
         .commandBuffer = cmd,
     };
 
-    const VkSemaphoreSubmitInfo waitInfo{
-        .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-        .semaphore = _swapchain.getAcquireSemaphore(),
-        .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-    };
-    std::vector<VkSemaphoreSubmitInfo> waitInfos = _pendingFrameWaitSemaphores;
-    waitInfos.push_back(waitInfo);
+    std::vector<VkSemaphoreSubmitInfo> waitInfos = consumePendingFrameWaitSemaphores();
 
     const VkSemaphoreSubmitInfo signalInfos[2] = {
         {
@@ -677,11 +699,34 @@ void VulkanRuntime::endFrame(VkCommandBuffer cmd)
     const VkSubmitInfo2 submitInfo{
         .sType                    = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
         .waitSemaphoreInfoCount   = static_cast<uint32_t>(waitInfos.size()),
-        .pWaitSemaphoreInfos      = waitInfos.data(),
+        .pWaitSemaphoreInfos      = waitInfos.empty() ? nullptr : waitInfos.data(),
         .commandBufferInfoCount   = 1,
         .pCommandBufferInfos      = &cmdInfo,
         .signalSemaphoreInfoCount = 2,
         .pSignalSemaphoreInfos    = signalInfos,
+    };
+
+    NVVK_CHECK(vkQueueSubmit2(_context.getQueueInfo(0).queue, 1, &submitInfo, nullptr));
+}
+
+void VulkanRuntime::signalPresentSemaphore()
+{
+    std::vector<VkSemaphoreSubmitInfo> waitInfos = consumePendingFrameWaitSemaphores();
+
+    const VkSemaphoreSubmitInfo signalInfo{
+        .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+        .semaphore = _swapchain.getPresentSemaphore(),
+        .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+    };
+
+    const VkSubmitInfo2 submitInfo{
+        .sType                    = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .waitSemaphoreInfoCount   = static_cast<uint32_t>(waitInfos.size()),
+        .pWaitSemaphoreInfos      = waitInfos.empty() ? nullptr : waitInfos.data(),
+        .commandBufferInfoCount   = 0,
+        .pCommandBufferInfos      = nullptr,
+        .signalSemaphoreInfoCount = 1,
+        .pSignalSemaphoreInfos    = &signalInfo,
     };
 
     NVVK_CHECK(vkQueueSubmit2(_context.getQueueInfo(0).queue, 1, &submitInfo, nullptr));
@@ -728,6 +773,13 @@ void VulkanRuntime::submitAndWaitTempCmdBuffer(VkCommandBuffer cmd)
 void VulkanRuntime::addWaitSemaphore(const VkSemaphoreSubmitInfo& signalInfo)
 {
     _pendingFrameWaitSemaphores.push_back(signalInfo);
+}
+
+std::vector<VkSemaphoreSubmitInfo> VulkanRuntime::consumePendingFrameWaitSemaphores()
+{
+    std::vector<VkSemaphoreSubmitInfo> waitInfos = _pendingFrameWaitSemaphores;
+    _pendingFrameWaitSemaphores.clear();
+    return waitInfos;
 }
 
 void VulkanRuntime::deferDestroy(std::function<void()> task)
