@@ -15,6 +15,8 @@ find_path(NVPRO_CORE2_DIR
 )
 include(${NVPRO_CORE2_DIR}/cmake/Setup.cmake)
 
+find_package(SDL3 CONFIG REQUIRED PATHS "$ENV{VULKAN_SDK}/cmake")
+
 # Add compile definitions for nvutils to enable thread pool priority and deadlock check
 # This ensures both the library and our application see the same class layout
 if(TARGET nvutils)
@@ -102,6 +104,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   nvpro2::nvvk
   nvpro2::nvvkglsl
   nvpro2::nvvkgltf
+  SDL3::SDL3
   vk_radix_sort
   spirv-reflect-static
   crc32c
