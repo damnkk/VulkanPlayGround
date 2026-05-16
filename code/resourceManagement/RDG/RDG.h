@@ -15,12 +15,12 @@ GPU resource when RDG compile.
 #include "array"
 #include "list"
 #include "PlayApp.h"
+#include "core/runtime/VulkanRuntime.h"
 #include "RDGResources.h"
 #include "RDGPasses.hpp"
 namespace Play
 {
 class RenderPass;
-struct PlayFrameData;
 } // namespace Play
 namespace Play::RDG
 {

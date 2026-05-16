@@ -119,7 +119,7 @@ Texture::Texture(uint32_t width, uint32_t height, uint32_t depth, VkFormat forma
         VkDependencyInfo info{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
         info.imageMemoryBarrierCount = 1;
         info.pImageMemoryBarriers    = &imageBarrier;
-        auto cmd                     = vkDriver->_app->createTempCmdBuffer();
+        auto cmd                     = vkDriver->createTempCmdBuffer();
         vkCmdPipelineBarrier2(cmd, &info);
         PlayResourceManager::Instance().submitAndWaitTempCmdBuffer(cmd);
     }
@@ -171,7 +171,7 @@ Texture::Texture(uint32_t size, VkFormat format, VkImageUsageFlags usage, VkImag
         VkDependencyInfo info{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
         info.imageMemoryBarrierCount = 1;
         info.pImageMemoryBarriers    = &imageBarrier;
-        auto cmd                     = vkDriver->_app->createTempCmdBuffer();
+        auto cmd                     = vkDriver->createTempCmdBuffer();
         vkCmdPipelineBarrier2(cmd, &info);
         PlayResourceManager::Instance().submitAndWaitTempCmdBuffer(cmd);
     }

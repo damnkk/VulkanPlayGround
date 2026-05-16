@@ -12,6 +12,7 @@
 #include "RenderPassCache.h"
 #include "FrameBufferCache.h"
 #include "VulkanDriver.h"
+#include "controlComponent/controlComponent.h"
 namespace Play
 {
 struct ScopeTimer
@@ -47,17 +48,13 @@ PlayElement::PlayElement(Info info) : _info(info)
 
 PlayElement::~PlayElement()
 {
-    delete vkDriver;
-    vkDriver = nullptr;
     // delete _sceneManager;
     // _sceneManager = nullptr;
 }
 
 void PlayElement::onAttach(nvapp::Application* app)
 {
-    _app     = app;
-    vkDriver = new VulkanDriver(app);
-    vkDriver->init();
+    _app = app;
     // CameraManip
     // _sceneManager     = new SceneManager();
     _profilerTimeline = _info.profilerManager->createTimeline({"graphics"});

@@ -50,7 +50,7 @@ void Renderer::updateCameraBuffer()
     data.cameraPosition    = camera->getCameraManipulator()->getEye();
     data.projMatrix        = camera->getCameraManipulator()->getPerspectiveMatrix();
     data.viewMatrix        = camera->getCameraManipulator()->getViewMatrix();
-    data.viewPortSize      = {vkDriver->getApp()->getViewportSize().width, vkDriver->getApp()->getViewportSize().height};
+    data.viewPortSize      = {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height};
     data.viewProjMatrix    = data.projMatrix * data.viewMatrix;
     data.invViewMatrix     = glm::inverse(data.viewMatrix);
     data.invProjMatrix     = glm::inverse(data.projMatrix);

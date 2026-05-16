@@ -32,9 +32,9 @@ void PlayResourceManager::initialize()
 {
     VmaAllocatorCreateInfo allocatorInfo = {
         .flags          = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
-        .physicalDevice = vkDriver->_physicalDevice,
-        .device         = vkDriver->_device,
-        .instance       = vkDriver->_instance,
+        .physicalDevice = vkDriver->getPhysicalDevice(),
+        .device         = vkDriver->getDevice(),
+        .instance       = vkDriver->getInstance(),
     };
     ::nvvk::ResourceAllocator::init(allocatorInfo);
     ::nvvk::StagingUploader::init(this);
@@ -56,11 +56,11 @@ void PlayResourceManager::deInit()
 
 VkCommandBuffer PlayResourceManager::getTempCommandBuffer()
 {
-    return vkDriver->_app->createTempCmdBuffer();
+    return vkDriver->createTempCmdBuffer();
 }
 
 void PlayResourceManager::submitAndWaitTempCmdBuffer(VkCommandBuffer cmd)
 {
-    vkDriver->_app->submitAndWaitTempCmdBuffer(cmd);
+    vkDriver->submitAndWaitTempCmdBuffer(cmd);
 }
 } // namespace Play

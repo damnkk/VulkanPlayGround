@@ -458,7 +458,7 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
                     createInfo.codeSize = module->_spvCode.size() * sizeof(uint32_t);
                     createInfo.pCode    = module->_spvCode.data();
 
-                    NVVK_CHECK(vkCreateShaderModule(vkDriver->_device, &createInfo, nullptr, &module->_shaderModule));
+                    NVVK_CHECK(vkCreateShaderModule(vkDriver->getDevice(), &createInfo, nullptr, &module->_shaderModule));
                     _nameIdMap[name] = module->_poolId;
                     return module->_poolId;
                 }
@@ -488,7 +488,7 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
         VkShaderModuleCreateInfo createInfo{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
         createInfo.codeSize = module->_spvCode.size() * sizeof(uint32_t);
         createInfo.pCode    = module->_spvCode.data();
-        NVVK_CHECK(vkCreateShaderModule(vkDriver->_device, &createInfo, nullptr, &module->_shaderModule));
+        NVVK_CHECK(vkCreateShaderModule(vkDriver->getDevice(), &createInfo, nullptr, &module->_shaderModule));
         _nameIdMap[name] = module->_poolId;
         std::ofstream spvFile(fullSpvPath, std::ios::binary);
         if (spvFile.is_open())
@@ -533,7 +533,7 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
                         createInfo.codeSize = module->_spvCode.size() * sizeof(uint32_t);
                         createInfo.pCode    = module->_spvCode.data();
 
-                        NVVK_CHECK(vkCreateShaderModule(vkDriver->_device, &createInfo, nullptr, &module->_shaderModule));
+                        NVVK_CHECK(vkCreateShaderModule(vkDriver->getDevice(), &createInfo, nullptr, &module->_shaderModule));
                         _nameIdMap[name] = module->_poolId;
                         return module->_poolId;
                     }
@@ -555,7 +555,7 @@ uint32_t ShaderManager::loadShaderFromFile(std::string name, const std::filesyst
             module->_name                       = name;
             module->_entryPoint                 = entry;
             VkShaderModuleCreateInfo createInfo = _glslCCompiler.makeShaderModuleCreateInfo(result, 0);
-            NVVK_CHECK(vkCreateShaderModule(vkDriver->_device, &createInfo, nullptr, &module->_shaderModule));
+            NVVK_CHECK(vkCreateShaderModule(vkDriver->getDevice(), &createInfo, nullptr, &module->_shaderModule));
             _nameIdMap[name] = module->_poolId;
             // Save the compiled SPV code to disk
 
@@ -602,7 +602,7 @@ void ShaderManager::deInit()
         ShaderModule* module = _shaderPool.get(id);
         if (module)
         {
-            vkDestroyShaderModule(vkDriver->_device, module->_shaderModule, nullptr);
+            vkDestroyShaderModule(vkDriver->getDevice(), module->_shaderModule, nullptr);
             _shaderPool.free(id);
         }
     }

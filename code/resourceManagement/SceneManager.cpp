@@ -98,7 +98,7 @@ void SceneManager::updateDescriptorSet()
     skyWrite.pImageInfo = skyImageInfos.data();
     if (!_sceneSkyTexture.empty()) writes.push_back(skyWrite);
 
-    vkUpdateDescriptorSets(vkDriver->_device, writes.size(), writes.data(), 0, nullptr);
+    vkUpdateDescriptorSets(vkDriver->getDevice(), writes.size(), writes.data(), 0, nullptr);
 }
 
 void SceneManager::update() {}

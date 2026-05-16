@@ -6,6 +6,7 @@
 #include "VulkanDriver.h"
 #include "resourceManagement/PconstantType.h.slang"
 #include "PlayAllocator.h"
+#include "controlComponent/controlComponent.h"
 
 #include "GBufferConfig.h"
 namespace Play

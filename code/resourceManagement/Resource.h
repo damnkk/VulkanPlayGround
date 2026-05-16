@@ -12,8 +12,11 @@ namespace Play
 class PlayAllocator;
 class Texture;
 class Buffer;
-class VulkanDriver;
-extern VulkanDriver* vkDriver;
+namespace runtime
+{
+class VulkanRuntime;
+}
+extern runtime::VulkanRuntime* vkDriver;
 
 class Texture : public nvvk::Image, public RefCounted
 {

@@ -666,7 +666,7 @@ void RDGBuilder::afterPassExecute()
         vkQueueSubmit2(vkDriver->getQueue(queueIndex).queue, 1, &submit, nullptr);
     }
     // we add the last signaled semaphore into here, so that the next frame would wait on it.
-    vkDriver->_app->addWaitSemaphore(signalInfo);
+    vkDriver->addWaitSemaphore(signalInfo);
     _renderContext->_prevPassNode = nullptr;
     _submitInfos.clear();
 }

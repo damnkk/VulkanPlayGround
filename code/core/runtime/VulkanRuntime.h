@@ -293,6 +293,9 @@ private:
 
 namespace Play
 {
+using CommandPool   = runtime::CommandPool;
+using PlayFrameData = runtime::VulkanRuntime::FrameData;
+
 extern runtime::VulkanRuntime* vkDriver;
 runtime::VulkanRuntime* GetVulkanRuntime();
 } // namespace Play
