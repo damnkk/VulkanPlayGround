@@ -1,3 +1,4 @@
+#if 0
 #pragma once
 
 #include <volk.h>
@@ -283,3 +284,4 @@ public:
 extern VulkanDriver* vkDriver;
 
 } // namespace Play
+#endif

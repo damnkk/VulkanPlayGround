@@ -6,8 +6,123 @@
 #include <nvvk/check_error.hpp>
 #include <nvvk/debug_util.hpp>
 
+#include "DescriptorManager.h"
+#include "FrameBufferCache.h"
+#include "PipelineCacheManager.h"
+#include "PlayAllocator.h"
+#include "RenderPassCache.h"
+#include "ShaderManager.hpp"
+#include "controlComponent/controlComponent.h"
+#include "core/RefCounted.h"
+
+namespace Play
+{
+runtime::VulkanRuntime* vkDriver = nullptr;
+}
+
 namespace Play::runtime
 {
+
+void CommandPool::init(VkDevice inputDevice, uint32_t queueFamilyIndex, VkCommandBufferLevel inputLevel)
+{
+    device = inputDevice;
+    level  = inputLevel;
+
+    const VkCommandPoolCreateInfo poolInfo{
+        .sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .queueFamilyIndex = queueFamilyIndex,
+    };
+    NVVK_CHECK(vkCreateCommandPool(device, &poolInfo, nullptr, &vkHandle));
+}
+
+void CommandPool::cleanup()
+{
+    if (vkHandle != VK_NULL_HANDLE && device != VK_NULL_HANDLE)
+    {
+        vkDestroyCommandPool(device, vkHandle, nullptr);
+    }
+
+    vkHandle         = VK_NULL_HANDLE;
+    device           = VK_NULL_HANDLE;
+    currCmdBufferIdx = 0;
+    cmdBuffers.clear();
+}
+
+VkCommandBuffer CommandPool::allocCommandBuffer()
+{
+    if (currCmdBufferIdx >= cmdBuffers.size())
+    {
+        const VkCommandBufferAllocateInfo allocInfo{
+            .sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .commandPool        = vkHandle,
+            .level              = level,
+            .commandBufferCount = 1,
+        };
+
+        VkCommandBuffer cmdBuffer = VK_NULL_HANDLE;
+        NVVK_CHECK(vkAllocateCommandBuffers(device, &allocInfo, &cmdBuffer));
+        cmdBuffers.push_back(cmdBuffer);
+    }
+
+    return cmdBuffers[currCmdBufferIdx++];
+}
+
+void CommandPool::reset()
+{
+    if (vkHandle != VK_NULL_HANDLE)
+    {
+        vkResetCommandPool(device, vkHandle, 0);
+    }
+    currCmdBufferIdx = 0;
+}
+
+void VulkanRuntime::FrameData::init(VulkanRuntime& runtime, uint32_t graphicsQueueFamilyIndex, uint32_t computeQueueFamilyIndex)
+{
+    const VkDevice device = runtime.getDevice();
+
+    presentCmdPool.init(device, graphicsQueueFamilyIndex);
+    graphicsCmdPool.init(device, graphicsQueueFamilyIndex);
+    computeCmdPool.init(device, computeQueueFamilyIndex);
+    workerGraphicsPools.init(device, graphicsQueueFamilyIndex);
+
+    const VkSemaphoreTypeCreateInfo timelineInfo{
+        .sType         = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+        .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
+        .initialValue  = 0,
+    };
+    const VkSemaphoreCreateInfo semaphoreInfo{
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        .pNext = &timelineInfo,
+    };
+    NVVK_CHECK(vkCreateSemaphore(device, &semaphoreInfo, nullptr, &semaphore));
+    NVVK_DBG_NAME(semaphore);
+}
+
+void VulkanRuntime::FrameData::deinit(VkDevice device)
+{
+    presentCmdPool.cleanup();
+    graphicsCmdPool.cleanup();
+    computeCmdPool.cleanup();
+    workerGraphicsPools.cleanup();
+
+    if (semaphore != VK_NULL_HANDLE)
+    {
+        vkDestroySemaphore(device, semaphore, nullptr);
+        semaphore = VK_NULL_HANDLE;
+    }
+
+    presentCmdBuffer = VK_NULL_HANDLE;
+    timelineValue    = 0;
+}
+
+void VulkanRuntime::FrameData::reset()
+{
+    presentCmdPool.reset();
+    graphicsCmdPool.reset();
+    computeCmdPool.reset();
+    workerGraphicsPools.reset();
+}
 
 bool VulkanRuntime::init(const RuntimeConfig& config, const nvvk::ContextInitInfo& contextInfo)
 {
@@ -20,6 +135,16 @@ bool VulkanRuntime::init(const RuntimeConfig& config, const nvvk::ContextInitInf
     }
 
     if (!initContext(contextInfo))
+    {
+        deinit();
+        return false;
+    }
+    _physicalDeviceProperties2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+    vkGetPhysicalDeviceProperties2(getPhysicalDevice(), &_physicalDeviceProperties2);
+    nvvk::DebugUtil::getInstance().init(getDevice());
+    Play::vkDriver = this;
+
+    if (!initRenderServices())
     {
         deinit();
         return false;
@@ -86,6 +211,7 @@ void VulkanRuntime::deinit()
         vkDeviceWaitIdle(_context.getDevice());
     }
 
+    deinitRenderServices();
     destroyFrameSubmission();
 
     if (_context.getDevice())
@@ -112,6 +238,10 @@ void VulkanRuntime::deinit()
 
     _window.deinit();
     _initialized = false;
+    if (Play::vkDriver == this)
+    {
+        Play::vkDriver = nullptr;
+    }
 }
 
 bool VulkanRuntime::initContext(const nvvk::ContextInitInfo& contextInfo)
@@ -167,6 +297,62 @@ bool VulkanRuntime::initContext(const nvvk::ContextInitInfo& contextInfo)
     return true;
 }
 
+bool VulkanRuntime::initRenderServices()
+{
+    _descriptorSetCache   = new Play::DescriptorSetCache();
+    _pipelineCacheManager = new Play::PipelineCacheManager();
+
+    Play::PlayResourceManager::Instance().initialize();
+    Play::ShaderManager::Instance().init();
+
+    if (!_enableDynamicRendering)
+    {
+        _renderPassCache  = new Play::RenderPassCache();
+        _frameBufferCache = new Play::FrameBufferCache();
+    }
+
+    _tonemapperControlComponent = new Play::ToneMappingControlComponent();
+    prepareGlobalDescriptorSet();
+    prepareFrameDescriptorSet();
+    _lastTick = SDL_GetPerformanceCounter();
+    return true;
+}
+
+void VulkanRuntime::deinitRenderServices()
+{
+    if (!_descriptorSetCache && !_pipelineCacheManager && !_tonemapperControlComponent)
+    {
+        return;
+    }
+
+    std::vector<Play::RefCounted*> leakedObjects = _registeredObjects;
+    _registeredObjects.clear();
+    for (Play::RefCounted* obj : leakedObjects)
+    {
+        if (obj && obj->isAlive())
+        {
+            LOGW("VulkanRuntime: Force destroying leaked RefCounted object at %p (refCount=%u)\n", obj, obj->getRefCount());
+            obj->forceDestroy();
+        }
+    }
+
+    destroyDeferredTasks();
+
+    delete _tonemapperControlComponent;
+    _tonemapperControlComponent = nullptr;
+    delete _frameBufferCache;
+    _frameBufferCache = nullptr;
+    delete _renderPassCache;
+    _renderPassCache = nullptr;
+    delete _descriptorSetCache;
+    _descriptorSetCache = nullptr;
+    delete _pipelineCacheManager;
+    _pipelineCacheManager = nullptr;
+
+    Play::PlayResourceManager::Instance().deInit();
+    Play::ShaderManager::Instance().deInit();
+}
+
 bool VulkanRuntime::initSurfaceAndSwapchain()
 {
     nvvk::Swapchain::InitInfo swapchainInfo{
@@ -219,52 +405,15 @@ bool VulkanRuntime::createFrameSubmission(uint32_t frameCount)
     destroyFrameSubmission();
 
     _frames.resize(frameCount);
+    _deferredDestroyQueues.resize(frameCount);
     _frameIndex = 0;
 
-    const VkSemaphoreTypeCreateInfo timelineInfo{
-        .sType         = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
-        .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
-        .initialValue  = 0,
-    };
-    const VkSemaphoreCreateInfo semaphoreInfo{
-        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-        .pNext = &timelineInfo,
-    };
-
-    const VkCommandPoolCreateInfo poolInfo{
-        .sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-        .queueFamilyIndex = _context.getQueueInfo(0).familyIndex,
-    };
+    const uint32_t graphicsQueueFamilyIndex = getGfxQueue().familyIndex;
+    const uint32_t computeQueueFamilyIndex  = getComputeQueue().familyIndex;
 
     for (FrameData& frame : _frames)
     {
-        if (vkCreateSemaphore(_context.getDevice(), &semaphoreInfo, nullptr, &frame.timeline) != VK_SUCCESS)
-        {
-            LOGE("Failed to create frame timeline semaphore\n");
-            return false;
-        }
-        NVVK_DBG_NAME(frame.timeline);
-
-        if (vkCreateCommandPool(_context.getDevice(), &poolInfo, nullptr, &frame.cmdPool) != VK_SUCCESS)
-        {
-            LOGE("Failed to create frame command pool\n");
-            return false;
-        }
-        NVVK_DBG_NAME(frame.cmdPool);
-
-        const VkCommandBufferAllocateInfo allocInfo{
-            .sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-            .commandPool        = frame.cmdPool,
-            .level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-            .commandBufferCount = 1,
-        };
-        if (vkAllocateCommandBuffers(_context.getDevice(), &allocInfo, &frame.cmdBuffer) != VK_SUCCESS)
-        {
-            LOGE("Failed to allocate frame command buffer\n");
-            return false;
-        }
-        NVVK_DBG_NAME(frame.cmdBuffer);
+        frame.init(*this, graphicsQueueFamilyIndex, computeQueueFamilyIndex);
     }
 
     return true;
@@ -276,23 +425,23 @@ void VulkanRuntime::destroyFrameSubmission()
     {
         for (FrameData& frame : _frames)
         {
-            if (frame.cmdBuffer != VK_NULL_HANDLE)
-            {
-                vkFreeCommandBuffers(_context.getDevice(), frame.cmdPool, 1, &frame.cmdBuffer);
-                frame.cmdBuffer = VK_NULL_HANDLE;
-            }
-            if (frame.cmdPool != VK_NULL_HANDLE)
-            {
-                vkDestroyCommandPool(_context.getDevice(), frame.cmdPool, nullptr);
-                frame.cmdPool = VK_NULL_HANDLE;
-            }
-            if (frame.timeline != VK_NULL_HANDLE)
-            {
-                vkDestroySemaphore(_context.getDevice(), frame.timeline, nullptr);
-                frame.timeline = VK_NULL_HANDLE;
-            }
+            frame.deinit(_context.getDevice());
         }
         _frames.clear();
+    }
+    _deferredDestroyQueues.clear();
+    _pendingFrameWaitSemaphores.clear();
+}
+
+void VulkanRuntime::destroyDeferredTasks()
+{
+    for (DeferredDestroyQueue& queue : _deferredDestroyQueues)
+    {
+        for (auto& task : queue.tasks)
+        {
+            task();
+        }
+        queue.tasks.clear();
     }
 }
 
@@ -307,7 +456,7 @@ void VulkanRuntime::waitForCurrentFrame() const
     const VkSemaphoreWaitInfo waitInfo{
         .sType          = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
         .semaphoreCount = 1,
-        .pSemaphores    = &frame.timeline,
+        .pSemaphores    = &frame.semaphore,
         .pValues        = &frame.timelineValue,
     };
     vkWaitSemaphores(_context.getDevice(), &waitInfo, UINT64_MAX);
@@ -349,6 +498,9 @@ bool VulkanRuntime::prepareFrame()
     }
 
     waitForCurrentFrame();
+    _frames[_frameIndex].reset();
+    _pendingFrameWaitSemaphores.clear();
+    tryCleanupDeferredTasks();
 
     const VkResult result = _swapchain.acquireNextImage(_context.getDevice());
     if (result == VK_ERROR_OUT_OF_DATE_KHR)
@@ -367,14 +519,14 @@ bool VulkanRuntime::prepareFrame()
 VkCommandBuffer VulkanRuntime::beginCommandRecording()
 {
     FrameData& frame = _frames[_frameIndex];
-    vkResetCommandPool(_context.getDevice(), frame.cmdPool, 0);
+    frame.presentCmdBuffer = frame.presentCmdPool.allocCommandBuffer();
 
     const VkCommandBufferBeginInfo beginInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
     };
-    NVVK_CHECK(vkBeginCommandBuffer(frame.cmdBuffer, &beginInfo));
-    return frame.cmdBuffer;
+    NVVK_CHECK(vkBeginCommandBuffer(frame.presentCmdBuffer, &beginInfo));
+    return frame.presentCmdBuffer;
 }
 
 void VulkanRuntime::recordBootstrapClear(VkCommandBuffer cmd) const
@@ -422,6 +574,8 @@ void VulkanRuntime::endFrame(VkCommandBuffer cmd)
         .semaphore = _swapchain.getAcquireSemaphore(),
         .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
     };
+    std::vector<VkSemaphoreSubmitInfo> waitInfos = _pendingFrameWaitSemaphores;
+    waitInfos.push_back(waitInfo);
 
     const VkSemaphoreSubmitInfo signalInfos[2] = {
         {
@@ -431,7 +585,7 @@ void VulkanRuntime::endFrame(VkCommandBuffer cmd)
         },
         {
             .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-            .semaphore = frame.timeline,
+            .semaphore = frame.semaphore,
             .value     = signalValue,
             .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
         },
@@ -439,8 +593,8 @@ void VulkanRuntime::endFrame(VkCommandBuffer cmd)
 
     const VkSubmitInfo2 submitInfo{
         .sType                    = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-        .waitSemaphoreInfoCount   = 1,
-        .pWaitSemaphoreInfos      = &waitInfo,
+        .waitSemaphoreInfoCount   = static_cast<uint32_t>(waitInfos.size()),
+        .pWaitSemaphoreInfos      = waitInfos.data(),
         .commandBufferInfoCount   = 1,
         .pCommandBufferInfos      = &cmdInfo,
         .signalSemaphoreInfoCount = 2,
@@ -449,6 +603,178 @@ void VulkanRuntime::endFrame(VkCommandBuffer cmd)
 
     NVVK_CHECK(vkQueueSubmit2(_context.getQueueInfo(0).queue, 1, &submitInfo, nullptr));
 }
+
+VkCommandBuffer VulkanRuntime::createTempCmdBuffer()
+{
+    const VkCommandBufferAllocateInfo allocInfo{
+        .sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool        = _transientCmdPool,
+        .level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
+
+    VkCommandBuffer cmd = VK_NULL_HANDLE;
+    NVVK_CHECK(vkAllocateCommandBuffers(getDevice(), &allocInfo, &cmd));
+
+    const VkCommandBufferBeginInfo beginInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    };
+    NVVK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
+    return cmd;
+}
+
+void VulkanRuntime::submitAndWaitTempCmdBuffer(VkCommandBuffer cmd)
+{
+    NVVK_CHECK(vkEndCommandBuffer(cmd));
+
+    const VkCommandBufferSubmitInfo cmdInfo{
+        .sType         = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+        .commandBuffer = cmd,
+    };
+    const VkSubmitInfo2 submitInfo{
+        .sType                  = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .commandBufferInfoCount = 1,
+        .pCommandBufferInfos    = &cmdInfo,
+    };
+    NVVK_CHECK(vkQueueSubmit2(getGfxQueue().queue, 1, &submitInfo, nullptr));
+    NVVK_CHECK(vkQueueWaitIdle(getGfxQueue().queue));
+    vkFreeCommandBuffers(getDevice(), _transientCmdPool, 1, &cmd);
+}
+
+void VulkanRuntime::addWaitSemaphore(const VkSemaphoreSubmitInfo& signalInfo)
+{
+    _pendingFrameWaitSemaphores.push_back(signalInfo);
+}
+
+void VulkanRuntime::deferDestroy(std::function<void()> task)
+{
+    if (_deferredDestroyQueues.empty())
+    {
+        task();
+        return;
+    }
+
+    const uint32_t targetFrame = (_frameIndex + 1) % static_cast<uint32_t>(_deferredDestroyQueues.size());
+    _deferredDestroyQueues[targetFrame].tasks.push_back(std::move(task));
+}
+
+void VulkanRuntime::registerObject(Play::RefCounted* obj)
+{
+    if (!obj)
+    {
+        return;
+    }
+
+    for (Play::RefCounted* registeredObject : _registeredObjects)
+    {
+        if (registeredObject == obj)
+        {
+            return;
+        }
+    }
+    _registeredObjects.push_back(obj);
+}
+
+void VulkanRuntime::unregisterObject(Play::RefCounted* obj)
+{
+    for (size_t i = 0; i < _registeredObjects.size(); ++i)
+    {
+        if (_registeredObjects[i] == obj)
+        {
+            _registeredObjects[i] = _registeredObjects.back();
+            _registeredObjects.pop_back();
+            return;
+        }
+    }
+}
+
+void VulkanRuntime::tryCleanupDeferredTasks()
+{
+    if (_deferredDestroyQueues.empty())
+    {
+        return;
+    }
+
+    DeferredDestroyQueue& queue = _deferredDestroyQueues[_frameIndex];
+    for (auto& task : queue.tasks)
+    {
+        task();
+    }
+    queue.tasks.clear();
+}
+
+void VulkanRuntime::tick()
+{
+    const uint64_t currentTick = SDL_GetPerformanceCounter();
+    const uint64_t frequency   = SDL_GetPerformanceFrequency();
+    _deltaTime                 = _lastTick == 0 ? 0.0 : static_cast<double>(currentTick - _lastTick) / static_cast<double>(frequency);
+    _lastTick                  = currentTick;
+}
+
+void VulkanRuntime::prepareGlobalDescriptorSet()
+{
+    _globalDescriptorBindings.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_ALL, nullptr);
+    _globalDescriptorBindings.addBinding(1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_ALL, nullptr);
+    _globalDescriptorBindings.addBinding(2, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_ALL, nullptr);
+    _globalDescriptorBindings.addBinding(3, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_ALL, nullptr);
+    _globalDescriptorBindings.addBinding(4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr);
+    _descriptorSetCache->initGlobalDescriptorSets(_globalDescriptorBindings);
+    updateGlobalDescriptorSet();
+}
+
+void VulkanRuntime::updateGlobalDescriptorSet()
+{
+    std::vector<VkSampler>             samplerList(2);
+    std::vector<VkDescriptorImageInfo> imageInfoList;
+    VkSamplerCreateInfo                samplerCreateInfo{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+    samplerCreateInfo.magFilter     = VK_FILTER_LINEAR;
+    samplerCreateInfo.minFilter     = VK_FILTER_LINEAR;
+    samplerCreateInfo.addressModeU  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerCreateInfo.addressModeV  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerCreateInfo.addressModeW  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerCreateInfo.mipLodBias    = 0.0F;
+    samplerCreateInfo.maxAnisotropy = 1.0F;
+    samplerCreateInfo.compareEnable = VK_FALSE;
+    Play::PlayResourceManager::Instance().acquireSampler(samplerList[0], samplerCreateInfo);
+    imageInfoList.push_back({samplerList[0]});
+    samplerCreateInfo.magFilter = VK_FILTER_LINEAR;
+    samplerCreateInfo.minFilter = VK_FILTER_LINEAR;
+    Play::PlayResourceManager::Instance().acquireSampler(samplerList[1], samplerCreateInfo);
+    imageInfoList.push_back({samplerList[1]});
+
+    VkDescriptorBufferInfo toneMappingBufferInfo{};
+    toneMappingBufferInfo.buffer = _tonemapperControlComponent->getGPUBuffer()->buffer;
+    toneMappingBufferInfo.offset = 0;
+    toneMappingBufferInfo.range  = VK_WHOLE_SIZE;
+
+    std::vector<VkWriteDescriptorSet> writeSet(3, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET});
+    writeSet[0].dstSet          = _descriptorSetCache->getEngineDescriptorSet().set;
+    writeSet[0].dstBinding      = 2;
+    writeSet[0].descriptorCount = 1;
+    writeSet[0].descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLER;
+    writeSet[0].pImageInfo      = &imageInfoList[0];
+    writeSet[1].dstSet          = _descriptorSetCache->getEngineDescriptorSet().set;
+    writeSet[1].dstBinding      = 3;
+    writeSet[1].descriptorCount = 1;
+    writeSet[1].descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLER;
+    writeSet[1].pImageInfo      = &imageInfoList[1];
+    writeSet[2].dstSet          = _descriptorSetCache->getEngineDescriptorSet().set;
+    writeSet[2].dstBinding      = 4;
+    writeSet[2].descriptorCount = 1;
+    writeSet[2].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    writeSet[2].pBufferInfo     = &toneMappingBufferInfo;
+
+    vkUpdateDescriptorSets(getDevice(), static_cast<uint32_t>(writeSet.size()), writeSet.data(), 0, nullptr);
+}
+
+void VulkanRuntime::prepareFrameDescriptorSet()
+{
+    _frameDescriptorBindings.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, nullptr);
+    _descriptorSetCache->initFrameDescriptorSets(_frameDescriptorBindings);
+}
+
+void VulkanRuntime::updateFrameDescriptorSet() {}
 
 void VulkanRuntime::updateFrameStatsTitle()
 {

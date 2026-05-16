@@ -1,3 +1,4 @@
+#if 0
 #include "VulkanDriver.h"
 #include "DescriptorManager.h"
 #include "RenderPassCache.h"
@@ -282,3 +283,4 @@ void VulkanDriver::tick()
 }
 
 } // namespace Play
+#endif
