@@ -99,9 +99,20 @@ public:
         uint64_t               timelineValue = 0;
     };
 
-    bool init(const RuntimeConfig& config, const nvvk::ContextInitInfo& contextInfo);
+    VulkanRuntime(const RuntimeConfig& config, const nvvk::ContextInitInfo& contextInfo);
+    ~VulkanRuntime();
+
+    VulkanRuntime(const VulkanRuntime&)            = delete;
+    VulkanRuntime& operator=(const VulkanRuntime&) = delete;
+    VulkanRuntime(VulkanRuntime&&)                 = delete;
+    VulkanRuntime& operator=(VulkanRuntime&&)      = delete;
+
+    bool isInitialized() const
+    {
+        return _initialized;
+    }
+
     void run();
-    void deinit();
 
     VkDevice getDevice() const
     {
@@ -224,6 +235,8 @@ private:
         bool     titleUpdateTimerInitialized = false;
     };
 
+    bool init(const RuntimeConfig& config, const nvvk::ContextInitInfo& contextInfo);
+    void destroy();
     bool initContext(const nvvk::ContextInitInfo& contextInfo);
     bool initSurfaceAndSwapchain();
     bool initRenderServices();
@@ -272,6 +285,7 @@ private:
     uint64_t                              _lastTick     = 0;
     double                                _deltaTime    = 0.0;
     VkExtent2D                            _windowSize   = {};
+    bool                                  _registeredAsGlobal = false;
     bool                                  _initialized  = false;
 };
 
@@ -280,4 +294,5 @@ private:
 namespace Play
 {
 extern runtime::VulkanRuntime* vkDriver;
+runtime::VulkanRuntime* GetVulkanRuntime();
 } // namespace Play

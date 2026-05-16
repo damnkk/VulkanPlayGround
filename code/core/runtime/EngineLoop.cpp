@@ -7,14 +7,13 @@ namespace Play::runtime
 
 int EngineLoop::run(const RuntimeConfig& config, const nvvk::ContextInitInfo& contextInfo)
 {
-    VulkanRuntime runtime;
-    if (!runtime.init(config, contextInfo))
+    VulkanRuntime runtime(config, contextInfo);
+    if (!runtime.isInitialized())
     {
         return 1;
     }
 
     runtime.run();
-    runtime.deinit();
     return 0;
 }
 

@@ -21,6 +21,11 @@ public:
         return _shouldClose;
     }
 
+    bool isCreated() const
+    {
+        return _window != nullptr;
+    }
+
     bool isRenderable() const
     {
         return !_minimized && _pixelSize.width > 0 && _pixelSize.height > 0;

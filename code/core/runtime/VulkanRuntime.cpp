@@ -18,6 +18,11 @@
 namespace Play
 {
 runtime::VulkanRuntime* vkDriver = nullptr;
+
+runtime::VulkanRuntime* GetVulkanRuntime()
+{
+    return vkDriver;
+}
 }
 
 namespace Play::runtime
@@ -124,6 +129,25 @@ void VulkanRuntime::FrameData::reset()
     workerGraphicsPools.reset();
 }
 
+VulkanRuntime::VulkanRuntime(const RuntimeConfig& config, const nvvk::ContextInitInfo& contextInfo)
+{
+    if (Play::vkDriver && Play::vkDriver != this)
+    {
+        LOGE("Only one VulkanRuntime instance can be registered globally\n");
+        return;
+    }
+
+    Play::vkDriver     = this;
+    _registeredAsGlobal = true;
+
+    init(config, contextInfo);
+}
+
+VulkanRuntime::~VulkanRuntime()
+{
+    destroy();
+}
+
 bool VulkanRuntime::init(const RuntimeConfig& config, const nvvk::ContextInitInfo& contextInfo)
 {
     _config     = config;
@@ -136,36 +160,35 @@ bool VulkanRuntime::init(const RuntimeConfig& config, const nvvk::ContextInitInf
 
     if (!initContext(contextInfo))
     {
-        deinit();
+        destroy();
         return false;
     }
     _physicalDeviceProperties2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
     vkGetPhysicalDeviceProperties2(getPhysicalDevice(), &_physicalDeviceProperties2);
     nvvk::DebugUtil::getInstance().init(getDevice());
-    Play::vkDriver = this;
 
     if (!initRenderServices())
     {
-        deinit();
+        destroy();
         return false;
     }
 
     if (!_window.createSurface(_context.getInstance(), &_surface))
     {
-        deinit();
+        destroy();
         return false;
     }
     NVVK_DBG_NAME(_surface);
 
     if (!createTransientCommandPool())
     {
-        deinit();
+        destroy();
         return false;
     }
 
     if (!initSurfaceAndSwapchain())
     {
-        deinit();
+        destroy();
         return false;
     }
 
@@ -175,6 +198,11 @@ bool VulkanRuntime::init(const RuntimeConfig& config, const nvvk::ContextInitInf
 
 void VulkanRuntime::run()
 {
+    if (!_initialized)
+    {
+        return;
+    }
+
     LOGI("Running SDL3 bootstrap runtime\n");
 
     while (!_window.shouldClose())
@@ -204,8 +232,18 @@ void VulkanRuntime::run()
     }
 }
 
-void VulkanRuntime::deinit()
+void VulkanRuntime::destroy()
 {
+    if (!_initialized && !_context.getInstance() && !_window.isCreated())
+    {
+        if (_registeredAsGlobal && Play::vkDriver == this)
+        {
+            Play::vkDriver      = nullptr;
+            _registeredAsGlobal = false;
+        }
+        return;
+    }
+
     if (_context.getDevice())
     {
         vkDeviceWaitIdle(_context.getDevice());
@@ -238,9 +276,10 @@ void VulkanRuntime::deinit()
 
     _window.deinit();
     _initialized = false;
-    if (Play::vkDriver == this)
+    if (_registeredAsGlobal && Play::vkDriver == this)
     {
         Play::vkDriver = nullptr;
+        _registeredAsGlobal = false;
     }
 }
 

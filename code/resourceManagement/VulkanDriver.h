@@ -285,3 +285,5 @@ extern VulkanDriver* vkDriver;
 
 } // namespace Play
 #endif
+
+#include "core/runtime/VulkanRuntime.h"
