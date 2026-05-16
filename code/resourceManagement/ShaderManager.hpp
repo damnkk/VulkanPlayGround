@@ -42,7 +42,7 @@ enum class ShaderType
 VkDescriptorType      spvToDescriptorType(SpvReflectDescriptorType type);
 VkPipelineStageFlags2 spvToVkStageFlags(SpvReflectShaderStageFlagBits flags);
 
-class PlayElement;
+class RenderSession;
 struct ShaderModule
 {
     ShaderModule(uint32_t id) : _poolId(id) {}

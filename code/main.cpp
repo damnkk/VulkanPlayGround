@@ -111,7 +111,7 @@ int main(int argc, char** argv)
     std::string renderMode = "defer";
     parameterRegistry.add({"rendermode", "rm"}, &renderMode);
 
-    Play::PlayElement::Info playInfo = {
+    Play::RenderSession::Info playInfo = {
         .profilerManager   = &profilerManager,
         .parameterRegistry = &parameterRegistry,
         .renderMode        = &renderMode,
@@ -212,7 +212,7 @@ int main(int argc, char** argv)
 
     // add the sample main element
     // app.addElement(sampleElement);
-    app.addElement(std::make_shared<Play::PlayElement>(playInfo));
+    app.addElement(std::make_shared<Play::RenderSession>(playInfo));
     app.addElement(std::make_shared<nvapp::ElementDefaultWindowTitle>());
     // add profiler element
     app.addElement(std::make_shared<nvapp::ElementProfiler>(&profilerManager));

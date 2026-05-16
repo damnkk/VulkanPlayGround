@@ -6,13 +6,15 @@
 #include <memory>
 namespace Play
 {
-class PlayElement;
+class Renderer;
 class RenderProgram;
 
 class PresentPass : public BasePass
 {
 public:
-    PresentPass(PlayElement* element) : _element(element) {}
+    PresentPass(Renderer* renderer) : _renderer(renderer) {}
+    static constexpr const char* PRESENT_TEXTURE_NAME = "presentTexture";
+
     ~PresentPass();
 
     void init() override;
@@ -20,7 +22,7 @@ public:
     void build(RDG::RDGBuilder* rdgBuilder) override;
 
 private:
-    PlayElement*          _element;
+    Renderer*             _renderer;
     RefPtr<RenderProgram> _presentProgram;
 };
 

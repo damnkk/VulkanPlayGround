@@ -11,6 +11,7 @@
 #include "PipelineCacheManager.h"
 #include "PlayAllocator.h"
 #include "RenderPassCache.h"
+#include "Resource.h"
 #include "ShaderManager.hpp"
 #include "controlComponent/controlComponent.h"
 #include "core/RefCounted.h"
@@ -249,6 +250,7 @@ void VulkanRuntime::destroy()
         vkDeviceWaitIdle(_context.getDevice());
     }
 
+    clearSwapchainTextures();
     deinitRenderServices();
     destroyFrameSubmission();
 
@@ -418,6 +420,7 @@ bool VulkanRuntime::initSurfaceAndSwapchain()
         LOGE("Swapchain resource initialization failed\n");
         return false;
     }
+    refreshCurrentSwapchainTexture();
 
     return createFrameSubmission(_swapchain.getFramesInFlight());
 }
@@ -509,6 +512,7 @@ bool VulkanRuntime::rebuildSwapchain()
         return false;
     }
 
+    clearSwapchainTextures();
     if (_swapchain.reinitResources(_windowSize, _config.vSync) != VK_SUCCESS)
     {
         LOGE("Swapchain rebuild failed\n");
@@ -522,6 +526,45 @@ bool VulkanRuntime::rebuildSwapchain()
 
     _frameIndex = 0;
     return true;
+}
+
+void VulkanRuntime::clearSwapchainTextures()
+{
+    _swapchainTextures.clear();
+}
+
+Play::Texture* VulkanRuntime::getCurrentSwapchainTexture()
+{
+    return refreshCurrentSwapchainTexture();
+}
+
+Play::Texture* VulkanRuntime::refreshCurrentSwapchainTexture()
+{
+    const uint32_t imageCount = _swapchain.getImageCount();
+    if (imageCount == 0)
+    {
+        return nullptr;
+    }
+
+    const VkImage image = _swapchain.getImage();
+    if (image == VK_NULL_HANDLE)
+    {
+        return nullptr;
+    }
+
+    for (RefPtr<Play::Texture>& texture : _swapchainTextures)
+    {
+        if (texture && texture->image == image)
+        {
+            return texture.get();
+        }
+    }
+
+    _swapchainTextures.emplace_back(new Play::Texture("SwapchainBackbuffer", image, _swapchain.getImageView(), _swapchain.getImageFormat(),
+                                                      {_windowSize.width, _windowSize.height, 1},
+                                                      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                                                      VK_IMAGE_LAYOUT_UNDEFINED));
+    return _swapchainTextures.back().get();
 }
 
 bool VulkanRuntime::prepareFrame()
@@ -552,6 +595,7 @@ bool VulkanRuntime::prepareFrame()
         return false;
     }
 
+    refreshCurrentSwapchainTexture();
     return true;
 }
 

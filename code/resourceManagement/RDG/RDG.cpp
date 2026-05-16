@@ -15,17 +15,7 @@ namespace Play::RDG
 
 RDGTextureBuilder& RDGTextureBuilder::Import(Texture* texture)
 {
-    _textureNode->setRHI(texture);
-    _textureNode->_ownsRHI           = false;
-    _textureNode->_info._aspectFlags = texture->AspectFlags();
-    _textureNode->_info._format      = texture->Format();
-    _textureNode->_info._extent      = texture->Extent();
-    _textureNode->_info._type        = texture->Type();
-    _textureNode->_info._usageFlags  = texture->UsageFlags();
-    _textureNode->_info._sampleCount = texture->SampleCount();
-    _textureNode->_info._mipmapLevel = texture->MipLevel();
-    _textureNode->_info._layerCount  = texture->LayerCount();
-    _textureNode->_info._debugName   = texture->DebugName();
+    _textureNode->setRHI(texture, false);
     return *this;
 }
 

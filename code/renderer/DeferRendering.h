@@ -19,7 +19,7 @@ enum class DeferPasses
 class DeferRenderer : public Renderer
 {
 public:
-    explicit DeferRenderer(PlayElement& element);
+    explicit DeferRenderer(RenderSession& session);
     ~DeferRenderer() override;
     void OnGUI() override;
 

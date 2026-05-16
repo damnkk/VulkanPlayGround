@@ -2,7 +2,7 @@
 #define FRAMEBUFFERCACHE_H
 namespace Play
 {
-class PlayElement;
+class RenderSession;
 class FrameBufferCache
 {
 public:

@@ -2,6 +2,8 @@
 
 #include "SdlWindow.h"
 
+#include "core/RefCounted.h"
+
 #include <nvvk/context.hpp>
 #include <nvvk/descriptors.hpp>
 #include <nvvk/swapchain.hpp>
@@ -13,6 +15,7 @@ class FrameBufferCache;
 class PipelineCacheManager;
 class RefCounted;
 class RenderPassCache;
+class Texture;
 class ToneMappingControlComponent;
 } // namespace Play
 
@@ -179,6 +182,8 @@ public:
         return _windowSize;
     }
 
+    Play::Texture* getCurrentSwapchainTexture();
+
     uint32_t getFrameCycleIndex() const
     {
         return _frameIndex;
@@ -249,6 +254,8 @@ private:
     void waitForCurrentFrame() const;
     bool rebuildSwapchain();
     bool prepareFrame();
+    Play::Texture* refreshCurrentSwapchainTexture();
+    void clearSwapchainTextures();
     VkCommandBuffer beginCommandRecording();
     void recordBootstrapClear(VkCommandBuffer cmd) const;
     void endFrame(VkCommandBuffer cmd);
@@ -270,6 +277,7 @@ private:
     VkSurfaceKHR                          _surface          = VK_NULL_HANDLE;
     VkCommandPool                         _transientCmdPool = VK_NULL_HANDLE;
     std::vector<FrameData>                _frames{};
+    std::vector<RefPtr<Play::Texture>>    _swapchainTextures{};
     std::vector<DeferredDestroyQueue>     _deferredDestroyQueues{};
     std::vector<Play::RefCounted*>        _registeredObjects{};
     std::vector<VkSemaphoreSubmitInfo>    _pendingFrameWaitSemaphores{};

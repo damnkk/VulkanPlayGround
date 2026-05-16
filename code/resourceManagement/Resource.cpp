@@ -21,6 +21,27 @@ Texture::Texture(std::string name) : Texture()
     debugName = std::move(name);
 }
 
+Texture::Texture(std::string name, VkImage externalImage, VkImageView externalImageView, VkFormat externalFormat, VkExtent3D externalExtent,
+                 VkImageUsageFlags externalUsage, VkImageLayout externalLayout, VkImageAspectFlags externalAspectFlags, uint32_t externalMipLevels,
+                 uint32_t externalLayerCount, VkSampleCountFlagBits externalSamples, bool ownsImage)
+    : Texture()
+{
+    debugName              = std::move(name);
+    image                  = externalImage;
+    descriptor.imageView   = externalImageView;
+    descriptor.imageLayout = externalLayout;
+    format                 = externalFormat;
+    extent                 = externalExtent;
+    mipLevels              = externalMipLevels;
+    arrayLayers            = externalLayerCount;
+    type                   = VK_IMAGE_TYPE_2D;
+    sampleCount            = externalSamples;
+    usageFlags             = externalUsage;
+    aspectFlags            = externalAspectFlags;
+    allocation             = nullptr;
+    _ownsImage             = ownsImage;
+}
+
 Texture::Texture(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage, VkImageLayout layout, uint32_t mipLevels,
                  VkSampleCountFlagBits samples)
     : Texture()
@@ -353,7 +374,7 @@ void Texture::onDestroy()
 {
     if (vkDriver) vkDriver->unregisterObject(this);
 
-    if (image != VK_NULL_HANDLE)
+    if (image != VK_NULL_HANDLE && _ownsImage)
     {
         nvvk::Image capturedImage;
         capturedImage.image       = this->image;
@@ -365,10 +386,11 @@ void Texture::onDestroy()
         capturedImage.format      = this->format;
 
         vkDriver->deferDestroy([capturedImage]() mutable { PlayResourceManager::Instance().destroyImage(capturedImage); });
-
-        image                = VK_NULL_HANDLE;
-        descriptor.imageView = VK_NULL_HANDLE;
     }
+
+    image                = VK_NULL_HANDLE;
+    descriptor.imageView = VK_NULL_HANDLE;
+    allocation           = nullptr;
 }
 
 // ==================== Buffer 实现 ====================

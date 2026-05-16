@@ -23,8 +23,7 @@ namespace RDG
 class RenderDependencyGraph;
 }
 
-// as same as "view"
-class PlayElement : public nvapp::IAppElement
+class RenderSession : public nvapp::IAppElement
 {
 public:
     struct Info
@@ -34,8 +33,8 @@ public:
         std::string*                renderMode{};
     };
     // Interface
-    PlayElement(Info info);
-    virtual ~PlayElement();
+    RenderSession(Info info);
+    virtual ~RenderSession();
 
     virtual void onAttach(nvapp::Application* app) override;                     // Called once at start
     virtual void onDetach() override;                                            // Called before destroying the application
@@ -46,11 +45,6 @@ public:
     virtual void onRender(VkCommandBuffer cmd) override;                     // For anything to render within a frame
     virtual void onFileDrop(const std::filesystem::path& filename) override; // For when a file is dragged on top of the window
     virtual void onLastHeadlessFrame() override;                             // Called at the end of the last frame in headless mode
-
-    inline Texture* getUITexture() const
-    {
-        return _uiTexture.get();
-    }
 
     enum RenderMode
     {
@@ -69,10 +63,6 @@ protected:
     // FrameBufferCache
     // PipelineCache
     std::unique_ptr<Renderer> _renderer;
-    RefPtr<Texture>           _uiTexture;
-    VkDescriptorSet           _uiTextureDescriptor;
-    VkDescriptorPool          _descriptorPool;
-    void                      createGraphicsDescriptResource();
 
 private:
     Info _info;

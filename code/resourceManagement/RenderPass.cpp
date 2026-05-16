@@ -71,8 +71,27 @@ void DynamicRenderPass::begin(VkCommandBuffer cmd, const VkRect2D& renderArea)
     {
         auto& accessInfo = state.textureStates[0];
         if (!accessInfo.isAttachment) continue;
-        state.barrierInfo.oldLayout = state.texture->getRHI()->Layout();
-        batchBarrier.appendOptionalLayoutTransition(*state.texture->getRHI(), state.barrierInfo);
+        Texture* texture = state.texture->getRHI();
+        if (!texture) continue;
+
+        state.barrierInfo.oldLayout = texture->Layout();
+        batchBarrier.appendOptionalLayoutTransition(*texture, state.barrierInfo);
+
+        if (accessInfo.attachSlotIdx != ~0U && accessInfo.attachSlotIdx < m_vkColorAttachments.size())
+        {
+            m_vkColorAttachments[accessInfo.attachSlotIdx].imageView   = texture->descriptor.imageView;
+            m_vkColorAttachments[accessInfo.attachSlotIdx].imageLayout = accessInfo.layout;
+        }
+        else if (texture->isDepth())
+        {
+            m_vkDepthAttachment.imageView   = texture->descriptor.imageView;
+            m_vkDepthAttachment.imageLayout = accessInfo.layout;
+        }
+        else
+        {
+            m_vkStencilAttachment.imageView   = texture->descriptor.imageView;
+            m_vkStencilAttachment.imageLayout = accessInfo.layout;
+        }
     }
     batchBarrier.cmdPipelineBarrier(cmd, 0);
     m_vkRenderingInfo.renderArea = renderArea;

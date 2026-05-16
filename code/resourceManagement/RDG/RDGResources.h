@@ -94,9 +94,22 @@ public:
         return _rhi.get();
     }
 
-    void setRHI(Texture* rhi)
+    void setRHI(Texture* rhi, bool ownsRHI = true)
     {
-        _rhi = RefPtr<Texture>(rhi);
+        _rhi     = RefPtr<Texture>(rhi);
+        _ownsRHI = ownsRHI;
+        if (rhi)
+        {
+            _info._aspectFlags = rhi->AspectFlags();
+            _info._format      = rhi->Format();
+            _info._extent      = rhi->Extent();
+            _info._type        = rhi->Type();
+            _info._usageFlags  = rhi->UsageFlags();
+            _info._sampleCount = rhi->SampleCount();
+            _info._mipmapLevel = rhi->MipLevel();
+            _info._layerCount  = rhi->LayerCount();
+            _info._debugName   = rhi->DebugName();
+        }
     }
 
     inline std::string name() const

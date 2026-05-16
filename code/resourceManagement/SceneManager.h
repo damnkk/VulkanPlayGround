@@ -9,7 +9,7 @@
 #include "core/RefCounted.h"
 namespace Play
 {
-class PlayElement;
+class RenderSession;
 class Texture;
 class SceneManager
 {

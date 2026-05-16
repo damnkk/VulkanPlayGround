@@ -5,6 +5,7 @@
 #include "VulkanDriver.h"
 #include "RDG/RDG.h"
 #include "renderPasses/RenderPass.h"
+#include "renderPasses/PresentPass.h"
 #include <algorithm>
 namespace Play
 {
@@ -62,6 +63,7 @@ void Renderer::updateCameraBuffer()
 
 void Renderer::OnPreRender()
 {
+    updatePresentTexture();
     updateCameraBuffer();
     _scene->update();
 }
@@ -75,11 +77,6 @@ void Renderer::OnPostRender() {}
 
 void Renderer::SetScene(SceneManager* scene) {}
 
-Texture* Renderer::getOutputTexture()
-{
-    return _outputTexture;
-}
-
 void Renderer::OnResize(int width, int height)
 {
     width  = std::max(width, 1);
@@ -92,7 +89,6 @@ void Renderer::OnResize(int width, int height)
 
     _rdgBuilder.reset();
     _rdgBuilder = std::make_unique<RDG::RDGBuilder>();
-    _outputTexture = _view->getUITexture();
 
     if (_passes.empty())
     {
@@ -108,6 +104,28 @@ void Renderer::OnResize(int width, int height)
         pass->build(_rdgBuilder.get());
     }
     _rdgBuilder->compile();
+}
+
+void Renderer::updatePresentTexture()
+{
+    if (!_rdgBuilder || !vkDriver)
+    {
+        return;
+    }
+
+    RDG::RDGTextureRef presentTexture = _rdgBuilder->getTexture(PresentPass::PRESENT_TEXTURE_NAME);
+    if (!presentTexture)
+    {
+        return;
+    }
+
+    Texture* swapchainTexture = vkDriver->getCurrentSwapchainTexture();
+    if (!swapchainTexture)
+    {
+        return;
+    }
+
+    presentTexture->setRHI(swapchainTexture, false);
 }
 
 } // namespace Play

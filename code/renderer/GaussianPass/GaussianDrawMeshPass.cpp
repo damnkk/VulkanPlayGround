@@ -1,5 +1,7 @@
 #include "GaussianDrawMeshPass.h"
 #include "renderer/GaussianRenderer.h"
+#include "renderer/renderPasses/PresentPass.h"
+#include "Resource.h"
 #include "ShaderManager.hpp"
 #include "utils.hpp"
 
@@ -102,10 +104,11 @@ void GaussianDrawMeshPass::build(RDG::RDGBuilder* rdgBuilder)
                 })
             .finish();
 
-    auto outputTexRef = rdgBuilder->createTexture("outputTexture").Import(_ownedRenderer->getOutputTexture()).finish();
+    auto outputTexRef = rdgBuilder->createTexture(PresentPass::PRESENT_TEXTURE_NAME).finish();
     [[maybe_unused]] RDG::RenderPassNodeRef presentPass =
         rdgBuilder->createRenderPass("PresentPass")
-            .color(0, outputTexRef, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE)
+            .color(0, outputTexRef, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                   VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
             .read(0, colorAttachment, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT)
             .execute(
                 [this](RDG::PassNode* node, RDG::RenderContext& context)

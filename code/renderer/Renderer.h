@@ -12,11 +12,14 @@ namespace Play
 {
 class PlayCamera;
 struct SceneManager;
-class PlayElement;
+class RenderSession;
 class Texture;
 class Buffer;
 class BasePass;
-namespace RDG { class RDGBuilder; }
+namespace RDG
+{
+class RDGBuilder;
+}
 
 struct PerFrameRootData
 {
@@ -34,7 +37,6 @@ public:
     virtual void     RenderFrame();
     virtual void     SetScene(SceneManager* scene);
     virtual void     OnResize(int width, int height);
-    virtual Texture* getOutputTexture();
     virtual void     addCamera();
 
     virtual void        setActiveCamera(size_t index);
@@ -61,10 +63,10 @@ protected:
 
     std::unique_ptr<RDG::RDGBuilder>         _rdgBuilder;
     std::vector<std::unique_ptr<BasePass>>   _passes;
-    Texture*                                 _outputTexture = nullptr;
-    PlayElement*                             _view          = nullptr;
+    RenderSession*                           _view = nullptr;
 
 private:
+    void updatePresentTexture();
 };
 
 } // namespace Play

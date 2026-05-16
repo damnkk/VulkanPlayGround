@@ -30,6 +30,9 @@ public:
     Texture(uint32_t size, VkFormat format, VkImageUsageFlags usage, VkImageLayout initialLayout, uint32_t mipLevels = 1);
     Texture(const std::filesystem::path& imagePath, VkImageLayout finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, uint32_t mipLevels = 1,
             bool isSrgb = true);
+    Texture(std::string name, VkImage image, VkImageView imageView, VkFormat format, VkExtent3D extent, VkImageUsageFlags usage, VkImageLayout layout,
+            VkImageAspectFlags aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT, uint32_t mipLevels = 1, uint32_t layerCount = 1,
+            VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT, bool ownsImage = false);
 
     struct TexMetaData
     {
@@ -111,6 +114,10 @@ public:
     {
         return image != VK_NULL_HANDLE;
     }
+    bool ownsImage() const
+    {
+        return _ownsImage;
+    }
 
 protected:
     void onDestroy() override;
@@ -121,6 +128,7 @@ protected:
     std::string           debugName;
     VkImageAspectFlags    aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
     VkImageUsageFlags     usageFlags  = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    bool                  _ownsImage  = true;
 };
 
 class Buffer : public nvvk::Buffer, public RefCounted

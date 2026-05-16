@@ -8,7 +8,7 @@ namespace Play
 class GaussianRenderer : public Renderer
 {
 public:
-    explicit GaussianRenderer(PlayElement& element);
+    explicit GaussianRenderer(RenderSession& session);
     ~GaussianRenderer() override;
     void OnGUI() override;
 

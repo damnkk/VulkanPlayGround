@@ -11,9 +11,9 @@
 namespace Play
 {
 
-DeferRenderer::DeferRenderer(PlayElement& view)
+DeferRenderer::DeferRenderer(RenderSession& session)
 {
-    _view = &view;
+    _view = &session;
     // _scene->addScene<nvvkgltf::Scene>("D:/repo/downloaded_resources/man/SK_Man_Full_04.gltf");
     std::filesystem::path modelPath     = ".\\resource\\skybox\\graveyard_pathways_2k.hdr";
     RefPtr<Texture>       skyboxTexture = RefPtr<Texture>(new Texture(modelPath, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, true));
@@ -43,7 +43,7 @@ void DeferRenderer::setupPasses()
     _passes.push_back(std::make_unique<GBufferPass>(this));
     _passes.push_back(std::make_unique<LightPass>(this));
     _passes.push_back(std::make_unique<PostProcessPass>(this));
-    _passes.push_back(std::make_unique<PresentPass>(_view));
+    _passes.push_back(std::make_unique<PresentPass>(this));
 }
 
 } // namespace Play

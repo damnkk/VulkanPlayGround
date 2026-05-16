@@ -4,7 +4,7 @@
 
 namespace Play
 {
-class PlayElement;
+class RenderSession;
 
 struct RenderPassKey
 {
