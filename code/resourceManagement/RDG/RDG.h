@@ -14,7 +14,7 @@ GPU resource when RDG compile.
 #include "functional"
 #include "array"
 #include "list"
-#include "PlayApp.h"
+#include "core/runtime/RenderSession.h"
 #include "core/runtime/VulkanRuntime.h"
 #include "RDGResources.h"
 #include "RDGPasses.hpp"

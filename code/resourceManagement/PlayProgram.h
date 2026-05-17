@@ -1,7 +1,7 @@
 #ifndef PLAYPROGRAM_H
 #define PLAYPROGRAM_H
 
-#include "PlayApp.h"
+#include "core/runtime/RenderSession.h"
 #include <nvvk/descriptors.hpp>
 #include <nvvk/graphics_pipeline.hpp>
 #include <nvvk/compute_pipeline.hpp>

@@ -1,4 +1,4 @@
-#include "PlayApp.h"
+#include "RenderSession.h"
 
 #include "DeferRendering.h"
 #include "GaussianRenderer.h"

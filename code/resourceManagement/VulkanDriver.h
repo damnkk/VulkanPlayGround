@@ -102,7 +102,7 @@ struct PlayFrameData
 /**
  * @brief VulkanDriver 是底层图形驱动的单例封装。
  * 它负责持有 VkDevice, VkQueue 等核心句柄，以及全局共享的缓存（如 DescriptorCache）。
- * 任何需要访问 Vulkan API 的地方都应该通过这个类，而不是 PlayApp。
+ * 任何需要访问 Vulkan API 的地方都应该通过这个类，而不是 RenderSession。
  */
 
 class VulkanDriver

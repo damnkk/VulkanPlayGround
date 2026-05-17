@@ -9,7 +9,7 @@
 #include "DescriptorManager.h"
 #include "FrameBufferCache.h"
 #include "PipelineCacheManager.h"
-#include "PlayApp.h"
+#include "RenderSession.h"
 #include "PlayAllocator.h"
 #include "RenderPassCache.h"
 #include "Resource.h"

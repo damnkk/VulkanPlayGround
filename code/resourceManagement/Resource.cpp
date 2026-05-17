@@ -1,5 +1,5 @@
 #include "Resource.h"
-#include "PlayApp.h"
+#include "core/runtime/RenderSession.h"
 #include "PlayAllocator.h"
 #include "VulkanDriver.h"
 #include "utils.hpp"

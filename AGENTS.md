@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-`code/` contains the application and engine sources. Key areas are `code/renderer/` for renderers and passes, `code/resourceManagement/` for shaders, pipelines, scene data, and RDG helpers, `code/core/` for shared utilities, and `code/debugger/` for Nsight/diagnostics hooks. Entry points live in `code/main.cpp` and `code/PlayApp.*`.
+`code/` contains the application and engine sources. Key areas are `code/renderer/` for renderers and passes, `code/resourceManagement/` for shaders, pipelines, scene data, and RDG helpers, `code/core/` for shared utilities, and `code/debugger/` for Nsight/diagnostics hooks. Entry points live in `code/main.cpp` and `code/core/runtime/RenderSession.*`.
 
 Runtime assets are split by purpose: `resource/` holds models and skyboxes, `content/volumeData/` holds volume datasets, and `shaders/` contains GLSL and Slang sources such as `shaders/newShaders/gaussian/`. Third-party code is vendored under `External/`; avoid modifying it unless the change is an intentional dependency update.
 
@@ -19,7 +19,7 @@ Use `--rendermode gaussian` when working on the Gaussian path. Build outputs and
 ## Coding Style & Naming Conventions
 Formatting is defined in `.clang-format`: 4-space indentation, no tabs, Allman braces, left-aligned pointers, and a 150-column limit. Run `clang-format -i` on touched C++ files before opening a PR.
 
-Match existing naming in the area you edit: PascalCase for types and most engine files (`PlayApp.h`, `GBufferPass.cpp`), descriptive shader names, and existing member-prefix style within each class (`_renderer`, `m_app`, etc.). Keep header/source pairs aligned by name.
+Match existing naming in the area you edit: PascalCase for types and most engine files (`RenderSession.h`, `GBufferPass.cpp`), descriptive shader names, and existing member-prefix style within each class (`_renderer`, `m_app`, etc.). Keep header/source pairs aligned by name.
 
 ## Agent Workflow Preferences
 - Do not proactively run compile or build commands. The user will manually verify whether compilation succeeds.

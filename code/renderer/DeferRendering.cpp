@@ -1,5 +1,5 @@
 #include "DeferRendering.h"
-#include "PlayApp.h"
+#include "core/runtime/RenderSession.h"
 #include "renderpasses/PostProcessPass.h"
 #include "renderPasses/PresentPass.h"
 #include "renderPasses/VolumeSkyPass.h"

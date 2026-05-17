@@ -1,5 +1,5 @@
-#ifndef PLAYAPP_H
-#define PLAYAPP_H
+#ifndef RENDERSESSION_H
+#define RENDERSESSION_H
 #include "resourceManagement/Resource.h"
 
 namespace Play
@@ -59,4 +59,4 @@ private:
 
 } //    namespace Play
 
-#endif // PLAYAPP_H
+#endif // RENDERSESSION_H

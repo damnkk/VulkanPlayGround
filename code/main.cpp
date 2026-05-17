@@ -25,7 +25,8 @@ int main(int argc, char** argv)
         nvutils::ParameterParser   parameterParser;
         parameterRegistry.add({"validation"}, &validation);
         parameterRegistry.add({"verbose"}, &verbose);
-        std::string renderMode = "defer";
+        // std::string renderMode = "defer";
+        std::string renderMode = "gaussian";
         parameterRegistry.add({"rendermode", "rm"}, &renderMode);
         parameterParser.add(parameterRegistry);
         parameterParser.parse(argc, argv);
