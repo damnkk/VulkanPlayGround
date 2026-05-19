@@ -202,6 +202,7 @@ bool VulkanRuntime::init(const RuntimeConfig& config, const nvvk::ContextInitInf
     }
 
     _initialized = true;
+    _guiHost.start();
     return true;
 }
 
@@ -260,6 +261,7 @@ void VulkanRuntime::destroy()
     }
 
     _renderSession.reset();
+    _guiHost.stop();
     clearSwapchainTextures();
     deinitRenderServices();
     destroyFrameSubmission();

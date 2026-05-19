@@ -75,6 +75,34 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/External/spz)
 # Executable
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES})
+
+#####################################################################################
+# webview
+set(WEBVIEW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(WEBVIEW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(WEBVIEW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(WEBVIEW_BUILD_SHARED_LIBRARY OFF CACHE BOOL "" FORCE)
+set(WEBVIEW_BUILD_STATIC_LIBRARY OFF CACHE BOOL "" FORCE)
+set(WEBVIEW_INSTALL_TARGETS OFF CACHE BOOL "" FORCE)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/External/webview)
+
+#####################################################################################
+# rttr
+set(BUILD_RTTR_DYNAMIC OFF CACHE BOOL "" FORCE)
+set(BUILD_STATIC ON CACHE BOOL "" FORCE)
+set(BUILD_UNIT_TESTS OFF CACHE BOOL "" FORCE)
+set(BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
+set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(BUILD_DOCUMENTATION OFF CACHE BOOL "" FORCE)
+set(BUILD_INSTALLER OFF CACHE BOOL "" FORCE)
+set(BUILD_PACKAGE OFF CACHE BOOL "" FORCE)
+set(USE_PCH OFF CACHE BOOL "" FORCE)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/External/rttr EXCLUDE_FROM_ALL)
+
+if(TARGET rttr_core_lib)
+  set_property(TARGET rttr_core_lib PROPERTY FOLDER "ThirdParty/rttr")
+endif()
+
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME})
 target_include_directories(${PROJECT_NAME} PRIVATE
   ${NVPRO_CORE2_DIR}
@@ -105,6 +133,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   nvpro2::nvvkgltf
   SDL3::SDL3
   vk_radix_sort
+  webview::core
+  RTTR::Core_Lib
   spirv-reflect-static
   crc32c
   "${CMAKE_CURRENT_SOURCE_DIR}/External/sqlite3/libsqlite3.lib"

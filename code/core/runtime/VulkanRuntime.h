@@ -1,4 +1,5 @@
 #pragma once
+#include "RuntimeGuiHost.h"
 #include "SdlWindow.h"
 #include <memory>
 #include "core/RefCounted.h"
@@ -283,6 +284,7 @@ private:
     };
 
     RuntimeConfig                         _config{};
+    RuntimeGuiHost                        _guiHost{};
     SdlWindow                             _window{};
     nvvk::Context                         _context{};
     nvvk::Swapchain                       _swapchain{};
