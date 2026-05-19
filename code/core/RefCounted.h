@@ -3,6 +3,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cassert>
+#include <rttr/rttr_enable.h>
 
 namespace Play
 {
@@ -81,6 +82,8 @@ public:
             m_strongCount.store(0, std::memory_order_release);
         }
     }
+
+    RTTR_ENABLE()
 
 protected:
     virtual ~RefCounted() = default;

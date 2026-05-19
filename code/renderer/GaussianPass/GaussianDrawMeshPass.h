@@ -3,6 +3,7 @@
 #include "renderpasses/RenderPass.h"
 #include "RDG/RDG.h"
 #include "core/RefCounted.h"
+#include <rttr/rttr_enable.h>
 
 namespace Play
 {
@@ -17,6 +18,8 @@ public:
     ~GaussianDrawMeshPass();
     void init() override;
     void build(RDG::RDGBuilder* rdgBuilder) override;
+
+    RTTR_ENABLE(BasePass)
 
 private:
     GaussianRenderer*          _ownedRenderer = nullptr;

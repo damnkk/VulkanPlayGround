@@ -4,6 +4,7 @@
 #include "RenderPass.h"
 #include "core/RefCounted.h"
 #include <memory>
+#include <rttr/rttr_enable.h>
 namespace Play
 {
 class Renderer;
@@ -20,6 +21,8 @@ public:
     void init() override;
     // build 需要接收一个输入纹理，即上一阶段的输出
     void build(RDG::RDGBuilder* rdgBuilder) override;
+
+    RTTR_ENABLE(BasePass)
 
 private:
     Renderer*             _renderer;

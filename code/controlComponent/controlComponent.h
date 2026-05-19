@@ -3,6 +3,7 @@
 #include "Resource.h"
 #include "nvshaders/tonemap_io.h.slang"
 #include "core/RefCounted.h"
+#include <rttr/rttr_enable.h>
 namespace Play
 {
 // easy place to add some UI controls for testing, like changing the skybox, or some other settings that are not directly related to the renderer or
@@ -27,6 +28,8 @@ public:
         memcpy(data, &_cpuData, sizeof(T));
     }
 
+    RTTR_ENABLE()
+
 protected:
     T              _cpuData{};
     RefPtr<Buffer> _gpuBuffer;
@@ -41,6 +44,7 @@ ControlComponent<T>::ControlComponent()
 
 class ToneMappingControlComponent : public ControlComponent<shaderio::TonemapperData>
 {
+    RTTR_ENABLE(ControlComponent<shaderio::TonemapperData>)
 };
 } // namespace Play
 

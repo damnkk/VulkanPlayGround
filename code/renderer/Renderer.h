@@ -7,6 +7,7 @@
 #include <vector>
 #include <array>
 #include "core/RefCounted.h"
+#include <rttr/rttr_enable.h>
 
 namespace Play
 {
@@ -49,6 +50,8 @@ public:
     {
         return _scene.get();
     }
+
+    RTTR_ENABLE()
 
 protected:
     virtual void setupPasses() = 0;

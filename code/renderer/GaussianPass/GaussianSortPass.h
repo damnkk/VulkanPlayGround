@@ -4,6 +4,7 @@
 #include "RDG/RDG.h"
 #include "vk_radix_sort.h"
 #include "core/RefCounted.h"
+#include <rttr/rttr_enable.h>
 namespace Play
 {
 class ComputeProgram;
@@ -16,6 +17,8 @@ public:
     void RenderFrame();
     void init() override;
     void build(RDG::RDGBuilder* rdgBuilder) override;
+
+    RTTR_ENABLE(BasePass)
 
 private:
     VrdxSorter                    _sorter = VK_NULL_HANDLE;

@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <rttr/rttr_enable.h>
 
 namespace Play
 {
@@ -30,6 +31,8 @@ public:
         return _program;
     }
 
+    RTTR_ENABLE()
+
 protected:
     std::string  _name;
     PlayProgram* _program = nullptr;
@@ -41,6 +44,8 @@ public:
     ~FixedMaterial();
 
     static FixedMaterial* Create();
+
+    RTTR_ENABLE(Material)
 
 private:
     FixedMaterial();
@@ -55,6 +60,8 @@ public:
         _program = program;
     }
     ~CustomMaterial();
+
+    RTTR_ENABLE(Material)
 };
 
 } // namespace Play

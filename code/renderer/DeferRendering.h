@@ -2,6 +2,7 @@
 #define DEFERRENDERING_H
 #include "Renderer.h"
 #include <bitset>
+#include <rttr/rttr_enable.h>
 
 namespace Play
 {
@@ -21,6 +22,8 @@ class DeferRenderer : public Renderer
 public:
     explicit DeferRenderer(RenderSession& session);
     ~DeferRenderer() override;
+
+    RTTR_ENABLE(Renderer)
 
 protected:
     void setupPasses() override;

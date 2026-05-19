@@ -1,6 +1,7 @@
 #ifndef RENDERPASS_H
 #define RENDERPASS_H
 #include <string>
+#include <rttr/rttr_enable.h>
 namespace Play
 {
 namespace RDG
@@ -17,6 +18,8 @@ public:
     virtual void init()                             = 0;
     virtual void build(RDG::RDGBuilder* rdgBuilder) = 0;
     std::string  _name;
+
+    RTTR_ENABLE()
 
 private:
 };

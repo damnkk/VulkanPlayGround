@@ -13,6 +13,7 @@
 #include "PConstantType.h.slang"
 #include "VulkanDriver.h"
 #include "core/RefCounted.h"
+#include <rttr/rttr_enable.h>
 namespace Play
 {
 namespace RDG
@@ -249,6 +250,8 @@ public:
         _descriptorSetManager.finalizePipelineLayout();
     };
 
+    RTTR_ENABLE(RefCounted)
+
 protected:
     void onDestroy() override;
 
@@ -294,6 +297,8 @@ public:
         return _psoState;
     }
 
+    RTTR_ENABLE(PlayProgram)
+
 private:
     VkPipeline  getOrCreatePipeline();
     ShaderID    _vertexModuleID = ~0U;
@@ -325,6 +330,8 @@ public:
         return _programType;
     }
 
+    RTTR_ENABLE(PlayProgram)
+
 private:
     VkPipeline  getOrCreatePipeline();
     ShaderID    _computeModuleID = ~0U;
@@ -353,6 +360,8 @@ public:
     {
         return _programType;
     }
+
+    RTTR_ENABLE(PlayProgram)
 
 private:
     VkPipeline  getOrCreatePipeline();
@@ -403,6 +412,8 @@ public:
     {
         return _programType;
     }
+
+    RTTR_ENABLE(PlayProgram)
 
 private:
     VkPipeline  getOrCreatePipeline();

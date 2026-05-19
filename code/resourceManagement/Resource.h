@@ -7,6 +7,7 @@
 #include "PlayAllocator.h"
 #include "ShaderManager.hpp"
 #include "core/RefCounted.h"
+#include <rttr/rttr_enable.h>
 namespace Play
 {
 class PlayAllocator;
@@ -119,6 +120,8 @@ public:
         return _ownsImage;
     }
 
+    RTTR_ENABLE(RefCounted)
+
 protected:
     void onDestroy() override;
 
@@ -185,6 +188,8 @@ public:
     {
         return buffer != VK_NULL_HANDLE;
     }
+
+    RTTR_ENABLE(RefCounted)
 
 protected:
     void onDestroy() override;

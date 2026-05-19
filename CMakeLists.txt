@@ -88,6 +88,7 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/External/webview)
 
 #####################################################################################
 # rttr
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 set(BUILD_RTTR_DYNAMIC OFF CACHE BOOL "" FORCE)
 set(BUILD_STATIC ON CACHE BOOL "" FORCE)
 set(BUILD_UNIT_TESTS OFF CACHE BOOL "" FORCE)

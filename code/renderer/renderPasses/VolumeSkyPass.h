@@ -7,6 +7,7 @@
 #include "controlComponent/controlComponent.h"
 #include <glm/glm.hpp>
 #include "Hdevice.h"
+#include <rttr/rttr_enable.h>
 // Keep explicit padding so the CPU-side layout matches the shader constant-buffer packing.
 struct AtmosphereParameters
 {
@@ -52,9 +53,12 @@ public:
     virtual void init() override;
     virtual void build(RDG::RDGBuilder* rdgBuilder) override;
 
+    RTTR_ENABLE(BasePass)
+
 private:
     struct AtmosControler : public ControlComponent<AtmosphereParameters>
     {
+        RTTR_ENABLE(ControlComponent<AtmosphereParameters>)
     } _skyAtmosControler;
     RefPtr<ComputeProgram> _transmittanceLutProgram;
     RefPtr<ComputeProgram> _multiScatteringLutProgram;

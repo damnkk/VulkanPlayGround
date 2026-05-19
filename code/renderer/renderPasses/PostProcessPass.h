@@ -5,6 +5,7 @@
 #include <memory>
 #include <nvvk/graphics_pipeline.hpp>
 #include <nvshaders_host/tonemapper.hpp>
+#include <rttr/rttr_enable.h>
 namespace Play
 {
 class ComputeProgram;
@@ -17,6 +18,8 @@ public:
 
     void init() override;
     void build(RDG::RDGBuilder* rdgBuilder) override;
+
+    RTTR_ENABLE(BasePass)
 
 private:
     friend class DeferRenderer;
