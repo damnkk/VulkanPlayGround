@@ -1,4 +1,5 @@
-#pragma once
+#ifndef PLAY_EDITOR_EDITOR_REGISTRY_H
+#define PLAY_EDITOR_EDITOR_REGISTRY_H
 
 #include <rttr/type.h>
 #include <rttr/instance.h>
@@ -232,3 +233,5 @@ private:
 };
 
 } // namespace Play::editor
+
+#endif // PLAY_EDITOR_EDITOR_REGISTRY_H

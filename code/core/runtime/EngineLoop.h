@@ -1,4 +1,6 @@
-#pragma once
+#ifndef PLAY_CODE_CORE_RUNTIME_ENGINELOOP_H
+#define PLAY_CODE_CORE_RUNTIME_ENGINELOOP_H
+
 
 #include "RuntimeConfig.h"
 
@@ -14,3 +16,5 @@ public:
 };
 
 } // namespace Play::runtime
+
+#endif // PLAY_CODE_CORE_RUNTIME_ENGINELOOP_H

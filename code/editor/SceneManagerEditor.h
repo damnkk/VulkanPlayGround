@@ -1,4 +1,6 @@
-#pragma once
+#ifndef PLAY_CODE_EDITOR_SCENEMANAGEREDITOR_H
+#define PLAY_CODE_EDITOR_SCENEMANAGEREDITOR_H
+
 
 #include "editor/EditorHtml.h"
 
@@ -21,3 +23,5 @@ private:
 };
 
 } // namespace Play::editor
+
+#endif // PLAY_CODE_EDITOR_SCENEMANAGEREDITOR_H

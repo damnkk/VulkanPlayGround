@@ -1,4 +1,6 @@
-#pragma once
+#ifndef PLAY_CODE_EDITOR_RENDERMODETABS_H
+#define PLAY_CODE_EDITOR_RENDERMODETABS_H
+
 
 #include "editor/EditorRegistry.h"
 #include "editor/EditorHtml.h"
@@ -40,3 +42,5 @@ private:
 };
 
 } // namespace Play::editor
+
+#endif // PLAY_CODE_EDITOR_RENDERMODETABS_H

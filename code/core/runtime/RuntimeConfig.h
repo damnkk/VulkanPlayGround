@@ -1,4 +1,6 @@
-#pragma once
+#ifndef PLAY_CODE_CORE_RUNTIME_RUNTIMECONFIG_H
+#define PLAY_CODE_CORE_RUNTIME_RUNTIMECONFIG_H
+
 
 #include "pch.h"
 #include <string>
@@ -17,3 +19,5 @@ struct RuntimeConfig
 };
 
 } // namespace Play::runtime
+
+#endif // PLAY_CODE_CORE_RUNTIME_RUNTIMECONFIG_H

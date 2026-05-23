@@ -1,4 +1,6 @@
-#pragma once
+#ifndef PLAY_CODE_CORE_RUNTIME_VULKANRUNTIME_H
+#define PLAY_CODE_CORE_RUNTIME_VULKANRUNTIME_H
+
 #include "RuntimeGuiHost.h"
 #include "SdlWindow.h"
 #include <memory>
@@ -327,3 +329,5 @@ using PlayFrameData = runtime::VulkanRuntime::FrameData;
 extern runtime::VulkanRuntime* vkDriver;
 runtime::VulkanRuntime* GetVulkanRuntime();
 } // namespace Play
+
+#endif // PLAY_CODE_CORE_RUNTIME_VULKANRUNTIME_H

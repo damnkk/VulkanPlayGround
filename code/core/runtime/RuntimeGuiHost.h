@@ -1,4 +1,6 @@
-#pragma once
+#ifndef PLAY_CODE_CORE_RUNTIME_RUNTIMEGUIHOST_H
+#define PLAY_CODE_CORE_RUNTIME_RUNTIMEGUIHOST_H
+
 
 #include <SDL3/SDL.h>
 
@@ -50,3 +52,5 @@ private:
 };
 
 } // namespace Play::runtime
+
+#endif // PLAY_CODE_CORE_RUNTIME_RUNTIMEGUIHOST_H

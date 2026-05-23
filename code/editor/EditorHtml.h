@@ -1,4 +1,6 @@
-#pragma once
+#ifndef PLAY_CODE_EDITOR_EDITORHTML_H
+#define PLAY_CODE_EDITOR_EDITORHTML_H
+
 
 #include <rttr/type.h>
 #include <rttr/instance.h>
@@ -13,3 +15,5 @@ void appendReflectedObjectHtml(std::string& html, const char* title, rttr::type 
 bool setReflectedProperty(rttr::type type, rttr::instance instance, const char* propertyName, const rttr::variant& value);
 
 } // namespace Play::editor::detail
+
+#endif // PLAY_CODE_EDITOR_EDITORHTML_H

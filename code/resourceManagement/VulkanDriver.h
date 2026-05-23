@@ -1,5 +1,7 @@
+#ifndef PLAY_CODE_RESOURCEMANAGEMENT_VULKANDRIVER_H
+#define PLAY_CODE_RESOURCEMANAGEMENT_VULKANDRIVER_H
+
 #if 0
-#pragma once
 
 #include <volk.h>
 #include <nvvk/context.hpp>
@@ -286,3 +288,5 @@ extern VulkanDriver* vkDriver;
 #endif
 
 #include "core/runtime/VulkanRuntime.h"
+
+#endif // PLAY_CODE_RESOURCEMANAGEMENT_VULKANDRIVER_H

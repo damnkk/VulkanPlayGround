@@ -1,4 +1,6 @@
-#pragma once
+#ifndef PLAY_CODE_EDITOR_CONTROLPANEL_H
+#define PLAY_CODE_EDITOR_CONTROLPANEL_H
+
 
 #include "editor/EditorRegistry.h"
 
@@ -23,3 +25,5 @@ private:
 };
 
 } // namespace Play::editor
+
+#endif // PLAY_CODE_EDITOR_CONTROLPANEL_H

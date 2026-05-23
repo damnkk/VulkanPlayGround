@@ -1,4 +1,6 @@
-#pragma once
+#ifndef PLAY_CODE_EDITOR_RUNTIMEEDITOR_H
+#define PLAY_CODE_EDITOR_RUNTIMEEDITOR_H
+
 
 #include "editor/EditorRegistry.h"
 #include "editor/EditorRuntimeContext.h"
@@ -50,3 +52,5 @@ private:
 };
 
 } // namespace Play::editor
+
+#endif // PLAY_CODE_EDITOR_RUNTIMEEDITOR_H

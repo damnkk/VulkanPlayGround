@@ -1,4 +1,6 @@
-#pragma once
+#ifndef PLAY_CODE_CORE_RUNTIME_SDLWINDOW_H
+#define PLAY_CODE_CORE_RUNTIME_SDLWINDOW_H
+
 
 #include "RuntimeConfig.h"
 #include "vulkan/vulkan.h"
@@ -97,3 +99,5 @@ private:
 };
 
 } // namespace Play::runtime
+
+#endif // PLAY_CODE_CORE_RUNTIME_SDLWINDOW_H

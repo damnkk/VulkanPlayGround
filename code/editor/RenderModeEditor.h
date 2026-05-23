@@ -1,4 +1,6 @@
-#pragma once
+#ifndef PLAY_CODE_EDITOR_RENDERMODEEDITOR_H
+#define PLAY_CODE_EDITOR_RENDERMODEEDITOR_H
+
 
 #include "editor/ControlPanel.h"
 #include "editor/SceneManagerEditor.h"
@@ -32,3 +34,5 @@ private:
 };
 
 } // namespace Play::editor
+
+#endif // PLAY_CODE_EDITOR_RENDERMODEEDITOR_H

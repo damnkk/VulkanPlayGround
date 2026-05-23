@@ -1,4 +1,6 @@
-#pragma once
+#ifndef PLAY_CODE_EDITOR_EDITORRUNTIMECONTEXT_H
+#define PLAY_CODE_EDITOR_EDITORRUNTIMECONTEXT_H
+
 
 namespace Play
 {
@@ -47,3 +49,5 @@ private:
 };
 
 } // namespace Play::editor
+
+#endif // PLAY_CODE_EDITOR_EDITORRUNTIMECONTEXT_H

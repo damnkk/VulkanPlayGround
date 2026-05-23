@@ -16,7 +16,7 @@
 #include "ShaderManager.hpp"
 #include "controlComponent/controlComponent.h"
 #include "core/RefCounted.h"
-#include "editor/EditorRegistration.h"
+#include "editor/EditorRegistry.h"
 
 namespace Play
 {
@@ -205,7 +205,8 @@ bool VulkanRuntime::init(const RuntimeConfig& config, const nvvk::ContextInitInf
     _initialized = true;
     Play::editor::RuntimeEditor& editor = _guiHost.getEditor();
     editor.bindRuntime(*this, *_renderSession, _config.renderMode.c_str());
-    Play::editor::registerRuntimeEditorObjects(getEditorRegistry(), *this);
+    getEditorRegistry().registerWritable<shaderio::TonemapperData>(
+        "Tonemapper", getTonemapperControlComponent(), Play::editor::EditorRenderMode::Defer);
     _guiHost.start();
     return true;
 }

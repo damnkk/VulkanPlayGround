@@ -1,4 +1,6 @@
-#pragma once
+#ifndef PLAY_CODE_CORE_REFCOUNTED_H
+#define PLAY_CODE_CORE_REFCOUNTED_H
+
 
 #include <atomic>
 #include <cstdint>
@@ -350,3 +352,5 @@ private:
 };
 
 } // namespace Play
+
+#endif // PLAY_CODE_CORE_REFCOUNTED_H
