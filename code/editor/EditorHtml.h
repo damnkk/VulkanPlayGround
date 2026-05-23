@@ -11,7 +11,13 @@ namespace Play::editor::detail
 
 void appendHtmlText(std::string& html, const char* text);
 void appendHtmlText(std::string& html, const std::string& text);
-void appendReflectedObjectHtml(std::string& html, const char* title, rttr::type type, rttr::instance instance, bool editable = false);
+void appendReflectedObjectHtml(
+    std::string& html,
+    const char* title,
+    rttr::type type,
+    rttr::instance instance,
+    bool editable = false,
+    rttr::instance defaultInstance = rttr::instance());
 bool setReflectedProperty(rttr::type type, rttr::instance instance, const char* propertyName, const rttr::variant& value);
 
 } // namespace Play::editor::detail

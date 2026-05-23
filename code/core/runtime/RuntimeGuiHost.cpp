@@ -132,6 +132,24 @@ void RuntimeGuiHost::setEditorProperty(const char* id, const char* request, void
     webview_return(host->_webview, id, changed ? 0 : 1, changed ? "true" : "false");
 }
 
+void RuntimeGuiHost::resetEditorObject(const char* id, const char* request, void* arg)
+{
+    RuntimeGuiHost* host = static_cast<RuntimeGuiHost*>(arg);
+    if (!host || !host->_webview)
+    {
+        return;
+    }
+
+    const std::string requestJson  = request ? request : "";
+    const std::string objectIdText = webview::detail::json_parse(requestJson, "", 0);
+
+    Play::editor::EditorObjectId objectId = 0;
+    const bool parsedId = parseEditorObjectId(objectIdText, objectId);
+    const bool changed  = parsedId && host->_editor.getEditorRegistry().resetObject(objectId);
+
+    webview_return(host->_webview, id, changed ? 0 : 1, changed ? "true" : "false");
+}
+
 int RuntimeGuiHost::run()
 {
     webview_t webview = webview_create(0, nullptr);
@@ -155,6 +173,7 @@ int RuntimeGuiHost::run()
         webview_set_title(webview, "VulkanPlayGround Runtime UI");
         webview_set_size(webview, 920, 640, WEBVIEW_HINT_NONE);
         webview_bind(webview, "setEditorProperty", &RuntimeGuiHost::setEditorProperty, this);
+        webview_bind(webview, "resetEditorObject", &RuntimeGuiHost::resetEditorObject, this);
         webview_set_html(webview, html.c_str());
         webview_run(webview);
     }

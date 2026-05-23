@@ -142,6 +142,12 @@ rttr::instance EditorRegistry::getObjectInstance(EditorObjectId id) const
     return entry ? entry->adapter->getInstance() : rttr::instance();
 }
 
+rttr::instance EditorRegistry::getDefaultObjectInstance(EditorObjectId id) const
+{
+    const Impl::Entry* entry = _impl->entryFromId(id);
+    return entry ? entry->adapter->getDefaultInstance() : rttr::instance();
+}
+
 bool EditorRegistry::setObjectProperty(EditorObjectId id, const char* propertyName, const rttr::variant& value)
 {
     Impl::Entry* entry = _impl->entryFromId(id);
@@ -156,6 +162,22 @@ bool EditorRegistry::setObjectProperty(EditorObjectId id, const char* propertyNa
     }
 
     return entry->adapter->setProperty(propertyName, value);
+}
+
+bool EditorRegistry::resetObject(EditorObjectId id)
+{
+    Impl::Entry* entry = _impl->entryFromId(id);
+    if (!entry)
+    {
+        return false;
+    }
+
+    if (!matchesCapabilities(toEditorObjectCapabilityMask(EditorObjectCapability::Editable), entry->info.traits.capabilityMask))
+    {
+        return false;
+    }
+
+    return entry->adapter->resetObject();
 }
 
 EditorObjectId EditorRegistry::addObject(const char* title, const EditorObjectTraits& traits, detail::IEditorObjectAdapter* adapter)

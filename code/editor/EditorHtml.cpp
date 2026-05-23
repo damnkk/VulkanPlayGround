@@ -111,7 +111,139 @@ std::string metadataToString(const rttr::property& property, const char* name)
     return ok ? text : std::string();
 }
 
-void appendMetadataAttribute(std::string& html, const rttr::property& property, const char* metadataName, const char* attributeName)
+bool metadataToDouble(const rttr::property& property, const char* name, double& value)
+{
+    const rttr::variant metadata = property.get_metadata(name);
+    if (!metadata.is_valid())
+    {
+        return false;
+    }
+
+    bool         ok   = false;
+    const double data = metadata.to_double(&ok);
+    if (!ok)
+    {
+        return false;
+    }
+
+    value = data;
+    return true;
+}
+
+std::string inferFloatingStep(double value)
+{
+    const double magnitude = value < 0.0 ? -value : value;
+    if (magnitude >= 1000.0)
+    {
+        return "10";
+    }
+
+    if (magnitude >= 100.0)
+    {
+        return "1";
+    }
+
+    if (magnitude >= 10.0)
+    {
+        return "0.1";
+    }
+
+    if (magnitude >= 1.0)
+    {
+        return "0.01";
+    }
+
+    if (magnitude >= 0.1)
+    {
+        return "0.001";
+    }
+
+    if (magnitude >= 0.01)
+    {
+        return "0.0001";
+    }
+
+    if (magnitude >= 0.001)
+    {
+        return "0.00001";
+    }
+
+    return "0.000001";
+}
+
+std::string inferRangeStep(double minValue, double maxValue)
+{
+    double range = maxValue - minValue;
+    if (range < 0.0)
+    {
+        range = -range;
+    }
+
+    if (range >= 1000.0)
+    {
+        return "10";
+    }
+
+    if (range >= 100.0)
+    {
+        return "1";
+    }
+
+    if (range >= 10.0)
+    {
+        return "0.1";
+    }
+
+    if (range >= 1.0)
+    {
+        return "0.01";
+    }
+
+    if (range >= 0.1)
+    {
+        return "0.001";
+    }
+
+    if (range >= 0.01)
+    {
+        return "0.0001";
+    }
+
+    return "0.00001";
+}
+
+bool isFloatingNumericProperty(const rttr::property& property)
+{
+    const rttr::type type = property.get_type();
+    return type == rttr::type::get<float>() || type == rttr::type::get<double>() || getVectorComponentCount(type) > 0;
+}
+
+std::string makeNumericStep(const rttr::property& property, const rttr::variant& value)
+{
+    const std::string metadataStep = metadataToString(property, "ui.step");
+    if (!metadataStep.empty())
+    {
+        return metadataStep;
+    }
+
+    if (!isFloatingNumericProperty(property))
+    {
+        return "1";
+    }
+
+    double minValue = 0.0;
+    double maxValue = 0.0;
+    if (metadataToDouble(property, "ui.min", minValue) && metadataToDouble(property, "ui.max", maxValue))
+    {
+        return inferRangeStep(minValue, maxValue);
+    }
+
+    bool         ok           = false;
+    const double numericValue = value.to_double(&ok);
+    return inferFloatingStep(ok ? numericValue : 1.0);
+}
+
+void appendMetadataDataAttribute(std::string& html, const rttr::property& property, const char* metadataName, const char* attributeName)
 {
     const std::string value = metadataToString(property, metadataName);
     if (value.empty())
@@ -126,15 +258,13 @@ void appendMetadataAttribute(std::string& html, const rttr::property& property, 
     html += "\"";
 }
 
-void appendScalarInputAttributes(std::string& html, const rttr::property& property)
+void appendNumericInputAttributes(std::string& html, const rttr::property& property, const rttr::variant& value)
 {
-    appendMetadataAttribute(html, property, "ui.min", "min");
-    appendMetadataAttribute(html, property, "ui.max", "max");
-    appendMetadataAttribute(html, property, "ui.step", "step");
-    if (metadataToString(property, "ui.step").empty())
-    {
-        html += " step=\"any\"";
-    }
+    html += " inputmode=\"decimal\" data-editor-drag=\"number\" data-editor-step=\"";
+    appendHtmlText(html, makeNumericStep(property, value));
+    html += "\"";
+    appendMetadataDataAttribute(html, property, "ui.min", "data-editor-min");
+    appendMetadataDataAttribute(html, property, "ui.max", "data-editor-max");
 }
 
 void appendEditorPropertyAttribute(std::string& html, const std::string& propertyPath)
@@ -144,7 +274,22 @@ void appendEditorPropertyAttribute(std::string& html, const std::string& propert
     html += "\"";
 }
 
-void appendVectorPropertyInput(std::string& html, const rttr::property& property, const rttr::variant& value, bool editable)
+void appendInputDefaultTextAttribute(std::string& html, const char* value)
+{
+    html += " data-editor-default=\"";
+    appendHtmlText(html, value);
+    html += "\"";
+}
+
+void appendInputDefaultAttribute(std::string& html, const rttr::variant& value)
+{
+    html += " data-editor-default=\"";
+    appendPropertyValue(html, value);
+    html += "\"";
+}
+
+void appendVectorPropertyInput(
+    std::string& html, const rttr::property& property, const rttr::variant& value, const rttr::variant& defaultValue, bool editable)
 {
     static const char* componentNames[] = {"x", "y", "z", "w"};
 
@@ -156,12 +301,15 @@ void appendVectorPropertyInput(std::string& html, const rttr::property& property
     for (size_t componentIndex = 0; componentIndex < componentCount; ++componentIndex)
     {
         const std::string propertyPath = property.get_name().to_string() + "." + componentNames[componentIndex];
-        html += "<input type=\"number\" value=\"";
-        appendPropertyValue(html, rttr::variant(getVectorComponent(value, componentIndex)));
+        const rttr::variant componentValue = rttr::variant(getVectorComponent(value, componentIndex));
+        const rttr::variant defaultComponentValue = rttr::variant(getVectorComponent(defaultValue, componentIndex));
+        html += "<input type=\"text\" value=\"";
+        appendPropertyValue(html, componentValue);
         html += "\" title=\"";
         appendHtmlText(html, propertyPath);
         html += "\"";
-        appendScalarInputAttributes(html, property);
+        appendNumericInputAttributes(html, property, componentValue);
+        appendInputDefaultAttribute(html, defaultComponentValue);
 
         if (editable && !property.is_readonly())
         {
@@ -178,7 +326,8 @@ void appendVectorPropertyInput(std::string& html, const rttr::property& property
     html += "</div>";
 }
 
-void appendPropertyInput(std::string& html, const rttr::property& property, const rttr::variant& value, bool editable)
+void appendPropertyInput(
+    std::string& html, const rttr::property& property, const rttr::variant& value, const rttr::variant& defaultValue, bool editable)
 {
     const bool propertyEditable = editable && isEditableProperty(property);
     const bool boolProperty     = isBoolProperty(property);
@@ -187,7 +336,7 @@ void appendPropertyInput(std::string& html, const rttr::property& property, cons
 
     if (vectorProperty)
     {
-        appendVectorPropertyInput(html, property, value, editable);
+        appendVectorPropertyInput(html, property, value, defaultValue, editable);
         return;
     }
 
@@ -199,21 +348,23 @@ void appendPropertyInput(std::string& html, const rttr::property& property, cons
         {
             html += " checked";
         }
+        appendInputDefaultTextAttribute(html, defaultValue.to_bool() ? "true" : "false");
     }
     else if (stringProperty)
     {
         html += " type=\"text\" value=\"";
         appendPropertyValue(html, value);
         html += "\"";
+        appendInputDefaultAttribute(html, defaultValue);
     }
     else if (property.get_type().is_arithmetic() || property.get_type().is_enumeration())
     {
-        const std::string widget = metadataToString(property, "ui.widget");
-        html += widget == "slider" ? " type=\"range\"" : " type=\"number\"";
+        html += " type=\"text\"";
         html += " value=\"";
         appendPropertyValue(html, value);
         html += "\"";
-        appendScalarInputAttributes(html, property);
+        appendNumericInputAttributes(html, property, value);
+        appendInputDefaultAttribute(html, defaultValue);
     }
     else
     {
@@ -221,6 +372,7 @@ void appendPropertyInput(std::string& html, const rttr::property& property, cons
         html += " value=\"";
         appendPropertyValue(html, value);
         html += "\"";
+        appendInputDefaultAttribute(html, defaultValue);
     }
 
     if (propertyEditable)
@@ -339,7 +491,8 @@ void appendHtmlText(std::string& html, const std::string& text)
     appendHtmlText(html, text.c_str());
 }
 
-void appendReflectedObjectHtml(std::string& html, const char* title, rttr::type type, rttr::instance instance, bool editable)
+void appendReflectedObjectHtml(
+    std::string& html, const char* title, rttr::type type, rttr::instance instance, bool editable, rttr::instance defaultInstance)
 {
     html += "<div class=\"object-head\"><div class=\"object-title\">";
     appendHtmlText(html, title);
@@ -373,7 +526,9 @@ void appendReflectedObjectHtml(std::string& html, const char* title, rttr::type 
             }
 
             html += "</label>";
-            appendPropertyInput(html, property, property.get_value(instance), editable);
+            const rttr::variant value        = property.get_value(instance);
+            const rttr::variant defaultValue = defaultInstance.is_valid() ? property.get_value(defaultInstance) : value;
+            appendPropertyInput(html, property, value, defaultValue, editable);
             html += "</div>";
         }
     }

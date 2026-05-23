@@ -27,12 +27,22 @@ void ControlPanel::appendHtml(std::string& html) const
             continue;
         }
 
+        const rttr::instance defaultInstance = _registry.getDefaultObjectInstance(id);
+
         html += "<details class=\"control-unit\" data-editor-object-id=\"";
         html += std::to_string(id);
-        html += "\" open><summary>";
+        html += "\" open><summary><span>";
         detail::appendHtmlText(html, objectInfo->title);
-        html += "</summary><div class=\"control-content\">";
-        detail::appendReflectedObjectHtml(html, objectInfo->title.c_str(), objectInfo->type, _registry.getObjectInstance(id), true);
+        html += "</span>";
+        if (defaultInstance.is_valid())
+        {
+            html += "<button class=\"control-reset\" type=\"button\" title=\"Reset to default\" data-editor-reset-object>";
+            html += "&#8634;</button>";
+        }
+        html += "</summary>";
+        html += "<div class=\"control-content\">";
+        detail::appendReflectedObjectHtml(
+            html, objectInfo->title.c_str(), objectInfo->type, _registry.getObjectInstance(id), true, defaultInstance);
         html += "</div></details>";
     }
     html += "</div></section>";

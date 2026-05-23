@@ -217,9 +217,31 @@ std::string RuntimeEditor::buildHtml() const
     .control-unit summary {
       min-height: 42px;
       box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
       padding: 10px;
       color: #f4f7fb;
       cursor: pointer;
+    }
+
+    .control-reset {
+      width: 26px;
+      height: 26px;
+      box-sizing: border-box;
+      border: 1px solid #384456;
+      border-radius: 4px;
+      padding: 0;
+      flex: 0 0 auto;
+      background: #1c2532;
+      color: #b7c2d4;
+      cursor: pointer;
+    }
+
+    .control-reset:hover {
+      border-color: #4b95ca;
+      color: #ffffff;
     }
 
     .property-list {
@@ -231,7 +253,7 @@ std::string RuntimeEditor::buildHtml() const
     .property-row {
       min-width: 0;
       display: grid;
-      grid-template-columns: minmax(84px, 1fr) minmax(80px, 140px);
+      grid-template-columns: minmax(84px, 1fr) minmax(96px, 168px);
       gap: 8px;
       align-items: center;
       font-size: 12px;
@@ -257,6 +279,24 @@ std::string RuntimeEditor::buildHtml() const
 
     .property-row input.property-error {
       border-color: #d35b5b;
+    }
+
+    .property-row input[data-editor-drag="number"] {
+      cursor: ew-resize;
+    }
+
+    .property-row input[data-editor-drag="number"].editing {
+      cursor: text;
+    }
+
+    .property-row input.dragging {
+      border-color: #4b95ca;
+      background: #152334;
+    }
+
+    body.dragging-number {
+      cursor: ew-resize;
+      user-select: none;
     }
 
     .vector-input {
@@ -318,14 +358,208 @@ std::string RuntimeEditor::buildHtml() const
           input.dataset.editorProperty,
           getPropertyInputValue(input)
         );
+        if (input.type === "checkbox") {
+          input.defaultChecked = input.checked;
+        } else {
+          input.defaultValue = input.value;
+        }
       } catch (error) {
         input.classList.add("property-error");
       }
     }
 
+    function applyInputDefault(input) {
+      if (input.type === "checkbox") {
+        input.checked = input.dataset.editorDefault === "true";
+        input.defaultChecked = input.checked;
+      } else {
+        input.value = input.dataset.editorDefault ?? "";
+        input.defaultValue = input.value;
+      }
+
+      input.classList.remove("property-error");
+    }
+
+    async function resetObjectInput(button) {
+      const objectView = button.closest("[data-editor-object-id]");
+      if (!objectView || !window.resetEditorObject) {
+        return;
+      }
+
+      button.disabled = true;
+      try {
+        await window.resetEditorObject(objectView.dataset.editorObjectId);
+        for (const input of objectView.querySelectorAll("[data-editor-property]")) {
+          applyInputDefault(input);
+        }
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    function scheduleCommitPropertyInput(input) {
+      if (input.dataset.commitQueued) {
+        return;
+      }
+
+      input.dataset.commitQueued = "true";
+      requestAnimationFrame(() => {
+        delete input.dataset.commitQueued;
+        commitPropertyInput(input);
+      });
+    }
+
+    function getDatasetNumber(input, name) {
+      const value = Number(input.dataset[name]);
+      return Number.isFinite(value) ? value : null;
+    }
+
+    function clampEditorNumber(input, value) {
+      const min = getDatasetNumber(input, "editorMin");
+      const max = getDatasetNumber(input, "editorMax");
+      if (min !== null && value < min) {
+        return min;
+      }
+
+      if (max !== null && value > max) {
+        return max;
+      }
+
+      return value;
+    }
+
+    function getEditorStep(input, event) {
+      let step = getDatasetNumber(input, "editorStep") ?? 0.01;
+      if (event.shiftKey) {
+        step *= 10.0;
+      }
+
+      if (event.altKey || event.ctrlKey) {
+        step *= 0.1;
+      }
+
+      return step;
+    }
+
+    function getStepPrecision(step) {
+      const text = String(step);
+      const exponent = text.match(/e-(\d+)/i);
+      if (exponent) {
+        return Number(exponent[1]);
+      }
+
+      const dot = text.indexOf(".");
+      return dot < 0 ? 0 : text.length - dot - 1;
+    }
+
+    function formatEditorNumber(value, step) {
+      const precision = Math.min(8, Math.max(0, getStepPrecision(step) + 1));
+      return Number(value.toFixed(precision)).toString();
+    }
+
+    function setEditingNumberInput(input, editing) {
+      input.classList.toggle("editing", editing);
+      if (editing) {
+        input.focus();
+        input.select();
+      }
+    }
+
+    function setupDraggableNumberInput(input) {
+      input.addEventListener("dblclick", (event) => {
+        event.preventDefault();
+        setEditingNumberInput(input, true);
+      });
+
+      input.addEventListener("focus", () => {
+        if (!document.body.classList.contains("dragging-number")) {
+          input.classList.add("editing");
+        }
+      });
+
+      input.addEventListener("blur", () => {
+        input.classList.remove("editing");
+        commitPropertyInput(input);
+      });
+
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          input.blur();
+        } else if (event.key === "Escape") {
+          input.value = input.defaultValue;
+          input.blur();
+        }
+      });
+
+      input.addEventListener("change", () => commitPropertyInput(input));
+
+      input.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0 || input.classList.contains("editing")) {
+          return;
+        }
+
+        event.preventDefault();
+        const startValue = Number(input.value);
+        const drag = {
+          moved: false,
+          startValue: Number.isFinite(startValue) ? startValue : 0.0,
+          startX: event.clientX
+        };
+
+        input.setPointerCapture(event.pointerId);
+        input.classList.add("dragging");
+        document.body.classList.add("dragging-number");
+
+        const move = (moveEvent) => {
+          const dx = moveEvent.clientX - drag.startX;
+          if (!drag.moved && Math.abs(dx) < 2) {
+            return;
+          }
+
+          drag.moved = true;
+          const step = getEditorStep(input, moveEvent);
+          const value = clampEditorNumber(input, drag.startValue + dx * step);
+          input.value = formatEditorNumber(value, step);
+          scheduleCommitPropertyInput(input);
+          moveEvent.preventDefault();
+        };
+
+        const stop = (stopEvent) => {
+          if (input.hasPointerCapture(stopEvent.pointerId)) {
+            input.releasePointerCapture(stopEvent.pointerId);
+          }
+
+          input.classList.remove("dragging");
+          document.body.classList.remove("dragging-number");
+          input.removeEventListener("pointermove", move);
+          input.removeEventListener("pointerup", stop);
+          input.removeEventListener("pointercancel", stop);
+          if (drag.moved) {
+            commitPropertyInput(input);
+          }
+        };
+
+        input.addEventListener("pointermove", move);
+        input.addEventListener("pointerup", stop);
+        input.addEventListener("pointercancel", stop);
+      });
+    }
+
     for (const input of document.querySelectorAll("[data-editor-property]")) {
-      const eventName = input.type === "range" || input.type === "checkbox" ? "input" : "change";
-      input.addEventListener(eventName, () => commitPropertyInput(input));
+      if (input.dataset.editorDrag === "number") {
+        setupDraggableNumberInput(input);
+      } else {
+        const eventName = input.type === "checkbox" ? "input" : "change";
+        input.addEventListener(eventName, () => commitPropertyInput(input));
+      }
+    }
+
+    for (const button of document.querySelectorAll("[data-editor-reset-object]")) {
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        resetObjectInput(button);
+      });
     }
   </script>
 </body>
