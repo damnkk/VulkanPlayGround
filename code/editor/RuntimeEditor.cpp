@@ -12,7 +12,6 @@ RuntimeEditor::RuntimeEditor() : _mainBar(_runtimeContext), _renderModeTabs(_run
 
 void RuntimeEditor::bindRuntime(Play::runtime::VulkanRuntime& runtime, Play::RenderSession& renderSession, const char* activeMode)
 {
-    _editorRegistry.clear();
     _runtimeContext.bind(runtime, renderSession, _editorRegistry);
     _renderModeTabs.bindRenderSession(renderSession, activeMode);
 }
@@ -255,6 +254,24 @@ std::string RuntimeEditor::buildHtml() const
       background: #111822;
       color: #f4f7fb;
     }
+
+    .property-row input.property-error {
+      border-color: #d35b5b;
+    }
+
+    .vector-input {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 4px;
+    }
+
+    .vector-input.vector-size-2 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .vector-input.vector-size-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
   </style>
 </head>
 <body>
@@ -282,6 +299,33 @@ std::string RuntimeEditor::buildHtml() const
 
     for (const tab of tabs) {
       tab.onclick = () => showRenderMode(tab.dataset.renderMode);
+    }
+
+    function getPropertyInputValue(input) {
+      return input.type === "checkbox" ? (input.checked ? "true" : "false") : input.value;
+    }
+
+    async function commitPropertyInput(input) {
+      const objectView = input.closest("[data-editor-object-id]");
+      if (!objectView || !input.dataset.editorProperty || !window.setEditorProperty) {
+        return;
+      }
+
+      input.classList.remove("property-error");
+      try {
+        await window.setEditorProperty(
+          objectView.dataset.editorObjectId,
+          input.dataset.editorProperty,
+          getPropertyInputValue(input)
+        );
+      } catch (error) {
+        input.classList.add("property-error");
+      }
+    }
+
+    for (const input of document.querySelectorAll("[data-editor-property]")) {
+      const eventName = input.type === "range" || input.type === "checkbox" ? "input" : "change";
+      input.addEventListener(eventName, () => commitPropertyInput(input));
     }
   </script>
 </body>

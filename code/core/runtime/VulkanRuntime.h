@@ -19,7 +19,7 @@ class RefCounted;
 class RenderSession;
 class RenderPassCache;
 class Texture;
-class ToneMappingControlComponent;
+class Buffer;
 } // namespace Play
 
 namespace Play::runtime
@@ -222,11 +222,6 @@ public:
         return _pipelineCacheManager;
     }
 
-    Play::ToneMappingControlComponent& getTonemapperControlComponent()
-    {
-        return *_tonemapperControlComponent;
-    }
-
     Play::editor::EditorRegistry& getEditorRegistry()
     {
         return _guiHost.getEditor().getEditorRegistry();
@@ -244,6 +239,7 @@ public:
     void tick();
 
     void updateFrameDescriptorSet();
+    void updateGlobalTonemapperBuffer(Play::Buffer* buffer);
 
     VkPhysicalDeviceProperties2 _physicalDeviceProperties2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
     bool                        _enableRayTracing        = true;
@@ -308,7 +304,6 @@ private:
     Play::DescriptorSetCache*             _descriptorSetCache        = nullptr;
     Play::RenderPassCache*                _renderPassCache           = nullptr;
     Play::FrameBufferCache*               _frameBufferCache          = nullptr;
-    Play::ToneMappingControlComponent*    _tonemapperControlComponent = nullptr;
     FrameStats                            _frameStats{};
     uint32_t                              _frameIndex   = 0;
     uint64_t                              _frameCounter = 0;

@@ -5,9 +5,30 @@
 #include <nvutils/logger.hpp>
 
 #include "webview/webview.h"
+#include "webview/detail/json.hh"
 
 namespace Play::runtime
 {
+
+namespace
+{
+bool parseEditorObjectId(const std::string& text, Play::editor::EditorObjectId& id)
+{
+    Play::editor::EditorObjectId parsedId = 0;
+    for (const char ch : text)
+    {
+        if (ch < '0' || ch > '9')
+        {
+            return false;
+        }
+
+        parsedId = parsedId * 10 + static_cast<Play::editor::EditorObjectId>(ch - '0');
+    }
+
+    id = parsedId;
+    return id != 0;
+}
+} // namespace
 
 RuntimeGuiHost::RuntimeGuiHost() = default;
 
@@ -90,6 +111,27 @@ void RuntimeGuiHost::requestTerminate(webview_t webview, void* arg)
     webview_terminate(webview);
 }
 
+void RuntimeGuiHost::setEditorProperty(const char* id, const char* request, void* arg)
+{
+    RuntimeGuiHost* host = static_cast<RuntimeGuiHost*>(arg);
+    if (!host || !host->_webview)
+    {
+        return;
+    }
+
+    const std::string requestJson  = request ? request : "";
+    const std::string objectIdText = webview::detail::json_parse(requestJson, "", 0);
+    const std::string propertyName = webview::detail::json_parse(requestJson, "", 1);
+    const std::string value        = webview::detail::json_parse(requestJson, "", 2);
+
+    Play::editor::EditorObjectId objectId = 0;
+    const bool parsedId = parseEditorObjectId(objectIdText, objectId);
+    const bool changed  = parsedId && !propertyName.empty()
+                          && host->_editor.getEditorRegistry().setObjectProperty(objectId, propertyName.c_str(), rttr::variant(value));
+
+    webview_return(host->_webview, id, changed ? 0 : 1, changed ? "true" : "false");
+}
+
 int RuntimeGuiHost::run()
 {
     webview_t webview = webview_create(0, nullptr);
@@ -112,6 +154,7 @@ int RuntimeGuiHost::run()
 
         webview_set_title(webview, "VulkanPlayGround Runtime UI");
         webview_set_size(webview, 920, 640, WEBVIEW_HINT_NONE);
+        webview_bind(webview, "setEditorProperty", &RuntimeGuiHost::setEditorProperty, this);
         webview_set_html(webview, html.c_str());
         webview_run(webview);
     }

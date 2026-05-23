@@ -37,6 +37,7 @@ public:
 private:
     static int  threadMain(void* data);
     static void requestTerminate(webview_t webview, void* arg);
+    static void setEditorProperty(const char* id, const char* request, void* arg);
 
     int  run();
     void cleanupFinishedThread();

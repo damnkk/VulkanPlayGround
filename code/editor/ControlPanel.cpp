@@ -32,7 +32,7 @@ void ControlPanel::appendHtml(std::string& html) const
         html += "\" open><summary>";
         detail::appendHtmlText(html, objectInfo->title);
         html += "</summary><div class=\"control-content\">";
-        detail::appendReflectedObjectHtml(html, objectInfo->title.c_str(), objectInfo->type, _registry.getObjectInstance(id));
+        detail::appendReflectedObjectHtml(html, objectInfo->title.c_str(), objectInfo->type, _registry.getObjectInstance(id), true);
         html += "</div></details>";
     }
     html += "</div></section>";
