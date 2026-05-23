@@ -16,6 +16,7 @@
 #include "ShaderManager.hpp"
 #include "controlComponent/controlComponent.h"
 #include "core/RefCounted.h"
+#include "editor/EditorRegistration.h"
 
 namespace Play
 {
@@ -202,6 +203,9 @@ bool VulkanRuntime::init(const RuntimeConfig& config, const nvvk::ContextInitInf
     }
 
     _initialized = true;
+    Play::editor::RuntimeEditor& editor = _guiHost.getEditor();
+    editor.bindRuntime(*this, *_renderSession, _config.renderMode.c_str());
+    Play::editor::registerRuntimeEditorObjects(getEditorRegistry(), *this);
     _guiHost.start();
     return true;
 }
@@ -218,6 +222,10 @@ void VulkanRuntime::run()
     while (!_window.shouldClose())
     {
         _window.pollEvents();
+        if (_window.getInputState().keyOPressed)
+        {
+            _guiHost.start();
+        }
 
         if (!_window.isRenderable())
         {

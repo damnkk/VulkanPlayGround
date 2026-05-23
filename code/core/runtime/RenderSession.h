@@ -28,6 +28,7 @@ public:
     void onResize(const VkExtent2D& size);
     void beginFrame();
     void renderFrame();
+    SceneManager* getSceneManager();
 
     enum RenderMode
     {

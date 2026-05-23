@@ -225,6 +225,11 @@ public:
         return *_tonemapperControlComponent;
     }
 
+    Play::editor::EditorRegistry& getEditorRegistry()
+    {
+        return _guiHost.getEditor().getEditorRegistry();
+    }
+
     VkCommandBuffer createTempCmdBuffer();
     void            submitAndWaitTempCmdBuffer(VkCommandBuffer cmd);
     void            addWaitSemaphore(const VkSemaphoreSubmitInfo& signalInfo);

@@ -30,6 +30,8 @@ struct SdlInputState
     bool keyA     = false;
     bool keyS     = false;
     bool keyD     = false;
+    bool keyO        = false;
+    bool keyOPressed = false;
     bool keyLeft  = false;
     bool keyRight = false;
     bool keyUp    = false;

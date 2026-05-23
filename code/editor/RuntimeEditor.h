@@ -1,0 +1,52 @@
+#pragma once
+
+#include "editor/EditorRegistry.h"
+#include "editor/EditorRuntimeContext.h"
+#include "editor/MainBar.h"
+#include "editor/RenderModeTabs.h"
+
+namespace Play
+{
+class RenderSession;
+}
+
+namespace Play::runtime
+{
+class VulkanRuntime;
+}
+
+namespace Play::editor
+{
+
+class RuntimeEditor
+{
+public:
+    RuntimeEditor();
+
+    void bindRuntime(Play::runtime::VulkanRuntime& runtime, Play::RenderSession& renderSession, const char* activeMode);
+
+    EditorRegistry& getEditorRegistry()
+    {
+        return _editorRegistry;
+    }
+
+    const EditorRegistry& getEditorRegistry() const
+    {
+        return _editorRegistry;
+    }
+
+    RenderModeTabs& getRenderModeTabs()
+    {
+        return _renderModeTabs;
+    }
+
+    std::string buildHtml() const;
+
+private:
+    EditorRuntimeContext _runtimeContext;
+    EditorRegistry       _editorRegistry;
+    MainBar              _mainBar;
+    RenderModeTabs       _renderModeTabs;
+};
+
+} // namespace Play::editor

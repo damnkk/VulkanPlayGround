@@ -137,6 +137,7 @@ void SdlWindow::refreshInputState()
     float mouseY = 0.0F;
     const SDL_MouseButtonFlags previousMouseButtonFlags = _mouseButtonFlags;
     _mouseButtonFlags                                  = SDL_GetMouseState(&mouseX, &mouseY);
+    const bool previousKeyO                            = _inputState.keyO;
 
     int windowWidth  = 0;
     int windowHeight = 0;
@@ -172,6 +173,8 @@ void SdlWindow::refreshInputState()
     _inputState.keyA     = keyDown(SDL_SCANCODE_A);
     _inputState.keyS     = keyDown(SDL_SCANCODE_S);
     _inputState.keyD     = keyDown(SDL_SCANCODE_D);
+    _inputState.keyO        = keyDown(SDL_SCANCODE_O);
+    _inputState.keyOPressed = _inputState.keyO && !previousKeyO;
     _inputState.keyLeft  = keyDown(SDL_SCANCODE_LEFT);
     _inputState.keyRight = keyDown(SDL_SCANCODE_RIGHT);
     _inputState.keyUp    = keyDown(SDL_SCANCODE_UP);

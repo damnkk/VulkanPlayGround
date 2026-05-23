@@ -23,6 +23,7 @@
 #include "resourceManagement/PlayProgram.h"
 #include "resourceManagement/PlayScene.h"
 #include "resourceManagement/Resource.h"
+#include "resourceManagement/SceneManager.h"
 #include "resourceManagement/ShaderManager.hpp"
 
 RTTR_REGISTRATION
@@ -48,7 +49,63 @@ RTTR_REGISTRATION
     rttr::registration::class_<Play::GaussianSortPass>("Play::GaussianSortPass");
     rttr::registration::class_<Play::GaussianDrawMeshPass>("Play::GaussianDrawMeshPass");
 
-    rttr::registration::class_<AtmosphereParameters>("AtmosphereParameters");
+    rttr::registration::class_<AtmosphereParameters>("AtmosphereParameters")
+        .property("BottomRadius", &AtmosphereParameters::BottomRadius)(rttr::metadata("ui.label", "Bottom Radius"))
+        .property("TopRadius", &AtmosphereParameters::TopRadius)(rttr::metadata("ui.label", "Top Radius"))
+        .property("RayleighDensityExpScale", &AtmosphereParameters::RayleighDensityExpScale)
+        .property("RayleighScattering", &AtmosphereParameters::RayleighScattering)
+        .property("MieDensityExpScale", &AtmosphereParameters::MieDensityExpScale)
+        .property("MieScattering", &AtmosphereParameters::MieScattering)
+        .property("MieExtinction", &AtmosphereParameters::MieExtinction)
+        .property("MieAbsorption", &AtmosphereParameters::MieAbsorption)
+        .property("MiePhaseG", &AtmosphereParameters::MiePhaseG)(
+            rttr::metadata("ui.label", "Mie Phase G"),
+            rttr::metadata("ui.widget", "slider"),
+            rttr::metadata("ui.min", -1.0f),
+            rttr::metadata("ui.max", 1.0f),
+            rttr::metadata("ui.step", 0.01f))
+        .property("AbsorptionDensity0LayerWidth", &AtmosphereParameters::AbsorptionDensity0LayerWidth)
+        .property("AbsorptionDensity0ConstantTerm", &AtmosphereParameters::AbsorptionDensity0ConstantTerm)
+        .property("AbsorptionDensity0LinearTerm", &AtmosphereParameters::AbsorptionDensity0LinearTerm)
+        .property("AbsorptionDensity1ConstantTerm", &AtmosphereParameters::AbsorptionDensity1ConstantTerm)
+        .property("AbsorptionDensity1LinearTerm", &AtmosphereParameters::AbsorptionDensity1LinearTerm)
+        .property("AbsorptionExtinction", &AtmosphereParameters::AbsorptionExtinction)
+        .property("GroundAlbedo", &AtmosphereParameters::GroundAlbedo)
+        .property("sun_dir", &AtmosphereParameters::sun_dir)(rttr::metadata("ui.label", "Sun Direction"))
+        .property("solar_irradiance", &AtmosphereParameters::solar_irradiance)
+        .property("sun_angular_radius", &AtmosphereParameters::sun_angular_radius)
+        .property("mu_s_min", &AtmosphereParameters::mu_s_min);
+
+    rttr::registration::class_<shaderio::TonemapperData>("shaderio::TonemapperData")
+        .property("isActive", &shaderio::TonemapperData::isActive)
+        .property("method", &shaderio::TonemapperData::method)
+        .property("exposure", &shaderio::TonemapperData::exposure)(
+            rttr::metadata("ui.widget", "slider"),
+            rttr::metadata("ui.min", 0.0f),
+            rttr::metadata("ui.max", 8.0f),
+            rttr::metadata("ui.step", 0.01f))
+        .property("temperature", &shaderio::TonemapperData::temperature)
+        .property("tint", &shaderio::TonemapperData::tint)
+        .property("contrast", &shaderio::TonemapperData::contrast)
+        .property("brightness", &shaderio::TonemapperData::brightness)
+        .property("saturation", &shaderio::TonemapperData::saturation)
+        .property("vignette", &shaderio::TonemapperData::vignette)
+        .property("vibrance", &shaderio::TonemapperData::vibrance)
+        .property("shadowBias", &shaderio::TonemapperData::shadowBias)
+        .property("midtoneBias", &shaderio::TonemapperData::midtoneBias)
+        .property("highlightBias", &shaderio::TonemapperData::highlightBias)
+        .property("coolColor", &shaderio::TonemapperData::coolColor)
+        .property("warmColor", &shaderio::TonemapperData::warmColor)
+        .property("splitBalance", &shaderio::TonemapperData::splitBalance)
+        .property("autoExposure", &shaderio::TonemapperData::autoExposure)
+        .property("autoExposureSpeed", &shaderio::TonemapperData::autoExposureSpeed)
+        .property("evMinValue", &shaderio::TonemapperData::evMinValue)
+        .property("evMaxValue", &shaderio::TonemapperData::evMaxValue)
+        .property("enableCenterMetering", &shaderio::TonemapperData::enableCenterMetering)
+        .property("centerMeteringSize", &shaderio::TonemapperData::centerMeteringSize)
+        .property("averageMode", &shaderio::TonemapperData::averageMode)
+        .property("dither", &shaderio::TonemapperData::dither);
+
     rttr::registration::class_<Play::ControlComponent<AtmosphereParameters>>("Play::ControlComponent<AtmosphereParameters>");
     rttr::registration::class_<Play::ControlComponent<shaderio::TonemapperData>>("Play::ControlComponent<shaderio::TonemapperData>");
     rttr::registration::class_<Play::ToneMappingControlComponent>("Play::ToneMappingControlComponent");
@@ -68,6 +125,7 @@ RTTR_REGISTRATION
     rttr::registration::class_<Play::RenderScene>("Play::RenderScene");
     rttr::registration::class_<Play::RTScene>("Play::RTScene");
     rttr::registration::class_<Play::GaussianScene>("Play::GaussianScene");
+    rttr::registration::class_<Play::SceneManager>("Play::SceneManager");
 
     rttr::registration::class_<Play::ShaderModule>("Play::ShaderModule");
     rttr::registration::class_<Play::ShaderManager>("Play::ShaderManager");
