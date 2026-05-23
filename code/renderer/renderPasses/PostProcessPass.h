@@ -6,6 +6,7 @@
 #include <nvvk/graphics_pipeline.hpp>
 #include <nvshaders_host/tonemapper.hpp>
 #include <rttr/rttr_enable.h>
+#include "controlComponent/controlComponent.h"
 namespace Play
 {
 class ComputeProgram;
@@ -24,8 +25,9 @@ public:
 private:
     friend class DeferRenderer;
     RefPtr<ComputeProgram> _postProgram;
-    DeferRenderer*         _ownedRender = nullptr;
-    nvshaders::Tonemapper  _tonemapper;
+    DeferRenderer*         _ownedRender                 = nullptr;
+    ToneMappingControlComponent _tonemapperControlComponent;
+    nvshaders::Tonemapper       _tonemapper;
 };
 
 } // namespace Play

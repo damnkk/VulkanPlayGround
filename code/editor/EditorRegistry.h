@@ -95,7 +95,9 @@ public:
 
     virtual rttr::type     getType() const                                             = 0;
     virtual rttr::instance getInstance() const                                         = 0;
+    virtual rttr::instance getDefaultInstance() const                                  = 0;
     virtual bool           setProperty(const char* propertyName, const rttr::variant& value) = 0;
+    virtual bool           resetObject()                                               = 0;
 };
 
 template <typename T>
@@ -116,9 +118,19 @@ public:
         return rttr::instance(*_object);
     }
 
+    rttr::instance getDefaultInstance() const override
+    {
+        return rttr::instance();
+    }
+
     bool setProperty(const char* propertyName, const rttr::variant& value) override
     {
         return setReflectedProperty(getType(), getInstance(), propertyName, value);
+    }
+
+    bool resetObject() override
+    {
+        return false;
     }
 
 private:
@@ -129,7 +141,7 @@ template <typename T>
 class ControlComponentEditorAdapter final : public IEditorObjectAdapter
 {
 public:
-    explicit ControlComponentEditorAdapter(Play::ControlComponent<T>& component) : _component(&component)
+    explicit ControlComponentEditorAdapter(Play::ControlComponent<T>& component) : _component(&component), _defaultObject(component.getCPUHandle())
     {
     }
 
@@ -143,6 +155,11 @@ public:
         return rttr::instance(_component->getCPUHandle());
     }
 
+    rttr::instance getDefaultInstance() const override
+    {
+        return rttr::instance(_defaultObject);
+    }
+
     bool setProperty(const char* propertyName, const rttr::variant& value) override
     {
         if (!setReflectedProperty(getType(), getInstance(), propertyName, value))
@@ -154,8 +171,16 @@ public:
         return true;
     }
 
+    bool resetObject() override
+    {
+        _component->getCPUHandle() = _defaultObject;
+        _component->flushToGPU();
+        return true;
+    }
+
 private:
     Play::ControlComponent<T>* _component = nullptr;
+    T                          _defaultObject;
 };
 } // namespace detail
 
@@ -223,7 +248,9 @@ public:
     std::vector<EditorObjectId> queryObjects(const EditorObjectQuery& query) const;
     const EditorObjectInfo*     getObjectInfo(EditorObjectId id) const;
     rttr::instance              getObjectInstance(EditorObjectId id) const;
+    rttr::instance              getDefaultObjectInstance(EditorObjectId id) const;
     bool                        setObjectProperty(EditorObjectId id, const char* propertyName, const rttr::variant& value);
+    bool                        resetObject(EditorObjectId id);
 
 private:
     EditorObjectId addObject(const char* title, const EditorObjectTraits& traits, detail::IEditorObjectAdapter* adapter);

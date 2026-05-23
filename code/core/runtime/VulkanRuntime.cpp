@@ -14,9 +14,7 @@
 #include "RenderPassCache.h"
 #include "Resource.h"
 #include "ShaderManager.hpp"
-#include "controlComponent/controlComponent.h"
 #include "core/RefCounted.h"
-#include "editor/EditorRegistry.h"
 
 namespace Play
 {
@@ -196,6 +194,7 @@ bool VulkanRuntime::init(const RuntimeConfig& config, const nvvk::ContextInitInf
     }
 
     _renderSession = std::make_unique<Play::RenderSession>(Play::RenderSession::Info{.renderMode = _config.renderMode});
+    getEditorRegistry().clear();
     if (!_renderSession->init())
     {
         destroy();
@@ -205,8 +204,6 @@ bool VulkanRuntime::init(const RuntimeConfig& config, const nvvk::ContextInitInf
     _initialized = true;
     Play::editor::RuntimeEditor& editor = _guiHost.getEditor();
     editor.bindRuntime(*this, *_renderSession, _config.renderMode.c_str());
-    getEditorRegistry().registerWritable<shaderio::TonemapperData>(
-        "Tonemapper", getTonemapperControlComponent(), Play::editor::EditorRenderMode::Defer);
     _guiHost.start();
     return true;
 }
@@ -269,8 +266,9 @@ void VulkanRuntime::destroy()
         vkDeviceWaitIdle(_context.getDevice());
     }
 
-    _renderSession.reset();
     _guiHost.stop();
+    getEditorRegistry().clear();
+    _renderSession.reset();
     clearSwapchainTextures();
     deinitRenderServices();
     destroyFrameSubmission();
@@ -373,7 +371,6 @@ bool VulkanRuntime::initRenderServices()
         _frameBufferCache = new Play::FrameBufferCache();
     }
 
-    _tonemapperControlComponent = new Play::ToneMappingControlComponent();
     prepareGlobalDescriptorSet();
     prepareFrameDescriptorSet();
     _lastTick = SDL_GetPerformanceCounter();
@@ -382,7 +379,7 @@ bool VulkanRuntime::initRenderServices()
 
 void VulkanRuntime::deinitRenderServices()
 {
-    if (!_descriptorSetCache && !_pipelineCacheManager && !_tonemapperControlComponent)
+    if (!_descriptorSetCache && !_pipelineCacheManager)
     {
         return;
     }
@@ -400,8 +397,6 @@ void VulkanRuntime::deinitRenderServices()
 
     destroyDeferredTasks();
 
-    delete _tonemapperControlComponent;
-    _tonemapperControlComponent = nullptr;
     delete _frameBufferCache;
     _frameBufferCache = nullptr;
     delete _renderPassCache;
@@ -889,12 +884,7 @@ void VulkanRuntime::updateGlobalDescriptorSet()
     Play::PlayResourceManager::Instance().acquireSampler(samplerList[1], samplerCreateInfo);
     imageInfoList.push_back({samplerList[1]});
 
-    VkDescriptorBufferInfo toneMappingBufferInfo{};
-    toneMappingBufferInfo.buffer = _tonemapperControlComponent->getGPUBuffer()->buffer;
-    toneMappingBufferInfo.offset = 0;
-    toneMappingBufferInfo.range  = VK_WHOLE_SIZE;
-
-    std::vector<VkWriteDescriptorSet> writeSet(3, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET});
+    std::vector<VkWriteDescriptorSet> writeSet(2, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET});
     writeSet[0].dstSet          = _descriptorSetCache->getEngineDescriptorSet().set;
     writeSet[0].dstBinding      = 2;
     writeSet[0].descriptorCount = 1;
@@ -905,13 +895,30 @@ void VulkanRuntime::updateGlobalDescriptorSet()
     writeSet[1].descriptorCount = 1;
     writeSet[1].descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLER;
     writeSet[1].pImageInfo      = &imageInfoList[1];
-    writeSet[2].dstSet          = _descriptorSetCache->getEngineDescriptorSet().set;
-    writeSet[2].dstBinding      = 4;
-    writeSet[2].descriptorCount = 1;
-    writeSet[2].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    writeSet[2].pBufferInfo     = &toneMappingBufferInfo;
 
     vkUpdateDescriptorSets(getDevice(), static_cast<uint32_t>(writeSet.size()), writeSet.data(), 0, nullptr);
+}
+
+void VulkanRuntime::updateGlobalTonemapperBuffer(Play::Buffer* buffer)
+{
+    if (!buffer || !_descriptorSetCache)
+    {
+        return;
+    }
+
+    VkDescriptorBufferInfo toneMappingBufferInfo{};
+    toneMappingBufferInfo.buffer = buffer->buffer;
+    toneMappingBufferInfo.offset = 0;
+    toneMappingBufferInfo.range  = VK_WHOLE_SIZE;
+
+    VkWriteDescriptorSet writeSet{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    writeSet.dstSet          = _descriptorSetCache->getEngineDescriptorSet().set;
+    writeSet.dstBinding      = 4;
+    writeSet.descriptorCount = 1;
+    writeSet.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    writeSet.pBufferInfo     = &toneMappingBufferInfo;
+
+    vkUpdateDescriptorSets(getDevice(), 1, &writeSet, 0, nullptr);
 }
 
 void VulkanRuntime::prepareFrameDescriptorSet()

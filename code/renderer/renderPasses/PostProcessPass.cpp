@@ -4,9 +4,9 @@
 #include "PlayProgram.h"
 #include "ShaderManager.hpp"
 #include "VulkanDriver.h"
+#include "editor/EditorRegistry.h"
 #include "resourceManagement/PconstantType.h.slang"
 #include "PlayAllocator.h"
-#include "controlComponent/controlComponent.h"
 
 #include "GBufferConfig.h"
 namespace Play
@@ -21,6 +21,10 @@ void PostProcessPass::init()
     _postProgram->setComputeModuleID(PostProcesscId);
     _postProgram->getDescriptorSetManager().initPushConstant<PerFrameConstant>();
     _tonemapper.init(&PlayResourceManager::Instance(), {shadermodule->_spvCode});
+    _tonemapperControlComponent.flushToGPU();
+    vkDriver->updateGlobalTonemapperBuffer(_tonemapperControlComponent.getGPUBuffer());
+    vkDriver->getEditorRegistry().registerWritable<shaderio::TonemapperData>(
+        "Tonemapper", _tonemapperControlComponent, editor::EditorRenderMode::Defer);
 }
 
 void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
@@ -43,7 +47,7 @@ void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
                         {
                             PlayResourceManager::Instance().acquireSampler(inputTextureRef->getRHI()->descriptor.sampler);
                             this->_tonemapper.runCompute(context._currCmdBuffer, vkDriver->getViewportSize(),
-                                                         vkDriver->getTonemapperControlComponent().getCPUHandle(),
+                                                         _tonemapperControlComponent.getCPUHandle(),
                                                          inputTextureRef->getRHI()->descriptor, outputTexRef->getRHI()->descriptor);
                         })
                     .finish();
