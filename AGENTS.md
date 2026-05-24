@@ -24,6 +24,7 @@ Match existing naming in the area you edit: PascalCase for types and most engine
 ## Agent Workflow Preferences
 - Do not proactively run compile or build commands. The user will manually verify whether compilation succeeds.
 - Do not add or adjust standard library includes (such as C/C++ `std` headers) on your own. Assume the user will ensure required headers exist.
+- When adding engine extension APIs, prefer a generic extensibility point over one method per concrete feature. For example, use node/component APIs such as `addComponent<T>()`, `getComponent<T>()`, and `removeComponent<T>()` instead of growing `attachModel()`, `attachAnimation()`, `attachVideo()`, etc. Add concrete wrappers only when they encode real workflow policy, not merely because a component type exists today.
 
 ## Testing Guidelines
 There is no top-level automated test suite for the application. Validate changes with:
