@@ -1,48 +1,34 @@
-﻿#ifndef RENDER_SCENE_H
-#define RENDER_SCENE_H
-#include <nvvkgltf/scene_vk.hpp>
-#include <nvvkgltf/scene_rtx.hpp>
-#include "miniply.h"
-#include <vector>
-#include <filesystem>
-#include "newShaders/gaussian/gaussianLib.h.slang"
+#ifndef PLAY_SCENE_H
+#define PLAY_SCENE_H
+
+#include "GpuScene.h"
 #include "core/RefCounted.h"
+#include "miniply.h"
+#include "newShaders/gaussian/gaussianLib.h.slang"
+#include <filesystem>
 #include <splat-types.h>
+#include <vector>
+
 namespace Play
 {
-class Material;
+
 class Buffer;
-class RenderScene : public nvvkgltf::SceneVk
+
+class GaussianScene : public GpuScene
 {
 public:
-    void     recordingCommandBuffer(VkCommandBuffer cmdBuffer);
-    uint32_t getTextureOffset() const
+    GpuSceneType getType() const override
     {
-        return textureOffset;
-    }
-    void setTextureOffset(uint32_t offset)
-    {
-        textureOffset = offset;
+        return GpuSceneType::eGaussian;
     }
 
-    void                    fillDefaultMaterials(nvvkgltf::Scene& scene);
-    std::vector<Material*>& getDefaultMaterials()
+    void clear() override;
+    void rebuild(const CpuScene& scene, AssetRegistry& assets) override
     {
-        return _defaultMaterials;
+        (void) scene;
+        (void) assets;
     }
 
-private:
-    std::vector<Material*> _defaultMaterials;
-    uint32_t               textureOffset = 0;
-}; // class RenderScene
-
-class RTScene : public nvvkgltf::SceneRtx
-{
-}; // class RTScene
-
-class GaussianScene
-{
-public:
     bool load(const std::filesystem::path& path);
 
     const std::vector<float3>& getPositions() const
@@ -74,6 +60,7 @@ public:
     {
         return _meta;
     }
+
     uint32_t getVertexCount() const
     {
         return static_cast<uint32_t>(_positions.size());
@@ -126,8 +113,8 @@ private:
 
     RefPtr<Buffer>    _sceneUniformBuffer;
     GaussianSceneMeta _meta{};
-}; // class GaussianScene
+};
 
 } // namespace Play
 
-#endif // RENDER_SCENE_H
+#endif // PLAY_SCENE_H

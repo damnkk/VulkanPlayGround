@@ -7,8 +7,52 @@
 namespace Play
 {
 
-SceneManager::SceneManager()
+namespace
 {
+std::unique_ptr<GpuScene> createGpuScene(GpuSceneType type)
+{
+    switch (type)
+    {
+        case GpuSceneType::eGaussian:
+            return std::make_unique<GaussianScene>();
+        case GpuSceneType::eRayTracing:
+            return std::make_unique<RayTracingGpuScene>();
+        case GpuSceneType::eRaster:
+        default:
+            return std::make_unique<RasterGpuScene>();
+    }
+}
+
+RasterGpuScene* getRasterScene(GpuScene* gpuScene)
+{
+    if (!gpuScene || gpuScene->getType() != GpuSceneType::eRaster)
+    {
+        return nullptr;
+    }
+    return static_cast<RasterGpuScene*>(gpuScene);
+}
+
+const RasterGpuScene* getRasterScene(const GpuScene* gpuScene)
+{
+    if (!gpuScene || gpuScene->getType() != GpuSceneType::eRaster)
+    {
+        return nullptr;
+    }
+    return static_cast<const RasterGpuScene*>(gpuScene);
+}
+} // namespace
+
+SceneManager::SceneManager(GpuSceneType gpuSceneType) : _gpuScene(createGpuScene(gpuSceneType))
+{
+    if (_gpuScene)
+    {
+        _gpuScene->clear();
+        if (_gpuScene->getType() != GpuSceneType::eGaussian)
+        {
+            _gpuScene->rebuild(_cpuScene, _assetRegistry);
+        }
+    }
+
     _sceneDescriptorBindings.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr); // g_SceneSkyTexture
     _sceneDescriptorBindings.addBinding(1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr); // s_SceneSkyBoxTexture
     _sceneDescriptorBindings.addBinding(2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr); // s_SceneVolumeFogTexture
@@ -18,49 +62,39 @@ SceneManager::SceneManager()
     vkDriver->getDescriptorSetCache()->initSceneDescriptorSets(_sceneDescriptorBindings);
 }
 
+ModelLoadResult SceneManager::loadModel(const std::filesystem::path& filename, const ModelLoadingConfig& loadingCfg)
+{
+    std::lock_guard<std::mutex> lock(_cpuSceneMutex);
+    ModelLoadResult            result = loadModelFromFile(filename, loadingCfg, _assetRegistry, _cpuScene);
+    if (!result.success)
+    {
+        return result;
+    }
+
+    _cpuScene.updateWorldTransforms();
+    if (_gpuScene && _gpuScene->getType() != GpuSceneType::eGaussian)
+    {
+        RasterGpuScene* rasterScene = getRasterScene(_gpuScene.get());
+        const size_t    previousBindlessTextureCount = rasterScene ? rasterScene->getBindlessTextures().size() : 0;
+        _gpuScene->rebuild(_cpuScene, _assetRegistry);
+        if (rasterScene && rasterScene->getBindlessTextures().size() != previousBindlessTextureCount)
+        {
+            updateDescriptorSet();
+        }
+    }
+    return result;
+}
+
 template <typename T>
 SceneManager& SceneManager::addScene(std::filesystem::path filename)
 {
     if (typeid(T) == typeid(GaussianScene))
     {
-        _gaussianScene.load(filename);
+        getGaussianScene().load(filename);
     }
-    else if (typeid(T) == typeid(nvvkgltf::Scene))
+    else
     {
-        nvvkgltf::Scene* cpuScene = nullptr;
-        {
-            std::lock_guard<std::mutex> lock(_sceneMutex);
-            cpuScene = &_scenes.emplace_back();
-        }
-        cpuScene->load(filename);
-        RenderScene* vkScene = nullptr;
-        {
-            std::lock_guard<std::mutex> lock(_scenesVkMutex);
-            vkScene = &_scenesVk.emplace_back();
-        }
-        vkScene->init(PlayResourceManager::GetAsAllocator(), PlayResourceManager::GetAsSamplerPool());
-        auto cmd = PlayResourceManager::Instance().getTempCommandBuffer();
-        vkScene->create(cmd, *PlayResourceManager::Instance().GetAsStagingUploader(), *cpuScene, true, false);
-        PlayResourceManager::Instance().submitAndWaitTempCmdBuffer(cmd);
-        {
-            std::lock_guard<std::mutex> lock(_scenesVkMutex);
-            vkScene->setTextureOffset(static_cast<uint32_t>(_sceneImages.size()));
-            _sceneImages.insert(_sceneImages.end(), vkScene->textures().begin(), vkScene->textures().end());
-            vkScene->fillDefaultMaterials(*cpuScene);
-        }
-        {
-            std::lock_guard<std::mutex> lock(_cpuSceneMutex);
-            const std::string           modelName = filename.stem().string();
-            ModelAssetID                modelID   = _assetRegistry.registerModel(modelName, filename);
-            CpuSceneNodeID              nodeID    = _cpuScene.create3DNode(modelName, _cpuScene.rootNode());
-            CpuModelComponent*          modelComponent = _cpuScene.addComponent<CpuModelComponent>(nodeID);
-            if (modelComponent)
-            {
-                modelComponent->model = modelID;
-            }
-            _cpuScene.updateWorldTransforms();
-            _rasterGpuScene.rebuild(_cpuScene, _assetRegistry);
-        }
+        loadModel(filename);
     }
     return *this;
 }
@@ -81,7 +115,7 @@ void SceneManager::updateDescriptorSet()
 {
     std::vector<VkWriteDescriptorSet> writes;
 
-    const std::vector<RefPtr<Texture>>& rasterBindlessTextures = _rasterGpuScene.getBindlessTextures();
+    const RasterGpuScene* rasterScene = getRasterScene(_gpuScene.get());
 
     VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
     write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
@@ -89,24 +123,14 @@ void SceneManager::updateDescriptorSet()
     write.dstSet         = vkDriver->getDescriptorSetCache()->getSceneDescriptorSet().set;
 
     std::vector<VkDescriptorImageInfo> imageInfos;
-    if (!rasterBindlessTextures.empty())
+    if (rasterScene && !rasterScene->getBindlessTextures().empty())
     {
+        const std::vector<RefPtr<Texture>>& rasterBindlessTextures = rasterScene->getBindlessTextures();
         write.descriptorCount = static_cast<uint32_t>(rasterBindlessTextures.size());
         imageInfos.resize(rasterBindlessTextures.size());
         for (size_t i = 0; i < rasterBindlessTextures.size(); ++i)
         {
             imageInfos[i].imageView   = rasterBindlessTextures[i]->descriptor.imageView;
-            imageInfos[i].sampler     = VK_NULL_HANDLE;
-            imageInfos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        }
-    }
-    else
-    {
-        write.descriptorCount = static_cast<uint32_t>(_sceneImages.size());
-        imageInfos.resize(_sceneImages.size());
-        for (size_t i = 0; i < _sceneImages.size(); ++i)
-        {
-            imageInfos[i].imageView   = _sceneImages[i].descriptor.imageView;
             imageInfos[i].sampler     = VK_NULL_HANDLE;
             imageInfos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         }
@@ -136,35 +160,20 @@ void SceneManager::update()
 {
     std::lock_guard<std::mutex> lock(_cpuSceneMutex);
     _cpuScene.updateWorldTransforms();
-    if (_rasterGpuScene.getSourceSceneRevision() != _cpuScene.getRevision())
+    if (_gpuScene && _gpuScene->getType() != GpuSceneType::eGaussian && _gpuScene->getSourceSceneRevision() != _cpuScene.getRevision())
     {
-        const size_t previousBindlessTextureCount = _rasterGpuScene.getBindlessTextures().size();
-        _rasterGpuScene.rebuild(_cpuScene, _assetRegistry);
-        if (_rasterGpuScene.getBindlessTextures().size() != previousBindlessTextureCount)
+        RasterGpuScene* rasterScene = getRasterScene(_gpuScene.get());
+        const size_t    previousBindlessTextureCount = rasterScene ? rasterScene->getBindlessTextures().size() : 0;
+        _gpuScene->rebuild(_cpuScene, _assetRegistry);
+        if (rasterScene && rasterScene->getBindlessTextures().size() != previousBindlessTextureCount)
         {
             updateDescriptorSet();
         }
     }
 }
 
-SceneManager::~SceneManager()
-{
-    for (auto& scene : _scenes)
-    {
-        scene.destroy();
-    }
-    for (auto& vkScene : _scenesVk)
-    {
-        vkScene.deinit();
-    }
-    for (auto& rtScene : _scenesRTX)
-    {
-        rtScene.deinit();
-    }
-}
+SceneManager::~SceneManager() = default;
 
-template SceneManager& SceneManager::addScene<nvvkgltf::Scene>(std::filesystem::path);
-template SceneManager& SceneManager::addScenes<nvvkgltf::Scene>(std::vector<std::filesystem::path>);
 template SceneManager& SceneManager::addScene<GaussianScene>(std::filesystem::path);
 template SceneManager& SceneManager::addScenes<GaussianScene>(std::vector<std::filesystem::path>);
 

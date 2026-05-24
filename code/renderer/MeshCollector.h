@@ -5,13 +5,11 @@
 namespace Play
 {
 class Renderer;
-class RenderScene;
 // at the begining,just a small structure with single mesh info, later will be extended
 struct MeshBatch
 {
-    uint32_t              sceneID;
-    uint32_t              materialID;
-    std::vector<uint32_t> renderNodeIDs;
+    uint32_t              materialID = 0;
+    std::vector<uint32_t> drawItemIDs;
 };
 
 // one submit class, recreate per frame

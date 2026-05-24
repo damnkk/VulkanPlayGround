@@ -1,7 +1,7 @@
 #ifndef RASTER_GPU_SCENE_H
 #define RASTER_GPU_SCENE_H
 
-#include "SceneAssets.h"
+#include "GpuScene.h"
 
 namespace Play
 {
@@ -46,15 +46,20 @@ struct RasterGpuSceneHeader
     uint32_t transformCount      = 0;
 };
 
-class RasterGpuScene
+class RasterGpuScene : public GpuScene
 {
 public:
-    void clear();
-    void rebuild(const CpuScene& scene, AssetRegistry& assets);
+    GpuSceneType getType() const override
+    {
+        return GpuSceneType::eRaster;
+    }
+
+    void clear() override;
+    void rebuild(const CpuScene& scene, AssetRegistry& assets) override;
 
     uint32_t ensureBindlessTexture(TextureAssetID textureID, AssetRegistry& assets);
 
-    uint64_t getSourceSceneRevision() const
+    uint64_t getSourceSceneRevision() const override
     {
         return _sourceSceneRevision;
     }
