@@ -78,8 +78,14 @@ void RasterGpuScene::rebuild(const CpuScene& scene, AssetRegistry& assets)
 
             const ModelSubmeshAsset& submesh = model->submeshes[renderable.submeshIndex];
 
+            glm::mat4 renderableLocalToModel = renderable.localToModel;
+            if (renderable.nodeIndex < model->nodes.size())
+            {
+                renderableLocalToModel = model->nodes[renderable.nodeIndex].modelTransform;
+            }
+
             RasterGpuTransform transform;
-            transform.objectToWorld     = node.worldTransform * renderable.localToModel;
+            transform.objectToWorld     = node.worldTransform * renderableLocalToModel;
             transform.worldToObject     = glm::inverse(transform.objectToWorld);
             transform.prevObjectToWorld = transform.objectToWorld;
 

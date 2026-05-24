@@ -1,4 +1,4 @@
-#include "ModelLoading.h"
+#include "ModelLoadingInternal.h"
 
 #include "nvutils/file_operations.hpp"
 #include <assimp/GltfMaterial.h>
@@ -466,28 +466,42 @@ void appendMeshGeometry(const aiMesh* mesh, ModelAsset& model, ModelSubmeshAsset
 
 struct AssimpImportContext
 {
-    AssetRegistry&         assets;
-    CpuScene&              scene;
-    ModelAssetID           modelID;
-    std::vector<uint32_t>  meshSubmeshIndices;
+    AssetRegistry&        assets;
+    ModelAssetID          modelID;
+    std::vector<uint32_t> meshSubmeshIndices;
 };
 
-void appendAssimpNode(const aiNode* assimpNode, CpuSceneNodeID parentNode, AssimpImportContext& context)
+uint32_t appendAssimpNode(const aiNode* assimpNode, uint32_t parentNodeIndex, const glm::mat4& parentToModel, AssimpImportContext& context)
 {
     if (!assimpNode)
     {
-        return;
+        return INVALID_SCENE_ID;
     }
 
-    const std::string nodeName = makeAssimpName(assimpNode->mName, "Node", static_cast<uint32_t>(context.scene.getNodes().size()));
-    CpuSceneNodeID    nodeID   = context.scene.create3DNode(nodeName, parentNode);
-    context.scene.setLocalTransform(nodeID, toGlm(assimpNode->mTransformation));
+    const glm::mat4 localTransform = toGlm(assimpNode->mTransformation);
+    const glm::mat4 modelTransform = parentToModel * localTransform;
+
+    const ModelAsset* existingModel      = context.assets.getModel(context.modelID);
+    const uint32_t    fallbackNodeIndex  = existingModel ? static_cast<uint32_t>(existingModel->nodes.size()) : 0;
+
+    ModelNodeAsset modelNode;
+    modelNode.name           = makeAssimpName(assimpNode->mName, "Node", fallbackNodeIndex);
+    modelNode.parent         = parentNodeIndex;
+    modelNode.localTransform = localTransform;
+    modelNode.modelTransform = modelTransform;
+
+    const uint32_t nodeIndex = context.assets.addModelNode(context.modelID, modelNode);
+    if (nodeIndex == INVALID_SCENE_ID)
+    {
+        return INVALID_SCENE_ID;
+    }
 
     ModelAsset* model = context.assets.getModel(context.modelID);
     if (model && assimpNode->mNumMeshes > 0)
     {
-        const uint32_t firstRenderable = static_cast<uint32_t>(model->renderables.size());
-        uint32_t       renderableCount = 0;
+        model->nodes[nodeIndex].firstRenderable = static_cast<uint32_t>(model->renderables.size());
+        uint32_t renderableCount                = 0;
+
         for (uint32_t meshSlot = 0; meshSlot < assimpNode->mNumMeshes; ++meshSlot)
         {
             const uint32_t meshIndex = assimpNode->mMeshes[meshSlot];
@@ -496,30 +510,67 @@ void appendAssimpNode(const aiNode* assimpNode, CpuSceneNodeID parentNode, Assim
                 continue;
             }
 
-            ModelRenderableTemplate renderable;
-            renderable.submeshIndex = context.meshSubmeshIndices[meshIndex];
-            renderable.localToModel = glm::mat4(1.0f);
-            context.assets.addModelRenderable(context.modelID, renderable);
-            ++renderableCount;
-        }
-
-        if (renderableCount > 0)
-        {
-            CpuModelComponent* modelComponent = context.scene.addComponent<CpuModelComponent>(nodeID);
-            if (modelComponent)
+            const uint32_t submeshIndex = context.meshSubmeshIndices[meshIndex];
+            if (submeshIndex == INVALID_SCENE_ID)
             {
-                modelComponent->model           = context.modelID;
-                modelComponent->firstRenderable = firstRenderable;
-                modelComponent->renderableCount = renderableCount;
+                continue;
+            }
+
+            ModelRenderableTemplate renderable;
+            renderable.submeshIndex = submeshIndex;
+            renderable.nodeIndex    = nodeIndex;
+            renderable.localToModel = modelTransform;
+            if (context.assets.addModelRenderable(context.modelID, renderable) != INVALID_SCENE_ID)
+            {
+                ++renderableCount;
             }
         }
+
+        model = context.assets.getModel(context.modelID);
+        if (model && nodeIndex < model->nodes.size())
+        {
+            model->nodes[nodeIndex].renderableCount = renderableCount;
+        }
     }
 
+    uint32_t previousChildIndex = INVALID_SCENE_ID;
     for (uint32_t childIndex = 0; childIndex < assimpNode->mNumChildren; ++childIndex)
     {
-        appendAssimpNode(assimpNode->mChildren[childIndex], nodeID, context);
+        const uint32_t childNodeIndex = appendAssimpNode(assimpNode->mChildren[childIndex], nodeIndex, modelTransform, context);
+        if (childNodeIndex == INVALID_SCENE_ID)
+        {
+            continue;
+        }
+
+        model = context.assets.getModel(context.modelID);
+        if (!model || nodeIndex >= model->nodes.size() || childNodeIndex >= model->nodes.size())
+        {
+            continue;
+        }
+
+        if (previousChildIndex == INVALID_SCENE_ID)
+        {
+            model->nodes[nodeIndex].firstChild = childNodeIndex;
+        }
+        else if (previousChildIndex < model->nodes.size())
+        {
+            model->nodes[previousChildIndex].nextSibling = childNodeIndex;
+        }
+
+        previousChildIndex = childNodeIndex;
     }
+
+    return nodeIndex;
 }
+
+class ModelFormatLoader
+{
+public:
+    virtual ~ModelFormatLoader() = default;
+
+    virtual bool            canLoad(const std::filesystem::path& path, const ModelLoadingConfig& loadingCfg) const = 0;
+    virtual ModelLoadResult load(const std::filesystem::path& path, const ModelLoadingConfig& loadingCfg, AssetRegistry& assets) const = 0;
+};
 
 class AssimpFormatLoader : public ModelFormatLoader
 {
@@ -544,8 +595,7 @@ public:
         return false;
     }
 
-    ModelLoadResult load(const std::filesystem::path& path, const ModelLoadingConfig& loadingCfg, AssetRegistry& assets,
-                         CpuScene& scene) const override
+    ModelLoadResult load(const std::filesystem::path& path, const ModelLoadingConfig& loadingCfg, AssetRegistry& assets) const override
     {
         ModelLoadResult result;
 
@@ -602,7 +652,7 @@ public:
             return result;
         }
 
-        AssimpImportContext context{assets, scene, result.model, {}};
+        AssimpImportContext context{assets, result.model, {}};
         context.meshSubmeshIndices.reserve(assimpScene->mNumMeshes);
         for (uint32_t meshIndex = 0; meshIndex < assimpScene->mNumMeshes; ++meshIndex)
         {
@@ -627,8 +677,12 @@ public:
             context.meshSubmeshIndices.push_back(assets.addModelSubmesh(result.model, submesh));
         }
 
-        result.rootNode = scene.create3DNode(modelName, scene.rootNode());
-        appendAssimpNode(assimpScene->mRootNode, result.rootNode, context);
+        if (appendAssimpNode(assimpScene->mRootNode, INVALID_SCENE_ID, glm::mat4(1.0f), context) == INVALID_SCENE_ID)
+        {
+            result.message = "Model node hierarchy import failed.";
+            return result;
+        }
+
         result.success = true;
         return result;
     }
@@ -646,8 +700,7 @@ uint32_t ModelLoadingConfig::DefaultAssimpPostProcessFlags()
            aiProcess_TransformUVCoords;
 }
 
-ModelLoadResult loadModelFromFile(const std::filesystem::path& path, const ModelLoadingConfig& loadingCfg, AssetRegistry& assets,
-                                  CpuScene& scene)
+ModelLoadResult model_loading::loadModelAssetFromFile(const std::filesystem::path& path, const ModelLoadingConfig& loadingCfg, AssetRegistry& assets)
 {
     const AssimpFormatLoader gltfLoader(ModelFileFormat::eGltf);
     const AssimpFormatLoader objLoader(ModelFileFormat::eObj);
@@ -657,7 +710,7 @@ ModelLoadResult loadModelFromFile(const std::filesystem::path& path, const Model
     {
         if (loader->canLoad(path, loadingCfg))
         {
-            return loader->load(path, loadingCfg, assets, scene);
+            return loader->load(path, loadingCfg, assets);
         }
     }
 

@@ -10,6 +10,11 @@
 namespace Play
 {
 
+class AssetRegistry;
+class CpuScene;
+struct ModelLoadingConfig;
+struct ModelLoadResult;
+
 constexpr uint32_t INVALID_SCENE_ID = ~0u;
 
 struct ModelAssetID
@@ -66,9 +71,12 @@ public:
 class CpuModelComponent : public CpuSceneComponent
 {
 public:
+    std::string  sourcePath;
     ModelAssetID model;
     uint32_t     firstRenderable = 0;
     uint32_t     renderableCount = INVALID_SCENE_ID;
+
+    ModelLoadResult loadFromFile(CpuScene& scene, AssetRegistry& assets, const std::string& path, const ModelLoadingConfig& loadingCfg);
 
     bool hasModel() const
     {
@@ -448,6 +456,8 @@ public:
     }
 
 private:
+    friend class CpuModelComponent;
+
     CpuSceneNodeID makeNodeID(uint32_t index) const;
     CpuSceneNodeID createNode(const std::string& name, CpuSceneNodeID parent, CpuSceneNodeType type);
     void           attachChild(CpuSceneNodeID parent, CpuSceneNodeID child);

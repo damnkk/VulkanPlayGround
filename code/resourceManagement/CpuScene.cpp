@@ -1,7 +1,28 @@
 #include "CpuScene.h"
+#include "ModelLoadingInternal.h"
 
 namespace Play
 {
+
+ModelLoadResult CpuModelComponent::loadFromFile(CpuScene& scene, AssetRegistry& assets, const std::string& path,
+                                                const ModelLoadingConfig& loadingCfg)
+{
+    ModelLoadResult result = model_loading::loadModelAssetFromFile(path, loadingCfg, assets);
+    if (!result.success)
+    {
+        return result;
+    }
+
+    const ModelAsset* modelAsset = assets.getModel(result.model);
+
+    sourcePath       = path;
+    model            = result.model;
+    firstRenderable  = 0;
+    renderableCount  = modelAsset ? static_cast<uint32_t>(modelAsset->renderables.size()) : INVALID_SCENE_ID;
+
+    scene.markDirty();
+    return result;
+}
 
 ComponentStore::~ComponentStore()
 {
