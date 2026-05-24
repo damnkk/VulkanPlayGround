@@ -56,8 +56,21 @@ void RasterGpuScene::rebuild(const CpuScene& scene, AssetRegistry& assets)
             continue;
         }
 
-        for (const ModelRenderableTemplate& renderable : model->renderables)
+        uint32_t firstRenderable = 0;
+        uint32_t renderableEnd   = static_cast<uint32_t>(model->renderables.size());
+        if (!modelComponent->usesAllRenderables())
         {
+            firstRenderable = modelComponent->firstRenderable;
+            renderableEnd   = firstRenderable + modelComponent->renderableCount;
+            if (renderableEnd > model->renderables.size())
+            {
+                renderableEnd = static_cast<uint32_t>(model->renderables.size());
+            }
+        }
+
+        for (uint32_t renderableIndex = firstRenderable; renderableIndex < renderableEnd; ++renderableIndex)
+        {
+            const ModelRenderableTemplate& renderable = model->renderables[renderableIndex];
             if (renderable.submeshIndex >= model->submeshes.size())
             {
                 continue;

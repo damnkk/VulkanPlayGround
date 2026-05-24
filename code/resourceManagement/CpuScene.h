@@ -67,10 +67,17 @@ class CpuModelComponent : public CpuSceneComponent
 {
 public:
     ModelAssetID model;
+    uint32_t     firstRenderable = 0;
+    uint32_t     renderableCount = INVALID_SCENE_ID;
 
     bool hasModel() const
     {
         return model.isValid();
+    }
+
+    bool usesAllRenderables() const
+    {
+        return renderableCount == INVALID_SCENE_ID;
     }
 
     RTTR_ENABLE(CpuSceneComponent)

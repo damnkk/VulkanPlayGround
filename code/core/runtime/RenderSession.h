@@ -41,6 +41,11 @@ public:
         eRCount
     } _renderMode = eGaussianRendering;
 
+    RenderMode getRenderMode() const
+    {
+        return _renderMode;
+    }
+
 protected:
     // SceneManager
     // RenderPassCache

@@ -72,6 +72,42 @@ set_property(TARGET upsweep_slang PROPERTY FOLDER "ThirdParty/vrdx")
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/External/spz)
 
 #####################################################################################
+# assimp
+function(add_assimp_dependency)
+  set(BUILD_SHARED_LIBS OFF)
+  set(ASSIMP_BUILD_ASSIMP_TOOLS OFF)
+  set(ASSIMP_BUILD_SAMPLES OFF)
+  set(ASSIMP_BUILD_TESTS OFF)
+  set(ASSIMP_INSTALL OFF)
+  set(ASSIMP_WARNINGS_AS_ERRORS OFF)
+  set(ASSIMP_NO_EXPORT ON)
+
+  if(TARGET zlibstatic)
+    set(_assimp_zlib_target zlibstatic)
+    set(_assimp_zlib_include_target zlibstatic)
+    if(TARGET zlib)
+      set(_assimp_zlib_include_target zlib)
+    endif()
+  elseif(TARGET zlib)
+    set(_assimp_zlib_target zlib)
+    set(_assimp_zlib_include_target zlib)
+  endif()
+
+  if(_assimp_zlib_target)
+    set(ZLIB_FOUND TRUE)
+    set(ZLIB_LIBRARIES ${_assimp_zlib_target})
+    set(ASSIMP_BUILD_ZLIB ON)
+    get_target_property(_assimp_zlib_include_dirs ${_assimp_zlib_include_target} INTERFACE_INCLUDE_DIRECTORIES)
+    if(_assimp_zlib_include_dirs)
+      set(ZLIB_INCLUDE_DIR ${_assimp_zlib_include_dirs})
+    endif()
+  endif()
+
+  add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/External/assimp EXCLUDE_FROM_ALL)
+endfunction()
+add_assimp_dependency()
+
+#####################################################################################
 # Executable
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES})
@@ -131,7 +167,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   nvpro2::nvutils
   nvpro2::nvvk
   nvpro2::nvvkglsl
-  nvpro2::nvvkgltf
   SDL3::SDL3
   vk_radix_sort
   webview::core
@@ -140,6 +175,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   crc32c
   "${CMAKE_CURRENT_SOURCE_DIR}/External/sqlite3/libsqlite3.lib"
   spz
+  assimp::assimp
 )
 
 add_project_definitions(${PROJECT_NAME})

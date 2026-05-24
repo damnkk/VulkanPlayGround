@@ -1,6 +1,7 @@
 #ifndef PLAY_CODE_CORE_RUNTIME_VULKANRUNTIME_H
 #define PLAY_CODE_CORE_RUNTIME_VULKANRUNTIME_H
 
+#include "RenderSession.h"
 #include "RuntimeGuiHost.h"
 #include "SdlWindow.h"
 #include <memory>
@@ -16,7 +17,6 @@ class DescriptorSetCache;
 class FrameBufferCache;
 class PipelineCacheManager;
 class RefCounted;
-class RenderSession;
 class RenderPassCache;
 class Texture;
 class Buffer;
@@ -188,6 +188,11 @@ public:
     const SdlInputState& getInputState() const
     {
         return _window.getInputState();
+    }
+
+    Play::RenderSession::RenderMode getRenderMode() const
+    {
+        return _renderSession ? _renderSession->getRenderMode() : Play::RenderSession::eDeferRendering;
     }
 
     double getDeltaTime() const
