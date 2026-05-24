@@ -6,7 +6,6 @@
 #include "CpuScene.h"
 #include "SceneAssets.h"
 #include "RasterGpuScene.h"
-#include "ModelLoading.h"
 #include "core/RefCounted.h"
 namespace Play
 {
@@ -31,11 +30,6 @@ public:
     {
         return _gpuScene ? _gpuScene->getType() : GpuSceneType::eRaster;
     }
-    ModelLoadResult loadModel(const std::filesystem::path& filename, const ModelLoadingConfig& loadingCfg = ModelLoadingConfig{});
-    template <typename T>
-    SceneManager& addScene(std::filesystem::path filename);
-    template <typename T>
-    SceneManager& addScenes(std::vector<std::filesystem::path> filenames);
     GaussianScene& getGaussianScene()
     {
         return *static_cast<GaussianScene*>(_gpuScene.get());

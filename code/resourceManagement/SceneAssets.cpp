@@ -123,6 +123,19 @@ TextureAssetID AssetRegistry::addModelLocalTexture(ModelAssetID modelID, Texture
     return textureID;
 }
 
+uint32_t AssetRegistry::addModelNode(ModelAssetID modelID, const ModelNodeAsset& node)
+{
+    ModelAsset* model = getModel(modelID);
+    if (!model)
+    {
+        return INVALID_SCENE_ID;
+    }
+
+    const uint32_t index = static_cast<uint32_t>(model->nodes.size());
+    model->nodes.push_back(node);
+    return index;
+}
+
 uint32_t AssetRegistry::addModelSubmesh(ModelAssetID modelID, const ModelSubmeshAsset& submesh)
 {
     ModelAsset* model = getModel(modelID);

@@ -37,19 +37,6 @@ struct ModelLoadResult
     std::string    message;
 };
 
-class ModelFormatLoader
-{
-public:
-    virtual ~ModelFormatLoader() = default;
-
-    virtual bool            canLoad(const std::filesystem::path& path, const ModelLoadingConfig& loadingCfg) const = 0;
-    virtual ModelLoadResult load(const std::filesystem::path& path, const ModelLoadingConfig& loadingCfg, AssetRegistry& assets,
-                                 CpuScene& scene) const = 0;
-};
-
-ModelLoadResult loadModelFromFile(const std::filesystem::path& path, const ModelLoadingConfig& loadingCfg, AssetRegistry& assets,
-                                  CpuScene& scene);
-
 } // namespace Play
 
 #endif // MODEL_LOADING_H

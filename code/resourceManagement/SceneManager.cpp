@@ -1,5 +1,4 @@
 #include "SceneManager.h"
-#include "nvutils/parallel_work.hpp"
 #include "Resource.h"
 #include "VulkanDriver.h"
 #include "DescriptorManager.h"
@@ -60,50 +59,6 @@ SceneManager::SceneManager(GpuSceneType gpuSceneType) : _gpuScene(createGpuScene
                                         VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT); // s_SceneTextures[]
 
     vkDriver->getDescriptorSetCache()->initSceneDescriptorSets(_sceneDescriptorBindings);
-}
-
-ModelLoadResult SceneManager::loadModel(const std::filesystem::path& filename, const ModelLoadingConfig& loadingCfg)
-{
-    std::lock_guard<std::mutex> lock(_cpuSceneMutex);
-    ModelLoadResult            result = loadModelFromFile(filename, loadingCfg, _assetRegistry, _cpuScene);
-    if (!result.success)
-    {
-        return result;
-    }
-
-    _cpuScene.updateWorldTransforms();
-    if (_gpuScene && _gpuScene->getType() != GpuSceneType::eGaussian)
-    {
-        RasterGpuScene* rasterScene = getRasterScene(_gpuScene.get());
-        const size_t    previousBindlessTextureCount = rasterScene ? rasterScene->getBindlessTextures().size() : 0;
-        _gpuScene->rebuild(_cpuScene, _assetRegistry);
-        if (rasterScene && rasterScene->getBindlessTextures().size() != previousBindlessTextureCount)
-        {
-            updateDescriptorSet();
-        }
-    }
-    return result;
-}
-
-template <typename T>
-SceneManager& SceneManager::addScene(std::filesystem::path filename)
-{
-    if (typeid(T) == typeid(GaussianScene))
-    {
-        getGaussianScene().load(filename);
-    }
-    else
-    {
-        loadModel(filename);
-    }
-    return *this;
-}
-
-template <typename T>
-SceneManager& SceneManager::addScenes(std::vector<std::filesystem::path> filenames)
-{
-    nvutils::parallel_batches<8>(filenames.size(), [&](size_t i) { addScene<T>(filenames[i]); }, 4);
-    return *this;
 }
 
 void SceneManager::addSkyBoxTexture(const RefPtr<Texture>& texture)
@@ -173,8 +128,5 @@ void SceneManager::update()
 }
 
 SceneManager::~SceneManager() = default;
-
-template SceneManager& SceneManager::addScene<GaussianScene>(std::filesystem::path);
-template SceneManager& SceneManager::addScenes<GaussianScene>(std::vector<std::filesystem::path>);
 
 } // namespace Play

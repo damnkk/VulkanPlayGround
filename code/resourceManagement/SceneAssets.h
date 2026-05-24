@@ -147,9 +147,22 @@ struct ModelSubmeshAsset
     glm::vec3       boundsMax = glm::vec3(0.0f);
 };
 
+struct ModelNodeAsset
+{
+    std::string name;
+    uint32_t    parent          = INVALID_SCENE_ID;
+    uint32_t    firstChild      = INVALID_SCENE_ID;
+    uint32_t    nextSibling     = INVALID_SCENE_ID;
+    glm::mat4   localTransform  = glm::mat4(1.0f);
+    glm::mat4   modelTransform  = glm::mat4(1.0f);
+    uint32_t    firstRenderable = 0;
+    uint32_t    renderableCount = 0;
+};
+
 struct ModelRenderableTemplate
 {
     uint32_t  submeshIndex = INVALID_SCENE_ID;
+    uint32_t  nodeIndex    = INVALID_SCENE_ID;
     glm::mat4 localToModel = glm::mat4(1.0f);
 };
 
@@ -166,6 +179,7 @@ struct ModelAsset
     std::vector<uint32_t>               indices;
     std::vector<TextureAssetID>          localTextures;
     std::vector<MaterialAssetID>         materials;
+    std::vector<ModelNodeAsset>          nodes;
     std::vector<ModelSubmeshAsset>       submeshes;
     std::vector<ModelRenderableTemplate> renderables;
     uint32_t                             generation = 1;
@@ -183,6 +197,7 @@ public:
     ModelAssetID    registerModel(const std::string& name, const std::filesystem::path& sourcePath);
 
     TextureAssetID addModelLocalTexture(ModelAssetID modelID, TextureAssetID textureID);
+    uint32_t       addModelNode(ModelAssetID modelID, const ModelNodeAsset& node);
     uint32_t       addModelSubmesh(ModelAssetID modelID, const ModelSubmeshAsset& submesh);
     uint32_t       addModelRenderable(ModelAssetID modelID, const ModelRenderableTemplate& renderable);
 
