@@ -4,37 +4,12 @@
 namespace Play
 {
 
-namespace
-{
-CpuSceneComponentID findModelComponentID(CpuScene& scene, CpuModelComponent* target)
-{
-    for (const CpuSceneNode& node : scene.getNodes())
-    {
-        if (!node.alive)
-        {
-            continue;
-        }
-
-        for (CpuSceneComponentID componentID : node.components)
-        {
-            if (scene.getComponent<CpuModelComponent>(componentID) == target)
-            {
-                return componentID;
-            }
-        }
-    }
-    return {};
-}
-} // namespace
-
 ModelLoadRequestID CpuModelComponent::requestLoadFromFile(CpuScene& scene, AssetLoadingServer& loadingServer, const std::string& path,
                                                           const ModelLoadingConfig& loadingCfg)
 {
-    const CpuSceneComponentID componentID = findModelComponentID(scene, this);
-
     sourcePath      = path;
     loadingConfig   = loadingCfg;
-    request         = loadingServer.requestModelLoad(componentID, path, loadingCfg);
+    request         = loadingServer.requestModelLoad(self, path, loadingCfg);
     model           = {};
     firstRenderable = 0;
     renderableCount = INVALID_SCENE_ID;

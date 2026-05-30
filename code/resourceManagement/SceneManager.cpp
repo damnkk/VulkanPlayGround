@@ -21,41 +21,6 @@ std::unique_ptr<GpuScene> createGpuScene(GpuSceneType type)
             return std::make_unique<RasterGpuScene>();
     }
 }
-
-bool isSameRequest(ModelLoadRequestID lhs, ModelLoadRequestID rhs)
-{
-    return lhs.index == rhs.index && lhs.generation == rhs.generation;
-}
-
-CpuModelComponent* findModelComponentByRequest(CpuScene& scene, const ModelLoadRequest& request)
-{
-    if (request.requester.isValid())
-    {
-        CpuModelComponent* component = scene.getComponent<CpuModelComponent>(request.requester);
-        if (component)
-        {
-            return component;
-        }
-    }
-
-    for (const CpuSceneNode& node : scene.getNodes())
-    {
-        if (!node.alive)
-        {
-            continue;
-        }
-
-        for (CpuSceneComponentID componentID : node.components)
-        {
-            CpuModelComponent* component = scene.getComponent<CpuModelComponent>(componentID);
-            if (component && isSameRequest(component->request, request.id))
-            {
-                return component;
-            }
-        }
-    }
-    return nullptr;
-}
 } // namespace
 
 SceneManager::SceneManager(GpuSceneType gpuSceneType) : _gpuScene(createGpuScene(gpuSceneType))
@@ -134,7 +99,7 @@ void SceneManager::update()
     ModelLoadCompletion completion;
     while (_assetLoadingServer.popCompletedModel(completion))
     {
-        CpuModelComponent* component = findModelComponentByRequest(_cpuScene, completion.request);
+        CpuModelComponent* component = _cpuScene.getComponent<CpuModelComponent>(completion.request.requester);
         if (!component)
         {
             continue;
@@ -144,8 +109,9 @@ void SceneManager::update()
         {
             component->model           = _gpuScene->registerModel(std::move(completion.result.model));
             component->firstRenderable = 0;
-            component->renderableCount = component->model.isValid() ? static_cast<uint32_t>(_gpuScene->getModels()[component->model.index].submeshes.size()) :
-                                                                      INVALID_SCENE_ID;
+            component->renderableCount = component->model.isValid()
+                                              ? static_cast<uint32_t>(_gpuScene->getModels()[component->model.index].submeshes.size())
+                                              : INVALID_SCENE_ID;
             component->loadState       = CpuModelComponent::LoadState::eLoaded;
             component->loadMessage.clear();
         }

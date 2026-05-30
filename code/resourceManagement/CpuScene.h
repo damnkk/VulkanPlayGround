@@ -62,6 +62,8 @@ class CpuSceneComponent
 public:
     virtual ~CpuSceneComponent() = default;
 
+    CpuSceneComponentID self;
+    CpuSceneNodeID      ownerNode;
     uint32_t generation = 1;
     bool     visible    = true;
 
@@ -212,6 +214,7 @@ private:
             componentID.typeID     = typeID;
             componentID.index      = index;
             componentID.generation = _items[index].generation;
+            _items[index].self     = componentID;
             return componentID;
         }
 
@@ -251,6 +254,8 @@ private:
             }
 
             _items[index].visible = false;
+            _items[index].self      = {};
+            _items[index].ownerNode = {};
             ++_items[index].generation;
             _freeSlots.push_back(index);
         }
@@ -402,6 +407,10 @@ public:
         }
 
         T* component = node->addComponent<T>(_components);
+        if (component)
+        {
+            component->ownerNode = nodeID;
+        }
         markDirty();
         return component;
     }
