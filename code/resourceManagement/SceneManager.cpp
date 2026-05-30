@@ -22,22 +22,39 @@ std::unique_ptr<GpuScene> createGpuScene(GpuSceneType type)
     }
 }
 
-RasterGpuScene* getRasterScene(GpuScene* gpuScene)
+bool isSameRequest(ModelLoadRequestID lhs, ModelLoadRequestID rhs)
 {
-    if (!gpuScene || gpuScene->getType() != GpuSceneType::eRaster)
-    {
-        return nullptr;
-    }
-    return static_cast<RasterGpuScene*>(gpuScene);
+    return lhs.index == rhs.index && lhs.generation == rhs.generation;
 }
 
-const RasterGpuScene* getRasterScene(const GpuScene* gpuScene)
+CpuModelComponent* findModelComponentByRequest(CpuScene& scene, const ModelLoadRequest& request)
 {
-    if (!gpuScene || gpuScene->getType() != GpuSceneType::eRaster)
+    if (request.requester.isValid())
     {
-        return nullptr;
+        CpuModelComponent* component = scene.getComponent<CpuModelComponent>(request.requester);
+        if (component)
+        {
+            return component;
+        }
     }
-    return static_cast<const RasterGpuScene*>(gpuScene);
+
+    for (const CpuSceneNode& node : scene.getNodes())
+    {
+        if (!node.alive)
+        {
+            continue;
+        }
+
+        for (CpuSceneComponentID componentID : node.components)
+        {
+            CpuModelComponent* component = scene.getComponent<CpuModelComponent>(componentID);
+            if (component && isSameRequest(component->request, request.id))
+            {
+                return component;
+            }
+        }
+    }
+    return nullptr;
 }
 } // namespace
 
@@ -46,10 +63,6 @@ SceneManager::SceneManager(GpuSceneType gpuSceneType) : _gpuScene(createGpuScene
     if (_gpuScene)
     {
         _gpuScene->clear();
-        if (_gpuScene->getType() != GpuSceneType::eGaussian)
-        {
-            _gpuScene->rebuild(_cpuScene, _assetRegistry);
-        }
     }
 
     _sceneDescriptorBindings.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr); // g_SceneSkyTexture
@@ -70,22 +83,20 @@ void SceneManager::updateDescriptorSet()
 {
     std::vector<VkWriteDescriptorSet> writes;
 
-    const RasterGpuScene* rasterScene = getRasterScene(_gpuScene.get());
-
     VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
     write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
     write.dstBinding     = SceneTextureBinding;
     write.dstSet         = vkDriver->getDescriptorSetCache()->getSceneDescriptorSet().set;
 
     std::vector<VkDescriptorImageInfo> imageInfos;
-    if (rasterScene && !rasterScene->getBindlessTextures().empty())
+    if (_gpuScene && !_gpuScene->getSceneTextures().empty())
     {
-        const std::vector<RefPtr<Texture>>& rasterBindlessTextures = rasterScene->getBindlessTextures();
-        write.descriptorCount = static_cast<uint32_t>(rasterBindlessTextures.size());
-        imageInfos.resize(rasterBindlessTextures.size());
-        for (size_t i = 0; i < rasterBindlessTextures.size(); ++i)
+        const std::vector<RefPtr<Texture>>& sceneTextures = _gpuScene->getSceneTextures();
+        write.descriptorCount = static_cast<uint32_t>(sceneTextures.size());
+        imageInfos.resize(sceneTextures.size());
+        for (size_t i = 0; i < sceneTextures.size(); ++i)
         {
-            imageInfos[i].imageView   = rasterBindlessTextures[i]->descriptor.imageView;
+            imageInfos[i].imageView   = sceneTextures[i]->descriptor.imageView;
             imageInfos[i].sampler     = VK_NULL_HANDLE;
             imageInfos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         }
@@ -113,17 +124,51 @@ void SceneManager::updateDescriptorSet()
 
 void SceneManager::update()
 {
+    _assetLoadingServer.processPendingLoads();
+
     std::lock_guard<std::mutex> lock(_cpuSceneMutex);
     _cpuScene.updateWorldTransforms();
+
+    const size_t previousSceneTextureCount = _gpuScene ? _gpuScene->getSceneTextures().size() : 0;
+
+    ModelLoadCompletion completion;
+    while (_assetLoadingServer.popCompletedModel(completion))
+    {
+        CpuModelComponent* component = findModelComponentByRequest(_cpuScene, completion.request);
+        if (!component)
+        {
+            continue;
+        }
+
+        if (completion.result.success && _gpuScene)
+        {
+            component->model           = _gpuScene->registerModel(std::move(completion.result.model));
+            component->firstRenderable = 0;
+            component->renderableCount = component->model.isValid() ? static_cast<uint32_t>(_gpuScene->getModels()[component->model.index].submeshes.size()) :
+                                                                      INVALID_SCENE_ID;
+            component->loadState       = CpuModelComponent::LoadState::eLoaded;
+            component->loadMessage.clear();
+        }
+        else
+        {
+            component->model           = {};
+            component->firstRenderable = 0;
+            component->renderableCount = INVALID_SCENE_ID;
+            component->loadState       = CpuModelComponent::LoadState::eFailed;
+            component->loadMessage     = completion.result.message;
+        }
+
+        _cpuScene.notifyComponentChanged();
+    }
+
     if (_gpuScene && _gpuScene->getType() != GpuSceneType::eGaussian && _gpuScene->getSourceSceneRevision() != _cpuScene.getRevision())
     {
-        RasterGpuScene* rasterScene = getRasterScene(_gpuScene.get());
-        const size_t    previousBindlessTextureCount = rasterScene ? rasterScene->getBindlessTextures().size() : 0;
-        _gpuScene->rebuild(_cpuScene, _assetRegistry);
-        if (rasterScene && rasterScene->getBindlessTextures().size() != previousBindlessTextureCount)
-        {
-            updateDescriptorSet();
-        }
+        _gpuScene->updateTransforms(_cpuScene);
+    }
+
+    if (_gpuScene && _gpuScene->getSceneTextures().size() != previousSceneTextureCount)
+    {
+        updateDescriptorSet();
     }
 }
 

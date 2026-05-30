@@ -1,41 +1,52 @@
 #ifndef MODEL_LOADING_H
 #define MODEL_LOADING_H
 
+#include "ModelLoadingConfig.h"
 #include "SceneAssets.h"
 
 namespace Play
 {
 
-enum class ModelFileFormat : uint32_t
+struct ImportedModel
 {
-    eAuto,
-    eGltf,
-    eObj
+    ModelAssetPackage package;
 };
 
-struct ModelLoadingConfig
+struct OptimizedModel
 {
-    static uint32_t DefaultAssimpPostProcessFlags();
+    ModelAssetPackage package;
+};
 
-    ModelFileFormat format                  = ModelFileFormat::eAuto;
-    uint32_t        assimpPostProcessFlags  = DefaultAssimpPostProcessFlags();
-    uint32_t        extraAssimpProcessFlags = 0;
-    float           globalScale             = 1.0f;
-    bool            loadMaterials           = true;
-    bool            loadTextures            = true;
-    bool            registerEmbeddedTexturePlaceholders = true;
-    bool            srgbBaseColorTextures   = true;
-    bool            srgbEmissiveTextures    = true;
-    uint32_t        textureMipLevels        = 1;
+struct ModelImportResult
+{
+    bool          success = false;
+    ImportedModel model;
+    std::string   message;
+};
+
+struct ModelOptimizeResult
+{
+    bool           success = false;
+    OptimizedModel model;
+    std::string    message;
 };
 
 struct ModelLoadResult
 {
-    bool           success = false;
-    ModelAssetID   model;
-    CpuSceneNodeID rootNode;
-    std::string    message;
+    bool              success = false;
+    ModelAssetPackage model;
+    std::string       message;
 };
+
+namespace model_loading
+{
+
+ModelImportResult   importModelFromFile(const std::filesystem::path& path, const ModelLoadingConfig& loadingConfig);
+ModelOptimizeResult optimizeModel(ImportedModel&& importedModel, const ModelLoadingConfig& loadingConfig);
+ModelLoadResult     uploadModel(OptimizedModel&& optimizedModel, const ModelLoadingConfig& loadingConfig);
+ModelLoadResult     loadModelFromFile(const std::filesystem::path& path, const ModelLoadingConfig& loadingConfig);
+
+} // namespace model_loading
 
 } // namespace Play
 

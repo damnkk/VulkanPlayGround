@@ -1,27 +1,48 @@
 #include "CpuScene.h"
-#include "ModelLoadingInternal.h"
+#include "AssetLoadingServer.h"
 
 namespace Play
 {
 
-ModelLoadResult CpuModelComponent::loadFromFile(CpuScene& scene, AssetRegistry& assets, const std::string& path,
-                                                const ModelLoadingConfig& loadingCfg)
+namespace
 {
-    ModelLoadResult result = model_loading::loadModelAssetFromFile(path, loadingCfg, assets);
-    if (!result.success)
+CpuSceneComponentID findModelComponentID(CpuScene& scene, CpuModelComponent* target)
+{
+    for (const CpuSceneNode& node : scene.getNodes())
     {
-        return result;
+        if (!node.alive)
+        {
+            continue;
+        }
+
+        for (CpuSceneComponentID componentID : node.components)
+        {
+            if (scene.getComponent<CpuModelComponent>(componentID) == target)
+            {
+                return componentID;
+            }
+        }
     }
+    return {};
+}
+} // namespace
 
-    const ModelAsset* modelAsset = assets.getModel(result.model);
+ModelLoadRequestID CpuModelComponent::requestLoadFromFile(CpuScene& scene, AssetLoadingServer& loadingServer, const std::string& path,
+                                                          const ModelLoadingConfig& loadingCfg)
+{
+    const CpuSceneComponentID componentID = findModelComponentID(scene, this);
 
-    sourcePath       = path;
-    model            = result.model;
-    firstRenderable  = 0;
-    renderableCount  = modelAsset ? static_cast<uint32_t>(modelAsset->renderables.size()) : INVALID_SCENE_ID;
+    sourcePath      = path;
+    loadingConfig   = loadingCfg;
+    request         = loadingServer.requestModelLoad(componentID, path, loadingCfg);
+    model           = {};
+    firstRenderable = 0;
+    renderableCount = INVALID_SCENE_ID;
+    loadState       = request.isValid() ? LoadState::eQueued : LoadState::eFailed;
+    loadMessage.clear();
 
-    scene.markDirty();
-    return result;
+    scene.notifyComponentChanged();
+    return request;
 }
 
 ComponentStore::~ComponentStore()
@@ -274,6 +295,11 @@ void CpuScene::updateWorldTransforms()
 
     updateWorldRecursive(_rootNode, glm::mat4(1.0f), true);
     _transformDirty = false;
+}
+
+void CpuScene::notifyComponentChanged()
+{
+    markDirty();
 }
 
 CpuSceneNodeID CpuScene::makeNodeID(uint32_t index) const

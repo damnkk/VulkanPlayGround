@@ -1,6 +1,7 @@
 #ifndef CPU_SCENE_H
 #define CPU_SCENE_H
 
+#include "ModelLoadingConfig.h"
 #include "pch.h"
 #include <glm/glm.hpp>
 #include <rttr/rttr_enable.h>
@@ -10,9 +11,8 @@
 namespace Play
 {
 
-class AssetRegistry;
+class AssetLoadingServer;
 class CpuScene;
-struct ModelLoadingConfig;
 struct ModelLoadResult;
 
 constexpr uint32_t INVALID_SCENE_ID = ~0u;
@@ -71,12 +71,26 @@ public:
 class CpuModelComponent : public CpuSceneComponent
 {
 public:
+    enum class LoadState : uint32_t
+    {
+        eEmpty,
+        eQueued,
+        eLoading,
+        eLoaded,
+        eFailed
+    };
+
     std::string  sourcePath;
+    ModelLoadingConfig loadingConfig;
+    ModelLoadRequestID request;
     ModelAssetID model;
     uint32_t     firstRenderable = 0;
     uint32_t     renderableCount = INVALID_SCENE_ID;
+    LoadState    loadState       = LoadState::eEmpty;
+    std::string  loadMessage;
 
-    ModelLoadResult loadFromFile(CpuScene& scene, AssetRegistry& assets, const std::string& path, const ModelLoadingConfig& loadingCfg);
+    ModelLoadRequestID requestLoadFromFile(CpuScene& scene, AssetLoadingServer& loadingServer, const std::string& path,
+                                           const ModelLoadingConfig& loadingCfg);
 
     bool hasModel() const
     {
@@ -444,6 +458,7 @@ public:
     }
 
     void updateWorldTransforms();
+    void notifyComponentChanged();
 
     uint64_t getRevision() const
     {

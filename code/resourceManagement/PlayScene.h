@@ -23,11 +23,6 @@ public:
     }
 
     void clear() override;
-    void rebuild(const CpuScene& scene, AssetRegistry& assets) override
-    {
-        (void) scene;
-        (void) assets;
-    }
 
     bool load(const std::filesystem::path& path);
 

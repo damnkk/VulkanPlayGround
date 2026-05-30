@@ -1,4 +1,4 @@
-#include "ModelLoadingInternal.h"
+#include "ModelLoading.h"
 
 #include "nvutils/file_operations.hpp"
 #include <assimp/GltfMaterial.h>
@@ -13,6 +13,18 @@ namespace Play
 
 namespace
 {
+
+struct ImportedTextureSlot
+{
+    int         localTextureIndex = -1;
+    glm::mat2x3 uvTransform      = glm::mat2x3(1.0f);
+    int         texCoord         = 0;
+
+    bool hasTexture() const
+    {
+        return localTextureIndex >= 0;
+    }
+};
 
 std::string lowerAscii(std::string value)
 {
@@ -75,28 +87,6 @@ glm::mat4 toGlm(const aiMatrix4x4& matrix)
                      matrix.a4, matrix.b4, matrix.c4, matrix.d4);
 }
 
-uint32_t packColor(const aiColor4D& color)
-{
-    auto toByte = [](float value) -> uint32_t
-    {
-        if (value < 0.0f)
-        {
-            value = 0.0f;
-        }
-        if (value > 1.0f)
-        {
-            value = 1.0f;
-        }
-        return static_cast<uint32_t>(value * 255.0f + 0.5f);
-    };
-
-    const uint32_t r = toByte(color.r);
-    const uint32_t g = toByte(color.g);
-    const uint32_t b = toByte(color.b);
-    const uint32_t a = toByte(color.a);
-    return r | (g << 8) | (b << 16) | (a << 24);
-}
-
 std::string makeIndexedName(const char* prefix, uint32_t index)
 {
     return std::string(prefix) + "_" + std::to_string(index);
@@ -126,31 +116,68 @@ bool isEmbeddedTextureName(const aiString& texturePath)
     return texturePath.length > 0 && texturePath.C_Str()[0] == '*';
 }
 
-int findLocalTextureIndex(const AssetRegistry& assets, ModelAssetID modelID, const std::filesystem::path& sourcePath, const std::string& name,
-                          bool embedded)
+AABB computeBounds(const aiMesh* mesh)
 {
-    const ModelAsset* model = assets.getModel(modelID);
-    if (!model)
+    AABB bounds;
+    bool hasBounds = false;
+
+    if (!mesh)
     {
-        return -1;
+        return bounds;
     }
 
-    for (uint32_t localIndex = 0; localIndex < model->localTextures.size(); ++localIndex)
+    for (uint32_t vertexIndex = 0; vertexIndex < mesh->mNumVertices; ++vertexIndex)
     {
-        const TextureAsset* texture = assets.getTexture(model->localTextures[localIndex]);
-        if (!texture)
-        {
-            continue;
-        }
+        const aiVector3D position = mesh->HasPositions() ? mesh->mVertices[vertexIndex] : aiVector3D(0.0f, 0.0f, 0.0f);
+        const glm::vec3  p(position.x, position.y, position.z);
 
+        if (!hasBounds)
+        {
+            bounds.min = p;
+            bounds.max = p;
+            hasBounds  = true;
+        }
+        else
+        {
+            bounds.min = glm::min(bounds.min, p);
+            bounds.max = glm::max(bounds.max, p);
+        }
+    }
+
+    return bounds;
+}
+
+uint32_t countTriangleIndices(const aiMesh* mesh)
+{
+    uint32_t indexCount = 0;
+    if (!mesh)
+    {
+        return indexCount;
+    }
+
+    for (uint32_t faceIndex = 0; faceIndex < mesh->mNumFaces; ++faceIndex)
+    {
+        if (mesh->mFaces[faceIndex].mNumIndices == 3)
+        {
+            indexCount += 3;
+        }
+    }
+    return indexCount;
+}
+
+int findLocalTextureIndex(const ModelAssetPackage& package, const std::filesystem::path& sourcePath, const std::string& name, bool embedded)
+{
+    for (uint32_t localIndex = 0; localIndex < package.textures.size(); ++localIndex)
+    {
+        const ModelTextureResource& texture = package.textures[localIndex];
         if (embedded)
         {
-            if (texture->sourcePath.empty() && texture->name == name)
+            if (texture.sourcePath.empty() && texture.name == name)
             {
                 return static_cast<int>(localIndex);
             }
         }
-        else if (texture->sourcePath == sourcePath)
+        else if (texture.sourcePath == sourcePath)
         {
             return static_cast<int>(localIndex);
         }
@@ -159,7 +186,7 @@ int findLocalTextureIndex(const AssetRegistry& assets, ModelAssetID modelID, con
     return -1;
 }
 
-int ensureLocalTextureIndex(AssetRegistry& assets, ModelAssetID modelID, const std::filesystem::path& modelPath, const aiScene* assimpScene,
+int ensureLocalTextureIndex(ModelAssetPackage& package, const std::filesystem::path& modelPath, const aiScene* assimpScene,
                             const aiString& texturePath, const ModelLoadingConfig& loadingCfg, bool isSrgb)
 {
     if (!loadingCfg.loadTextures)
@@ -180,7 +207,7 @@ int ensureLocalTextureIndex(AssetRegistry& assets, ModelAssetID modelID, const s
         name = texturePath.C_Str();
     }
 
-    const int existingLocalIndex = findLocalTextureIndex(assets, modelID, sourcePath, name, embedded);
+    const int existingLocalIndex = findLocalTextureIndex(package, sourcePath, name, embedded);
     if (existingLocalIndex >= 0)
     {
         return existingLocalIndex;
@@ -188,7 +215,7 @@ int ensureLocalTextureIndex(AssetRegistry& assets, ModelAssetID modelID, const s
 
     if (embedded && assimpScene)
     {
-        const char* embeddedName = texturePath.C_Str() + 1;
+        const char* embeddedName  = texturePath.C_Str() + 1;
         int         embeddedIndex = 0;
         while (*embeddedName)
         {
@@ -205,28 +232,19 @@ int ensureLocalTextureIndex(AssetRegistry& assets, ModelAssetID modelID, const s
         }
     }
 
-    TextureAssetID textureID = assets.registerTexture(name, sourcePath);
-    TextureAsset*  texture   = assets.getTexture(textureID);
-    if (texture)
-    {
-        texture->mipLevels = loadingCfg.textureMipLevels;
-        texture->isSrgb    = isSrgb;
-    }
+    ModelTextureResource texture;
+    texture.name       = name;
+    texture.sourcePath = sourcePath;
+    texture.mipLevels  = loadingCfg.textureMipLevels;
+    texture.isSrgb     = isSrgb;
 
-    ModelAsset* model = assets.getModel(modelID);
-    if (!model)
-    {
-        return -1;
-    }
-
-    const int localIndex = static_cast<int>(model->localTextures.size());
-    assets.addModelLocalTexture(modelID, textureID);
+    const int localIndex = static_cast<int>(package.textures.size());
+    package.textures.push_back(texture);
     return localIndex;
 }
 
-void readTextureSlot(const aiMaterial* material, aiTextureType textureType, ImportedMaterialTextureSlot& slot, AssetRegistry& assets,
-                     ModelAssetID modelID, const std::filesystem::path& modelPath, const aiScene* assimpScene,
-                     const ModelLoadingConfig& loadingCfg, bool isSrgb)
+void readTextureSlot(const aiMaterial* material, aiTextureType textureType, ImportedTextureSlot& slot, ModelAssetPackage& package,
+                     const std::filesystem::path& modelPath, const aiScene* assimpScene, const ModelLoadingConfig& loadingCfg, bool isSrgb)
 {
     if (!material || material->GetTextureCount(textureType) == 0)
     {
@@ -240,7 +258,7 @@ void readTextureSlot(const aiMaterial* material, aiTextureType textureType, Impo
         return;
     }
 
-    slot.localTextureIndex = ensureLocalTextureIndex(assets, modelID, modelPath, assimpScene, texturePath, loadingCfg, isSrgb);
+    slot.localTextureIndex = ensureLocalTextureIndex(package, modelPath, assimpScene, texturePath, loadingCfg, isSrgb);
     slot.texCoord          = static_cast<int>(uvIndex);
 
     aiUVTransform transform;
@@ -257,64 +275,75 @@ void readTextureSlot(const aiMaterial* material, aiTextureType textureType, Impo
     }
 }
 
-ImportedMaterialDesc importMaterial(const aiMaterial* material, AssetRegistry& assets, ModelAssetID modelID,
-                                    const std::filesystem::path& modelPath, const aiScene* assimpScene,
-                                    const ModelLoadingConfig& loadingCfg, uint32_t materialIndex)
+uint16_t appendTextureInfo(ModelAssetPackage& package, const ImportedTextureSlot& slot)
 {
-    ImportedMaterialDesc desc;
-    desc.name = makeIndexedName("Material", materialIndex);
-    if (!material)
+    if (!slot.hasTexture() || package.textureInfos.size() >= 0xFFFF)
     {
-        return desc;
+        return 0;
     }
 
-    aiString name;
-    if (material->Get(AI_MATKEY_NAME, name) == AI_SUCCESS && name.length > 0)
+    shaderio::GltfTextureInfo textureInfo = shaderio::defaultGltfTextureInfo();
+    textureInfo.index    = slot.localTextureIndex;
+    textureInfo.texCoord = slot.texCoord;
+    textureInfo.uvTransform =
+        shaderio::float3x2(slot.uvTransform[0][0], slot.uvTransform[1][0], slot.uvTransform[0][1], slot.uvTransform[1][1],
+                           slot.uvTransform[0][2], slot.uvTransform[1][2]);
+
+    const uint16_t textureInfoIndex = static_cast<uint16_t>(package.textureInfos.size());
+    package.textureInfos.push_back(textureInfo);
+    return textureInfoIndex;
+}
+
+shaderio::GltfShadeMaterial importMaterial(const aiMaterial* material, ModelAssetPackage& package, const std::filesystem::path& modelPath,
+                                           const aiScene* assimpScene, const ModelLoadingConfig& loadingCfg)
+{
+    shaderio::GltfShadeMaterial importedMaterial = shaderio::defaultGltfMaterial();
+    if (!material)
     {
-        desc.name = name.C_Str();
+        return importedMaterial;
     }
 
     aiColor4D baseColor;
     if (aiGetMaterialColor(material, AI_MATKEY_BASE_COLOR, &baseColor) == AI_SUCCESS ||
         aiGetMaterialColor(material, AI_MATKEY_COLOR_DIFFUSE, &baseColor) == AI_SUCCESS)
     {
-        desc.parameters.pbrBaseColorFactor = glm::vec4(baseColor.r, baseColor.g, baseColor.b, baseColor.a);
+        importedMaterial.pbrBaseColorFactor = shaderio::float4(baseColor.r, baseColor.g, baseColor.b, baseColor.a);
     }
 
     aiColor4D emissive;
     if (aiGetMaterialColor(material, AI_MATKEY_COLOR_EMISSIVE, &emissive) == AI_SUCCESS)
     {
-        desc.parameters.emissiveFactor = glm::vec3(emissive.r, emissive.g, emissive.b);
+        importedMaterial.emissiveFactor = shaderio::float3(emissive.r, emissive.g, emissive.b);
     }
 
     float metallic = 0.0f;
     if (aiGetMaterialFloat(material, AI_MATKEY_METALLIC_FACTOR, &metallic) == AI_SUCCESS)
     {
-        desc.parameters.pbrMetallicFactor = metallic;
+        importedMaterial.pbrMetallicFactor = metallic;
     }
 
     float roughness = 1.0f;
     if (aiGetMaterialFloat(material, AI_MATKEY_ROUGHNESS_FACTOR, &roughness) == AI_SUCCESS)
     {
-        desc.parameters.pbrRoughnessFactor = roughness;
+        importedMaterial.pbrRoughnessFactor = roughness;
     }
 
     float opacity = 1.0f;
     if (aiGetMaterialFloat(material, AI_MATKEY_OPACITY, &opacity) == AI_SUCCESS)
     {
-        desc.parameters.pbrBaseColorFactor.a = opacity;
+        importedMaterial.pbrBaseColorFactor.a = opacity;
     }
 
     int twoSided = 0;
     if (aiGetMaterialInteger(material, AI_MATKEY_TWOSIDED, &twoSided) == AI_SUCCESS)
     {
-        desc.parameters.doubleSided = twoSided != 0 ? 1 : 0;
+        importedMaterial.doubleSided = twoSided != 0 ? 1 : 0;
     }
 
     float alphaCutoff = 0.5f;
     if (aiGetMaterialFloat(material, AI_MATKEY_GLTF_ALPHACUTOFF, &alphaCutoff) == AI_SUCCESS)
     {
-        desc.parameters.alphaCutoff = alphaCutoff;
+        importedMaterial.alphaCutoff = alphaCutoff;
     }
 
     aiString alphaMode;
@@ -322,239 +351,132 @@ ImportedMaterialDesc importMaterial(const aiMaterial* material, AssetRegistry& a
     {
         if (sameText(alphaMode.C_Str(), "MASK"))
         {
-            desc.parameters.alphaMode = shaderio::eAlphaModeMask;
+            importedMaterial.alphaMode = shaderio::eAlphaModeMask;
         }
         else if (sameText(alphaMode.C_Str(), "BLEND"))
         {
-            desc.parameters.alphaMode = shaderio::eAlphaModeBlend;
+            importedMaterial.alphaMode = shaderio::eAlphaModeBlend;
         }
         else
         {
-            desc.parameters.alphaMode = shaderio::eAlphaModeOpaque;
+            importedMaterial.alphaMode = shaderio::eAlphaModeOpaque;
         }
     }
-    else if (desc.parameters.pbrBaseColorFactor.a < 1.0f)
+    else if (importedMaterial.pbrBaseColorFactor.a < 1.0f)
     {
-        desc.parameters.alphaMode = shaderio::eAlphaModeBlend;
+        importedMaterial.alphaMode = shaderio::eAlphaModeBlend;
     }
 
     if (!loadingCfg.loadTextures)
     {
-        return desc;
+        return importedMaterial;
     }
 
-    readTextureSlot(material, aiTextureType_BASE_COLOR, desc.textures.baseColor, assets, modelID, modelPath, assimpScene, loadingCfg,
+    ImportedTextureSlot baseColorSlot;
+    readTextureSlot(material, aiTextureType_BASE_COLOR, baseColorSlot, package, modelPath, assimpScene, loadingCfg,
                     loadingCfg.srgbBaseColorTextures);
-    if (!desc.textures.baseColor.hasTexture())
+    if (!baseColorSlot.hasTexture())
     {
-        readTextureSlot(material, aiTextureType_DIFFUSE, desc.textures.baseColor, assets, modelID, modelPath, assimpScene, loadingCfg,
+        readTextureSlot(material, aiTextureType_DIFFUSE, baseColorSlot, package, modelPath, assimpScene, loadingCfg,
                         loadingCfg.srgbBaseColorTextures);
     }
+    importedMaterial.pbrBaseColorTexture = appendTextureInfo(package, baseColorSlot);
 
-    readTextureSlot(material, aiTextureType_NORMALS, desc.textures.normal, assets, modelID, modelPath, assimpScene, loadingCfg, false);
-    if (!desc.textures.normal.hasTexture())
+    ImportedTextureSlot normalSlot;
+    readTextureSlot(material, aiTextureType_NORMALS, normalSlot, package, modelPath, assimpScene, loadingCfg, false);
+    if (!normalSlot.hasTexture())
     {
-        readTextureSlot(material, aiTextureType_NORMAL_CAMERA, desc.textures.normal, assets, modelID, modelPath, assimpScene, loadingCfg, false);
+        readTextureSlot(material, aiTextureType_NORMAL_CAMERA, normalSlot, package, modelPath, assimpScene, loadingCfg, false);
     }
+    importedMaterial.normalTexture = appendTextureInfo(package, normalSlot);
 
-    readTextureSlot(material, aiTextureType_GLTF_METALLIC_ROUGHNESS, desc.textures.metallicRoughness, assets, modelID, modelPath, assimpScene,
-                    loadingCfg, false);
-    if (!desc.textures.metallicRoughness.hasTexture())
+    ImportedTextureSlot metallicRoughnessSlot;
+    readTextureSlot(material, aiTextureType_GLTF_METALLIC_ROUGHNESS, metallicRoughnessSlot, package, modelPath, assimpScene, loadingCfg, false);
+    if (!metallicRoughnessSlot.hasTexture())
     {
-        readTextureSlot(material, aiTextureType_DIFFUSE_ROUGHNESS, desc.textures.metallicRoughness, assets, modelID, modelPath, assimpScene,
-                        loadingCfg, false);
+        readTextureSlot(material, aiTextureType_DIFFUSE_ROUGHNESS, metallicRoughnessSlot, package, modelPath, assimpScene, loadingCfg, false);
     }
+    importedMaterial.pbrMetallicRoughnessTexture = appendTextureInfo(package, metallicRoughnessSlot);
 
-    readTextureSlot(material, aiTextureType_EMISSIVE, desc.textures.emissive, assets, modelID, modelPath, assimpScene, loadingCfg,
+    ImportedTextureSlot emissiveSlot;
+    readTextureSlot(material, aiTextureType_EMISSIVE, emissiveSlot, package, modelPath, assimpScene, loadingCfg,
                     loadingCfg.srgbEmissiveTextures);
-    readTextureSlot(material, aiTextureType_AMBIENT_OCCLUSION, desc.textures.occlusion, assets, modelID, modelPath, assimpScene, loadingCfg,
-                    false);
-    readTextureSlot(material, aiTextureType_SPECULAR, desc.textures.specular, assets, modelID, modelPath, assimpScene, loadingCfg, false);
+    importedMaterial.emissiveTexture = appendTextureInfo(package, emissiveSlot);
 
-    return desc;
-}
+    ImportedTextureSlot occlusionSlot;
+    readTextureSlot(material, aiTextureType_AMBIENT_OCCLUSION, occlusionSlot, package, modelPath, assimpScene, loadingCfg, false);
+    importedMaterial.occlusionTexture = appendTextureInfo(package, occlusionSlot);
 
-void appendMeshGeometry(const aiMesh* mesh, ModelAsset& model, ModelSubmeshAsset& submesh)
-{
-    const uint32_t vertexBase = static_cast<uint32_t>(model.positions.size());
-    submesh.vertexBase       = vertexBase;
-    submesh.firstIndex       = static_cast<uint32_t>(model.indices.size());
+    ImportedTextureSlot specularSlot;
+    readTextureSlot(material, aiTextureType_SPECULAR, specularSlot, package, modelPath, assimpScene, loadingCfg, false);
+    importedMaterial.specularTexture = appendTextureInfo(package, specularSlot);
 
-    bool hasBounds = false;
-    for (uint32_t vertexIndex = 0; vertexIndex < mesh->mNumVertices; ++vertexIndex)
-    {
-        const aiVector3D position = mesh->HasPositions() ? mesh->mVertices[vertexIndex] : aiVector3D(0.0f, 0.0f, 0.0f);
-        const glm::vec3  p(position.x, position.y, position.z);
-        model.positions.push_back(p);
-
-        if (!hasBounds)
-        {
-            submesh.boundsMin = p;
-            submesh.boundsMax = p;
-            hasBounds         = true;
-        }
-        else
-        {
-            submesh.boundsMin = glm::min(submesh.boundsMin, p);
-            submesh.boundsMax = glm::max(submesh.boundsMax, p);
-        }
-
-        if (mesh->HasNormals())
-        {
-            const aiVector3D normal = mesh->mNormals[vertexIndex];
-            model.normals.push_back(glm::vec3(normal.x, normal.y, normal.z));
-        }
-        else
-        {
-            model.normals.push_back(glm::vec3(0.0f, 1.0f, 0.0f));
-        }
-
-        if (mesh->HasTangentsAndBitangents())
-        {
-            const aiVector3D tangent = mesh->mTangents[vertexIndex];
-            model.tangents.push_back(glm::vec4(tangent.x, tangent.y, tangent.z, 1.0f));
-        }
-        else
-        {
-            model.tangents.push_back(glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
-        }
-
-        if (mesh->HasTextureCoords(0))
-        {
-            const aiVector3D texCoord = mesh->mTextureCoords[0][vertexIndex];
-            model.texCoords0.push_back(glm::vec2(texCoord.x, texCoord.y));
-        }
-        else
-        {
-            model.texCoords0.push_back(glm::vec2(0.0f));
-        }
-
-        if (mesh->HasTextureCoords(1))
-        {
-            const aiVector3D texCoord = mesh->mTextureCoords[1][vertexIndex];
-            model.texCoords1.push_back(glm::vec2(texCoord.x, texCoord.y));
-        }
-        else
-        {
-            model.texCoords1.push_back(glm::vec2(0.0f));
-        }
-
-        if (mesh->HasVertexColors(0))
-        {
-            model.colors.push_back(packColor(mesh->mColors[0][vertexIndex]));
-        }
-        else
-        {
-            model.colors.push_back(0xFFFFFFFFu);
-        }
-    }
-
-    for (uint32_t faceIndex = 0; faceIndex < mesh->mNumFaces; ++faceIndex)
-    {
-        const aiFace& face = mesh->mFaces[faceIndex];
-        if (face.mNumIndices != 3)
-        {
-            continue;
-        }
-        model.indices.push_back(face.mIndices[0]);
-        model.indices.push_back(face.mIndices[1]);
-        model.indices.push_back(face.mIndices[2]);
-    }
-
-    submesh.indexCount = static_cast<uint32_t>(model.indices.size()) - submesh.firstIndex;
+    return importedMaterial;
 }
 
 struct AssimpImportContext
 {
-    AssetRegistry&        assets;
-    ModelAssetID          modelID;
+    ModelAssetPackage*    package = nullptr;
     std::vector<uint32_t> meshSubmeshIndices;
 };
 
-uint32_t appendAssimpNode(const aiNode* assimpNode, uint32_t parentNodeIndex, const glm::mat4& parentToModel, AssimpImportContext& context)
+uint32_t appendAssimpNode(const aiNode* assimpNode, uint32_t parentNodeIndex, AssimpImportContext& context)
 {
-    if (!assimpNode)
+    if (!assimpNode || !context.package)
     {
         return INVALID_SCENE_ID;
     }
+
+    ModelAsset& asset = context.package->asset;
 
     const glm::mat4 localTransform = toGlm(assimpNode->mTransformation);
-    const glm::mat4 modelTransform = parentToModel * localTransform;
-
-    const ModelAsset* existingModel      = context.assets.getModel(context.modelID);
-    const uint32_t    fallbackNodeIndex  = existingModel ? static_cast<uint32_t>(existingModel->nodes.size()) : 0;
+    aiVector3D      scaling;
+    aiVector3D      position;
+    aiQuaternion    rotation;
+    assimpNode->mTransformation.Decompose(scaling, rotation, position);
 
     ModelNodeAsset modelNode;
-    modelNode.name           = makeAssimpName(assimpNode->mName, "Node", fallbackNodeIndex);
+    modelNode.name           = makeAssimpName(assimpNode->mName, "Node", static_cast<uint32_t>(asset.nodes.size()));
     modelNode.parent         = parentNodeIndex;
-    modelNode.localTransform = localTransform;
-    modelNode.modelTransform = modelTransform;
+    modelNode.transformIdx   = static_cast<uint32_t>(asset.transforms.size());
+    modelNode.translation    = glm::vec3(position.x, position.y, position.z);
+    modelNode.rotation       = glm::vec3(rotation.x, rotation.y, rotation.z);
+    modelNode.scale          = glm::vec3(scaling.x, scaling.y, scaling.z);
 
-    const uint32_t nodeIndex = context.assets.addModelNode(context.modelID, modelNode);
-    if (nodeIndex == INVALID_SCENE_ID)
+    const uint32_t nodeIndex = static_cast<uint32_t>(asset.nodes.size());
+    asset.transforms.push_back(localTransform);
+    asset.nodes.push_back(modelNode);
+
+    if (asset.rootNode == INVALID_SCENE_ID)
     {
-        return INVALID_SCENE_ID;
+        asset.rootNode = nodeIndex;
     }
 
-    ModelAsset* model = context.assets.getModel(context.modelID);
-    if (model && assimpNode->mNumMeshes > 0)
+    for (uint32_t meshSlot = 0; meshSlot < assimpNode->mNumMeshes; ++meshSlot)
     {
-        model->nodes[nodeIndex].firstRenderable = static_cast<uint32_t>(model->renderables.size());
-        uint32_t renderableCount                = 0;
-
-        for (uint32_t meshSlot = 0; meshSlot < assimpNode->mNumMeshes; ++meshSlot)
+        const uint32_t meshIndex = assimpNode->mMeshes[meshSlot];
+        if (meshIndex < context.meshSubmeshIndices.size() && context.meshSubmeshIndices[meshIndex] != INVALID_SCENE_ID)
         {
-            const uint32_t meshIndex = assimpNode->mMeshes[meshSlot];
-            if (meshIndex >= context.meshSubmeshIndices.size())
-            {
-                continue;
-            }
-
-            const uint32_t submeshIndex = context.meshSubmeshIndices[meshIndex];
-            if (submeshIndex == INVALID_SCENE_ID)
-            {
-                continue;
-            }
-
-            ModelRenderableTemplate renderable;
-            renderable.submeshIndex = submeshIndex;
-            renderable.nodeIndex    = nodeIndex;
-            renderable.localToModel = modelTransform;
-            if (context.assets.addModelRenderable(context.modelID, renderable) != INVALID_SCENE_ID)
-            {
-                ++renderableCount;
-            }
-        }
-
-        model = context.assets.getModel(context.modelID);
-        if (model && nodeIndex < model->nodes.size())
-        {
-            model->nodes[nodeIndex].renderableCount = renderableCount;
+            asset.nodes[nodeIndex].submeshIdx.push_back(context.meshSubmeshIndices[meshIndex]);
         }
     }
 
     uint32_t previousChildIndex = INVALID_SCENE_ID;
     for (uint32_t childIndex = 0; childIndex < assimpNode->mNumChildren; ++childIndex)
     {
-        const uint32_t childNodeIndex = appendAssimpNode(assimpNode->mChildren[childIndex], nodeIndex, modelTransform, context);
+        const uint32_t childNodeIndex = appendAssimpNode(assimpNode->mChildren[childIndex], nodeIndex, context);
         if (childNodeIndex == INVALID_SCENE_ID)
-        {
-            continue;
-        }
-
-        model = context.assets.getModel(context.modelID);
-        if (!model || nodeIndex >= model->nodes.size() || childNodeIndex >= model->nodes.size())
         {
             continue;
         }
 
         if (previousChildIndex == INVALID_SCENE_ID)
         {
-            model->nodes[nodeIndex].firstChild = childNodeIndex;
+            asset.nodes[nodeIndex].firstChild = childNodeIndex;
         }
-        else if (previousChildIndex < model->nodes.size())
+        else if (previousChildIndex < asset.nodes.size())
         {
-            model->nodes[previousChildIndex].nextSibling = childNodeIndex;
+            asset.nodes[previousChildIndex].nextSibling = childNodeIndex;
         }
 
         previousChildIndex = childNodeIndex;
@@ -563,21 +485,21 @@ uint32_t appendAssimpNode(const aiNode* assimpNode, uint32_t parentNodeIndex, co
     return nodeIndex;
 }
 
-class ModelFormatLoader
+class ModelFormatImporter
 {
 public:
-    virtual ~ModelFormatLoader() = default;
+    virtual ~ModelFormatImporter() = default;
 
-    virtual bool            canLoad(const std::filesystem::path& path, const ModelLoadingConfig& loadingCfg) const = 0;
-    virtual ModelLoadResult load(const std::filesystem::path& path, const ModelLoadingConfig& loadingCfg, AssetRegistry& assets) const = 0;
+    virtual bool              canImport(const std::filesystem::path& path, const ModelLoadingConfig& loadingCfg) const = 0;
+    virtual ModelImportResult import(const std::filesystem::path& path, const ModelLoadingConfig& loadingCfg) const    = 0;
 };
 
-class AssimpFormatLoader : public ModelFormatLoader
+class AssimpFormatImporter : public ModelFormatImporter
 {
 public:
-    explicit AssimpFormatLoader(ModelFileFormat format) : _format(format) {}
+    explicit AssimpFormatImporter(ModelFileFormat format) : _format(format) {}
 
-    bool canLoad(const std::filesystem::path& path, const ModelLoadingConfig& loadingCfg) const override
+    bool canImport(const std::filesystem::path& path, const ModelLoadingConfig& loadingCfg) const override
     {
         if (loadingCfg.format != ModelFileFormat::eAuto)
         {
@@ -595,9 +517,9 @@ public:
         return false;
     }
 
-    ModelLoadResult load(const std::filesystem::path& path, const ModelLoadingConfig& loadingCfg, AssetRegistry& assets) const override
+    ModelImportResult import(const std::filesystem::path& path, const ModelLoadingConfig& loadingCfg) const override
     {
-        ModelLoadResult result;
+        ModelImportResult result;
 
         Assimp::Importer importer;
         importer.SetPropertyFloat(AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY, loadingCfg.globalScale);
@@ -609,51 +531,37 @@ public:
             assimpFlags |= aiProcess_GlobalScale;
         }
 
-        const std::string pathUtf8     = nvutils::utf8FromPath(path);
-        const aiScene*    assimpScene  = importer.ReadFile(pathUtf8, assimpFlags);
+        const std::string pathUtf8    = nvutils::utf8FromPath(path);
+        const aiScene*    assimpScene = importer.ReadFile(pathUtf8, assimpFlags);
         if (!assimpScene || !assimpScene->mRootNode)
         {
             result.message = importer.GetErrorString();
             return result;
         }
 
-        const std::string modelName = path.stem().string();
-        result.model               = assets.registerModel(modelName, path);
+        ModelAssetPackage& package = result.model.package;
+        package.asset.name         = path.stem().string();
+        package.asset.sourcePath   = path;
+        package.textureInfos.push_back(shaderio::defaultGltfTextureInfo());
 
-        std::vector<MaterialAssetID> materialIDs;
         if (loadingCfg.loadMaterials && assimpScene->mNumMaterials > 0)
         {
-            materialIDs.reserve(assimpScene->mNumMaterials);
+            package.materials.reserve(assimpScene->mNumMaterials);
             for (uint32_t materialIndex = 0; materialIndex < assimpScene->mNumMaterials; ++materialIndex)
             {
-                ImportedMaterialDesc materialDesc =
-                    importMaterial(assimpScene->mMaterials[materialIndex], assets, result.model, path, assimpScene, loadingCfg, materialIndex);
-                materialIDs.push_back(assets.registerMaterialFromModelTextureTable(result.model, materialDesc));
+                package.materials.push_back(importMaterial(assimpScene->mMaterials[materialIndex], package, path, assimpScene, loadingCfg));
             }
         }
 
-        if (materialIDs.empty())
+        if (package.materials.empty())
         {
-            MaterialAsset defaultMaterial;
-            defaultMaterial.name = modelName + "_DefaultMaterial";
-            MaterialAssetID defaultMaterialID = assets.registerMaterial(defaultMaterial);
-            ModelAsset*     model             = assets.getModel(result.model);
-            if (model)
-            {
-                model->materials.push_back(defaultMaterialID);
-            }
-            materialIDs.push_back(defaultMaterialID);
+            package.materials.push_back(shaderio::defaultGltfMaterial());
         }
 
-        ModelAsset* model = assets.getModel(result.model);
-        if (!model)
-        {
-            result.message = "Model registration failed.";
-            return result;
-        }
-
-        AssimpImportContext context{assets, result.model, {}};
+        AssimpImportContext context;
+        context.package = &package;
         context.meshSubmeshIndices.reserve(assimpScene->mNumMeshes);
+
         for (uint32_t meshIndex = 0; meshIndex < assimpScene->mNumMeshes; ++meshIndex)
         {
             const aiMesh* mesh = assimpScene->mMeshes[meshIndex];
@@ -663,21 +571,29 @@ public:
                 continue;
             }
 
-            ModelSubmeshAsset submesh;
-            submesh.name = makeAssimpName(mesh->mName, "Submesh", meshIndex);
-            appendMeshGeometry(mesh, *model, submesh);
+            MeshInfo meshInfo;
+            meshInfo.vertexBufferAddress = 0;
+            meshInfo.IndexBufferAddress  = 0;
+            meshInfo.indexCount          = countTriangleIndices(mesh);
 
             uint32_t materialIndex = mesh->mMaterialIndex;
-            if (materialIndex >= materialIDs.size())
+            if (materialIndex >= package.materials.size())
             {
                 materialIndex = 0;
             }
-            submesh.material = materialIDs[materialIndex];
+            meshInfo.materialIdx = materialIndex;
 
-            context.meshSubmeshIndices.push_back(assets.addModelSubmesh(result.model, submesh));
+            ModelSubmeshAsset submesh;
+            submesh.meshID = static_cast<uint32_t>(package.meshInfos.size());
+            submesh.bbox   = computeBounds(mesh);
+
+            const uint32_t submeshIndex = static_cast<uint32_t>(package.asset.submeshes.size());
+            package.meshInfos.push_back(meshInfo);
+            package.asset.submeshes.push_back(submesh);
+            context.meshSubmeshIndices.push_back(submeshIndex);
         }
 
-        if (appendAssimpNode(assimpScene->mRootNode, INVALID_SCENE_ID, glm::mat4(1.0f), context) == INVALID_SCENE_ID)
+        if (appendAssimpNode(assimpScene->mRootNode, INVALID_SCENE_ID, context) == INVALID_SCENE_ID)
         {
             result.message = "Model node hierarchy import failed.";
             return result;
@@ -700,23 +616,75 @@ uint32_t ModelLoadingConfig::DefaultAssimpPostProcessFlags()
            aiProcess_TransformUVCoords;
 }
 
-ModelLoadResult model_loading::loadModelAssetFromFile(const std::filesystem::path& path, const ModelLoadingConfig& loadingCfg, AssetRegistry& assets)
+ModelImportResult model_loading::importModelFromFile(const std::filesystem::path& path, const ModelLoadingConfig& loadingConfig)
 {
-    const AssimpFormatLoader gltfLoader(ModelFileFormat::eGltf);
-    const AssimpFormatLoader objLoader(ModelFileFormat::eObj);
+    const AssimpFormatImporter gltfImporter(ModelFileFormat::eGltf);
+    const AssimpFormatImporter objImporter(ModelFileFormat::eObj);
 
-    const ModelFormatLoader* loaders[] = {&gltfLoader, &objLoader};
-    for (const ModelFormatLoader* loader : loaders)
+    const ModelFormatImporter* importers[] = {&gltfImporter, &objImporter};
+    for (const ModelFormatImporter* importer : importers)
     {
-        if (loader->canLoad(path, loadingCfg))
+        if (importer->canImport(path, loadingConfig))
         {
-            return loader->load(path, loadingCfg, assets);
+            return importer->import(path, loadingConfig);
         }
     }
 
-    ModelLoadResult result;
+    ModelImportResult result;
     result.message = "Unsupported model format: " + path.extension().string();
     return result;
+}
+
+ModelOptimizeResult model_loading::optimizeModel(ImportedModel&& importedModel, const ModelLoadingConfig& loadingConfig)
+{
+    (void) loadingConfig;
+
+    ModelOptimizeResult result;
+    result.success       = true;
+    result.model.package = std::move(importedModel.package);
+    return result;
+}
+
+ModelLoadResult model_loading::uploadModel(OptimizedModel&& optimizedModel, const ModelLoadingConfig& loadingConfig)
+{
+    ModelLoadResult result;
+    result.success = true;
+    result.model   = std::move(optimizedModel.package);
+
+    if (loadingConfig.loadTextures)
+    {
+        for (ModelTextureResource& texture : result.model.textures)
+        {
+            if (!texture.texture && !texture.sourcePath.empty())
+            {
+                texture.texture = RefPtr<Texture>(
+                    new Texture(texture.sourcePath, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, texture.mipLevels, texture.isSrgb));
+            }
+        }
+    }
+
+    return result;
+}
+
+ModelLoadResult model_loading::loadModelFromFile(const std::filesystem::path& path, const ModelLoadingConfig& loadingConfig)
+{
+    ModelImportResult importResult = importModelFromFile(path, loadingConfig);
+    if (!importResult.success)
+    {
+        ModelLoadResult result;
+        result.message = importResult.message;
+        return result;
+    }
+
+    ModelOptimizeResult optimizeResult = optimizeModel(std::move(importResult.model), loadingConfig);
+    if (!optimizeResult.success)
+    {
+        ModelLoadResult result;
+        result.message = optimizeResult.message;
+        return result;
+    }
+
+    return uploadModel(std::move(optimizeResult.model), loadingConfig);
 }
 
 } // namespace Play

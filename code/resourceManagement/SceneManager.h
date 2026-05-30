@@ -1,11 +1,10 @@
 #ifndef SCENEMANAGER_H
 #define SCENEMANAGER_H
+#include "AssetLoadingServer.h"
 #include "filesystem"
 #include "nvvk/descriptors.hpp"
 #include "PlayScene.h"
 #include "CpuScene.h"
-#include "SceneAssets.h"
-#include "RasterGpuScene.h"
 #include "core/RefCounted.h"
 namespace Play
 {
@@ -42,13 +41,13 @@ public:
     {
         return _cpuScene;
     }
-    AssetRegistry& getAssetRegistry()
+    AssetLoadingServer& getAssetLoadingServer()
     {
-        return _assetRegistry;
+        return _assetLoadingServer;
     }
-    const AssetRegistry& getAssetRegistry() const
+    const AssetLoadingServer& getAssetLoadingServer() const
     {
-        return _assetRegistry;
+        return _assetLoadingServer;
     }
     RasterGpuScene& getRasterGpuScene()
     {
@@ -71,7 +70,7 @@ private:
 
     CpuScene       _cpuScene;
     std::mutex     _cpuSceneMutex;
-    AssetRegistry  _assetRegistry;
+    AssetLoadingServer _assetLoadingServer;
     std::unique_ptr<GpuScene> _gpuScene;
 };
 
