@@ -123,6 +123,8 @@ class RefPtr
 public:
     RefPtr() : m_ptr(nullptr) {}
 
+    RefPtr(decltype(nullptr)) noexcept : m_ptr(nullptr) {}
+
     // 从裸指针构造（接管所有权，增加引用计数）
     explicit RefPtr(T* ptr) : m_ptr(ptr)
     {
@@ -185,6 +187,12 @@ public:
     }
 
     // 从裸指针赋值
+    RefPtr& operator=(decltype(nullptr)) noexcept
+    {
+        reset();
+        return *this;
+    }
+
     RefPtr& operator=(T* ptr)
     {
         if (m_ptr != ptr)
@@ -320,7 +328,6 @@ public:
     {
         if (m_ptr && m_ptr->isAlive())
         {
-            m_ptr->addRef();
             return RefPtr<T>(m_ptr);
         }
         return RefPtr<T>(nullptr);

@@ -17,8 +17,8 @@ namespace
 struct ImportedTextureSlot
 {
     int         localTextureIndex = -1;
-    glm::mat2x3 uvTransform      = glm::mat2x3(1.0f);
-    int         texCoord         = 0;
+    glm::mat2x3 uvTransform       = glm::mat2x3(1.0f);
+    int         texCoord          = 0;
 
     bool hasTexture() const
     {
@@ -81,10 +81,8 @@ bool isObjPath(const std::filesystem::path& path)
 
 glm::mat4 toGlm(const aiMatrix4x4& matrix)
 {
-    return glm::mat4(matrix.a1, matrix.b1, matrix.c1, matrix.d1,
-                     matrix.a2, matrix.b2, matrix.c2, matrix.d2,
-                     matrix.a3, matrix.b3, matrix.c3, matrix.d3,
-                     matrix.a4, matrix.b4, matrix.c4, matrix.d4);
+    return glm::mat4(matrix.a1, matrix.b1, matrix.c1, matrix.d1, matrix.a2, matrix.b2, matrix.c2, matrix.d2, matrix.a3, matrix.b3, matrix.c3,
+                     matrix.d3, matrix.a4, matrix.b4, matrix.c4, matrix.d4);
 }
 
 uint32_t packColor(const aiColor4D& color)
@@ -332,7 +330,7 @@ void readTextureSlot(const aiMaterial* material, aiTextureType textureType, Impo
         return;
     }
 
-    aiString texturePath;
+    aiString     texturePath;
     unsigned int uvIndex = 0;
     if (material->GetTexture(textureType, 0, &texturePath, nullptr, &uvIndex) != AI_SUCCESS)
     {
@@ -345,8 +343,8 @@ void readTextureSlot(const aiMaterial* material, aiTextureType textureType, Impo
     aiUVTransform transform;
     if (material->Get(AI_MATKEY_UVTRANSFORM(textureType, 0), transform) == AI_SUCCESS)
     {
-        const float c = glm::cos(transform.mRotation);
-        const float s = glm::sin(transform.mRotation);
+        const float c          = glm::cos(transform.mRotation);
+        const float s          = glm::sin(transform.mRotation);
         slot.uvTransform[0][0] = transform.mScaling.x * c;
         slot.uvTransform[0][1] = transform.mScaling.x * s;
         slot.uvTransform[1][0] = -transform.mScaling.y * s;
@@ -364,11 +362,10 @@ uint16_t appendTextureInfo(ModelAssetPackage& package, const ImportedTextureSlot
     }
 
     shaderio::GltfTextureInfo textureInfo = shaderio::defaultGltfTextureInfo();
-    textureInfo.index    = slot.localTextureIndex;
-    textureInfo.texCoord = slot.texCoord;
-    textureInfo.uvTransform =
-        shaderio::float3x2(slot.uvTransform[0][0], slot.uvTransform[1][0], slot.uvTransform[0][1], slot.uvTransform[1][1],
-                           slot.uvTransform[0][2], slot.uvTransform[1][2]);
+    textureInfo.index                     = slot.localTextureIndex;
+    textureInfo.texCoord                  = slot.texCoord;
+    textureInfo.uvTransform = shaderio::float3x2(slot.uvTransform[0][0], slot.uvTransform[1][0], slot.uvTransform[0][1], slot.uvTransform[1][1],
+                                                 slot.uvTransform[0][2], slot.uvTransform[1][2]);
 
     const uint16_t textureInfoIndex = static_cast<uint16_t>(package.textureInfos.size());
     package.textureInfos.push_back(textureInfo);
@@ -412,7 +409,7 @@ shaderio::GltfShadeMaterial importMaterial(const aiMaterial* material, ModelAsse
     float opacity = 1.0f;
     if (aiGetMaterialFloat(material, AI_MATKEY_OPACITY, &opacity) == AI_SUCCESS)
     {
-        importedMaterial.pbrBaseColorFactor.a = opacity;
+        importedMaterial.pbrBaseColorFactor.z = opacity;
     }
 
     int twoSided = 0;
@@ -443,7 +440,7 @@ shaderio::GltfShadeMaterial importMaterial(const aiMaterial* material, ModelAsse
             importedMaterial.alphaMode = shaderio::eAlphaModeOpaque;
         }
     }
-    else if (importedMaterial.pbrBaseColorFactor.a < 1.0f)
+    else if (importedMaterial.pbrBaseColorFactor.z < 1.0f)
     {
         importedMaterial.alphaMode = shaderio::eAlphaModeBlend;
     }
@@ -454,8 +451,7 @@ shaderio::GltfShadeMaterial importMaterial(const aiMaterial* material, ModelAsse
     }
 
     ImportedTextureSlot baseColorSlot;
-    readTextureSlot(material, aiTextureType_BASE_COLOR, baseColorSlot, package, modelPath, assimpScene, loadingCfg,
-                    loadingCfg.srgbBaseColorTextures);
+    readTextureSlot(material, aiTextureType_BASE_COLOR, baseColorSlot, package, modelPath, assimpScene, loadingCfg, loadingCfg.srgbBaseColorTextures);
     if (!baseColorSlot.hasTexture())
     {
         readTextureSlot(material, aiTextureType_DIFFUSE, baseColorSlot, package, modelPath, assimpScene, loadingCfg,
@@ -480,8 +476,7 @@ shaderio::GltfShadeMaterial importMaterial(const aiMaterial* material, ModelAsse
     importedMaterial.pbrMetallicRoughnessTexture = appendTextureInfo(package, metallicRoughnessSlot);
 
     ImportedTextureSlot emissiveSlot;
-    readTextureSlot(material, aiTextureType_EMISSIVE, emissiveSlot, package, modelPath, assimpScene, loadingCfg,
-                    loadingCfg.srgbEmissiveTextures);
+    readTextureSlot(material, aiTextureType_EMISSIVE, emissiveSlot, package, modelPath, assimpScene, loadingCfg, loadingCfg.srgbEmissiveTextures);
     importedMaterial.emissiveTexture = appendTextureInfo(package, emissiveSlot);
 
     ImportedTextureSlot occlusionSlot;
@@ -517,12 +512,12 @@ uint32_t appendAssimpNode(const aiNode* assimpNode, uint32_t parentNodeIndex, As
     assimpNode->mTransformation.Decompose(scaling, rotation, position);
 
     ModelNodeAsset modelNode;
-    modelNode.name           = makeAssimpName(assimpNode->mName, "Node", static_cast<uint32_t>(asset.nodes.size()));
-    modelNode.parent         = parentNodeIndex;
-    modelNode.transformIdx   = static_cast<uint32_t>(asset.transforms.size());
-    modelNode.translation    = glm::vec3(position.x, position.y, position.z);
-    modelNode.rotation       = glm::vec3(rotation.x, rotation.y, rotation.z);
-    modelNode.scale          = glm::vec3(scaling.x, scaling.y, scaling.z);
+    modelNode.name         = makeAssimpName(assimpNode->mName, "Node", static_cast<uint32_t>(asset.nodes.size()));
+    modelNode.parent       = parentNodeIndex;
+    modelNode.transformIdx = static_cast<uint32_t>(asset.transforms.size());
+    modelNode.translation  = glm::vec3(position.x, position.y, position.z);
+    modelNode.rotation     = glm::vec3(rotation.x, rotation.y, rotation.z);
+    modelNode.scale        = glm::vec3(scaling.x, scaling.y, scaling.z);
 
     const uint32_t nodeIndex = static_cast<uint32_t>(asset.nodes.size());
     asset.transforms.push_back(localTransform);
