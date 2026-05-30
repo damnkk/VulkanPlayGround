@@ -9,154 +9,29 @@
 namespace Play
 {
 
-struct TextureAssetID
+struct AABB
 {
-    uint32_t index      = INVALID_SCENE_ID;
-    uint32_t generation = 0;
-
-    bool isValid() const
-    {
-        return index != INVALID_SCENE_ID;
-    }
-};
-
-struct MaterialAssetID
-{
-    uint32_t index      = INVALID_SCENE_ID;
-    uint32_t generation = 0;
-
-    bool isValid() const
-    {
-        return index != INVALID_SCENE_ID;
-    }
-};
-
-struct TextureAsset
-{
-    std::string           name;
-    std::filesystem::path sourcePath;
-    RefPtr<Texture>       texture;
-    uint32_t              generation    = 1;
-    uint32_t              bindlessIndex = INVALID_SCENE_ID;
-    uint32_t              mipLevels     = 1;
-    bool                  isSrgb        = true;
-
-    bool isResident() const
-    {
-        return texture && texture->isValid();
-    }
-};
-
-struct MaterialTextureSlot
-{
-    TextureAssetID texture;
-    glm::mat2x3    uvTransform = glm::mat2x3(1.0f);
-    int            texCoord    = 0;
-
-    bool hasTexture() const
-    {
-        return texture.isValid();
-    }
-};
-
-struct ImportedMaterialTextureSlot
-{
-    int         localTextureIndex = -1;
-    glm::mat2x3 uvTransform      = glm::mat2x3(1.0f);
-    int         texCoord         = 0;
-
-    bool hasTexture() const
-    {
-        return localTextureIndex >= 0;
-    }
-};
-
-struct MaterialTextureSet
-{
-    MaterialTextureSlot baseColor;
-    MaterialTextureSlot normal;
-    MaterialTextureSlot metallicRoughness;
-    MaterialTextureSlot emissive;
-    MaterialTextureSlot transmission;
-    MaterialTextureSlot thickness;
-    MaterialTextureSlot clearcoat;
-    MaterialTextureSlot clearcoatRoughness;
-    MaterialTextureSlot clearcoatNormal;
-    MaterialTextureSlot specular;
-    MaterialTextureSlot specularColor;
-    MaterialTextureSlot iridescence;
-    MaterialTextureSlot iridescenceThickness;
-    MaterialTextureSlot anisotropy;
-    MaterialTextureSlot sheenColor;
-    MaterialTextureSlot sheenRoughness;
-    MaterialTextureSlot occlusion;
-    MaterialTextureSlot pbrDiffuse;
-    MaterialTextureSlot pbrSpecularGlossiness;
-    MaterialTextureSlot diffuseTransmission;
-    MaterialTextureSlot diffuseTransmissionColor;
-};
-
-struct ImportedMaterialTextureSet
-{
-    ImportedMaterialTextureSlot baseColor;
-    ImportedMaterialTextureSlot normal;
-    ImportedMaterialTextureSlot metallicRoughness;
-    ImportedMaterialTextureSlot emissive;
-    ImportedMaterialTextureSlot transmission;
-    ImportedMaterialTextureSlot thickness;
-    ImportedMaterialTextureSlot clearcoat;
-    ImportedMaterialTextureSlot clearcoatRoughness;
-    ImportedMaterialTextureSlot clearcoatNormal;
-    ImportedMaterialTextureSlot specular;
-    ImportedMaterialTextureSlot specularColor;
-    ImportedMaterialTextureSlot iridescence;
-    ImportedMaterialTextureSlot iridescenceThickness;
-    ImportedMaterialTextureSlot anisotropy;
-    ImportedMaterialTextureSlot sheenColor;
-    ImportedMaterialTextureSlot sheenRoughness;
-    ImportedMaterialTextureSlot occlusion;
-    ImportedMaterialTextureSlot pbrDiffuse;
-    ImportedMaterialTextureSlot pbrSpecularGlossiness;
-    ImportedMaterialTextureSlot diffuseTransmission;
-    ImportedMaterialTextureSlot diffuseTransmissionColor;
-};
-
-struct MaterialAsset
-{
-    std::string                   name;
-    shaderio::GltfShadeMaterial   parameters = shaderio::defaultGltfMaterial();
-    MaterialTextureSet            textures;
-    uint32_t                      generation = 1;
-};
-
-struct ImportedMaterialDesc
-{
-    std::string                  name;
-    shaderio::GltfShadeMaterial  parameters = shaderio::defaultGltfMaterial();
-    ImportedMaterialTextureSet   textures;
+    glm::vec3 min = {0.0f, 0.0f, 0.0f};
+    glm::vec3 max = {0.0f, 0.0f, 0.0f};
 };
 
 struct ModelSubmeshAsset
 {
-    std::string     name;
-    uint32_t        firstIndex  = 0;
-    uint32_t        indexCount  = 0;
-    uint32_t        vertexBase  = 0;
-    MaterialAssetID material;
-    glm::vec3       boundsMin = glm::vec3(0.0f);
-    glm::vec3       boundsMax = glm::vec3(0.0f);
+    uint32_t meshID = INVALID_SCENE_ID; // idx to meshInfos
+    AABB     bbox;
 };
 
 struct ModelNodeAsset
 {
-    std::string name;
-    uint32_t    parent          = INVALID_SCENE_ID;
-    uint32_t    firstChild      = INVALID_SCENE_ID;
-    uint32_t    nextSibling     = INVALID_SCENE_ID;
-    glm::mat4   localTransform  = glm::mat4(1.0f);
-    glm::mat4   modelTransform  = glm::mat4(1.0f);
-    uint32_t    firstRenderable = 0;
-    uint32_t    renderableCount = 0;
+    std::string           name;
+    uint32_t              parent       = INVALID_SCENE_ID;
+    uint32_t              firstChild   = INVALID_SCENE_ID;
+    uint32_t              nextSibling  = INVALID_SCENE_ID;
+    uint32_t              transformIdx = INVALID_SCENE_ID;
+    glm::vec3             translation  = {0.0f, 0.0f, 0.0f};
+    glm::vec3             rotation     = {0.0f, 0.0f, 0.0f};
+    glm::vec3             scale        = {1.0f, 1.0f, 1.0f};
+    std::vector<uint32_t> submeshIdx;
 };
 
 struct ModelRenderableTemplate
@@ -166,75 +41,178 @@ struct ModelRenderableTemplate
     glm::mat4 localToModel = glm::mat4(1.0f);
 };
 
-struct ModelAsset
+struct RayTracingASInfo
 {
-    std::string                         name;
-    std::filesystem::path               sourcePath;
-    std::vector<glm::vec3>              positions;
-    std::vector<glm::vec3>              normals;
-    std::vector<glm::vec4>              tangents;
-    std::vector<glm::vec2>              texCoords0;
-    std::vector<glm::vec2>              texCoords1;
-    std::vector<uint32_t>               colors;
-    std::vector<uint32_t>               indices;
-    std::vector<TextureAssetID>          localTextures;
-    std::vector<MaterialAssetID>         materials;
-    std::vector<ModelNodeAsset>          nodes;
-    std::vector<ModelSubmeshAsset>       submeshes;
-    std::vector<ModelRenderableTemplate> renderables;
-    uint32_t                             generation = 1;
+    VkAccelerationStructureCreateInfoKHR createInfo;
 };
 
-class AssetRegistry
+struct MeshInfo
 {
-public:
-    void clear();
+    uint64_t vertexBufferAddress;
+    uint64_t IndexBufferAddress;
+    uint32_t indexCount;
+    uint32_t materialIdx;
+};
 
-    TextureAssetID  registerTexture(const std::string& name, const std::filesystem::path& sourcePath);
-    TextureAssetID  registerTexture(const std::string& name, const RefPtr<Texture>& texture);
-    MaterialAssetID registerMaterial(const MaterialAsset& material);
-    MaterialAssetID registerMaterialFromModelTextureTable(ModelAssetID modelID, const ImportedMaterialDesc& desc);
-    ModelAssetID    registerModel(const std::string& name, const std::filesystem::path& sourcePath);
+struct VertexStreamInfo
+{
+    uint64_t positionBufferAddress  = 0;
+    uint64_t normalBufferAddress    = 0;
+    uint64_t tangentBufferAddress   = 0;
+    uint64_t texCoord0BufferAddress = 0;
+    uint64_t texCoord1BufferAddress = 0;
+    uint64_t colorBufferAddress     = 0;
+};
 
-    TextureAssetID addModelLocalTexture(ModelAssetID modelID, TextureAssetID textureID);
-    uint32_t       addModelNode(ModelAssetID modelID, const ModelNodeAsset& node);
-    uint32_t       addModelSubmesh(ModelAssetID modelID, const ModelSubmeshAsset& submesh);
-    uint32_t       addModelRenderable(ModelAssetID modelID, const ModelRenderableTemplate& renderable);
+struct LightInfo
+{
+    glm::vec3 lightPosition;
+};
 
-    bool isValid(TextureAssetID textureID) const;
-    bool isValid(MaterialAssetID materialID) const;
-    bool isValid(ModelAssetID modelID) const;
+struct GltfShadeMaterial
+{
+    glm::vec3 pbrBaseColorFactor; // offset 0    - 16 bytes
+    glm::vec3 emissiveFactor;     // offset 16   - 12 bytes
+    float     normalTextureScale; // offset 28   - 4 bytes
 
-    TextureAsset*       getTexture(TextureAssetID textureID);
-    const TextureAsset* getTexture(TextureAssetID textureID) const;
-    MaterialAsset*       getMaterial(MaterialAssetID materialID);
-    const MaterialAsset* getMaterial(MaterialAssetID materialID) const;
-    ModelAsset*         getModel(ModelAssetID modelID);
-    const ModelAsset*   getModel(ModelAssetID modelID) const;
+    float pbrRoughnessFactor; // offset 32   - 4 bytes
+    float pbrMetallicFactor;  // offset 36   - 4 bytes
+    int   alphaMode;          // offset 40   - 4 bytes
+    float alphaCutoff;        // offset 44   - 4 bytes
 
-    const std::vector<TextureAsset>& getTextures() const
+    glm::vec3 attenuationColor; // offset 48   - 12 bytes
+    float     ior;              // offset 60   - 4 bytes
+
+    float transmissionFactor;  // offset 64   - 4 bytes
+    float thicknessFactor;     // offset 68   - 4 bytes
+    float attenuationDistance; // offset 72   - 4 bytes
+    float clearcoatFactor;     // offset 76   - 4 bytes
+
+    glm::vec3 specularColorFactor; // offset 80   - 12 bytes
+    float     clearcoatRoughness;  // offset 92   - 4 bytes
+
+    float specularFactor;              // offset 96   - 4 bytes
+    int   unlit;                       // offset 100  - 4 bytes
+    float iridescenceFactor;           // offset 104  - 4 bytes
+    float iridescenceThicknessMaximum; // offset 108  - 4 bytes
+
+    float     iridescenceThicknessMinimum; // offset 112  - 4 bytes
+    float     iridescenceIor;              // offset 116  - 4 bytes
+    glm::vec2 anisotropyRotation;          // offset 120  - 8 bytes
+
+    glm::vec3 sheenColorFactor;   // offset 128  - 12 bytes
+    float     anisotropyStrength; // offset 140  - 4 bytes
+
+    float sheenRoughnessFactor;     // offset 144  - 4 bytes
+    float occlusionStrength;        // offset 148  - 4 bytes
+    float dispersion;               // offset 152  - 4 bytes
+    int   usePbrSpecularGlossiness; // offset 156  - 4 bytes
+
+    glm::vec4 pbrDiffuseFactor;    // offset 160  - 16 bytes
+    glm::vec3 pbrSpecularFactor;   // offset 176  - 12 bytes
+    float     pbrGlossinessFactor; // offset 188  - 4 bytes
+
+    glm::vec3 diffuseTransmissionColor;  // offset 192  - 12 bytes
+    float     diffuseTransmissionFactor; // offset 204  - 4 bytes
+
+    glm::vec3 multiscatterColorFactor; // offset 208  - 12 bytes  // KHR_materials_volume_scatter
+    float     scatterAnisotropy;       // offset 220  - 4 bytes   // KHR_materials_volume_scatter
+
+    int doubleSided; // offset 224  - 4 bytes
+    // Texture infos (uint16_t, 2 bytes each)
+    uint16_t pbrBaseColorTexture;             // offset 228  - 2 bytes
+    uint16_t normalTexture;                   // offset 230  - 2 bytes
+    uint16_t pbrMetallicRoughnessTexture;     // offset 232  - 2 bytes
+    uint16_t emissiveTexture;                 // offset 234  - 2 bytes
+    uint16_t transmissionTexture;             // offset 236  - 2 bytes
+    uint16_t thicknessTexture;                // offset 238  - 2 bytes
+    uint16_t clearcoatTexture;                // offset 240  - 2 bytes
+    uint16_t clearcoatRoughnessTexture;       // offset 242  - 2 bytes
+    uint16_t clearcoatNormalTexture;          // offset 244  - 2 bytes
+    uint16_t specularTexture;                 // offset 246  - 2 bytes
+    uint16_t specularColorTexture;            // offset 248  - 2 bytes
+    uint16_t iridescenceTexture;              // offset 250  - 2 bytes
+    uint16_t iridescenceThicknessTexture;     // offset 252  - 2 bytes
+    uint16_t anisotropyTexture;               // offset 254  - 2 bytes
+    uint16_t sheenColorTexture;               // offset 256  - 2 bytes
+    uint16_t sheenRoughnessTexture;           // offset 258  - 2 bytes
+    uint16_t occlusionTexture;                // offset 260  - 2 bytes
+    uint16_t pbrDiffuseTexture;               // offset 262  - 2 bytes
+    uint16_t pbrSpecularGlossinessTexture;    // offset 264  - 2 bytes
+    uint16_t diffuseTransmissionTexture;      // offset 266  - 2 bytes
+    uint16_t diffuseTransmissionColorTexture; // offset 268  - 2 bytes
+    uint16_t _pad1;                           // offset 270  - 2 bytes
+                                              // Total size: 272 bytes
+};
+
+struct ModelAsset
+{
+    std::string                    name;
+    std::filesystem::path          sourcePath;
+    std::vector<ModelSubmeshAsset> submeshes;
+    std::vector<ModelNodeAsset>    nodes;
+    std::vector<glm::mat4>         transforms;
+    uint32_t                       rootNode = INVALID_SCENE_ID;
+
+    RefPtr<Buffer>                transformBuffer = nullptr;
+    RefPtr<Buffer>                materialBuffer  = nullptr;
+    RefPtr<Buffer>                meshInfoBuffer  = nullptr;
+    RefPtr<Buffer>                lightInfoBuffer = nullptr;
+    std::vector<RayTracingASInfo> accelerationStructures;
+
+    uint32_t generation = 1;
+};
+
+struct ModelTextureResource
+{
+    std::string           name;
+    std::filesystem::path sourcePath;
+    RefPtr<Texture>       texture;
+    uint32_t              mipLevels = 1;
+    bool                  isSrgb    = true;
+
+    bool isResident() const
     {
-        return _textures;
+        return texture && texture->isValid();
     }
+};
 
-    const std::vector<MaterialAsset>& getMaterials() const
+struct ModelMeshRange
+{
+    uint32_t firstVertex = 0;
+    uint32_t vertexCount = 0;
+    uint32_t firstIndex  = 0;
+    uint32_t indexCount  = 0;
+    uint32_t materialIdx = 0;
+    AABB     bbox;
+};
+
+struct ModelGeometryPayload
+{
+    std::vector<glm::vec3> positions;
+    std::vector<glm::vec3> normals;
+    std::vector<glm::vec4> tangents;
+    std::vector<glm::vec2> texCoords0;
+    std::vector<glm::vec2> texCoords1;
+    std::vector<uint32_t>  colors;
+    std::vector<uint32_t>  indices;
+    std::vector<ModelMeshRange> ranges;
+
+    bool empty() const
     {
-        return _materials;
+        return positions.empty() || indices.empty() || ranges.empty();
     }
+};
 
-    const std::vector<ModelAsset>& getModels() const
-    {
-        return _models;
-    }
-
-private:
-    TextureAssetID  makeTextureID(uint32_t index) const;
-    MaterialAssetID makeMaterialID(uint32_t index) const;
-    ModelAssetID    makeModelID(uint32_t index) const;
-
-    std::vector<TextureAsset>  _textures;
-    std::vector<MaterialAsset> _materials;
-    std::vector<ModelAsset>    _models;
+struct ModelAssetPackage
+{
+    ModelAsset                               asset;
+    ModelGeometryPayload                     geometry;
+    std::vector<MeshInfo>                    meshInfos;
+    std::vector<shaderio::GltfShadeMaterial> materials;
+    std::vector<shaderio::GltfTextureInfo>   textureInfos;
+    std::vector<ModelTextureResource>        textures;
+    std::vector<RefPtr<Buffer>>              ownedBuffers;
 };
 
 } // namespace Play

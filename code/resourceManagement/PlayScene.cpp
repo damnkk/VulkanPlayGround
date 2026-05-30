@@ -1,5 +1,8 @@
 #include "PlayScene.h"
 #include "Resource.h"
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include <array>
 #include <string>
 #include <nvutils/parallel_work.hpp>
@@ -434,18 +437,19 @@ bool GaussianScene::load(const std::filesystem::path& filename)
                                                                   _rotations[rotationBase + 2], _rotations[rotationBase + 3]};
                                                rotation = glm::normalize(rotation);
 
-                                               const glm::mat3 scaleMatrix           = glm::mat3(glm::scale(scale));
+                                               const glm::mat3 scaleMatrix           = glm::mat3(glm::scale(glm::mat4(1.0f), scale));
                                                const glm::mat3 rotationMatrix        = glm::mat3_cast(rotation);
                                                const glm::mat3 covarianceMatrix      = rotationMatrix * scaleMatrix;
                                                glm::mat3       transformedCovariance = covarianceMatrix * glm::transpose(covarianceMatrix);
+                                               const float*    covarianceData        = glm::value_ptr(transformedCovariance);
 
                                                const uint32_t stride6    = i * 6;
-                                               _covariances[stride6 + 0] = glm::value_ptr(transformedCovariance)[0];
-                                               _covariances[stride6 + 1] = glm::value_ptr(transformedCovariance)[3];
-                                               _covariances[stride6 + 2] = glm::value_ptr(transformedCovariance)[6];
-                                               _covariances[stride6 + 3] = glm::value_ptr(transformedCovariance)[4];
-                                               _covariances[stride6 + 4] = glm::value_ptr(transformedCovariance)[7];
-                                               _covariances[stride6 + 5] = glm::value_ptr(transformedCovariance)[8];
+                                               _covariances[stride6 + 0] = covarianceData[0];
+                                               _covariances[stride6 + 1] = covarianceData[3];
+                                               _covariances[stride6 + 2] = covarianceData[6];
+                                               _covariances[stride6 + 3] = covarianceData[4];
+                                               _covariances[stride6 + 4] = covarianceData[7];
+                                               _covariances[stride6 + 5] = covarianceData[8];
                                            });
 
             gotVertices = true;

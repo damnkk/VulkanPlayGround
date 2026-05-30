@@ -175,6 +175,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   crc32c
   "${CMAKE_CURRENT_SOURCE_DIR}/External/sqlite3/libsqlite3.lib"
   spz
+  stb
+  tinygltf
   assimp::assimp
 )
 
