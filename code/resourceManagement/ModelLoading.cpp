@@ -87,6 +87,28 @@ glm::mat4 toGlm(const aiMatrix4x4& matrix)
                      matrix.a4, matrix.b4, matrix.c4, matrix.d4);
 }
 
+uint32_t packColor(const aiColor4D& color)
+{
+    auto toByte = [](float value) -> uint32_t
+    {
+        if (value < 0.0f)
+        {
+            value = 0.0f;
+        }
+        if (value > 1.0f)
+        {
+            value = 1.0f;
+        }
+        return static_cast<uint32_t>(value * 255.0f + 0.5f);
+    };
+
+    const uint32_t r = toByte(color.r);
+    const uint32_t g = toByte(color.g);
+    const uint32_t b = toByte(color.b);
+    const uint32_t a = toByte(color.a);
+    return r | (g << 8) | (b << 16) | (a << 24);
+}
+
 std::string makeIndexedName(const char* prefix, uint32_t index)
 {
     return std::string(prefix) + "_" + std::to_string(index);
@@ -116,53 +138,112 @@ bool isEmbeddedTextureName(const aiString& texturePath)
     return texturePath.length > 0 && texturePath.C_Str()[0] == '*';
 }
 
-AABB computeBounds(const aiMesh* mesh)
+uint32_t appendMeshGeometry(const aiMesh* mesh, ModelAssetPackage& package, uint32_t materialIndex)
 {
-    AABB bounds;
-    bool hasBounds = false;
-
     if (!mesh)
     {
-        return bounds;
+        return INVALID_SCENE_ID;
     }
 
+    ModelGeometryPayload& geometry = package.geometry;
+
+    ModelMeshRange range;
+    range.firstVertex = static_cast<uint32_t>(geometry.positions.size());
+    range.firstIndex  = static_cast<uint32_t>(geometry.indices.size());
+    range.materialIdx = materialIndex;
+
+    bool hasBounds = false;
     for (uint32_t vertexIndex = 0; vertexIndex < mesh->mNumVertices; ++vertexIndex)
     {
         const aiVector3D position = mesh->HasPositions() ? mesh->mVertices[vertexIndex] : aiVector3D(0.0f, 0.0f, 0.0f);
         const glm::vec3  p(position.x, position.y, position.z);
+        geometry.positions.push_back(p);
 
         if (!hasBounds)
         {
-            bounds.min = p;
-            bounds.max = p;
-            hasBounds  = true;
+            range.bbox.min = p;
+            range.bbox.max = p;
+            hasBounds      = true;
         }
         else
         {
-            bounds.min = glm::min(bounds.min, p);
-            bounds.max = glm::max(bounds.max, p);
+            range.bbox.min = glm::min(range.bbox.min, p);
+            range.bbox.max = glm::max(range.bbox.max, p);
         }
-    }
 
-    return bounds;
-}
+        if (mesh->HasNormals())
+        {
+            const aiVector3D normal = mesh->mNormals[vertexIndex];
+            geometry.normals.push_back(glm::vec3(normal.x, normal.y, normal.z));
+        }
+        else
+        {
+            geometry.normals.push_back(glm::vec3(0.0f, 1.0f, 0.0f));
+        }
 
-uint32_t countTriangleIndices(const aiMesh* mesh)
-{
-    uint32_t indexCount = 0;
-    if (!mesh)
-    {
-        return indexCount;
+        if (mesh->HasTangentsAndBitangents())
+        {
+            const aiVector3D tangent = mesh->mTangents[vertexIndex];
+            geometry.tangents.push_back(glm::vec4(tangent.x, tangent.y, tangent.z, 1.0f));
+        }
+        else
+        {
+            geometry.tangents.push_back(glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
+        }
+
+        if (mesh->HasTextureCoords(0))
+        {
+            const aiVector3D texCoord = mesh->mTextureCoords[0][vertexIndex];
+            geometry.texCoords0.push_back(glm::vec2(texCoord.x, texCoord.y));
+        }
+        else
+        {
+            geometry.texCoords0.push_back(glm::vec2(0.0f));
+        }
+
+        if (mesh->HasTextureCoords(1))
+        {
+            const aiVector3D texCoord = mesh->mTextureCoords[1][vertexIndex];
+            geometry.texCoords1.push_back(glm::vec2(texCoord.x, texCoord.y));
+        }
+        else
+        {
+            geometry.texCoords1.push_back(glm::vec2(0.0f));
+        }
+
+        if (mesh->HasVertexColors(0))
+        {
+            geometry.colors.push_back(packColor(mesh->mColors[0][vertexIndex]));
+        }
+        else
+        {
+            geometry.colors.push_back(0xFFFFFFFFu);
+        }
     }
 
     for (uint32_t faceIndex = 0; faceIndex < mesh->mNumFaces; ++faceIndex)
     {
         if (mesh->mFaces[faceIndex].mNumIndices == 3)
         {
-            indexCount += 3;
+            geometry.indices.push_back(mesh->mFaces[faceIndex].mIndices[0]);
+            geometry.indices.push_back(mesh->mFaces[faceIndex].mIndices[1]);
+            geometry.indices.push_back(mesh->mFaces[faceIndex].mIndices[2]);
         }
     }
-    return indexCount;
+
+    range.vertexCount = mesh->mNumVertices;
+    range.indexCount  = static_cast<uint32_t>(geometry.indices.size()) - range.firstIndex;
+
+    MeshInfo meshInfo;
+    meshInfo.vertexBufferAddress = 0;
+    meshInfo.IndexBufferAddress  = 0;
+    meshInfo.indexCount          = range.indexCount;
+    meshInfo.materialIdx         = range.materialIdx;
+
+    const uint32_t meshID = static_cast<uint32_t>(package.meshInfos.size());
+    package.geometry.ranges.push_back(range);
+    package.meshInfos.push_back(meshInfo);
+    return meshID;
 }
 
 int findLocalTextureIndex(const ModelAssetPackage& package, const std::filesystem::path& sourcePath, const std::string& name, bool embedded)
@@ -571,24 +652,24 @@ public:
                 continue;
             }
 
-            MeshInfo meshInfo;
-            meshInfo.vertexBufferAddress = 0;
-            meshInfo.IndexBufferAddress  = 0;
-            meshInfo.indexCount          = countTriangleIndices(mesh);
-
             uint32_t materialIndex = mesh->mMaterialIndex;
             if (materialIndex >= package.materials.size())
             {
                 materialIndex = 0;
             }
-            meshInfo.materialIdx = materialIndex;
+
+            const uint32_t meshID = appendMeshGeometry(mesh, package, materialIndex);
+            if (meshID == INVALID_SCENE_ID || meshID >= package.geometry.ranges.size())
+            {
+                context.meshSubmeshIndices.push_back(INVALID_SCENE_ID);
+                continue;
+            }
 
             ModelSubmeshAsset submesh;
-            submesh.meshID = static_cast<uint32_t>(package.meshInfos.size());
-            submesh.bbox   = computeBounds(mesh);
+            submesh.meshID = meshID;
+            submesh.bbox   = package.geometry.ranges[meshID].bbox;
 
             const uint32_t submeshIndex = static_cast<uint32_t>(package.asset.submeshes.size());
-            package.meshInfos.push_back(meshInfo);
             package.asset.submeshes.push_back(submesh);
             context.meshSubmeshIndices.push_back(submeshIndex);
         }
@@ -645,27 +726,6 @@ ModelOptimizeResult model_loading::optimizeModel(ImportedModel&& importedModel, 
     return result;
 }
 
-ModelLoadResult model_loading::uploadModel(OptimizedModel&& optimizedModel, const ModelLoadingConfig& loadingConfig)
-{
-    ModelLoadResult result;
-    result.success = true;
-    result.model   = std::move(optimizedModel.package);
-
-    if (loadingConfig.loadTextures)
-    {
-        for (ModelTextureResource& texture : result.model.textures)
-        {
-            if (!texture.texture && !texture.sourcePath.empty())
-            {
-                texture.texture = RefPtr<Texture>(
-                    new Texture(texture.sourcePath, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, texture.mipLevels, texture.isSrgb));
-            }
-        }
-    }
-
-    return result;
-}
-
 ModelLoadResult model_loading::loadModelFromFile(const std::filesystem::path& path, const ModelLoadingConfig& loadingConfig)
 {
     ModelImportResult importResult = importModelFromFile(path, loadingConfig);
@@ -684,7 +744,10 @@ ModelLoadResult model_loading::loadModelFromFile(const std::filesystem::path& pa
         return result;
     }
 
-    return uploadModel(std::move(optimizeResult.model), loadingConfig);
+    ModelLoadResult result;
+    result.success = true;
+    result.model   = std::move(optimizeResult.model.package);
+    return result;
 }
 
 } // namespace Play

@@ -43,7 +43,6 @@ namespace model_loading
 
 ModelImportResult   importModelFromFile(const std::filesystem::path& path, const ModelLoadingConfig& loadingConfig);
 ModelOptimizeResult optimizeModel(ImportedModel&& importedModel, const ModelLoadingConfig& loadingConfig);
-ModelLoadResult     uploadModel(OptimizedModel&& optimizedModel, const ModelLoadingConfig& loadingConfig);
 ModelLoadResult     loadModelFromFile(const std::filesystem::path& path, const ModelLoadingConfig& loadingConfig);
 
 } // namespace model_loading

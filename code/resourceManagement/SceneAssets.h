@@ -54,6 +54,16 @@ struct MeshInfo
     uint32_t materialIdx;
 };
 
+struct VertexStreamInfo
+{
+    uint64_t positionBufferAddress  = 0;
+    uint64_t normalBufferAddress    = 0;
+    uint64_t tangentBufferAddress   = 0;
+    uint64_t texCoord0BufferAddress = 0;
+    uint64_t texCoord1BufferAddress = 0;
+    uint64_t colorBufferAddress     = 0;
+};
+
 struct LightInfo
 {
     glm::vec3 lightPosition;
@@ -144,7 +154,7 @@ struct ModelAsset
     std::vector<glm::mat4>         transforms;
     uint32_t                       rootNode = INVALID_SCENE_ID;
 
-    RefPtr<Buffer>                vertexBuffer    = nullptr;
+    RefPtr<Buffer>                transformBuffer = nullptr;
     RefPtr<Buffer>                materialBuffer  = nullptr;
     RefPtr<Buffer>                meshInfoBuffer  = nullptr;
     RefPtr<Buffer>                lightInfoBuffer = nullptr;
@@ -167,9 +177,37 @@ struct ModelTextureResource
     }
 };
 
+struct ModelMeshRange
+{
+    uint32_t firstVertex = 0;
+    uint32_t vertexCount = 0;
+    uint32_t firstIndex  = 0;
+    uint32_t indexCount  = 0;
+    uint32_t materialIdx = 0;
+    AABB     bbox;
+};
+
+struct ModelGeometryPayload
+{
+    std::vector<glm::vec3> positions;
+    std::vector<glm::vec3> normals;
+    std::vector<glm::vec4> tangents;
+    std::vector<glm::vec2> texCoords0;
+    std::vector<glm::vec2> texCoords1;
+    std::vector<uint32_t>  colors;
+    std::vector<uint32_t>  indices;
+    std::vector<ModelMeshRange> ranges;
+
+    bool empty() const
+    {
+        return positions.empty() || indices.empty() || ranges.empty();
+    }
+};
+
 struct ModelAssetPackage
 {
     ModelAsset                               asset;
+    ModelGeometryPayload                     geometry;
     std::vector<MeshInfo>                    meshInfos;
     std::vector<shaderio::GltfShadeMaterial> materials;
     std::vector<shaderio::GltfTextureInfo>   textureInfos;
