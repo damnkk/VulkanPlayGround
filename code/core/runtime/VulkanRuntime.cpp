@@ -24,7 +24,7 @@ runtime::VulkanRuntime* GetVulkanRuntime()
 {
     return vkDriver;
 }
-}
+} // namespace Play
 
 namespace Play::runtime
 {
@@ -138,7 +138,7 @@ VulkanRuntime::VulkanRuntime(const RuntimeConfig& config, const nvvk::ContextIni
         return;
     }
 
-    Play::vkDriver     = this;
+    Play::vkDriver      = this;
     _registeredAsGlobal = true;
 
     init(config, contextInfo);
@@ -202,6 +202,8 @@ bool VulkanRuntime::init(const RuntimeConfig& config, const nvvk::ContextInitInf
     }
 
     _initialized = true;
+
+    // editor system entrance
     Play::editor::RuntimeEditor& editor = _guiHost.getEditor();
     editor.bindRuntime(*this, *_renderSession, _config.renderMode.c_str());
     _guiHost.start();
@@ -299,7 +301,7 @@ void VulkanRuntime::destroy()
     _initialized = false;
     if (_registeredAsGlobal && Play::vkDriver == this)
     {
-        Play::vkDriver = nullptr;
+        Play::vkDriver      = nullptr;
         _registeredAsGlobal = false;
     }
 }
@@ -322,9 +324,8 @@ bool VulkanRuntime::initContext(const nvvk::ContextInitInfo& contextInfo)
     }
     info.instanceExtensions.push_back(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
 
-    const auto existingPreSelect = info.preSelectPhysicalDeviceCallback;
-    info.preSelectPhysicalDeviceCallback =
-        [existingPreSelect](VkInstance instance, VkPhysicalDevice physicalDevice)
+    const auto existingPreSelect         = info.preSelectPhysicalDeviceCallback;
+    info.preSelectPhysicalDeviceCallback = [existingPreSelect](VkInstance instance, VkPhysicalDevice physicalDevice)
     {
         if (existingPreSelect && !(*existingPreSelect)(instance, physicalDevice))
         {
@@ -338,8 +339,7 @@ bool VulkanRuntime::initContext(const nvvk::ContextInitInfo& contextInfo)
 
         for (uint32_t i = 0; i < queueFamilyCount; ++i)
         {
-            if ((queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0 &&
-                SDL_Vulkan_GetPresentationSupport(instance, physicalDevice, i))
+            if ((queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0 && SDL_Vulkan_GetPresentationSupport(instance, physicalDevice, i))
             {
                 return true;
             }
@@ -587,10 +587,9 @@ Play::Texture* VulkanRuntime::refreshCurrentSwapchainTexture()
         }
     }
 
-    _swapchainTextures.emplace_back(new Play::Texture("SwapchainBackbuffer", image, _swapchain.getImageView(), _swapchain.getImageFormat(),
-                                                      {_windowSize.width, _windowSize.height, 1},
-                                                      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-                                                      VK_IMAGE_LAYOUT_UNDEFINED));
+    _swapchainTextures.emplace_back(new Play::Texture(
+        "SwapchainBackbuffer", image, _swapchain.getImageView(), _swapchain.getImageFormat(), {_windowSize.width, _windowSize.height, 1},
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_IMAGE_LAYOUT_UNDEFINED));
     return _swapchainTextures.back().get();
 }
 
@@ -635,7 +634,7 @@ bool VulkanRuntime::prepareFrame()
 
 VkCommandBuffer VulkanRuntime::beginCommandRecording()
 {
-    FrameData& frame = _frames[_frameIndex];
+    FrameData& frame       = _frames[_frameIndex];
     frame.presentCmdBuffer = frame.presentCmdPool.allocCommandBuffer();
 
     const VkCommandBufferBeginInfo beginInfo{
@@ -648,7 +647,7 @@ VkCommandBuffer VulkanRuntime::beginCommandRecording()
 
 void VulkanRuntime::recordBootstrapClear(VkCommandBuffer cmd) const
 {
-    const float pulse = static_cast<float>(_frameCounter % 240) / 239.0F;
+    const float                     pulse = static_cast<float>(_frameCounter % 240) / 239.0F;
     const VkRenderingAttachmentInfo colorAttachment{
         .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .imageView   = _swapchain.getImageView(),
@@ -679,7 +678,7 @@ void VulkanRuntime::endFrame(VkCommandBuffer cmd)
     FrameData& frame = _frames[_frameIndex];
 
     const uint64_t signalValue = frame.timelineValue + 1;
-    frame.timelineValue       = signalValue;
+    frame.timelineValue        = signalValue;
 
     const VkCommandBufferSubmitInfo cmdInfo{
         .sType         = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,

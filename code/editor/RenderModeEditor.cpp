@@ -1,7 +1,5 @@
 #include "editor/RenderModeEditor.h"
 
-#include "editor/EditorHtml.h"
-
 namespace Play::editor
 {
 
@@ -25,6 +23,16 @@ void RenderModeEditor::setSceneManager(Play::SceneManager* sceneManager)
     _sceneManagerEditor.setSceneManager(sceneManager);
 }
 
+void RenderModeEditor::buildSnapshot(EditorUiRenderMode& renderMode, bool active) const
+{
+    renderMode.id     = _id;
+    renderMode.title  = _title;
+    renderMode.active = active;
+
+    _sceneManagerEditor.buildSnapshot(renderMode);
+    _controlPanel.buildSnapshot(renderMode);
+}
+
 std::string RenderModeEditor::createSceneNode(const char* parentNodeKey, const char* nodeType)
 {
     return _sceneManagerEditor.createSceneNode(parentNodeKey, nodeType);
@@ -38,29 +46,6 @@ bool RenderModeEditor::setSceneNodeTransform(const char* nodeKey, const char* tr
 bool RenderModeEditor::addSceneNodeComponent(const char* nodeKey, const char* componentType)
 {
     return _sceneManagerEditor.addSceneNodeComponent(nodeKey, componentType);
-}
-
-void RenderModeEditor::appendTabHtml(std::string& html, bool active) const
-{
-    html += "<button class=\"render-mode-tab";
-    html += active ? " active" : "";
-    html += "\" data-render-mode=\"";
-    detail::appendHtmlText(html, _id);
-    html += "\">";
-    detail::appendHtmlText(html, _title);
-    html += "</button>";
-}
-
-void RenderModeEditor::appendPageHtml(std::string& html, bool active) const
-{
-    html += "<section class=\"render-mode-page";
-    html += active ? " active" : "";
-    html += "\" data-render-mode-page=\"";
-    detail::appendHtmlText(html, _id);
-    html += "\">";
-    _sceneManagerEditor.appendHtml(html);
-    _controlPanel.appendHtml(html);
-    html += "</section>";
 }
 
 } // namespace Play::editor

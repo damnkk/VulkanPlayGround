@@ -1,7 +1,6 @@
 #ifndef PLAY_CODE_EDITOR_CONTROLPANEL_H
 #define PLAY_CODE_EDITOR_CONTROLPANEL_H
 
-
 #include "editor/EditorRegistry.h"
 
 namespace Play::editor
@@ -17,11 +16,11 @@ public:
     ControlPanel(ControlPanel&&)                 = delete;
     ControlPanel& operator=(ControlPanel&&)      = delete;
 
-    void appendHtml(std::string& html) const;
+    void buildSnapshot(EditorUiRenderMode& renderMode) const;
 
 private:
-    EditorRegistry&   _registry;
-    EditorRenderMode  _renderMode = EditorRenderMode::Any;
+    EditorRegistry&  _registry;
+    EditorRenderMode _renderMode = EditorRenderMode::Any;
 };
 
 } // namespace Play::editor

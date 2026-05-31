@@ -1,10 +1,8 @@
 #ifndef PLAY_CODE_EDITOR_RUNTIMEEDITOR_H
 #define PLAY_CODE_EDITOR_RUNTIMEEDITOR_H
 
-
 #include "editor/EditorRegistry.h"
 #include "editor/EditorRuntimeContext.h"
-#include "editor/MainBar.h"
 #include "editor/RenderModeTabs.h"
 
 namespace Play
@@ -42,12 +40,11 @@ public:
         return _renderModeTabs;
     }
 
-    std::string buildHtml() const;
+    EditorUiSnapshot buildSnapshot() const;
 
 private:
     EditorRuntimeContext _runtimeContext;
     EditorRegistry       _editorRegistry;
-    MainBar              _mainBar;
     RenderModeTabs       _renderModeTabs;
 };
 

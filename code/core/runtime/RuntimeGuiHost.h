@@ -1,11 +1,11 @@
 #ifndef PLAY_CODE_CORE_RUNTIME_RUNTIMEGUIHOST_H
 #define PLAY_CODE_CORE_RUNTIME_RUNTIMEGUIHOST_H
 
-
 #include <SDL3/SDL.h>
 
 #include "editor/RuntimeEditor.h"
-#include "webview/types.h"
+
+class QApplication;
 
 namespace Play::runtime
 {
@@ -35,23 +35,17 @@ public:
     }
 
 private:
-    static int  threadMain(void* data);
-    static void requestTerminate(webview_t webview, void* arg);
-    static void setEditorProperty(const char* id, const char* request, void* arg);
-    static void resetEditorObject(const char* id, const char* request, void* arg);
-    static void createSceneNode(const char* id, const char* request, void* arg);
-    static void setSceneNodeTransform(const char* id, const char* request, void* arg);
-    static void addSceneNodeComponent(const char* id, const char* request, void* arg);
+    static int threadMain(void* data);
 
     int  run();
     void cleanupFinishedThread();
-    void setWebview(webview_t webview);
+    void setApplication(QApplication* application);
     void markThreadFinished();
 
-    SDL_Thread*                 _thread        = nullptr;
-    SDL_Mutex*                  _mutex         = nullptr;
-    webview_t                   _webview       = nullptr;
-    bool                        _stopRequested = false;
+    SDL_Thread*                 _thread         = nullptr;
+    SDL_Mutex*                  _mutex          = nullptr;
+    QApplication*               _application    = nullptr;
+    bool                        _stopRequested  = false;
     bool                        _threadFinished = false;
     Play::editor::RuntimeEditor _editor;
 };

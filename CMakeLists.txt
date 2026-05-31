@@ -31,6 +31,18 @@ set(SPIRV_REFLECT_STATIC_LIB ON CACHE BOOL "Build spv-reflect as static lib" FOR
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/External/spv_reflect)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_AUTOMOC ON)
+
+#####################################################################################
+# Qt6
+if(CMAKE_BUILD_TYPE MATCHES "^[Dd]ebug$")
+  set(_vpg_qt_default_root ${CMAKE_CURRENT_SOURCE_DIR}/External/QT6/debug)
+else()
+  set(_vpg_qt_default_root ${CMAKE_CURRENT_SOURCE_DIR}/External/QT6/release)
+endif()
+set(VPG_QT6_ROOT ${_vpg_qt_default_root} CACHE PATH "Qt6 install prefix used by VulkanPlayGround")
+list(PREPEND CMAKE_PREFIX_PATH ${VPG_QT6_ROOT})
+find_package(Qt6 CONFIG REQUIRED COMPONENTS Widgets)
 
 #####################################################################################
 # Source files for this project
@@ -113,16 +125,6 @@ add_assimp_dependency()
 add_executable(${PROJECT_NAME} ${SOURCE_FILES})
 
 #####################################################################################
-# webview
-set(WEBVIEW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-set(WEBVIEW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(WEBVIEW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(WEBVIEW_BUILD_SHARED_LIBRARY OFF CACHE BOOL "" FORCE)
-set(WEBVIEW_BUILD_STATIC_LIBRARY OFF CACHE BOOL "" FORCE)
-set(WEBVIEW_INSTALL_TARGETS OFF CACHE BOOL "" FORCE)
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/External/webview)
-
-#####################################################################################
 # rttr
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 set(BUILD_RTTR_DYNAMIC OFF CACHE BOOL "" FORCE)
@@ -168,8 +170,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   nvpro2::nvvk
   nvpro2::nvvkglsl
   SDL3::SDL3
+  Qt6::Widgets
   vk_radix_sort
-  webview::core
   RTTR::Core_Lib
   spirv-reflect-static
   crc32c
@@ -180,19 +182,51 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   assimp::assimp
 )
 
+foreach(_vpg_qt_module Core Gui Widgets)
+  add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "$<TARGET_FILE:Qt6::${_vpg_qt_module}>"
+      "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
+  )
+endforeach()
+
+foreach(_vpg_qt_plugin_dir platforms styles imageformats)
+  if(EXISTS "${VPG_QT6_ROOT}/plugins/${_vpg_qt_plugin_dir}")
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/${_vpg_qt_plugin_dir}"
+      COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${VPG_QT6_ROOT}/plugins/${_vpg_qt_plugin_dir}"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/${_vpg_qt_plugin_dir}"
+    )
+  endif()
+endforeach()
+
 add_project_definitions(${PROJECT_NAME})
 
 # This sample doesn't need addtional files, but one might need to
 # copy required dlls, additional commands etc. through this command
 message(STATUS "NsightAftermath_LIBRARY_DIR: ${NsightAftermath_LIBRARY_DIR}")
-copy_to_runtime_and_install( ${PROJECT_NAME} 
-FILES
-${CMAKE_CURRENT_BINARY_DIR}/_deps/Slang-windows-x86_64-2025.13.1/bin/gfx.dll
-${CMAKE_CURRENT_BINARY_DIR}/_deps/Slang-windows-x86_64-2025.13.1/bin/slang-glsl-module.dll
-${CMAKE_CURRENT_BINARY_DIR}/_deps/Slang-windows-x86_64-2025.13.1/bin/slang-glslang.dll
-${CMAKE_CURRENT_BINARY_DIR}/_deps/Slang-windows-x86_64-2025.13.1/bin/slang-llvm.dll
-${CMAKE_CURRENT_BINARY_DIR}/_deps/Slang-windows-x86_64-2025.13.1/bin/slang-rt.dll
-${CMAKE_CURRENT_BINARY_DIR}/_deps/Slang-windows-x86_64-2025.13.1/bin/slang.dll
-${NsightAftermath_DLLS}
- AUTO)
+file(GLOB _vpg_slang_runtime_bin_dirs CONFIGURE_DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/_deps/Slang-windows-x86_64-*/bin")
+set(_vpg_slang_runtime_dlls)
+if(_vpg_slang_runtime_bin_dirs)
+  list(SORT _vpg_slang_runtime_bin_dirs)
+  list(POP_BACK _vpg_slang_runtime_bin_dirs _vpg_slang_runtime_bin_dir)
+  foreach(_vpg_slang_runtime_dll
+    gfx.dll
+    slang-glsl-module.dll
+    slang-glslang.dll
+    slang-llvm.dll
+    slang-rt.dll
+    slang.dll
+  )
+    list(APPEND _vpg_slang_runtime_dlls "${_vpg_slang_runtime_bin_dir}/${_vpg_slang_runtime_dll}")
+  endforeach()
+endif()
+
+copy_to_runtime_and_install(${PROJECT_NAME}
+  FILES
+    ${_vpg_slang_runtime_dlls}
+    ${NsightAftermath_DLLS}
+  AUTO)
 
