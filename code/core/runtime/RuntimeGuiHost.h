@@ -7,6 +7,11 @@
 
 class QApplication;
 
+namespace Play::editor
+{
+class QtRuntimeEditorWindow;
+} // namespace Play::editor
+
 namespace Play::runtime
 {
 
@@ -39,12 +44,15 @@ private:
 
     int  run();
     void cleanupFinishedThread();
+    void requestShowWindow();
     void setApplication(QApplication* application);
+    void setWindow(Play::editor::QtRuntimeEditorWindow* window);
     void markThreadFinished();
 
     SDL_Thread*                 _thread         = nullptr;
     SDL_Mutex*                  _mutex          = nullptr;
     QApplication*               _application    = nullptr;
+    Play::editor::QtRuntimeEditorWindow* _window = nullptr;
     bool                        _stopRequested  = false;
     bool                        _threadFinished = false;
     Play::editor::RuntimeEditor _editor;

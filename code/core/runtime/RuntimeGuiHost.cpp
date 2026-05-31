@@ -23,6 +23,7 @@ bool RuntimeGuiHost::start()
 
     if (_thread)
     {
+        requestShowWindow();
         return true;
     }
 
@@ -77,6 +78,7 @@ void RuntimeGuiHost::stop()
 
     SDL_LockMutex(_mutex);
     _application = nullptr;
+    _window      = nullptr;
     SDL_UnlockMutex(_mutex);
 
     SDL_DestroyMutex(_mutex);
@@ -95,6 +97,8 @@ int RuntimeGuiHost::run()
     int   argumentCount     = 1;
 
     QApplication application(argumentCount, arguments);
+    // Closing the panel should hide it, not tear down QApplication. Recreating QApplication in this SDL thread can trip Qt platform pixmap state.
+    application.setQuitOnLastWindowClosed(false);
     setApplication(&application);
 
     SDL_LockMutex(_mutex);
@@ -105,8 +109,10 @@ int RuntimeGuiHost::run()
     if (!shouldStop)
     {
         Play::editor::QtRuntimeEditorWindow window(_editor);
+        setWindow(&window);
         window.show();
         result = application.exec();
+        setWindow(nullptr);
     }
 
     setApplication(nullptr);
@@ -139,10 +145,39 @@ void RuntimeGuiHost::cleanupFinishedThread()
     _mutex = nullptr;
 }
 
+void RuntimeGuiHost::requestShowWindow()
+{
+    Play::editor::QtRuntimeEditorWindow* window = nullptr;
+    SDL_LockMutex(_mutex);
+    window = _window;
+    SDL_UnlockMutex(_mutex);
+
+    if (!window)
+    {
+        return;
+    }
+
+    QMetaObject::invokeMethod(window,
+                              [window]()
+                              {
+                                  window->showNormal();
+                                  window->raise();
+                                  window->activateWindow();
+                              },
+                              Qt::QueuedConnection);
+}
+
 void RuntimeGuiHost::setApplication(QApplication* application)
 {
     SDL_LockMutex(_mutex);
     _application = application;
+    SDL_UnlockMutex(_mutex);
+}
+
+void RuntimeGuiHost::setWindow(Play::editor::QtRuntimeEditorWindow* window)
+{
+    SDL_LockMutex(_mutex);
+    _window = window;
     SDL_UnlockMutex(_mutex);
 }
 

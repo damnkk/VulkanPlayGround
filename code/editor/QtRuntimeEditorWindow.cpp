@@ -4,13 +4,17 @@
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QFrame>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
+#include <QLayoutItem>
 #include <QLineEdit>
+#include <QMouseEvent>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QTabWidget>
@@ -38,7 +42,7 @@ std::string toStdString(const QString& text)
 
 QString makeDoubleText(double value)
 {
-    return QString::number(value, 'g', 9);
+    return QString::number(value, 'f', 3);
 }
 
 double textToDouble(const std::string& text, double fallback = 0.0)
@@ -96,7 +100,184 @@ void applySpinBoxRange(QDoubleSpinBox* spinBox, const EditorUiProperty& property
     }
     spinBox->setSingleStep(textToDouble(property.step, 1.0));
 }
+
+std::string itemKey(QTreeWidgetItem* item)
+{
+    return item ? toStdString(item->data(0, Qt::UserRole).toString()) : std::string();
+}
+
+std::string makeComponentSignature(const EditorUiSceneNode& node)
+{
+    std::string signature = node.key + "\n";
+    for (const EditorUiSceneComponent& component : node.components)
+    {
+        signature += component.typeName;
+        signature += "\n";
+        for (const EditorUiKeyValue& detail : component.details)
+        {
+            signature += detail.label;
+            signature += "=";
+            signature += detail.value;
+            signature += "\n";
+        }
+    }
+    return signature;
+}
+
+int transformEditorIndex(int groupIndex, int componentIndex)
+{
+    return groupIndex * 3 + componentIndex;
+}
+
+int controlPanelColumnCount(const QScrollArea* scrollArea)
+{
+    const int viewportWidth = scrollArea && scrollArea->viewport() ? scrollArea->viewport()->width() : 0;
+    return viewportWidth >= 760 ? 2 : 1;
+}
+
+struct VectorComponentInfo
+{
+    std::string rootPath;
+    int         componentIndex = -1;
+};
+
+int vectorComponentIndex(const std::string& component)
+{
+    if (component == "x" || component == "r")
+    {
+        return 0;
+    }
+
+    if (component == "y" || component == "g")
+    {
+        return 1;
+    }
+
+    if (component == "z" || component == "b")
+    {
+        return 2;
+    }
+
+    if (component == "w" || component == "a")
+    {
+        return 3;
+    }
+
+    return -1;
+}
+
+bool parseVectorComponent(const EditorUiProperty& property, VectorComponentInfo& output)
+{
+    if (property.kind != EditorUiPropertyKind::Number)
+    {
+        return false;
+    }
+
+    const size_t dot = property.path.rfind('.');
+    if (dot == std::string::npos || dot == 0 || dot + 1 >= property.path.size())
+    {
+        return false;
+    }
+
+    const int componentIndex = vectorComponentIndex(property.path.substr(dot + 1));
+    if (componentIndex < 0)
+    {
+        return false;
+    }
+
+    output.rootPath       = property.path.substr(0, dot);
+    output.componentIndex = componentIndex;
+    return true;
+}
+
+std::string makeVectorLabel(const EditorUiProperty& property, const std::string& rootPath)
+{
+    const size_t dot = property.label.rfind('.');
+    if (dot != std::string::npos && vectorComponentIndex(property.label.substr(dot + 1)) >= 0)
+    {
+        return property.label.substr(0, dot);
+    }
+
+    return rootPath;
+}
+
+class SceneTreeWidget final : public QTreeWidget
+{
+public:
+    explicit SceneTreeWidget(QWidget* parent = nullptr) : QTreeWidget(parent) {}
+
+protected:
+    void mousePressEvent(QMouseEvent* event) override
+    {
+        if (!itemAt(event->position().toPoint()))
+        {
+            setCurrentItem(nullptr);
+            clearSelection();
+            event->accept();
+            return;
+        }
+        QTreeWidget::mousePressEvent(event);
+    }
+};
 } // namespace
+
+struct QtRuntimeEditorWindow::RenderModePage
+{
+    struct PropertyWidgets
+    {
+        QLabel*         label  = nullptr;
+        QWidget*        editor = nullptr;
+        QDoubleSpinBox* componentEditors[4] = {};
+        std::string     componentPaths[4];
+        int             kind           = -1;
+        int             componentCount = 0;
+        bool            seen           = false;
+    };
+
+    struct ControlObjectWidgets
+    {
+        QGroupBox*                           group           = nullptr;
+        QLabel*                              typeLabel       = nullptr;
+        QPushButton*                         resetButton     = nullptr;
+        QFormLayout*                         form            = nullptr;
+        QLabel*                              emptyLabel      = nullptr;
+        bool                                 seen            = false;
+        std::map<std::string, PropertyWidgets> propertyWidgets;
+    };
+
+    std::string renderModeId;
+    bool        seen              = false;
+    bool        updatingSceneTree = false;
+
+    QWidget*    page = nullptr;
+    QTreeWidget* sceneTree = nullptr;
+    QLabel*     sceneEmptyLabel = nullptr;
+    QPushButton* addNode2DButton = nullptr;
+    QPushButton* addNode3DButton = nullptr;
+
+    QScrollArea*    inspectorScroll = nullptr;
+    QWidget*        inspectorDetails = nullptr;
+    QLabel*         inspectorEmptyLabel = nullptr;
+    QLabel*         inspectorNameLabel = nullptr;
+    QLabel*         inspectorTypeLabel = nullptr;
+    QGroupBox*      transformGroup = nullptr;
+    QDoubleSpinBox* transformEditors[9] = {};
+    QGroupBox*      componentGroup = nullptr;
+    QVBoxLayout*    componentDetailsLayout = nullptr;
+    QPushButton*    addModelButton = nullptr;
+    std::string     inspectorNodeKey;
+    std::string     componentSignature;
+
+    QScrollArea* controlsScroll = nullptr;
+    QWidget*     controlsContent = nullptr;
+    QVBoxLayout* controlsLayout = nullptr;
+    QWidget*     controlsGridHost = nullptr;
+    QGridLayout* controlsGrid = nullptr;
+    QLabel*      controlsEmptyLabel = nullptr;
+
+    std::map<unsigned int, ControlObjectWidgets> controlObjects;
+    std::map<std::string, QTreeWidgetItem*>      sceneItemsByKey;
+};
 
 QtRuntimeEditorWindow::QtRuntimeEditorWindow(RuntimeEditor& editor, QWidget* parent) : QMainWindow(parent), _editor(editor)
 {
@@ -139,6 +320,21 @@ QtRuntimeEditorWindow::QtRuntimeEditorWindow(RuntimeEditor& editor, QWidget* par
     refreshFromEditor();
 }
 
+QtRuntimeEditorWindow::~QtRuntimeEditorWindow()
+{
+    if (_refreshTimer)
+    {
+        _refreshTimer->stop();
+    }
+    _refreshScheduled = false;
+
+    for (auto& pageEntry : _pagesByMode)
+    {
+        delete pageEntry.second;
+    }
+    _pagesByMode.clear();
+}
+
 void QtRuntimeEditorWindow::refreshFromEditor()
 {
     if (_refreshing)
@@ -146,10 +342,228 @@ void QtRuntimeEditorWindow::refreshFromEditor()
         return;
     }
 
+    _refreshScheduled = false;
     _refreshing = true;
+    const EditorUiSnapshot snapshot = _editor.buildSnapshot();
+    updateRenderModeTabs(snapshot);
+    _refreshing = false;
+}
+
+QtRuntimeEditorWindow::RenderModePage* QtRuntimeEditorWindow::createRenderModePage(const EditorUiRenderMode& renderMode)
+{
+    RenderModePage* page = new RenderModePage();
+    page->renderModeId  = renderMode.id;
+    page->page          = new QWidget();
+    page->page->setProperty("renderModeId", toQString(renderMode.id));
+
+    QVBoxLayout* pageLayout = new QVBoxLayout(page->page);
+    pageLayout->setContentsMargins(8, 8, 8, 8);
+
+    QSplitter* splitter = new QSplitter(Qt::Horizontal, page->page);
+    QWidget*   scenePanel = new QWidget(splitter);
+    QVBoxLayout* sceneLayout = new QVBoxLayout(scenePanel);
+    sceneLayout->setContentsMargins(0, 0, 0, 0);
+
+    QHBoxLayout* sceneHeader = new QHBoxLayout();
+    QLabel*      sceneTitle  = new QLabel("Scene Tree");
+    sceneTitle->setProperty("sectionTitle", true);
+    sceneHeader->addWidget(sceneTitle);
+    sceneHeader->addStretch();
+
+    page->addNode2DButton = new QPushButton("Node2D");
+    page->addNode3DButton = new QPushButton("Node3D");
+    sceneHeader->addWidget(page->addNode2DButton);
+    sceneHeader->addWidget(page->addNode3DButton);
+    sceneLayout->addLayout(sceneHeader);
+
+    page->sceneEmptyLabel = makeMutedLabel("");
+    sceneLayout->addWidget(page->sceneEmptyLabel);
+
+    page->sceneTree = new SceneTreeWidget(scenePanel);
+    page->sceneTree->setColumnCount(2);
+    page->sceneTree->setHeaderLabels(QStringList() << "Node" << "Type");
+    page->sceneTree->header()->setStretchLastSection(false);
+    page->sceneTree->header()->setSectionResizeMode(0, QHeaderView::Stretch);
+    page->sceneTree->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    sceneLayout->addWidget(page->sceneTree);
+
+    QObject::connect(page->addNode2DButton, &QPushButton::clicked, this,
+                     [this, page]() { requestCreateSceneNode(page->renderModeId, "Node2D"); });
+    QObject::connect(page->addNode3DButton, &QPushButton::clicked, this,
+                     [this, page]() { requestCreateSceneNode(page->renderModeId, "Node3D"); });
+    QObject::connect(page->sceneTree, &QTreeWidget::itemExpanded, this,
+                     [this, page](QTreeWidgetItem* item)
+                     {
+                         if (!page->updatingSceneTree)
+                         {
+                             _expandedNodesByMode[page->renderModeId].insert(itemKey(item));
+                         }
+                     });
+    QObject::connect(page->sceneTree, &QTreeWidget::itemCollapsed, this,
+                     [this, page](QTreeWidgetItem* item)
+                     {
+                         if (!page->updatingSceneTree)
+                         {
+                             _expandedNodesByMode[page->renderModeId].erase(itemKey(item));
+                         }
+                     });
+    QObject::connect(page->sceneTree, &QTreeWidget::currentItemChanged, this,
+                     [this, page](QTreeWidgetItem* item, QTreeWidgetItem*)
+                     {
+                         if (page->updatingSceneTree)
+                         {
+                             return;
+                         }
+
+                         if (item)
+                         {
+                             _selectedNodeByMode[page->renderModeId] = itemKey(item);
+                         }
+                         else
+                         {
+                             _selectedNodeByMode[page->renderModeId].clear();
+                         }
+                         scheduleRefresh();
+                     });
+
+    splitter->addWidget(scenePanel);
+
+    QSplitter* rightSplitter = new QSplitter(Qt::Vertical, splitter);
+
+    page->inspectorScroll = new QScrollArea(rightSplitter);
+    page->inspectorScroll->setWidgetResizable(true);
+    QWidget* inspectorContent = new QWidget();
+    page->inspectorScroll->setWidget(inspectorContent);
+
+    QVBoxLayout* inspectorLayout = new QVBoxLayout(inspectorContent);
+    inspectorLayout->setContentsMargins(0, 0, 0, 0);
+
+    QLabel* inspectorTitle = new QLabel("Node Inspector");
+    inspectorTitle->setProperty("sectionTitle", true);
+    inspectorLayout->addWidget(inspectorTitle);
+
+    page->inspectorEmptyLabel = makeMutedLabel("");
+    page->inspectorEmptyLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    inspectorLayout->addWidget(page->inspectorEmptyLabel);
+
+    page->inspectorDetails = new QWidget(inspectorContent);
+    QVBoxLayout* inspectorDetailsLayout = new QVBoxLayout(page->inspectorDetails);
+    inspectorDetailsLayout->setContentsMargins(0, 0, 0, 0);
+
+    page->inspectorNameLabel = new QLabel();
+    page->inspectorNameLabel->setProperty("objectTitle", true);
+    inspectorDetailsLayout->addWidget(page->inspectorNameLabel);
+    page->inspectorTypeLabel = makeMutedLabel("");
+    inspectorDetailsLayout->addWidget(page->inspectorTypeLabel);
+    addSeparator(inspectorDetailsLayout);
+
+    page->transformGroup = new QGroupBox("Transform");
+    QFormLayout* transformForm = new QFormLayout(page->transformGroup);
+
+    static const char* transformLabels[] = {"Translation", "Rotation", "Scale"};
+    static const char* transformNames[]  = {"translation", "rotation", "scale"};
+    static const char* components[]      = {"x", "y", "z"};
+    static const double transformSteps[] = {0.01, 0.1, 0.01};
+
+    for (int groupIndex = 0; groupIndex < 3; ++groupIndex)
+    {
+        QWidget*     row       = new QWidget(page->transformGroup);
+        QHBoxLayout* rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+
+        for (int componentIndex = 0; componentIndex < 3; ++componentIndex)
+        {
+            QDoubleSpinBox* spin = new QDoubleSpinBox(row);
+            spin->setDecimals(3);
+            spin->setRange(-1000000000.0, 1000000000.0);
+            spin->setSingleStep(transformSteps[groupIndex]);
+            spin->setKeyboardTracking(false);
+            rowLayout->addWidget(spin);
+
+            page->transformEditors[transformEditorIndex(groupIndex, componentIndex)] = spin;
+            const std::string path = std::string(transformNames[groupIndex]) + "." + components[componentIndex];
+            QObject::connect(spin, &QDoubleSpinBox::valueChanged, this,
+                             [this, page, path](double value)
+                             {
+                                 if (!_refreshing && !page->inspectorNodeKey.empty())
+                                 {
+                                     requestSetSceneNodeTransform(page->renderModeId, page->inspectorNodeKey, path.c_str(), value);
+                                 }
+                             });
+        }
+
+        transformForm->addRow(transformLabels[groupIndex], row);
+    }
+    inspectorDetailsLayout->addWidget(page->transformGroup);
+
+    page->componentGroup = new QGroupBox("Components");
+    QVBoxLayout* componentLayout = new QVBoxLayout(page->componentGroup);
+    page->addModelButton = new QPushButton("Add ModelComponent");
+    componentLayout->addWidget(page->addModelButton);
+
+    QWidget* componentDetails = new QWidget(page->componentGroup);
+    page->componentDetailsLayout = new QVBoxLayout(componentDetails);
+    page->componentDetailsLayout->setContentsMargins(0, 0, 0, 0);
+    componentLayout->addWidget(componentDetails);
+    inspectorDetailsLayout->addWidget(page->componentGroup);
+    inspectorDetailsLayout->addStretch();
+    inspectorLayout->addWidget(page->inspectorDetails);
+    inspectorLayout->addStretch();
+
+    QObject::connect(page->addModelButton, &QPushButton::clicked, this,
+                     [this, page]()
+                     {
+                         if (!page->inspectorNodeKey.empty())
+                         {
+                             requestAddSceneNodeComponent(page->renderModeId, page->inspectorNodeKey);
+                         }
+                     });
+
+    rightSplitter->addWidget(page->inspectorScroll);
+
+    page->controlsScroll = new QScrollArea(rightSplitter);
+    page->controlsScroll->setWidgetResizable(true);
+    page->controlsScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    page->controlsContent = new QWidget();
+    page->controlsContent->setMinimumWidth(0);
+    page->controlsScroll->setWidget(page->controlsContent);
+    page->controlsLayout = new QVBoxLayout(page->controlsContent);
+    page->controlsLayout->setContentsMargins(0, 0, 0, 0);
+
+    QLabel* controlsTitle = new QLabel("Control Panel");
+    controlsTitle->setProperty("sectionTitle", true);
+    page->controlsLayout->addWidget(controlsTitle);
+    page->controlsEmptyLabel = makeMutedLabel("No control objects registered for this render mode.");
+    page->controlsLayout->addWidget(page->controlsEmptyLabel);
+    page->controlsGridHost = new QWidget(page->controlsContent);
+    page->controlsGridHost->setMinimumWidth(0);
+    page->controlsGrid = new QGridLayout(page->controlsGridHost);
+    page->controlsGrid->setContentsMargins(0, 0, 0, 0);
+    page->controlsGrid->setColumnStretch(0, 1);
+    page->controlsGrid->setColumnStretch(1, 1);
+    page->controlsLayout->addWidget(page->controlsGridHost);
+    page->controlsLayout->addStretch();
+
+    rightSplitter->addWidget(page->controlsScroll);
+    rightSplitter->setStretchFactor(0, 2);
+    rightSplitter->setStretchFactor(1, 3);
+
+    splitter->addWidget(rightSplitter);
+    splitter->setStretchFactor(0, 2);
+    splitter->setStretchFactor(1, 5);
+    pageLayout->addWidget(splitter);
+
+    return page;
+}
+
+void QtRuntimeEditorWindow::updateRenderModeTabs(const EditorUiSnapshot& snapshot)
+{
     const QSignalBlocker blocker(_tabs);
 
-    const EditorUiSnapshot snapshot = _editor.buildSnapshot();
+    for (auto& pageEntry : _pagesByMode)
+    {
+        pageEntry.second->seen = false;
+    }
 
     if (_currentRenderMode.empty())
     {
@@ -163,236 +577,328 @@ void QtRuntimeEditorWindow::refreshFromEditor()
         }
     }
 
-    _tabs->clear();
-
-    int currentIndex = 0;
     for (const EditorUiRenderMode& renderMode : snapshot.renderModes)
     {
-        QWidget* page = buildRenderModePage(renderMode);
-        page->setProperty("renderModeId", toQString(renderMode.id));
-        const int index = _tabs->addTab(page, toQString(renderMode.title));
-
-        if (renderMode.id == _currentRenderMode || (_currentRenderMode.empty() && renderMode.active))
+        RenderModePage* page = nullptr;
+        auto            pageIt = _pagesByMode.find(renderMode.id);
+        if (pageIt == _pagesByMode.end())
         {
-            currentIndex = index;
+            page = createRenderModePage(renderMode);
+            _pagesByMode[renderMode.id] = page;
+            _tabs->addTab(page->page, toQString(renderMode.title));
+        }
+        else
+        {
+            page = pageIt->second;
+        }
+
+        page->seen = true;
+        page->page->setProperty("renderModeId", toQString(renderMode.id));
+        const int tabIndex = _tabs->indexOf(page->page);
+        if (tabIndex >= 0)
+        {
+            _tabs->setTabText(tabIndex, toQString(renderMode.title));
+        }
+        updateRenderModePage(*page, renderMode);
+    }
+
+    for (auto pageIt = _pagesByMode.begin(); pageIt != _pagesByMode.end();)
+    {
+        RenderModePage* page = pageIt->second;
+        if (page->seen)
+        {
+            ++pageIt;
+            continue;
+        }
+
+        const int tabIndex = _tabs->indexOf(page->page);
+        if (tabIndex >= 0)
+        {
+            _tabs->removeTab(tabIndex);
+        }
+        delete page->page;
+        delete page;
+        pageIt = _pagesByMode.erase(pageIt);
+    }
+
+    int currentIndex = -1;
+    for (const EditorUiRenderMode& renderMode : snapshot.renderModes)
+    {
+        auto pageIt = _pagesByMode.find(renderMode.id);
+        if (pageIt == _pagesByMode.end())
+        {
+            continue;
+        }
+
+        const int tabIndex = _tabs->indexOf(pageIt->second->page);
+        if (renderMode.id == _currentRenderMode)
+        {
+            currentIndex = tabIndex;
         }
     }
 
-    if (_tabs->count() > 0)
+    if (currentIndex < 0)
+    {
+        for (const EditorUiRenderMode& renderMode : snapshot.renderModes)
+        {
+            auto pageIt = _pagesByMode.find(renderMode.id);
+            if (pageIt != _pagesByMode.end())
+            {
+                currentIndex        = _tabs->indexOf(pageIt->second->page);
+                _currentRenderMode = renderMode.id;
+                if (renderMode.active)
+                {
+                    break;
+                }
+            }
+        }
+    }
+
+    if (currentIndex >= 0)
     {
         _tabs->setCurrentIndex(currentIndex);
     }
-
-    _refreshing = false;
 }
 
-QWidget* QtRuntimeEditorWindow::buildRenderModePage(const EditorUiRenderMode& renderMode)
+void QtRuntimeEditorWindow::updateRenderModePage(RenderModePage& page, const EditorUiRenderMode& renderMode)
 {
-    QWidget* page = new QWidget();
-
-    QVBoxLayout* pageLayout = new QVBoxLayout(page);
-    pageLayout->setContentsMargins(8, 8, 8, 8);
-
-    QSplitter* splitter = new QSplitter(Qt::Horizontal, page);
-    splitter->addWidget(buildScenePanel(renderMode));
-
-    QSplitter* rightSplitter = new QSplitter(Qt::Vertical, splitter);
-    rightSplitter->addWidget(buildInspectorPanel(renderMode));
-    rightSplitter->addWidget(buildControlsPanel(renderMode));
-    rightSplitter->setStretchFactor(0, 2);
-    rightSplitter->setStretchFactor(1, 3);
-
-    splitter->addWidget(rightSplitter);
-    splitter->setStretchFactor(0, 2);
-    splitter->setStretchFactor(1, 5);
-    pageLayout->addWidget(splitter);
-
-    return page;
+    updateScenePanel(page, renderMode);
+    updateInspectorPanel(page, renderMode);
+    updateControlsPanel(page, renderMode);
 }
 
-QWidget* QtRuntimeEditorWindow::buildScenePanel(const EditorUiRenderMode& renderMode)
+void QtRuntimeEditorWindow::updateScenePanel(RenderModePage& page, const EditorUiRenderMode& renderMode)
 {
-    QWidget* panel = new QWidget();
-
-    QVBoxLayout* layout = new QVBoxLayout(panel);
-    layout->setContentsMargins(0, 0, 0, 0);
-
-    QHBoxLayout* header = new QHBoxLayout();
-    QLabel*      title  = new QLabel("Scene Tree");
-    title->setProperty("sectionTitle", true);
-    header->addWidget(title);
-    header->addStretch();
-
-    QPushButton* add2D = new QPushButton("Node2D");
-    QPushButton* add3D = new QPushButton("Node3D");
-    add2D->setEnabled(renderMode.scene.available);
-    add3D->setEnabled(renderMode.scene.available);
-    header->addWidget(add2D);
-    header->addWidget(add3D);
-    layout->addLayout(header);
-
-    QObject::connect(add2D, &QPushButton::clicked, this, [this, id = renderMode.id]() { requestCreateSceneNode(id, "Node2D"); });
-    QObject::connect(add3D, &QPushButton::clicked, this, [this, id = renderMode.id]() { requestCreateSceneNode(id, "Node3D"); });
+    page.addNode2DButton->setEnabled(renderMode.scene.available);
+    page.addNode3DButton->setEnabled(renderMode.scene.available);
 
     if (!renderMode.scene.available)
     {
-        layout->addWidget(makeMutedLabel(toQString(renderMode.scene.emptyText)));
-        layout->addStretch();
-        return panel;
+        page.sceneEmptyLabel->setText(toQString(renderMode.scene.emptyText));
+        page.sceneEmptyLabel->show();
+        page.sceneTree->hide();
+        _selectedNodeByMode[renderMode.id].clear();
+        clearSceneTree(page);
+        return;
     }
 
-    QTreeWidget* tree = new QTreeWidget(panel);
-    tree->setColumnCount(2);
-    tree->setHeaderLabels(QStringList() << "Node" << "Type");
-    tree->header()->setStretchLastSection(false);
-    tree->header()->setSectionResizeMode(0, QHeaderView::Stretch);
-    tree->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-    layout->addWidget(tree);
+    page.sceneEmptyLabel->hide();
+    page.sceneTree->show();
 
-    std::map<std::string, QTreeWidgetItem*> itemsByKey;
-
-    const auto addNode = [&](const auto& self, const EditorUiSceneNode& node, QTreeWidgetItem* parent) -> void
+    page.updatingSceneTree = true;
+    const QSignalBlocker blocker(page.sceneTree);
+    syncSceneTreeNode(page, renderMode.scene.root, nullptr, 0);
+    while (page.sceneTree->topLevelItemCount() > 1)
     {
-        QTreeWidgetItem* item = parent ? new QTreeWidgetItem(parent) : new QTreeWidgetItem(tree);
-        item->setText(0, toQString(node.name));
-        item->setText(1, node.is3D ? "3D" : "2D");
-        item->setData(0, Qt::UserRole, toQString(node.key));
-        itemsByKey[node.key] = item;
-
-        const bool expanded = parent == nullptr || _expandedNodesByMode[renderMode.id].count(node.key) > 0;
-        item->setExpanded(expanded);
-
-        for (const EditorUiSceneNode& child : node.children)
-        {
-            self(self, child, item);
-        }
-    };
-
-    addNode(addNode, renderMode.scene.root, nullptr);
-
-    std::string selectedKey = _selectedNodeByMode[renderMode.id];
-    if (selectedKey.empty() || !findSceneNode(renderMode.scene.root, selectedKey))
-    {
-        selectedKey                        = renderMode.scene.root.key;
-        _selectedNodeByMode[renderMode.id] = selectedKey;
+        QTreeWidgetItem* item = page.sceneTree->takeTopLevelItem(1);
+        removeSceneTreeItem(page, item);
     }
 
-    const auto selectedIt = itemsByKey.find(selectedKey);
-    if (selectedIt != itemsByKey.end())
+    std::string& selectedKey = _selectedNodeByMode[renderMode.id];
+    if (!selectedKey.empty() && !findSceneNode(renderMode.scene.root, selectedKey))
     {
-        tree->setCurrentItem(selectedIt->second);
+        selectedKey.clear();
     }
 
-    QObject::connect(tree, &QTreeWidget::itemExpanded, this, [this, id = renderMode.id](QTreeWidgetItem* item)
-                     { _expandedNodesByMode[id].insert(toStdString(item->data(0, Qt::UserRole).toString())); });
-    QObject::connect(tree, &QTreeWidget::itemCollapsed, this, [this, id = renderMode.id](QTreeWidgetItem* item)
-                     { _expandedNodesByMode[id].erase(toStdString(item->data(0, Qt::UserRole).toString())); });
-    QObject::connect(tree, &QTreeWidget::itemSelectionChanged, this,
-                     [this, tree, id = renderMode.id]()
-                     {
-                         QTreeWidgetItem* item = tree->currentItem();
-                         if (!item)
-                         {
-                             return;
-                         }
-                         _selectedNodeByMode[id] = toStdString(item->data(0, Qt::UserRole).toString());
-                         QTimer::singleShot(0, this, [this]() { refreshFromEditor(); });
-                     });
-
-    return panel;
-}
-
-QWidget* QtRuntimeEditorWindow::buildInspectorPanel(const EditorUiRenderMode& renderMode)
-{
-    QScrollArea* scroll = new QScrollArea();
-    scroll->setWidgetResizable(true);
-
-    QWidget* content = new QWidget();
-    scroll->setWidget(content);
-
-    QVBoxLayout* layout = new QVBoxLayout(content);
-    layout->setContentsMargins(0, 0, 0, 0);
-
-    QLabel* title = new QLabel("Node Inspector");
-    title->setProperty("sectionTitle", true);
-    layout->addWidget(title);
-
-    if (!renderMode.scene.available)
-    {
-        layout->addWidget(makeMutedLabel(toQString(renderMode.scene.emptyText)));
-        layout->addStretch();
-        return scroll;
-    }
-
-    std::string selectedKey = _selectedNodeByMode[renderMode.id];
     if (selectedKey.empty())
     {
-        selectedKey = renderMode.scene.root.key;
+        page.sceneTree->clearSelection();
+        page.sceneTree->setCurrentItem(nullptr);
+    }
+    else
+    {
+        auto itemIt = page.sceneItemsByKey.find(selectedKey);
+        if (itemIt != page.sceneItemsByKey.end())
+        {
+            page.sceneTree->setCurrentItem(itemIt->second);
+        }
+    }
+    page.updatingSceneTree = false;
+}
+
+QTreeWidgetItem* QtRuntimeEditorWindow::syncSceneTreeNode(RenderModePage& page, const EditorUiSceneNode& node, QTreeWidgetItem* parent, int row)
+{
+    QTreeWidgetItem* item = nullptr;
+    auto             itemIt = page.sceneItemsByKey.find(node.key);
+    if (itemIt == page.sceneItemsByKey.end())
+    {
+        item = new QTreeWidgetItem();
+        item->setData(0, Qt::UserRole, toQString(node.key));
+        page.sceneItemsByKey[node.key] = item;
+    }
+    else
+    {
+        item = itemIt->second;
+    }
+
+    if (parent)
+    {
+        if (item->parent() != parent || parent->indexOfChild(item) != row)
+        {
+            if (item->parent())
+            {
+                item->parent()->takeChild(item->parent()->indexOfChild(item));
+            }
+            else
+            {
+                const int oldTopLevelIndex = page.sceneTree->indexOfTopLevelItem(item);
+                if (oldTopLevelIndex >= 0)
+                {
+                    page.sceneTree->takeTopLevelItem(oldTopLevelIndex);
+                }
+            }
+            parent->insertChild(row, item);
+        }
+    }
+    else if (page.sceneTree->indexOfTopLevelItem(item) != row)
+    {
+        if (item->parent())
+        {
+            item->parent()->takeChild(item->parent()->indexOfChild(item));
+        }
+        else
+        {
+            const int oldTopLevelIndex = page.sceneTree->indexOfTopLevelItem(item);
+            if (oldTopLevelIndex >= 0)
+            {
+                page.sceneTree->takeTopLevelItem(oldTopLevelIndex);
+            }
+        }
+        page.sceneTree->insertTopLevelItem(row, item);
+    }
+
+    item->setText(0, toQString(node.name));
+    item->setText(1, node.is3D ? "3D" : "2D");
+    item->setData(0, Qt::UserRole, toQString(node.key));
+
+    const bool expanded = !parent || _expandedNodesByMode[page.renderModeId].count(node.key) > 0;
+    item->setExpanded(expanded);
+
+    int childRow = 0;
+    for (const EditorUiSceneNode& child : node.children)
+    {
+        syncSceneTreeNode(page, child, item, childRow);
+        ++childRow;
+    }
+
+    while (item->childCount() > childRow)
+    {
+        QTreeWidgetItem* child = item->takeChild(childRow);
+        removeSceneTreeItem(page, child);
+    }
+
+    return item;
+}
+
+void QtRuntimeEditorWindow::removeSceneTreeItem(RenderModePage& page, QTreeWidgetItem* item)
+{
+    if (!item)
+    {
+        return;
+    }
+
+    while (item->childCount() > 0)
+    {
+        QTreeWidgetItem* child = item->takeChild(0);
+        removeSceneTreeItem(page, child);
+    }
+
+    page.sceneItemsByKey.erase(itemKey(item));
+    delete item;
+}
+
+void QtRuntimeEditorWindow::clearSceneTree(RenderModePage& page)
+{
+    page.updatingSceneTree = true;
+    while (page.sceneTree->topLevelItemCount() > 0)
+    {
+        QTreeWidgetItem* item = page.sceneTree->takeTopLevelItem(0);
+        removeSceneTreeItem(page, item);
+    }
+    page.updatingSceneTree = false;
+}
+
+void QtRuntimeEditorWindow::updateInspectorPanel(RenderModePage& page, const EditorUiRenderMode& renderMode)
+{
+    if (!renderMode.scene.available)
+    {
+        page.inspectorNodeKey.clear();
+        page.componentSignature.clear();
+        page.inspectorEmptyLabel->setText(toQString(renderMode.scene.emptyText));
+        page.inspectorEmptyLabel->show();
+        page.inspectorDetails->hide();
+        clearComponentDetails(page);
+        page.inspectorScroll->verticalScrollBar()->setValue(0);
+        return;
+    }
+
+    const std::string selectedKey = _selectedNodeByMode[renderMode.id];
+    if (selectedKey.empty())
+    {
+        page.inspectorNodeKey.clear();
+        page.componentSignature.clear();
+        page.inspectorEmptyLabel->setText("No scene node selected.");
+        page.inspectorEmptyLabel->show();
+        page.inspectorDetails->hide();
+        clearComponentDetails(page);
+        page.inspectorScroll->verticalScrollBar()->setValue(0);
+        return;
     }
 
     const EditorUiSceneNode* node = findSceneNode(renderMode.scene.root, selectedKey);
     if (!node)
     {
-        node                               = &renderMode.scene.root;
-        _selectedNodeByMode[renderMode.id] = node->key;
+        _selectedNodeByMode[renderMode.id].clear();
+        page.inspectorNodeKey.clear();
+        page.componentSignature.clear();
+        page.inspectorEmptyLabel->setText("No scene node selected.");
+        page.inspectorEmptyLabel->show();
+        page.inspectorDetails->hide();
+        clearComponentDetails(page);
+        page.inspectorScroll->verticalScrollBar()->setValue(0);
+        return;
     }
 
-    QLabel* name = new QLabel(toQString(node->name));
-    name->setProperty("objectTitle", true);
-    layout->addWidget(name);
-    layout->addWidget(makeMutedLabel(toQString(node->typeName + "  " + node->key)));
-    addSeparator(layout);
-
-    QGroupBox*   transformGroup = new QGroupBox("Transform");
-    QFormLayout* transformForm  = new QFormLayout(transformGroup);
-
-    const auto addTransformRow = [&](const char* label, const char* property, const float values[3], double step)
+    const bool selectedNodeChanged = page.inspectorNodeKey != node->key;
+    page.inspectorNodeKey = node->key;
+    page.inspectorEmptyLabel->hide();
+    page.inspectorDetails->show();
+    if (selectedNodeChanged)
     {
-        QWidget*     row       = new QWidget();
-        QHBoxLayout* rowLayout = new QHBoxLayout(row);
-        rowLayout->setContentsMargins(0, 0, 0, 0);
+        page.inspectorScroll->verticalScrollBar()->setValue(0);
+    }
+    page.inspectorNameLabel->setText(toQString(node->name));
+    page.inspectorTypeLabel->setText(toQString(node->typeName + "  " + node->key));
 
-        static const char* components[] = {"x", "y", "z"};
+    const float* transformValues[] = {node->transform.translation, node->transform.rotation, node->transform.scale};
+    for (int groupIndex = 0; groupIndex < 3; ++groupIndex)
+    {
         for (int componentIndex = 0; componentIndex < 3; ++componentIndex)
         {
-            QDoubleSpinBox* spin = new QDoubleSpinBox(row);
-            spin->setDecimals(4);
-            spin->setRange(-1000000000.0, 1000000000.0);
-            spin->setSingleStep(step);
-            spin->setKeyboardTracking(false);
-            spin->setValue(values[componentIndex]);
-            rowLayout->addWidget(spin);
-
-            const std::string path = std::string(property) + "." + components[componentIndex];
-            QObject::connect(spin, &QDoubleSpinBox::valueChanged, this,
-                             [this, id = renderMode.id, key = node->key, path](double value)
-                             {
-                                 if (!_refreshing)
-                                 {
-                                     requestSetSceneNodeTransform(id, key, path.c_str(), value);
-                                 }
-                             });
+            QDoubleSpinBox* spin = page.transformEditors[transformEditorIndex(groupIndex, componentIndex)];
+            if (!spin || spin->hasFocus())
+            {
+                continue;
+            }
+            const QSignalBlocker blocker(spin);
+            spin->setValue(transformValues[groupIndex][componentIndex]);
         }
+    }
 
-        transformForm->addRow(label, row);
-    };
+    page.addModelButton->setEnabled(node->canAddModelComponent);
 
-    addTransformRow("Translation", "translation", node->transform.translation, 0.01);
-    addTransformRow("Rotation", "rotation", node->transform.rotation, 0.1);
-    addTransformRow("Scale", "scale", node->transform.scale, 0.01);
-    layout->addWidget(transformGroup);
+    const std::string componentSignature = makeComponentSignature(*node);
+    if (componentSignature == page.componentSignature)
+    {
+        return;
+    }
 
-    QGroupBox*   componentGroup  = new QGroupBox("Components");
-    QVBoxLayout* componentLayout = new QVBoxLayout(componentGroup);
-
-    QPushButton* addModel = new QPushButton("Add ModelComponent");
-    addModel->setEnabled(node->canAddModelComponent);
-    componentLayout->addWidget(addModel);
-    QObject::connect(addModel, &QPushButton::clicked, this, [this, id = renderMode.id, key = node->key]() { requestAddSceneNodeComponent(id, key); });
-
+    page.componentSignature = componentSignature;
+    clearComponentDetails(page);
     if (node->components.empty())
     {
-        componentLayout->addWidget(makeMutedLabel("No components."));
+        page.componentDetailsLayout->addWidget(makeMutedLabel("No components."));
+        return;
     }
 
     for (const EditorUiSceneComponent& component : node->components)
@@ -405,96 +911,311 @@ QWidget* QtRuntimeEditorWindow::buildInspectorPanel(const EditorUiRenderMode& re
             value->setWordWrap(true);
             componentForm->addRow(toQString(detail.label), value);
         }
-        componentLayout->addWidget(componentBox);
+        page.componentDetailsLayout->addWidget(componentBox);
     }
-    layout->addWidget(componentGroup);
-    layout->addStretch();
-
-    return scroll;
 }
 
-QWidget* QtRuntimeEditorWindow::buildControlsPanel(const EditorUiRenderMode& renderMode)
+void QtRuntimeEditorWindow::clearComponentDetails(RenderModePage& page)
 {
-    QScrollArea* scroll = new QScrollArea();
-    scroll->setWidgetResizable(true);
-
-    QWidget* content = new QWidget();
-    scroll->setWidget(content);
-
-    QVBoxLayout* layout = new QVBoxLayout(content);
-    layout->setContentsMargins(0, 0, 0, 0);
-
-    QLabel* title = new QLabel("Control Panel");
-    title->setProperty("sectionTitle", true);
-    layout->addWidget(title);
-
-    if (renderMode.controls.empty())
+    while (page.componentDetailsLayout && page.componentDetailsLayout->count() > 0)
     {
-        layout->addWidget(makeMutedLabel("No control objects registered for this render mode."));
-        layout->addStretch();
-        return scroll;
+        QLayoutItem* item = page.componentDetailsLayout->takeAt(0);
+        if (QWidget* widget = item->widget())
+        {
+            delete widget;
+        }
+        delete item;
+    }
+}
+
+void QtRuntimeEditorWindow::updateControlsPanel(RenderModePage& page, const EditorUiRenderMode& renderMode)
+{
+    for (auto& objectEntry : page.controlObjects)
+    {
+        objectEntry.second.seen = false;
     }
 
+    page.controlsEmptyLabel->setVisible(renderMode.controls.empty());
+    page.controlsGridHost->setVisible(!renderMode.controls.empty());
+    const int columnCount = controlPanelColumnCount(page.controlsScroll);
+    page.controlsGrid->setColumnStretch(0, 1);
+    page.controlsGrid->setColumnStretch(1, columnCount > 1 ? 1 : 0);
+    int controlIndex = 0;
     for (const EditorUiObject& object : renderMode.controls)
     {
-        QGroupBox*   group       = new QGroupBox(toQString(object.title));
-        QVBoxLayout* groupLayout = new QVBoxLayout(group);
-
-        QHBoxLayout* objectHeader = new QHBoxLayout();
-        objectHeader->addWidget(makeMutedLabel(toQString(object.typeName)));
-        objectHeader->addStretch();
-        QPushButton* reset = new QPushButton("Reset");
-        reset->setEnabled(object.canReset);
-        objectHeader->addWidget(reset);
-        groupLayout->addLayout(objectHeader);
-        QObject::connect(reset, &QPushButton::clicked, this, [this, id = object.id]() { requestResetObject(id); });
-
-        QFormLayout* form = new QFormLayout();
-        groupLayout->addLayout(form);
-
-        if (object.properties.empty())
-        {
-            groupLayout->addWidget(makeMutedLabel("No reflected properties."));
-        }
-
-        for (const EditorUiProperty& property : object.properties)
-        {
-            if (property.kind == EditorUiPropertyKind::Bool)
-            {
-                QCheckBox* check = new QCheckBox();
-                check->setEnabled(property.editable);
-                check->setChecked(property.boolValue);
-                QObject::connect(check, &QCheckBox::toggled, this, [this, id = object.id, path = property.path](bool checked)
-                                 { requestSetObjectProperty(id, path, checked ? "true" : "false"); });
-                form->addRow(toQString(property.label), check);
-            }
-            else if (property.kind == EditorUiPropertyKind::Number)
-            {
-                QDoubleSpinBox* spin = new QDoubleSpinBox();
-                spin->setDecimals(6);
-                spin->setKeyboardTracking(false);
-                spin->setEnabled(property.editable);
-                applySpinBoxRange(spin, property);
-                spin->setValue(textToDouble(property.value));
-                QObject::connect(spin, &QDoubleSpinBox::valueChanged, this, [this, id = object.id, path = property.path](double value)
-                                 { requestSetObjectProperty(id, path, toStdString(makeDoubleText(value))); });
-                form->addRow(toQString(property.label), spin);
-            }
-            else
-            {
-                QLineEdit* edit = new QLineEdit(toQString(property.value));
-                edit->setReadOnly(!property.editable);
-                QObject::connect(edit, &QLineEdit::editingFinished, this, [this, edit, id = object.id, path = property.path]()
-                                 { requestSetObjectProperty(id, path, toStdString(edit->text())); });
-                form->addRow(toQString(property.label), edit);
-            }
-        }
-
-        layout->addWidget(group);
+        updateControlObject(page, object);
+        RenderModePage::ControlObjectWidgets& widgets = page.controlObjects[object.id];
+        page.controlsGrid->addWidget(widgets.group, controlIndex / columnCount, controlIndex % columnCount);
+        ++controlIndex;
     }
 
-    layout->addStretch();
-    return scroll;
+    removeUnseenControlObjects(page);
+}
+
+void QtRuntimeEditorWindow::updateControlObject(RenderModePage& page, const EditorUiObject& object)
+{
+    RenderModePage::ControlObjectWidgets& widgets = page.controlObjects[object.id];
+    if (!widgets.group)
+    {
+        widgets.group = new QGroupBox(page.controlsGridHost);
+        widgets.group->setMinimumWidth(0);
+        QVBoxLayout* groupLayout = new QVBoxLayout(widgets.group);
+
+        QHBoxLayout* objectHeader = new QHBoxLayout();
+        widgets.typeLabel = makeMutedLabel("");
+        objectHeader->addWidget(widgets.typeLabel);
+        objectHeader->addStretch();
+        widgets.resetButton = new QPushButton("Reset");
+        objectHeader->addWidget(widgets.resetButton);
+        groupLayout->addLayout(objectHeader);
+
+        widgets.form = new QFormLayout();
+        widgets.form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+        widgets.form->setRowWrapPolicy(QFormLayout::WrapLongRows);
+        groupLayout->addLayout(widgets.form);
+        widgets.emptyLabel = makeMutedLabel("No reflected properties.");
+        groupLayout->addWidget(widgets.emptyLabel);
+        QObject::connect(widgets.resetButton, &QPushButton::clicked, this, [this, id = object.id]() { requestResetObject(id); });
+    }
+
+    widgets.seen = true;
+    widgets.group->setTitle(toQString(object.title));
+    widgets.typeLabel->setText(toQString(object.typeName));
+    widgets.resetButton->setEnabled(object.canReset);
+
+    for (auto& propertyEntry : widgets.propertyWidgets)
+    {
+        propertyEntry.second.seen = false;
+    }
+
+    widgets.emptyLabel->setVisible(object.properties.empty());
+    for (size_t propertyIndex = 0; propertyIndex < object.properties.size();)
+    {
+        const EditorUiProperty& property = object.properties[propertyIndex];
+
+        VectorComponentInfo vectorInfo;
+        if (parseVectorComponent(property, vectorInfo))
+        {
+            size_t propertyCount = 0;
+            while (propertyIndex + propertyCount < object.properties.size())
+            {
+                VectorComponentInfo nextVectorInfo;
+                if (!parseVectorComponent(object.properties[propertyIndex + propertyCount], nextVectorInfo) ||
+                    nextVectorInfo.rootPath != vectorInfo.rootPath)
+                {
+                    break;
+                }
+                ++propertyCount;
+            }
+
+            if (propertyCount > 1)
+            {
+                updateVectorPropertyWidget(page, object.id, object, propertyIndex, propertyCount, vectorInfo.rootPath,
+                                           makeVectorLabel(property, vectorInfo.rootPath));
+                propertyIndex += propertyCount;
+                continue;
+            }
+        }
+
+        updatePropertyWidget(page, object.id, property);
+        ++propertyIndex;
+    }
+
+    removeUnseenPropertyWidgets(page, object.id);
+}
+
+void QtRuntimeEditorWindow::updatePropertyWidget(RenderModePage& page, unsigned int objectId, const EditorUiProperty& property)
+{
+    RenderModePage::ControlObjectWidgets& objectWidgets = page.controlObjects[objectId];
+    RenderModePage::PropertyWidgets&      propertyWidgets = objectWidgets.propertyWidgets[property.path];
+    const int                             kind = static_cast<int>(property.kind);
+
+    if (propertyWidgets.editor && propertyWidgets.kind != kind)
+    {
+        objectWidgets.form->removeRow(propertyWidgets.label);
+        propertyWidgets = RenderModePage::PropertyWidgets();
+    }
+
+    if (!propertyWidgets.editor)
+    {
+        propertyWidgets.kind  = kind;
+        propertyWidgets.label = new QLabel(toQString(property.label));
+        propertyWidgets.label->setWordWrap(true);
+
+        if (property.kind == EditorUiPropertyKind::Bool)
+        {
+            QCheckBox* check = new QCheckBox();
+            propertyWidgets.editor = check;
+            QObject::connect(check, &QCheckBox::toggled, this, [this, objectId, path = property.path](bool checked)
+                             { requestSetObjectProperty(objectId, path, checked ? "true" : "false"); });
+        }
+        else if (property.kind == EditorUiPropertyKind::Number)
+        {
+            QDoubleSpinBox* spin = new QDoubleSpinBox();
+            spin->setDecimals(3);
+            spin->setKeyboardTracking(false);
+            spin->setMinimumWidth(64);
+            propertyWidgets.editor = spin;
+            QObject::connect(spin, &QDoubleSpinBox::valueChanged, this, [this, objectId, path = property.path](double value)
+                             { requestSetObjectProperty(objectId, path, toStdString(makeDoubleText(value))); });
+        }
+        else
+        {
+            QLineEdit* edit = new QLineEdit();
+            propertyWidgets.editor = edit;
+            QObject::connect(edit, &QLineEdit::editingFinished, this, [this, edit, objectId, path = property.path]()
+                             { requestSetObjectProperty(objectId, path, toStdString(edit->text())); });
+        }
+
+        objectWidgets.form->addRow(propertyWidgets.label, propertyWidgets.editor);
+    }
+
+    propertyWidgets.seen = true;
+    propertyWidgets.label->setText(toQString(property.label));
+
+    if (property.kind == EditorUiPropertyKind::Bool)
+    {
+        QCheckBox* check = static_cast<QCheckBox*>(propertyWidgets.editor);
+        check->setEnabled(property.editable);
+        const QSignalBlocker blocker(check);
+        check->setChecked(property.boolValue);
+    }
+    else if (property.kind == EditorUiPropertyKind::Number)
+    {
+        QDoubleSpinBox* spin = static_cast<QDoubleSpinBox*>(propertyWidgets.editor);
+        spin->setEnabled(property.editable);
+        const QSignalBlocker blocker(spin);
+        applySpinBoxRange(spin, property);
+        if (!spin->hasFocus())
+        {
+            spin->setValue(textToDouble(property.value));
+        }
+    }
+    else
+    {
+        QLineEdit* edit = static_cast<QLineEdit*>(propertyWidgets.editor);
+        edit->setReadOnly(!property.editable);
+        if (!edit->hasFocus())
+        {
+            const QSignalBlocker blocker(edit);
+            edit->setText(toQString(property.value));
+        }
+    }
+}
+
+void QtRuntimeEditorWindow::updateVectorPropertyWidget(RenderModePage& page, unsigned int objectId, const EditorUiObject& object,
+                                                       size_t firstPropertyIndex, size_t propertyCount, const std::string& rootPath,
+                                                       const std::string& label)
+{
+    RenderModePage::ControlObjectWidgets& objectWidgets = page.controlObjects[objectId];
+    RenderModePage::PropertyWidgets&      propertyWidgets = objectWidgets.propertyWidgets[rootPath];
+    const int                             kind = static_cast<int>(EditorUiPropertyKind::Number);
+
+    bool needsRebuild = !propertyWidgets.editor || propertyWidgets.kind != kind || propertyWidgets.componentCount != static_cast<int>(propertyCount);
+    if (!needsRebuild)
+    {
+        for (size_t componentOffset = 0; componentOffset < propertyCount; ++componentOffset)
+        {
+            if (propertyWidgets.componentPaths[componentOffset] != object.properties[firstPropertyIndex + componentOffset].path)
+            {
+                needsRebuild = true;
+                break;
+            }
+        }
+    }
+
+    if (needsRebuild && propertyWidgets.editor)
+    {
+        objectWidgets.form->removeRow(propertyWidgets.label);
+        propertyWidgets = RenderModePage::PropertyWidgets();
+    }
+
+    if (!propertyWidgets.editor)
+    {
+        propertyWidgets.kind           = kind;
+        propertyWidgets.componentCount = static_cast<int>(propertyCount);
+        propertyWidgets.label          = new QLabel(toQString(label));
+        propertyWidgets.label->setWordWrap(true);
+
+        QWidget*     row       = new QWidget();
+        row->setMinimumWidth(0);
+        QHBoxLayout* rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+
+        for (size_t componentOffset = 0; componentOffset < propertyCount && componentOffset < 4; ++componentOffset)
+        {
+            const EditorUiProperty& property = object.properties[firstPropertyIndex + componentOffset];
+            QDoubleSpinBox*         spin     = new QDoubleSpinBox(row);
+            spin->setDecimals(3);
+            spin->setKeyboardTracking(false);
+            spin->setMinimumWidth(56);
+            spin->setToolTip(toQString(property.label));
+            rowLayout->addWidget(spin);
+
+            propertyWidgets.componentEditors[componentOffset] = spin;
+            propertyWidgets.componentPaths[componentOffset]   = property.path;
+            QObject::connect(spin, &QDoubleSpinBox::valueChanged, this, [this, objectId, path = property.path](double value)
+                             { requestSetObjectProperty(objectId, path, toStdString(makeDoubleText(value))); });
+        }
+
+        propertyWidgets.editor = row;
+        objectWidgets.form->addRow(propertyWidgets.label, propertyWidgets.editor);
+    }
+
+    propertyWidgets.seen = true;
+    propertyWidgets.label->setText(toQString(label));
+
+    for (size_t componentOffset = 0; componentOffset < propertyCount && componentOffset < 4; ++componentOffset)
+    {
+        const EditorUiProperty& property = object.properties[firstPropertyIndex + componentOffset];
+        QDoubleSpinBox*         spin     = propertyWidgets.componentEditors[componentOffset];
+        if (!spin)
+        {
+            continue;
+        }
+
+        spin->setEnabled(property.editable);
+        const QSignalBlocker blocker(spin);
+        applySpinBoxRange(spin, property);
+        if (!spin->hasFocus())
+        {
+            spin->setValue(textToDouble(property.value));
+        }
+    }
+}
+
+void QtRuntimeEditorWindow::removeUnseenControlObjects(RenderModePage& page)
+{
+    for (auto objectIt = page.controlObjects.begin(); objectIt != page.controlObjects.end();)
+    {
+        RenderModePage::ControlObjectWidgets& widgets = objectIt->second;
+        if (widgets.seen)
+        {
+            ++objectIt;
+            continue;
+        }
+
+        page.controlsGrid->removeWidget(widgets.group);
+        delete widgets.group;
+        objectIt = page.controlObjects.erase(objectIt);
+    }
+}
+
+void QtRuntimeEditorWindow::removeUnseenPropertyWidgets(RenderModePage& page, unsigned int objectId)
+{
+    RenderModePage::ControlObjectWidgets& objectWidgets = page.controlObjects[objectId];
+    for (auto propertyIt = objectWidgets.propertyWidgets.begin(); propertyIt != objectWidgets.propertyWidgets.end();)
+    {
+        RenderModePage::PropertyWidgets& widgets = propertyIt->second;
+        if (widgets.seen)
+        {
+            ++propertyIt;
+            continue;
+        }
+
+        objectWidgets.form->removeRow(widgets.label);
+        propertyIt = objectWidgets.propertyWidgets.erase(propertyIt);
+    }
 }
 
 void QtRuntimeEditorWindow::requestCreateSceneNode(const std::string& renderModeId, const char* nodeType)
@@ -504,7 +1225,10 @@ void QtRuntimeEditorWindow::requestCreateSceneNode(const std::string& renderMode
     if (!nodeKey.empty())
     {
         _selectedNodeByMode[renderModeId] = nodeKey;
-        _expandedNodesByMode[renderModeId].insert(parentNode);
+        if (!parentNode.empty())
+        {
+            _expandedNodesByMode[renderModeId].insert(parentNode);
+        }
     }
     scheduleRefresh();
 }
@@ -535,7 +1259,20 @@ void QtRuntimeEditorWindow::requestResetObject(unsigned int objectId)
 
 void QtRuntimeEditorWindow::scheduleRefresh()
 {
-    QTimer::singleShot(0, this, [this]() { refreshFromEditor(); });
+    if (_refreshScheduled)
+    {
+        return;
+    }
+
+    _refreshScheduled = true;
+    QTimer::singleShot(0, this,
+                       [this]()
+                       {
+                           if (_refreshScheduled)
+                           {
+                               refreshFromEditor();
+                           }
+                       });
 }
 
 } // namespace Play::editor
