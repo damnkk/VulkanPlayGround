@@ -25,3 +25,6 @@
 [submodule "External/rttr"]
 	path = External/rttr
 	url = https://github.com/rttrorg/rttr.git
+[submodule "External/slint"]
+	path = External/slint
+	url = https://github.com/slint-ui/slint.git

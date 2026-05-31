@@ -72,6 +72,24 @@ bool RenderModeTabs::requestActiveMode(const char* id)
     return _context.requestRenderMode(id);
 }
 
+std::string RenderModeTabs::createSceneNode(const char* renderModeId, const char* parentNodeKey, const char* nodeType)
+{
+    RenderModeEditor* editor = findRenderMode(renderModeId);
+    return editor ? editor->createSceneNode(parentNodeKey, nodeType) : std::string();
+}
+
+bool RenderModeTabs::setSceneNodeTransform(const char* renderModeId, const char* nodeKey, const char* transformPath, const char* value)
+{
+    RenderModeEditor* editor = findRenderMode(renderModeId);
+    return editor && editor->setSceneNodeTransform(nodeKey, transformPath, value);
+}
+
+bool RenderModeTabs::addSceneNodeComponent(const char* renderModeId, const char* nodeKey, const char* componentType)
+{
+    RenderModeEditor* editor = findRenderMode(renderModeId);
+    return editor && editor->addSceneNodeComponent(nodeKey, componentType);
+}
+
 void RenderModeTabs::appendHtml(std::string& html) const
 {
     html += "<section class=\"render-mode-tabs\"><nav class=\"tab-strip\">";

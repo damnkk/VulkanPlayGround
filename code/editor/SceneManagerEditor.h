@@ -15,10 +15,16 @@ namespace Play::editor
 class SceneManagerEditor
 {
 public:
+    explicit SceneManagerEditor(const char* renderModeId = nullptr);
+
     void setSceneManager(Play::SceneManager* sceneManager);
     void appendHtml(std::string& html) const;
+    std::string createSceneNode(const char* parentNodeKey, const char* nodeType);
+    bool setSceneNodeTransform(const char* nodeKey, const char* transformPath, const char* value);
+    bool addSceneNodeComponent(const char* nodeKey, const char* componentType);
 
 private:
+    std::string         _renderModeId;
     Play::SceneManager* _sceneManager = nullptr;
 };
 
