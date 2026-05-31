@@ -49,6 +49,18 @@ public:
     {
         return _assetLoadingServer;
     }
+    template <typename Fn>
+    decltype(auto) readSceneGraph(Fn fn) const
+    {
+        std::lock_guard<std::mutex> lock(_cpuSceneMutex);
+        return fn(_cpuScene);
+    }
+    template <typename Fn>
+    decltype(auto) editSceneGraph(Fn fn)
+    {
+        std::lock_guard<std::mutex> lock(_cpuSceneMutex);
+        return fn(_cpuScene);
+    }
     RasterGpuScene& getRasterGpuScene()
     {
         return *static_cast<RasterGpuScene*>(_gpuScene.get());
@@ -68,8 +80,8 @@ private:
     nvvk::DescriptorBindings     _sceneDescriptorBindings;
     std::vector<RefPtr<Texture>> _sceneSkyTexture;
 
-    CpuScene       _cpuScene;
-    std::mutex     _cpuSceneMutex;
+    CpuScene           _cpuScene;
+    mutable std::mutex _cpuSceneMutex;
     AssetLoadingServer _assetLoadingServer;
     std::unique_ptr<GpuScene> _gpuScene;
 };

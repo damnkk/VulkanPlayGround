@@ -57,6 +57,13 @@ enum class CpuSceneNodeType : uint32_t
     eNode3D
 };
 
+struct CpuSceneNodeTransform
+{
+    glm::vec3 translation = {0.0f, 0.0f, 0.0f};
+    glm::vec3 rotation    = {0.0f, 0.0f, 0.0f};
+    glm::vec3 scale       = {1.0f, 1.0f, 1.0f};
+};
+
 class CpuSceneComponent
 {
 public:
@@ -304,6 +311,7 @@ struct CpuSceneNode
     CpuSceneNodeID firstChild;
     CpuSceneNodeID nextSibling;
 
+    CpuSceneNodeTransform local;
     glm::mat4 localTransform = glm::mat4(1.0f);
     glm::mat4 worldTransform = glm::mat4(1.0f);
 
@@ -312,6 +320,7 @@ struct CpuSceneNode
     bool                             alive        = true;
     bool                             visible      = true;
     bool                             worldVisible = true;
+    bool                             worldTransformDirty = true;
 
     template <typename T>
     T* addComponent(ComponentStore& componentStore)
@@ -393,6 +402,10 @@ public:
     const CpuSceneNode* getNode(CpuSceneNodeID nodeID) const;
 
     void setLocalTransform(CpuSceneNodeID nodeID, const glm::mat4& localTransform);
+    void setLocalTransform(CpuSceneNodeID nodeID, const CpuSceneNodeTransform& localTransform);
+    void setLocalTranslation(CpuSceneNodeID nodeID, const glm::vec3& translation);
+    void setLocalRotation(CpuSceneNodeID nodeID, const glm::vec3& rotation);
+    void setLocalScale(CpuSceneNodeID nodeID, const glm::vec3& scale);
     void setVisible(CpuSceneNodeID nodeID, bool visible);
     bool reparentNode(CpuSceneNodeID nodeID, CpuSceneNodeID newParent);
     bool removeNode(CpuSceneNodeID nodeID);
@@ -489,6 +502,7 @@ private:
     bool           isSameNode(CpuSceneNodeID lhs, CpuSceneNodeID rhs) const;
     bool           isDescendantOf(CpuSceneNodeID nodeID, CpuSceneNodeID ancestorID) const;
     void           removeNodeRecursive(CpuSceneNodeID nodeID);
+    void           markWorldTransformDirty(CpuSceneNodeID nodeID);
     void           updateWorldRecursive(CpuSceneNodeID nodeID, const glm::mat4& parentTransform, bool parentVisible);
     void           markDirty();
 

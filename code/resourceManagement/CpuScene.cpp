@@ -1,8 +1,60 @@
 #include "CpuScene.h"
 #include "AssetLoadingServer.h"
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 namespace Play
 {
+
+namespace
+{
+glm::mat4 composeLocalTransform(const CpuSceneNodeTransform& transform)
+{
+    glm::mat4 matrix = glm::translate(glm::mat4(1.0f), transform.translation);
+    matrix *= glm::mat4_cast(glm::quat(transform.rotation));
+    matrix = glm::scale(matrix, transform.scale);
+    return matrix;
+}
+
+CpuSceneNodeTransform decomposeLocalTransform(const glm::mat4& matrix)
+{
+    CpuSceneNodeTransform transform;
+    transform.translation = glm::vec3(matrix[3]);
+
+    glm::vec3 axisX = glm::vec3(matrix[0]);
+    glm::vec3 axisY = glm::vec3(matrix[1]);
+    glm::vec3 axisZ = glm::vec3(matrix[2]);
+
+    transform.scale.x = glm::length(axisX);
+    transform.scale.y = glm::length(axisY);
+    transform.scale.z = glm::length(axisZ);
+
+    if (glm::determinant(glm::mat3(matrix)) < 0.0f)
+    {
+        transform.scale.x = -transform.scale.x;
+    }
+
+    if (transform.scale.x != 0.0f)
+    {
+        axisX /= transform.scale.x;
+    }
+    if (transform.scale.y != 0.0f)
+    {
+        axisY /= transform.scale.y;
+    }
+    if (transform.scale.z != 0.0f)
+    {
+        axisZ /= transform.scale.z;
+    }
+
+    glm::mat3 rotationMatrix(1.0f);
+    rotationMatrix[0]   = axisX;
+    rotationMatrix[1]   = axisY;
+    rotationMatrix[2]   = axisZ;
+    transform.rotation  = glm::eulerAngles(glm::quat_cast(rotationMatrix));
+    return transform;
+}
+} // namespace
 
 ModelLoadRequestID CpuModelComponent::requestLoadFromFile(CpuScene& scene, AssetLoadingServer& loadingServer, const std::string& path,
                                                           const ModelLoadingConfig& loadingCfg)
@@ -152,6 +204,7 @@ CpuSceneNodeID CpuScene::createNode(const std::string& name, CpuSceneNodeID pare
 
     CpuSceneNodeID nodeID = makeNodeID(nodeIndex);
     attachChild(parent, nodeID);
+    markWorldTransformDirty(nodeID);
     markDirty();
     return nodeID;
 }
@@ -188,6 +241,64 @@ void CpuScene::setLocalTransform(CpuSceneNodeID nodeID, const glm::mat4& localTr
     }
 
     node->localTransform = localTransform;
+    node->local          = decomposeLocalTransform(localTransform);
+    markWorldTransformDirty(nodeID);
+    markDirty();
+}
+
+void CpuScene::setLocalTransform(CpuSceneNodeID nodeID, const CpuSceneNodeTransform& localTransform)
+{
+    CpuSceneNode* node = getNode(nodeID);
+    if (!node)
+    {
+        return;
+    }
+
+    node->local          = localTransform;
+    node->localTransform = composeLocalTransform(localTransform);
+    markWorldTransformDirty(nodeID);
+    markDirty();
+}
+
+void CpuScene::setLocalTranslation(CpuSceneNodeID nodeID, const glm::vec3& translation)
+{
+    CpuSceneNode* node = getNode(nodeID);
+    if (!node)
+    {
+        return;
+    }
+
+    node->local.translation = translation;
+    node->localTransform    = composeLocalTransform(node->local);
+    markWorldTransformDirty(nodeID);
+    markDirty();
+}
+
+void CpuScene::setLocalRotation(CpuSceneNodeID nodeID, const glm::vec3& rotation)
+{
+    CpuSceneNode* node = getNode(nodeID);
+    if (!node)
+    {
+        return;
+    }
+
+    node->local.rotation = rotation;
+    node->localTransform = composeLocalTransform(node->local);
+    markWorldTransformDirty(nodeID);
+    markDirty();
+}
+
+void CpuScene::setLocalScale(CpuSceneNodeID nodeID, const glm::vec3& scale)
+{
+    CpuSceneNode* node = getNode(nodeID);
+    if (!node)
+    {
+        return;
+    }
+
+    node->local.scale    = scale;
+    node->localTransform = composeLocalTransform(node->local);
+    markWorldTransformDirty(nodeID);
     markDirty();
 }
 
@@ -200,6 +311,7 @@ void CpuScene::setVisible(CpuSceneNodeID nodeID, bool visible)
     }
 
     node->visible = visible;
+    markWorldTransformDirty(nodeID);
     markDirty();
 }
 
@@ -233,6 +345,7 @@ bool CpuScene::reparentNode(CpuSceneNodeID nodeID, CpuSceneNodeID newParent)
     }
 
     attachChild(newParent, nodeID);
+    markWorldTransformDirty(nodeID);
     markDirty();
     return true;
 }
@@ -345,6 +458,25 @@ bool CpuScene::isDescendantOf(CpuSceneNodeID nodeID, CpuSceneNodeID ancestorID) 
     return false;
 }
 
+void CpuScene::markWorldTransformDirty(CpuSceneNodeID nodeID)
+{
+    CpuSceneNode* node = getNode(nodeID);
+    if (!node)
+    {
+        return;
+    }
+
+    node->worldTransformDirty = true;
+
+    CpuSceneNodeID childID = node->firstChild;
+    while (isValid(childID))
+    {
+        const CpuSceneNodeID nextID = _nodes[childID.index].nextSibling;
+        markWorldTransformDirty(childID);
+        childID = nextID;
+    }
+}
+
 void CpuScene::removeNodeRecursive(CpuSceneNodeID nodeID)
 {
     CpuSceneNode* node = getNode(nodeID);
@@ -373,6 +505,7 @@ void CpuScene::removeNodeRecursive(CpuSceneNodeID nodeID)
     node->alive        = false;
     node->visible      = false;
     node->worldVisible = false;
+    node->worldTransformDirty = false;
     ++node->generation;
     _freeNodeSlots.push_back(nodeID.index);
 }
@@ -388,6 +521,7 @@ void CpuScene::updateWorldRecursive(CpuSceneNodeID nodeID, const glm::mat4& pare
     node->worldTransform = parentTransform * node->localTransform;
     const bool visible   = parentVisible && node->visible;
     node->worldVisible   = visible;
+    node->worldTransformDirty = false;
 
     CpuSceneNodeID childID = node->firstChild;
     while (isValid(childID))

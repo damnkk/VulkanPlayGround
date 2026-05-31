@@ -28,6 +28,37 @@ bool parseEditorObjectId(const std::string& text, Play::editor::EditorObjectId& 
     id = parsedId;
     return id != 0;
 }
+
+std::string makeJsonString(const std::string& value)
+{
+    std::string json = "\"";
+    for (const char ch : value)
+    {
+        switch (ch)
+        {
+            case '\\':
+                json += "\\\\";
+                break;
+            case '"':
+                json += "\\\"";
+                break;
+            case '\n':
+                json += "\\n";
+                break;
+            case '\r':
+                json += "\\r";
+                break;
+            case '\t':
+                json += "\\t";
+                break;
+            default:
+                json += ch;
+                break;
+        }
+    }
+    json += "\"";
+    return json;
+}
 } // namespace
 
 RuntimeGuiHost::RuntimeGuiHost() = default;
@@ -150,6 +181,59 @@ void RuntimeGuiHost::resetEditorObject(const char* id, const char* request, void
     webview_return(host->_webview, id, changed ? 0 : 1, changed ? "true" : "false");
 }
 
+void RuntimeGuiHost::createSceneNode(const char* id, const char* request, void* arg)
+{
+    RuntimeGuiHost* host = static_cast<RuntimeGuiHost*>(arg);
+    if (!host || !host->_webview)
+    {
+        return;
+    }
+
+    const std::string requestJson   = request ? request : "";
+    const std::string renderModeId  = webview::detail::json_parse(requestJson, "", 0);
+    const std::string parentNodeKey = webview::detail::json_parse(requestJson, "", 1);
+    const std::string nodeType      = webview::detail::json_parse(requestJson, "", 2);
+
+    const std::string nodeKey = host->_editor.getRenderModeTabs().createSceneNode(renderModeId.c_str(), parentNodeKey.c_str(), nodeType.c_str());
+    const std::string result  = makeJsonString(nodeKey);
+    webview_return(host->_webview, id, nodeKey.empty() ? 1 : 0, result.c_str());
+}
+
+void RuntimeGuiHost::setSceneNodeTransform(const char* id, const char* request, void* arg)
+{
+    RuntimeGuiHost* host = static_cast<RuntimeGuiHost*>(arg);
+    if (!host || !host->_webview)
+    {
+        return;
+    }
+
+    const std::string requestJson   = request ? request : "";
+    const std::string renderModeId  = webview::detail::json_parse(requestJson, "", 0);
+    const std::string nodeKey       = webview::detail::json_parse(requestJson, "", 1);
+    const std::string transformPath = webview::detail::json_parse(requestJson, "", 2);
+    const std::string value         = webview::detail::json_parse(requestJson, "", 3);
+
+    const bool changed = host->_editor.getRenderModeTabs().setSceneNodeTransform(renderModeId.c_str(), nodeKey.c_str(), transformPath.c_str(), value.c_str());
+    webview_return(host->_webview, id, changed ? 0 : 1, changed ? "true" : "false");
+}
+
+void RuntimeGuiHost::addSceneNodeComponent(const char* id, const char* request, void* arg)
+{
+    RuntimeGuiHost* host = static_cast<RuntimeGuiHost*>(arg);
+    if (!host || !host->_webview)
+    {
+        return;
+    }
+
+    const std::string requestJson  = request ? request : "";
+    const std::string renderModeId = webview::detail::json_parse(requestJson, "", 0);
+    const std::string nodeKey      = webview::detail::json_parse(requestJson, "", 1);
+    const std::string component    = webview::detail::json_parse(requestJson, "", 2);
+
+    const bool changed = host->_editor.getRenderModeTabs().addSceneNodeComponent(renderModeId.c_str(), nodeKey.c_str(), component.c_str());
+    webview_return(host->_webview, id, changed ? 0 : 1, changed ? "true" : "false");
+}
+
 int RuntimeGuiHost::run()
 {
     webview_t webview = webview_create(0, nullptr);
@@ -174,6 +258,9 @@ int RuntimeGuiHost::run()
         webview_set_size(webview, 920, 640, WEBVIEW_HINT_NONE);
         webview_bind(webview, "setEditorProperty", &RuntimeGuiHost::setEditorProperty, this);
         webview_bind(webview, "resetEditorObject", &RuntimeGuiHost::resetEditorObject, this);
+        webview_bind(webview, "createSceneNode", &RuntimeGuiHost::createSceneNode, this);
+        webview_bind(webview, "setSceneNodeTransform", &RuntimeGuiHost::setSceneNodeTransform, this);
+        webview_bind(webview, "addSceneNodeComponent", &RuntimeGuiHost::addSceneNodeComponent, this);
         webview_set_html(webview, html.c_str());
         webview_run(webview);
     }

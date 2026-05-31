@@ -39,6 +39,9 @@ private:
     static void requestTerminate(webview_t webview, void* arg);
     static void setEditorProperty(const char* id, const char* request, void* arg);
     static void resetEditorObject(const char* id, const char* request, void* arg);
+    static void createSceneNode(const char* id, const char* request, void* arg);
+    static void setSceneNodeTransform(const char* id, const char* request, void* arg);
+    static void addSceneNodeComponent(const char* id, const char* request, void* arg);
 
     int  run();
     void cleanupFinishedThread();

@@ -22,6 +22,9 @@ public:
     const char* getTitle() const;
 
     void setSceneManager(Play::SceneManager* sceneManager);
+    std::string createSceneNode(const char* parentNodeKey, const char* nodeType);
+    bool setSceneNodeTransform(const char* nodeKey, const char* transformPath, const char* value);
+    bool addSceneNodeComponent(const char* nodeKey, const char* componentType);
 
     void appendTabHtml(std::string& html, bool active) const;
     void appendPageHtml(std::string& html, bool active) const;

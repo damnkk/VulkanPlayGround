@@ -6,7 +6,7 @@ namespace Play::editor
 {
 
 RenderModeEditor::RenderModeEditor(const char* id, const char* title, EditorRegistry& editorRegistry, EditorRenderMode renderMode)
-    : _id(id ? id : ""), _title(title ? title : ""), _controlPanel(editorRegistry, renderMode)
+    : _id(id ? id : ""), _title(title ? title : ""), _sceneManagerEditor(id), _controlPanel(editorRegistry, renderMode)
 {
 }
 
@@ -23,6 +23,21 @@ const char* RenderModeEditor::getTitle() const
 void RenderModeEditor::setSceneManager(Play::SceneManager* sceneManager)
 {
     _sceneManagerEditor.setSceneManager(sceneManager);
+}
+
+std::string RenderModeEditor::createSceneNode(const char* parentNodeKey, const char* nodeType)
+{
+    return _sceneManagerEditor.createSceneNode(parentNodeKey, nodeType);
+}
+
+bool RenderModeEditor::setSceneNodeTransform(const char* nodeKey, const char* transformPath, const char* value)
+{
+    return _sceneManagerEditor.setSceneNodeTransform(nodeKey, transformPath, value);
+}
+
+bool RenderModeEditor::addSceneNodeComponent(const char* nodeKey, const char* componentType)
+{
+    return _sceneManagerEditor.addSceneNodeComponent(nodeKey, componentType);
 }
 
 void RenderModeEditor::appendTabHtml(std::string& html, bool active) const

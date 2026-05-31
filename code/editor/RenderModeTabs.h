@@ -31,6 +31,9 @@ public:
     RenderModeEditor* findRenderMode(const char* id);
     void              bindRenderSession(Play::RenderSession& renderSession, const char* activeMode);
     bool              requestActiveMode(const char* id);
+    std::string       createSceneNode(const char* renderModeId, const char* parentNodeKey, const char* nodeType);
+    bool              setSceneNodeTransform(const char* renderModeId, const char* nodeKey, const char* transformPath, const char* value);
+    bool              addSceneNodeComponent(const char* renderModeId, const char* nodeKey, const char* componentType);
     void              appendHtml(std::string& html) const;
 
 private:
