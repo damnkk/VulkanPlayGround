@@ -25,6 +25,7 @@ public:
     std::string createSceneNode(const char* parentNodeKey, const char* nodeType);
     bool        setSceneNodeTransform(const char* nodeKey, const char* transformPath, const char* value);
     bool        addSceneNodeComponent(const char* nodeKey, const char* componentType);
+    bool        loadSceneNodeModel(const char* nodeKey, const char* path);
 
 private:
     std::string        _id;

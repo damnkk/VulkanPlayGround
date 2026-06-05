@@ -345,4 +345,46 @@ bool SceneManagerEditor::addSceneNodeComponent(const char* nodeKey, const char* 
         });
 }
 
+bool SceneManagerEditor::loadSceneNodeModel(const char* nodeKey, const char* path)
+{
+    if (!_sceneManager || !path || !path[0])
+    {
+        return false;
+    }
+
+    CpuSceneNodeID nodeID;
+    if (!parseNodeKey(nodeKey, nodeID))
+    {
+        return false;
+    }
+
+    const std::string sourcePath = path;
+    return _sceneManager->editSceneGraph(
+        [&](CpuScene& scene)
+        {
+            CpuSceneNode* node = scene.getNode(nodeID);
+            if (!node || node->type != CpuSceneNodeType::eNode3D)
+            {
+                return false;
+            }
+
+            CpuModelComponent* component = scene.getComponent<CpuModelComponent>(nodeID);
+            if (!component)
+            {
+                component = scene.addComponent<CpuModelComponent>(nodeID);
+            }
+            if (!component)
+            {
+                return false;
+            }
+
+            const ModelLoadingConfig loadingConfig = component->loadingConfig;
+            return _sceneManager->editAssetLoadingServer(
+                [&](AssetLoadingServer& loadingServer)
+                {
+                    return component->requestLoadFromFile(scene, loadingServer, sourcePath, loadingConfig).isValid();
+                });
+        });
+}
+
 } // namespace Play::editor

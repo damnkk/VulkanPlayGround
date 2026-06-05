@@ -99,6 +99,12 @@ bool RenderModeTabs::addSceneNodeComponent(const char* renderModeId, const char*
     return editor && editor->addSceneNodeComponent(nodeKey, componentType);
 }
 
+bool RenderModeTabs::loadSceneNodeModel(const char* renderModeId, const char* nodeKey, const char* path)
+{
+    RenderModeEditor* editor = findRenderMode(renderModeId);
+    return editor && editor->loadSceneNodeModel(nodeKey, path);
+}
+
 void RenderModeTabs::buildSnapshot(EditorUiSnapshot& snapshot) const
 {
     for (const std::unique_ptr<RenderModeEditor>& editor : _impl->editors)

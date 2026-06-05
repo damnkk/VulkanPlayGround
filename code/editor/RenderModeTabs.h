@@ -32,6 +32,7 @@ public:
     std::string       createSceneNode(const char* renderModeId, const char* parentNodeKey, const char* nodeType);
     bool              setSceneNodeTransform(const char* renderModeId, const char* nodeKey, const char* transformPath, const char* value);
     bool              addSceneNodeComponent(const char* renderModeId, const char* nodeKey, const char* componentType);
+    bool              loadSceneNodeModel(const char* renderModeId, const char* nodeKey, const char* path);
     void              buildSnapshot(EditorUiSnapshot& snapshot) const;
 
 private:

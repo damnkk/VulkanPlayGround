@@ -1,15 +1,14 @@
 #include "editor/QtRuntimeEditorWindow.h"
 
+#include <QApplication>
 #include <QCheckBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
-#include <QFrame>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
-#include <QLayoutItem>
 #include <QLineEdit>
 #include <QMouseEvent>
 #include <QPushButton>
@@ -24,6 +23,7 @@
 #include <QVBoxLayout>
 
 #include "editor/RuntimeEditor.h"
+#include "editor/SceneInspectorPanel.h"
 
 namespace Play::editor
 {
@@ -71,20 +71,18 @@ const EditorUiSceneNode* findSceneNode(const EditorUiSceneNode& node, const std:
     return nullptr;
 }
 
-void addSeparator(QVBoxLayout* layout)
-{
-    QFrame* line = new QFrame();
-    line->setFrameShape(QFrame::HLine);
-    line->setFrameShadow(QFrame::Sunken);
-    layout->addWidget(line);
-}
-
 QLabel* makeMutedLabel(const QString& text)
 {
     QLabel* label = new QLabel(text);
     label->setWordWrap(true);
     label->setProperty("muted", true);
     return label;
+}
+
+bool widgetContainsFocus(const QWidget* widget)
+{
+    const QWidget* focusWidget = QApplication::focusWidget();
+    return widget && focusWidget && (widget == focusWidget || widget->isAncestorOf(focusWidget));
 }
 
 void applySpinBoxRange(QDoubleSpinBox* spinBox, const EditorUiProperty& property)
@@ -104,29 +102,6 @@ void applySpinBoxRange(QDoubleSpinBox* spinBox, const EditorUiProperty& property
 std::string itemKey(QTreeWidgetItem* item)
 {
     return item ? toStdString(item->data(0, Qt::UserRole).toString()) : std::string();
-}
-
-std::string makeComponentSignature(const EditorUiSceneNode& node)
-{
-    std::string signature = node.key + "\n";
-    for (const EditorUiSceneComponent& component : node.components)
-    {
-        signature += component.typeName;
-        signature += "\n";
-        for (const EditorUiKeyValue& detail : component.details)
-        {
-            signature += detail.label;
-            signature += "=";
-            signature += detail.value;
-            signature += "\n";
-        }
-    }
-    return signature;
-}
-
-int transformEditorIndex(int groupIndex, int componentIndex)
-{
-    return groupIndex * 3 + componentIndex;
 }
 
 int controlPanelColumnCount(const QScrollArea* scrollArea)
@@ -255,18 +230,9 @@ struct QtRuntimeEditorWindow::RenderModePage
     QPushButton* addNode2DButton = nullptr;
     QPushButton* addNode3DButton = nullptr;
 
-    QScrollArea*    inspectorScroll = nullptr;
-    QWidget*        inspectorDetails = nullptr;
-    QLabel*         inspectorEmptyLabel = nullptr;
-    QLabel*         inspectorNameLabel = nullptr;
-    QLabel*         inspectorTypeLabel = nullptr;
-    QGroupBox*      transformGroup = nullptr;
-    QDoubleSpinBox* transformEditors[9] = {};
-    QGroupBox*      componentGroup = nullptr;
-    QVBoxLayout*    componentDetailsLayout = nullptr;
-    QPushButton*    addModelButton = nullptr;
-    std::string     inspectorNodeKey;
-    std::string     componentSignature;
+    QScrollArea*         inspectorScroll = nullptr;
+    SceneInspectorPanel* inspectorPanel  = nullptr;
+    std::string          inspectorNodeKey;
 
     QScrollArea* controlsScroll = nullptr;
     QWidget*     controlsContent = nullptr;
@@ -432,90 +398,34 @@ QtRuntimeEditorWindow::RenderModePage* QtRuntimeEditorWindow::createRenderModePa
 
     page->inspectorScroll = new QScrollArea(rightSplitter);
     page->inspectorScroll->setWidgetResizable(true);
-    QWidget* inspectorContent = new QWidget();
-    page->inspectorScroll->setWidget(inspectorContent);
+    page->inspectorPanel = new SceneInspectorPanel();
+    page->inspectorScroll->setWidget(page->inspectorPanel);
 
-    QVBoxLayout* inspectorLayout = new QVBoxLayout(inspectorContent);
-    inspectorLayout->setContentsMargins(0, 0, 0, 0);
-
-    QLabel* inspectorTitle = new QLabel("Node Inspector");
-    inspectorTitle->setProperty("sectionTitle", true);
-    inspectorLayout->addWidget(inspectorTitle);
-
-    page->inspectorEmptyLabel = makeMutedLabel("");
-    page->inspectorEmptyLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-    inspectorLayout->addWidget(page->inspectorEmptyLabel);
-
-    page->inspectorDetails = new QWidget(inspectorContent);
-    QVBoxLayout* inspectorDetailsLayout = new QVBoxLayout(page->inspectorDetails);
-    inspectorDetailsLayout->setContentsMargins(0, 0, 0, 0);
-
-    page->inspectorNameLabel = new QLabel();
-    page->inspectorNameLabel->setProperty("objectTitle", true);
-    inspectorDetailsLayout->addWidget(page->inspectorNameLabel);
-    page->inspectorTypeLabel = makeMutedLabel("");
-    inspectorDetailsLayout->addWidget(page->inspectorTypeLabel);
-    addSeparator(inspectorDetailsLayout);
-
-    page->transformGroup = new QGroupBox("Transform");
-    QFormLayout* transformForm = new QFormLayout(page->transformGroup);
-
-    static const char* transformLabels[] = {"Translation", "Rotation", "Scale"};
-    static const char* transformNames[]  = {"translation", "rotation", "scale"};
-    static const char* components[]      = {"x", "y", "z"};
-    static const double transformSteps[] = {0.01, 0.1, 0.01};
-
-    for (int groupIndex = 0; groupIndex < 3; ++groupIndex)
-    {
-        QWidget*     row       = new QWidget(page->transformGroup);
-        QHBoxLayout* rowLayout = new QHBoxLayout(row);
-        rowLayout->setContentsMargins(0, 0, 0, 0);
-
-        for (int componentIndex = 0; componentIndex < 3; ++componentIndex)
-        {
-            QDoubleSpinBox* spin = new QDoubleSpinBox(row);
-            spin->setDecimals(3);
-            spin->setRange(-1000000000.0, 1000000000.0);
-            spin->setSingleStep(transformSteps[groupIndex]);
-            spin->setKeyboardTracking(false);
-            rowLayout->addWidget(spin);
-
-            page->transformEditors[transformEditorIndex(groupIndex, componentIndex)] = spin;
-            const std::string path = std::string(transformNames[groupIndex]) + "." + components[componentIndex];
-            QObject::connect(spin, &QDoubleSpinBox::valueChanged, this,
-                             [this, page, path](double value)
-                             {
-                                 if (!_refreshing && !page->inspectorNodeKey.empty())
-                                 {
-                                     requestSetSceneNodeTransform(page->renderModeId, page->inspectorNodeKey, path.c_str(), value);
-                                 }
-                             });
-        }
-
-        transformForm->addRow(transformLabels[groupIndex], row);
-    }
-    inspectorDetailsLayout->addWidget(page->transformGroup);
-
-    page->componentGroup = new QGroupBox("Components");
-    QVBoxLayout* componentLayout = new QVBoxLayout(page->componentGroup);
-    page->addModelButton = new QPushButton("Add ModelComponent");
-    componentLayout->addWidget(page->addModelButton);
-
-    QWidget* componentDetails = new QWidget(page->componentGroup);
-    page->componentDetailsLayout = new QVBoxLayout(componentDetails);
-    page->componentDetailsLayout->setContentsMargins(0, 0, 0, 0);
-    componentLayout->addWidget(componentDetails);
-    inspectorDetailsLayout->addWidget(page->componentGroup);
-    inspectorDetailsLayout->addStretch();
-    inspectorLayout->addWidget(page->inspectorDetails);
-    inspectorLayout->addStretch();
-
-    QObject::connect(page->addModelButton, &QPushButton::clicked, this,
-                     [this, page]()
+    QObject::connect(page->inspectorPanel, &SceneInspectorPanel::sceneNodeTransformRequested, this,
+                     [this](const QString& renderModeId, const QString& nodeKey, const QString& path, double value)
                      {
-                         if (!page->inspectorNodeKey.empty())
+                         if (!_refreshing)
                          {
-                             requestAddSceneNodeComponent(page->renderModeId, page->inspectorNodeKey);
+                             const std::string renderMode = toStdString(renderModeId);
+                             const std::string node       = toStdString(nodeKey);
+                             const std::string transform  = toStdString(path);
+                             requestSetSceneNodeTransform(renderMode, node, transform.c_str(), value);
+                         }
+                     });
+    QObject::connect(page->inspectorPanel, &SceneInspectorPanel::sceneNodeComponentRequested, this,
+                     [this](const QString& renderModeId, const QString& nodeKey, const QString& componentType)
+                     {
+                         if (!_refreshing)
+                         {
+                             requestAddSceneNodeComponent(toStdString(renderModeId), toStdString(nodeKey), toStdString(componentType));
+                         }
+                     });
+    QObject::connect(page->inspectorPanel, &SceneInspectorPanel::sceneNodeModelLoadRequested, this,
+                     [this](const QString& renderModeId, const QString& nodeKey, const QString& path)
+                     {
+                         if (!_refreshing)
+                         {
+                             requestLoadSceneNodeModel(toStdString(renderModeId), toStdString(nodeKey), toStdString(path));
                          }
                      });
 
@@ -823,11 +733,7 @@ void QtRuntimeEditorWindow::updateInspectorPanel(RenderModePage& page, const Edi
     if (!renderMode.scene.available)
     {
         page.inspectorNodeKey.clear();
-        page.componentSignature.clear();
-        page.inspectorEmptyLabel->setText(toQString(renderMode.scene.emptyText));
-        page.inspectorEmptyLabel->show();
-        page.inspectorDetails->hide();
-        clearComponentDetails(page);
+        page.inspectorPanel->setUnavailable(toQString(renderMode.id), toQString(renderMode.scene.emptyText));
         page.inspectorScroll->verticalScrollBar()->setValue(0);
         return;
     }
@@ -836,11 +742,7 @@ void QtRuntimeEditorWindow::updateInspectorPanel(RenderModePage& page, const Edi
     if (selectedKey.empty())
     {
         page.inspectorNodeKey.clear();
-        page.componentSignature.clear();
-        page.inspectorEmptyLabel->setText("No scene node selected.");
-        page.inspectorEmptyLabel->show();
-        page.inspectorDetails->hide();
-        clearComponentDetails(page);
+        page.inspectorPanel->setEmpty(toQString(renderMode.id), "No scene node selected.");
         page.inspectorScroll->verticalScrollBar()->setValue(0);
         return;
     }
@@ -850,82 +752,18 @@ void QtRuntimeEditorWindow::updateInspectorPanel(RenderModePage& page, const Edi
     {
         _selectedNodeByMode[renderMode.id].clear();
         page.inspectorNodeKey.clear();
-        page.componentSignature.clear();
-        page.inspectorEmptyLabel->setText("No scene node selected.");
-        page.inspectorEmptyLabel->show();
-        page.inspectorDetails->hide();
-        clearComponentDetails(page);
+        page.inspectorPanel->setEmpty(toQString(renderMode.id), "No scene node selected.");
         page.inspectorScroll->verticalScrollBar()->setValue(0);
         return;
     }
 
     const bool selectedNodeChanged = page.inspectorNodeKey != node->key;
     page.inspectorNodeKey = node->key;
-    page.inspectorEmptyLabel->hide();
-    page.inspectorDetails->show();
     if (selectedNodeChanged)
     {
         page.inspectorScroll->verticalScrollBar()->setValue(0);
     }
-    page.inspectorNameLabel->setText(toQString(node->name));
-    page.inspectorTypeLabel->setText(toQString(node->typeName + "  " + node->key));
-
-    const float* transformValues[] = {node->transform.translation, node->transform.rotation, node->transform.scale};
-    for (int groupIndex = 0; groupIndex < 3; ++groupIndex)
-    {
-        for (int componentIndex = 0; componentIndex < 3; ++componentIndex)
-        {
-            QDoubleSpinBox* spin = page.transformEditors[transformEditorIndex(groupIndex, componentIndex)];
-            if (!spin || spin->hasFocus())
-            {
-                continue;
-            }
-            const QSignalBlocker blocker(spin);
-            spin->setValue(transformValues[groupIndex][componentIndex]);
-        }
-    }
-
-    page.addModelButton->setEnabled(node->canAddModelComponent);
-
-    const std::string componentSignature = makeComponentSignature(*node);
-    if (componentSignature == page.componentSignature)
-    {
-        return;
-    }
-
-    page.componentSignature = componentSignature;
-    clearComponentDetails(page);
-    if (node->components.empty())
-    {
-        page.componentDetailsLayout->addWidget(makeMutedLabel("No components."));
-        return;
-    }
-
-    for (const EditorUiSceneComponent& component : node->components)
-    {
-        QGroupBox*   componentBox  = new QGroupBox(toQString(component.typeName));
-        QFormLayout* componentForm = new QFormLayout(componentBox);
-        for (const EditorUiKeyValue& detail : component.details)
-        {
-            QLabel* value = new QLabel(toQString(detail.value));
-            value->setWordWrap(true);
-            componentForm->addRow(toQString(detail.label), value);
-        }
-        page.componentDetailsLayout->addWidget(componentBox);
-    }
-}
-
-void QtRuntimeEditorWindow::clearComponentDetails(RenderModePage& page)
-{
-    while (page.componentDetailsLayout && page.componentDetailsLayout->count() > 0)
-    {
-        QLayoutItem* item = page.componentDetailsLayout->takeAt(0);
-        if (QWidget* widget = item->widget())
-        {
-            delete widget;
-        }
-        delete item;
-    }
+    page.inspectorPanel->setNode(toQString(renderMode.id), *node);
 }
 
 void QtRuntimeEditorWindow::updateControlsPanel(RenderModePage& page, const EditorUiRenderMode& renderMode)
@@ -1086,7 +924,7 @@ void QtRuntimeEditorWindow::updatePropertyWidget(RenderModePage& page, unsigned 
         spin->setEnabled(property.editable);
         const QSignalBlocker blocker(spin);
         applySpinBoxRange(spin, property);
-        if (!spin->hasFocus())
+        if (!widgetContainsFocus(spin))
         {
             spin->setValue(textToDouble(property.value));
         }
@@ -1095,7 +933,7 @@ void QtRuntimeEditorWindow::updatePropertyWidget(RenderModePage& page, unsigned 
     {
         QLineEdit* edit = static_cast<QLineEdit*>(propertyWidgets.editor);
         edit->setReadOnly(!property.editable);
-        if (!edit->hasFocus())
+        if (!widgetContainsFocus(edit))
         {
             const QSignalBlocker blocker(edit);
             edit->setText(toQString(property.value));
@@ -1177,7 +1015,7 @@ void QtRuntimeEditorWindow::updateVectorPropertyWidget(RenderModePage& page, uns
         spin->setEnabled(property.editable);
         const QSignalBlocker blocker(spin);
         applySpinBoxRange(spin, property);
-        if (!spin->hasFocus())
+        if (!widgetContainsFocus(spin))
         {
             spin->setValue(textToDouble(property.value));
         }
@@ -1235,13 +1073,21 @@ void QtRuntimeEditorWindow::requestCreateSceneNode(const std::string& renderMode
 
 void QtRuntimeEditorWindow::requestSetSceneNodeTransform(const std::string& renderModeId, const std::string& nodeKey, const char* path, double value)
 {
-    _editor.getRenderModeTabs().setSceneNodeTransform(renderModeId.c_str(), nodeKey.c_str(), path, toStdString(makeDoubleText(value)).c_str());
+    const std::string valueText = toStdString(makeDoubleText(value));
+    _editor.getRenderModeTabs().setSceneNodeTransform(renderModeId.c_str(), nodeKey.c_str(), path, valueText.c_str());
     scheduleRefresh();
 }
 
-void QtRuntimeEditorWindow::requestAddSceneNodeComponent(const std::string& renderModeId, const std::string& nodeKey)
+void QtRuntimeEditorWindow::requestAddSceneNodeComponent(const std::string& renderModeId, const std::string& nodeKey,
+                                                         const std::string& componentType)
 {
-    _editor.getRenderModeTabs().addSceneNodeComponent(renderModeId.c_str(), nodeKey.c_str(), "ModelComponent");
+    _editor.getRenderModeTabs().addSceneNodeComponent(renderModeId.c_str(), nodeKey.c_str(), componentType.c_str());
+    scheduleRefresh();
+}
+
+void QtRuntimeEditorWindow::requestLoadSceneNodeModel(const std::string& renderModeId, const std::string& nodeKey, const std::string& path)
+{
+    _editor.getRenderModeTabs().loadSceneNodeModel(renderModeId.c_str(), nodeKey.c_str(), path.c_str());
     scheduleRefresh();
 }
 

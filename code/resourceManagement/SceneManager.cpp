@@ -89,43 +89,51 @@ void SceneManager::updateDescriptorSet()
 
 void SceneManager::update()
 {
-    _assetLoadingServer.processPendingLoads();
+    editAssetLoadingServer(
+        [](AssetLoadingServer& loadingServer)
+        {
+            loadingServer.processPendingLoads();
+        });
 
     std::lock_guard<std::mutex> lock(_cpuSceneMutex);
     _cpuScene.updateWorldTransforms();
 
     const size_t previousSceneTextureCount = _gpuScene ? _gpuScene->getSceneTextures().size() : 0;
 
-    ModelLoadCompletion completion;
-    while (_assetLoadingServer.popCompletedModel(completion))
-    {
-        CpuModelComponent* component = _cpuScene.getComponent<CpuModelComponent>(completion.request.requester);
-        if (!component)
+    editAssetLoadingServer(
+        [&](AssetLoadingServer& loadingServer)
         {
-            continue;
-        }
+            ModelLoadCompletion completion;
+            while (loadingServer.popCompletedModel(completion))
+            {
+                CpuModelComponent* component = _cpuScene.getComponent<CpuModelComponent>(completion.request.requester);
+                if (!component)
+                {
+                    continue;
+                }
 
-        if (completion.result.success && _gpuScene)
-        {
-            component->model           = _gpuScene->registerModel(std::move(completion.result.model));
-            component->firstRenderable = 0;
-            component->renderableCount = component->model.isValid()
-                                              ? static_cast<uint32_t>(_gpuScene->getModels()[component->model.index].submeshes.size())
-                                              : INVALID_SCENE_ID;
-            component->loadState       = CpuModelComponent::LoadState::eLoaded;
-            component->loadMessage.clear();
-        }
-        else
-        {
-            component->model           = {};
-            component->firstRenderable = 0;
-            component->renderableCount = INVALID_SCENE_ID;
-            component->loadState       = CpuModelComponent::LoadState::eFailed;
-            component->loadMessage     = completion.result.message;
-        }
+                if (completion.result.success && _gpuScene)
+                {
+                    component->model           = _gpuScene->registerModel(std::move(completion.result.model));
+                    component->firstRenderable = 0;
+                    component->renderableCount = component->model.isValid()
+                                                      ? static_cast<uint32_t>(_gpuScene->getModels()[component->model.index].submeshes.size())
+                                                      : INVALID_SCENE_ID;
+                    component->loadState       = CpuModelComponent::LoadState::eLoaded;
+                    component->loadMessage.clear();
+                }
+                else
+                {
+                    component->model           = {};
+                    component->firstRenderable = 0;
+                    component->renderableCount = INVALID_SCENE_ID;
+                    component->loadState       = CpuModelComponent::LoadState::eFailed;
+                    component->loadMessage     = completion.result.message;
+                }
 
-        _cpuScene.notifyComponentChanged();
-    }
+                _cpuScene.notifyComponentChanged();
+            }
+        });
 
     if (_gpuScene && _gpuScene->getType() != GpuSceneType::eGaussian && _gpuScene->getSourceSceneRevision() != _cpuScene.getRevision())
     {

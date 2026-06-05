@@ -48,4 +48,9 @@ bool RenderModeEditor::addSceneNodeComponent(const char* nodeKey, const char* co
     return _sceneManagerEditor.addSceneNodeComponent(nodeKey, componentType);
 }
 
+bool RenderModeEditor::loadSceneNodeModel(const char* nodeKey, const char* path)
+{
+    return _sceneManagerEditor.loadSceneNodeModel(nodeKey, path);
+}
+
 } // namespace Play::editor

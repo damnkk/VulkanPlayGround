@@ -48,11 +48,11 @@ private:
     QTreeWidgetItem* syncSceneTreeNode(RenderModePage& page, const EditorUiSceneNode& node, QTreeWidgetItem* parent, int row);
     void             removeSceneTreeItem(RenderModePage& page, QTreeWidgetItem* item);
     void             clearSceneTree(RenderModePage& page);
-    void             clearComponentDetails(RenderModePage& page);
 
     void requestCreateSceneNode(const std::string& renderModeId, const char* nodeType);
     void requestSetSceneNodeTransform(const std::string& renderModeId, const std::string& nodeKey, const char* path, double value);
-    void requestAddSceneNodeComponent(const std::string& renderModeId, const std::string& nodeKey);
+    void requestAddSceneNodeComponent(const std::string& renderModeId, const std::string& nodeKey, const std::string& componentType);
+    void requestLoadSceneNodeModel(const std::string& renderModeId, const std::string& nodeKey, const std::string& path);
     void requestSetObjectProperty(unsigned int objectId, const std::string& propertyPath, const std::string& value);
     void requestResetObject(unsigned int objectId);
     void scheduleRefresh();
