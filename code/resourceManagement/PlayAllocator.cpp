@@ -37,9 +37,8 @@ void PlayResourceManager::initialize()
         .instance       = vkDriver->getInstance(),
     };
     ::nvvk::ResourceAllocator::init(allocatorInfo);
-    ::nvvk::StagingUploader::init(this);
+    ::nvvk::StagingUploader::init(this, true);
     ::nvvk::SamplerPool::init(allocatorInfo.device);
-    this->m_base.enableLayoutBarriers = true;
 }
 
 void PlayResourceManager::deInit()
