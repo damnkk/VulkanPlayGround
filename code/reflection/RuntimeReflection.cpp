@@ -122,8 +122,6 @@ RTTR_REGISTRATION
     rttr::registration::class_<Play::Buffer>("Play::Buffer");
     rttr::registration::class_<Play::Buffer::BufferMetaData>("Play::Buffer::BufferMetaData");
 
-    rttr::registration::class_<Play::RenderScene>("Play::RenderScene");
-    rttr::registration::class_<Play::RTScene>("Play::RTScene");
     rttr::registration::class_<Play::GaussianScene>("Play::GaussianScene");
     rttr::registration::class_<Play::SceneManager>("Play::SceneManager");
 

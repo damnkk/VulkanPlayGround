@@ -1,17 +1,369 @@
 #include "GBufferPass.h"
-#include "Material.h"
-#include "RDG/RDG.h"
-#include "VulkanDriver.h"
-#include "MeshCollector.h"
-#include "SceneManager.h"
+
 #include "DeferRendering.h"
+#include "PlayAllocator.h"
+#include "RDG/RDG.h"
+#include "SceneManager.h"
+#include "VulkanDriver.h"
 #include "utils.hpp"
-#include "nvutils/parallel_work.hpp"
-#include "pConstantType.h.slang"
+
 namespace Play
 {
 
+namespace
+{
+
+constexpr VkBufferUsageFlags2 kGBufferGPUInstanceDataUsage = VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT;
+constexpr uint32_t            kGBufferInstanceFlagDoubleSided = 1 << 0;
+
+bool isBoundsInFrustum(const AABB& bounds, const glm::mat4& viewProj)
+{
+    const glm::vec3 corners[] = {
+        {bounds.min.x, bounds.min.y, bounds.min.z},
+        {bounds.max.x, bounds.min.y, bounds.min.z},
+        {bounds.min.x, bounds.max.y, bounds.min.z},
+        {bounds.max.x, bounds.max.y, bounds.min.z},
+        {bounds.min.x, bounds.min.y, bounds.max.z},
+        {bounds.max.x, bounds.min.y, bounds.max.z},
+        {bounds.min.x, bounds.max.y, bounds.max.z},
+        {bounds.max.x, bounds.max.y, bounds.max.z},
+    };
+
+    uint32_t outsideLeft   = 0;
+    uint32_t outsideRight  = 0;
+    uint32_t outsideBottom = 0;
+    uint32_t outsideTop    = 0;
+    uint32_t outsideNear   = 0;
+    uint32_t outsideFar    = 0;
+
+    for (uint32_t i = 0; i < 8; ++i)
+    {
+        const glm::vec4 clip = viewProj * glm::vec4(corners[i], 1.0f);
+        if (clip.x < -clip.w) ++outsideLeft;
+        if (clip.x > clip.w) ++outsideRight;
+        if (clip.y < -clip.w) ++outsideBottom;
+        if (clip.y > clip.w) ++outsideTop;
+        if (clip.z < 0.0f) ++outsideNear;
+        if (clip.z > clip.w) ++outsideFar;
+    }
+
+    return outsideLeft < 8 && outsideRight < 8 && outsideBottom < 8 && outsideTop < 8 && outsideNear < 8 && outsideFar < 8;
+}
+
+float computeDepthKey(const AABB& bounds, const CameraData& cameraData)
+{
+    const glm::vec3 center = (bounds.min + bounds.max) * 0.5f;
+    return glm::length(center - cameraData.cameraPosition);
+}
+
+uint32_t quantizeDepth(float depth)
+{
+    if (depth <= 0.0f)
+    {
+        return 0;
+    }
+
+    const float scaledDepth = depth * 16.0f;
+    if (scaledDepth >= 1048575.0f)
+    {
+        return 1048575u;
+    }
+
+    return static_cast<uint32_t>(scaledDepth);
+}
+
+uint64_t makeSortKey(float depthKey, uint32_t materialIndex, uint32_t meshInfoIndex)
+{
+    const uint64_t depthBits    = static_cast<uint64_t>(quantizeDepth(depthKey)) & 0xFFFFFull;
+    const uint64_t materialBits = static_cast<uint64_t>(materialIndex) & 0xFFFFFull;
+    const uint64_t meshBits     = static_cast<uint64_t>(meshInfoIndex) & 0xFFFFFull;
+    return (depthBits << 40) | (materialBits << 20) | meshBits;
+}
+
+uint64_t meshInfoAddressForModel(const ModelAsset& model, const GpuModelRange& range, uint32_t meshInfoIndex)
+{
+    if (!model.meshInfoBuffer || meshInfoIndex < range.firstMeshInfo)
+    {
+        return 0;
+    }
+
+    const uint32_t localMeshInfoIndex = meshInfoIndex - range.firstMeshInfo;
+    if (localMeshInfoIndex >= range.meshInfoCount)
+    {
+        return 0;
+    }
+
+    return model.meshInfoBuffer->address + localMeshInfoIndex * sizeof(MeshInfo);
+}
+
+uint64_t materialAddressForModel(const ModelAsset& model, const GpuModelRange& range, uint32_t materialIndex)
+{
+    if (!model.materialBuffer || materialIndex < range.firstMaterial)
+    {
+        return 0;
+    }
+
+    const uint32_t localMaterialIndex = materialIndex - range.firstMaterial;
+    if (localMaterialIndex >= range.materialCount)
+    {
+        return 0;
+    }
+
+    return model.materialBuffer->address + localMaterialIndex * sizeof(shaderio::GltfShadeMaterial);
+}
+
+} // namespace
+
 void GBufferPass::init() {}
+
+void GBufferPass::prepareRenderList()
+{
+    _visibleInstances.clear();
+    _renderItems.clear();
+    _gpuInstanceData.clear();
+
+    if (!_ownedRender || !_ownedRender->getSceneManager())
+    {
+        return;
+    }
+
+    SceneManager*   sceneManager = _ownedRender->getSceneManager();
+    const GpuScene* gpuScene     = sceneManager->getGpuScene();
+    if (!gpuScene)
+    {
+        return;
+    }
+
+    const CameraData& cameraData = _ownedRender->getCurrentCameraData();
+    sceneManager->readSceneGraph(
+        [&](const CpuScene& scene)
+        {
+            collectVisibleInstances(scene, *gpuScene, cameraData);
+        });
+
+    buildRenderList(*gpuScene);
+    sortRenderList();
+    uploadGPUInstanceData();
+}
+
+void GBufferPass::collectVisibleInstances(const CpuScene& scene, const GpuScene& gpuScene, const CameraData& cameraData)
+{
+    const std::vector<ModelAsset>& models = gpuScene.getModels();
+
+    const std::vector<CpuSceneNode>& nodes = scene.getNodes();
+    for (uint32_t nodeIndex = 0; nodeIndex < nodes.size(); ++nodeIndex)
+    {
+        const CpuSceneNode& node = nodes[nodeIndex];
+        if (!node.alive || !node.worldVisible)
+        {
+            continue;
+        }
+
+        for (CpuSceneComponentID componentID : node.components)
+        {
+            const CpuModelComponent* modelComponent = scene.getComponent<CpuModelComponent>(componentID);
+            if (!modelComponent || !modelComponent->visible || !modelComponent->hasModel())
+            {
+                continue;
+            }
+
+            if (modelComponent->model.index >= models.size())
+            {
+                continue;
+            }
+
+            const ModelAsset& model = models[modelComponent->model.index];
+            if (model.generation != modelComponent->model.generation || model.renderables.empty())
+            {
+                continue;
+            }
+
+            const uint32_t firstRenderable = modelComponent->firstRenderable;
+            if (firstRenderable >= model.renderables.size())
+            {
+                continue;
+            }
+
+            const uint32_t availableRenderables = static_cast<uint32_t>(model.renderables.size()) - firstRenderable;
+            uint32_t       renderableCount = modelComponent->usesAllRenderables() ? availableRenderables : modelComponent->renderableCount;
+            if (renderableCount > availableRenderables)
+            {
+                renderableCount = availableRenderables;
+            }
+            if (renderableCount == 0)
+            {
+                continue;
+            }
+
+            AABB localBounds;
+            bool hasBounds = false;
+            for (uint32_t renderableOffset = 0; renderableOffset < renderableCount; ++renderableOffset)
+            {
+                const ModelRenderableTemplate& renderable = model.renderables[firstRenderable + renderableOffset];
+                if (hasBounds)
+                {
+                    expandAABB(localBounds, renderable.modelBounds);
+                }
+                else
+                {
+                    localBounds = renderable.modelBounds;
+                    hasBounds   = true;
+                }
+            }
+            if (!hasBounds)
+            {
+                continue;
+            }
+
+            GBufferVisibleInstance visibleInstance;
+            visibleInstance.modelIndex      = modelComponent->model.index;
+            visibleInstance.firstRenderable = firstRenderable;
+            visibleInstance.renderableCount = renderableCount;
+            visibleInstance.objectToWorld   = node.worldTransform;
+            visibleInstance.worldBounds     = transformAABB(localBounds, node.worldTransform);
+            visibleInstance.depthKey        = computeDepthKey(visibleInstance.worldBounds, cameraData);
+
+            if (!isBoundsInFrustum(visibleInstance.worldBounds, cameraData.viewProjMatrix))
+            {
+                continue;
+            }
+
+            _visibleInstances.push_back(visibleInstance);
+        }
+    }
+}
+
+void GBufferPass::buildRenderList(const GpuScene& gpuScene)
+{
+    const GpuSceneCommonData&           common      = gpuScene.getCommonData();
+    const std::vector<ModelAsset>&      models      = gpuScene.getModels();
+    const std::vector<GpuModelRange>&   modelRanges = gpuScene.getModelRanges();
+
+    for (uint32_t visibleIndex = 0; visibleIndex < _visibleInstances.size(); ++visibleIndex)
+    {
+        const GBufferVisibleInstance& visibleInstance = _visibleInstances[visibleIndex];
+        if (visibleInstance.modelIndex >= models.size() || visibleInstance.modelIndex >= modelRanges.size())
+        {
+            continue;
+        }
+
+        const ModelAsset&    model = models[visibleInstance.modelIndex];
+        const GpuModelRange& range = modelRanges[visibleInstance.modelIndex];
+
+        for (uint32_t renderableOffset = 0; renderableOffset < visibleInstance.renderableCount; ++renderableOffset)
+        {
+            const uint32_t renderableIndex = visibleInstance.firstRenderable + renderableOffset;
+            if (renderableIndex >= model.renderables.size())
+            {
+                continue;
+            }
+
+            const ModelRenderableTemplate& renderable = model.renderables[renderableIndex];
+            if (renderable.submeshIndex >= model.submeshes.size())
+            {
+                continue;
+            }
+
+            const ModelSubmeshAsset& submesh = model.submeshes[renderable.submeshIndex];
+            const uint32_t           meshInfoIndex = submesh.meshID;
+            if (meshInfoIndex == INVALID_SCENE_ID || meshInfoIndex >= common.meshInfos.size())
+            {
+                continue;
+            }
+
+            const MeshInfo& meshInfo = common.meshInfos[meshInfoIndex];
+            if (meshInfo.indexCount == 0)
+            {
+                continue;
+            }
+
+            GBufferGPUInstanceData gpuInstanceData;
+            gpuInstanceData.objectToWorld      = visibleInstance.objectToWorld * renderable.localToModel;
+            gpuInstanceData.worldToObject      = glm::inverse(gpuInstanceData.objectToWorld);
+            gpuInstanceData.meshInfoAddress    = meshInfoAddressForModel(model, range, meshInfoIndex);
+            gpuInstanceData.materialAddress    = materialAddressForModel(model, range, meshInfo.materialIdx);
+            gpuInstanceData.textureInfoAddress = 0;
+            gpuInstanceData.meshInfoIndex      = meshInfoIndex;
+            gpuInstanceData.materialIndex      = meshInfo.materialIdx;
+            gpuInstanceData.textureInfoOffset  = range.firstTextureInfo;
+
+            if (meshInfo.materialIdx < common.materials.size() && common.materials[meshInfo.materialIdx].doubleSided != 0)
+            {
+                gpuInstanceData.flags |= kGBufferInstanceFlagDoubleSided;
+            }
+
+            GBufferRenderItem renderItem;
+            renderItem.visibleInstanceIndex = visibleIndex;
+            renderItem.renderableIndex      = renderableIndex;
+            renderItem.meshInfoIndex        = meshInfoIndex;
+            renderItem.materialIndex        = meshInfo.materialIdx;
+            renderItem.indexCount           = meshInfo.indexCount;
+            renderItem.depthKey             = visibleInstance.depthKey;
+            renderItem.sortKey              = makeSortKey(renderItem.depthKey, renderItem.materialIndex, renderItem.meshInfoIndex);
+            renderItem.gpuInstanceIndex     = static_cast<uint32_t>(_gpuInstanceData.size());
+
+            _gpuInstanceData.push_back(gpuInstanceData);
+            _renderItems.push_back(renderItem);
+        }
+    }
+}
+
+void GBufferPass::sortRenderList()
+{
+    std::sort(
+        _renderItems.begin(), _renderItems.end(),
+        [](const GBufferRenderItem& lhs, const GBufferRenderItem& rhs)
+        {
+            if (lhs.sortKey == rhs.sortKey)
+            {
+                return lhs.depthKey < rhs.depthKey;
+            }
+            return lhs.sortKey < rhs.sortKey;
+        });
+}
+
+void GBufferPass::uploadGPUInstanceData()
+{
+    if (_renderItems.empty())
+    {
+        _gpuInstanceData.clear();
+        return;
+    }
+
+    std::vector<GBufferGPUInstanceData> sortedInstanceData;
+    sortedInstanceData.reserve(_renderItems.size());
+    for (uint32_t itemIndex = 0; itemIndex < _renderItems.size(); ++itemIndex)
+    {
+        GBufferRenderItem& renderItem = _renderItems[itemIndex];
+        if (renderItem.gpuInstanceIndex >= _gpuInstanceData.size())
+        {
+            continue;
+        }
+
+        sortedInstanceData.push_back(_gpuInstanceData[renderItem.gpuInstanceIndex]);
+        renderItem.gpuInstanceIndex = static_cast<uint32_t>(sortedInstanceData.size() - 1);
+    }
+    _gpuInstanceData.swap(sortedInstanceData);
+
+    const VkDeviceSize dataSize = static_cast<VkDeviceSize>(_gpuInstanceData.size() * sizeof(GBufferGPUInstanceData));
+    if (dataSize == 0)
+    {
+        return;
+    }
+
+    if (!_gpuInstanceDataBuffer || _gpuInstanceDataBuffer->BufferSize() < dataSize)
+    {
+        _gpuInstanceDataBuffer =
+            RefPtr<Buffer>(new Buffer("GBufferGPUInstanceData", kGBufferGPUInstanceDataUsage, dataSize,
+                                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
+    }
+
+    if (_gpuInstanceDataBuffer && _gpuInstanceDataBuffer->mapping)
+    {
+        memcpy(_gpuInstanceDataBuffer->mapping, _gpuInstanceData.data(), dataSize);
+        PlayResourceManager::Instance().flushBuffer(*_gpuInstanceDataBuffer, 0, dataSize);
+    }
+}
 
 void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
 {
@@ -66,135 +418,29 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
                                      .MipmapLevel(1)
                                      .finish();
 
-    RDG::RenderPassNodeRef gBufferPass =
-        rdgBuilder->createRenderPass("GBufferPass")
-            .color(0, BaseColorRT, VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-            .color(1, WorldNormalRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-            .color(2, PBRRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-            .color(3, EmissiveRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-            .color(4, Custom1RT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-            .color(5, VelocityRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-            .depth(DepthRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-            .execute(
-                [this](RDG::PassNode* node, RDG::RenderContext& context)
-                {
-                    // cast renderpass node,and collect renderPass info
-                    RDG::RenderPassNodeRef renderPassNode   = dynamic_cast<RDG::RenderPassNodeRef>(node);
-                    SceneManager*          sceneManager     = _ownedRender->getSceneManager();
-                    RenderPassConfig&      renderPassConfig = renderPassNode->getRenderPass()->getConfig();
-                    std::vector<VkFormat>  colorFormats;
-                    for (const auto& colorAttachment : renderPassConfig.colorAttachments)
-                    {
-                        colorFormats.push_back(colorAttachment.format);
-                    }
-
-                    VkCommandBufferInheritanceRenderingInfo renderingInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDERING_INFO};
-                    renderingInfo.colorAttachmentCount    = static_cast<uint32_t>(colorFormats.size());
-                    renderingInfo.pColorAttachmentFormats = colorFormats.data();
-                    renderingInfo.depthAttachmentFormat =
-                        renderPassConfig.depthAttachment.has_value() ? renderPassConfig.depthAttachment->format : VK_FORMAT_UNDEFINED;
-                    renderingInfo.stencilAttachmentFormat =
-                        renderPassConfig.stencilAttachment.has_value() ? renderPassConfig.stencilAttachment->format : VK_FORMAT_UNDEFINED;
-
-                    renderingInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-                    VkCommandBufferInheritanceInfo inheritanceInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO};
-                    inheritanceInfo.pNext = &renderingInfo;
-
-                    // collect mesh batch
-                    MeshCollector           meshCollector(this->_ownedRender);
-                    std::vector<MeshBatch>& meshBatches = meshCollector.collectMeshBatches();
-                    {
-                        std::unordered_set<uint64_t> processedMaterialID;
-                        for (auto& batch : meshBatches)
-                        {
-                            RenderScene& gpuScene = sceneManager->getVkScene()[batch.sceneID];
-                            Material*    mat      = gpuScene.getDefaultMaterials()[batch.materialID];
-                            mat->getProgram()->setPassNode(node);
-                        }
-                    }
-                    // dispatch num
-                    uint32_t batchNum = (static_cast<uint32_t>(meshBatches.size()) + MAX_SUB_RENDER_THREAD - 1) / MAX_SUB_RENDER_THREAD;
-                    std::array<VkCommandBuffer, MAX_SUB_RENDER_THREAD> cmdBuffers = {VK_NULL_HANDLE};
-                    BS::thread_pool&                                   threadPool = nvutils::get_thread_pool();
-                    BS::multi_future<void>                             res        = threadPool.submit_sequence<uint32_t>(
-                        0, MAX_SUB_RENDER_THREAD,
-                        [&](uint32_t threadIndex)
-                        {
-                            uint32_t beginIndex = threadIndex * batchNum;
-                            if (beginIndex >= meshBatches.size()) return;
-
-                            VkCommandBuffer subCmdBuffer = context._frameData->workerGraphicsPools.getCommandBuffer(threadIndex);
-                            cmdBuffers[threadIndex] = subCmdBuffer;
-
-                            VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-                            beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT | VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
-                            beginInfo.pInheritanceInfo = &inheritanceInfo;
-
-                            NVVK_CHECK(vkBeginCommandBuffer(subCmdBuffer, &beginInfo));
-
-                            // Simple loop for now, optimize later
-                            uint32_t endBatchIndex = std::min((uint32_t) meshBatches.size(), beginIndex + batchNum);
-                            for (uint32_t i = beginIndex; i < endBatchIndex; ++i)
-                            {
-                                MeshBatch&   batch    = meshBatches[i];
-                                RenderScene& gpuScene = sceneManager->getVkScene()[batch.sceneID];
-                                PlayProgram* program  = gpuScene.getDefaultMaterials()[batch.materialID]->getProgram();
-                                VkViewport   viewport = {
-                                    0, 0, (float) vkDriver->getViewportSize().width, (float) vkDriver->getViewportSize().height, 0.0f, 1.0f};
-                                VkRect2D scissor = {{0, 0}, {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height}};
-                                vkCmdSetViewportWithCount(subCmdBuffer, 1, &viewport);
-                                vkCmdSetScissorWithCount(subCmdBuffer, 1, &scissor);
-                                vkCmdSetDepthWriteEnable(subCmdBuffer, VK_FALSE);
-                                vkCmdSetDepthTestEnable(subCmdBuffer, VK_FALSE);
-                                program->bind(subCmdBuffer);
-                                context._pendingGfxState->bindDescriptorSet(subCmdBuffer, program);
-                                for (int i = 0; i < batch.renderNodeIDs.size(); ++i)
-                                {
-                                    nvvkgltf::Scene&                 scene = sceneManager->getCpuScene()[batch.sceneID];
-                                    RenderScene&                     gpuScene = sceneManager->getVkScene()[batch.sceneID];
-                                    const nvvkgltf::RenderNode&      renderNode = scene.getRenderNodes()[batch.renderNodeIDs[i]];
-                                    const nvvkgltf::RenderPrimitive& renderPrimitive = scene.getRenderPrimitives()[renderNode.renderPrimID];
-                                    auto&                            indexBuffer = gpuScene.indices()[renderNode.renderPrimID];
-                                    int                              indexCount = renderPrimitive.indexCount;
-                                    GBufferPushConstant* constant = program->getDescriptorSetManager().getPushConstantData<GBufferPushConstant>();
-                                    constant->perFrameConstant.cameraBufferDeviceAddress = _ownedRender->getCurrentCameraBuffer()->address;
-                                    constant->sceneConstant.sceneDescAddress = sceneManager->getVkScene()[batch.sceneID].sceneDesc().address;
-                                    constant->sceneConstant.renderNodeId  = batch.renderNodeIDs[i];
-                                    constant->sceneConstant.textureOffset = gpuScene.getTextureOffset();
-                                    program->getDescriptorSetManager().pushConstantRanges(subCmdBuffer);
-                                    vkCmdBindIndexBuffer2(subCmdBuffer, indexBuffer.buffer, 0, indexBuffer.bufferSize,
-                                                                                             VkIndexType::VK_INDEX_TYPE_UINT32);
-                                    vkCmdDrawIndexed(subCmdBuffer, indexCount, 1, 0, 0, 0);
-                                }
-                            }
-
-                            NVVK_CHECK(vkEndCommandBuffer(subCmdBuffer));
-                        });
-                    res.wait();
-
-                    // Filter out null buffers if thread count > batch count
-                    std::vector<VkCommandBuffer> validCmdBuffers;
-                    validCmdBuffers.reserve(MAX_SUB_RENDER_THREAD);
-                    for (auto cb : cmdBuffers)
-                    {
-                        if (cb != VK_NULL_HANDLE) validCmdBuffers.push_back(cb);
-                    }
-
-                    if (!validCmdBuffers.empty())
-                    {
-                        vkCmdExecuteCommands(context._currCmdBuffer, static_cast<uint32_t>(validCmdBuffers.size()), validCmdBuffers.data());
-                    }
-                })
-            .finish();
-    gBufferPass->setMultiThreadRecordingState(true);
+    rdgBuilder->createRenderPass("GBufferPass")
+        .color(0, BaseColorRT, VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+        .color(1, WorldNormalRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+        .color(2, PBRRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+        .color(3, EmissiveRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+        .color(4, Custom1RT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+        .color(5, VelocityRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+        .depth(DepthRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+        .execute(
+            [this](RDG::PassNode* node, RDG::RenderContext& context)
+            {
+                (void) node;
+                (void) context;
+                prepareRenderList();
+            })
+        .finish();
 }
 
 } // namespace Play

@@ -1,11 +1,10 @@
 #ifndef SCENEMANAGER_H
 #define SCENEMANAGER_H
+#include "AssetLoadingServer.h"
 #include "filesystem"
-#include "nvvkgltf/scene.hpp"
-#include "nvvkgltf/scene_vk.hpp"
-#include "nvvkgltf/scene_rtx.hpp"
 #include "nvvk/descriptors.hpp"
 #include "PlayScene.h"
+#include "CpuScene.h"
 #include "core/RefCounted.h"
 namespace Play
 {
@@ -14,26 +13,67 @@ class Texture;
 class SceneManager
 {
 public:
-    SceneManager();
-    template <typename T>
-    SceneManager& addScene(std::filesystem::path filename);
-    template <typename T>
-    SceneManager&                 addScenes(std::vector<std::filesystem::path> filenames);
-    std::vector<nvvkgltf::Scene>& getCpuScene()
+    static constexpr uint32_t SceneTextureBinding      = 3;
+    static constexpr uint32_t SceneTexturePoolCapacity = 1024;
+
+    SceneManager(GpuSceneType gpuSceneType = GpuSceneType::eRaster);
+    GpuScene* getGpuScene()
     {
-        return _scenes;
+        return _gpuScene.get();
     }
-    std::vector<RenderScene>& getVkScene()
+    const GpuScene* getGpuScene() const
     {
-        return _scenesVk;
+        return _gpuScene.get();
     }
-    std::vector<RTScene>& getRtxScene()
+    GpuSceneType getGpuSceneType() const
     {
-        return _scenesRTX;
+        return _gpuScene ? _gpuScene->getType() : GpuSceneType::eRaster;
     }
     GaussianScene& getGaussianScene()
     {
-        return _gaussianScene;
+        return *static_cast<GaussianScene*>(_gpuScene.get());
+    }
+    CpuScene& getSceneGraph()
+    {
+        return _cpuScene;
+    }
+    const CpuScene& getSceneGraph() const
+    {
+        return _cpuScene;
+    }
+    AssetLoadingServer& getAssetLoadingServer()
+    {
+        return _assetLoadingServer;
+    }
+    const AssetLoadingServer& getAssetLoadingServer() const
+    {
+        return _assetLoadingServer;
+    }
+    template <typename Fn>
+    decltype(auto) editAssetLoadingServer(Fn fn)
+    {
+        std::lock_guard<std::mutex> lock(_assetLoadingServerMutex);
+        return fn(_assetLoadingServer);
+    }
+    template <typename Fn>
+    decltype(auto) readSceneGraph(Fn fn) const
+    {
+        std::lock_guard<std::mutex> lock(_cpuSceneMutex);
+        return fn(_cpuScene);
+    }
+    template <typename Fn>
+    decltype(auto) editSceneGraph(Fn fn)
+    {
+        std::lock_guard<std::mutex> lock(_cpuSceneMutex);
+        return fn(_cpuScene);
+    }
+    RasterGpuScene& getRasterGpuScene()
+    {
+        return *static_cast<RasterGpuScene*>(_gpuScene.get());
+    }
+    const RasterGpuScene& getRasterGpuScene() const
+    {
+        return *static_cast<const RasterGpuScene*>(_gpuScene.get());
     }
     void addSkyBoxTexture(const RefPtr<Texture>& texture);
     void updateDescriptorSet();
@@ -43,18 +83,14 @@ public:
 
 protected:
 private:
-    std::vector<nvvkgltf::Scene> _scenes; // for cpu
-    std::mutex                   _sceneMutex;
-    std::vector<RenderScene>     _scenesVk; // for vulkan gpu
-    std::mutex                   _scenesVkMutex;
-    std::vector<RTScene>         _scenesRTX; // for ray tracing gpu
-    std::mutex                   _scenesRTXMutex;
-    std::vector<nvvk::Image>     _sceneImages; // all scene images
     nvvk::DescriptorBindings     _sceneDescriptorBindings;
     std::vector<RefPtr<Texture>> _sceneSkyTexture;
 
-    // for gaussian scene
-    GaussianScene _gaussianScene;
+    CpuScene           _cpuScene;
+    mutable std::mutex _cpuSceneMutex;
+    AssetLoadingServer _assetLoadingServer;
+    std::mutex         _assetLoadingServerMutex;
+    std::unique_ptr<GpuScene> _gpuScene;
 };
 
 } // namespace Play

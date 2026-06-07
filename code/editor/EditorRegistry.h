@@ -5,7 +5,7 @@
 #include <rttr/instance.h>
 #include <rttr/variant.h>
 
-#include "editor/EditorHtml.h"
+#include "editor/EditorUiModel.h"
 
 namespace Play
 {
@@ -58,7 +58,7 @@ struct EditorObjectTraits
 
 struct EditorObjectQuery
 {
-    EditorRenderMode           renderMode           = EditorRenderMode::Any;
+    EditorRenderMode           renderMode             = EditorRenderMode::Any;
     EditorObjectCapabilityMask requiredCapabilityMask = 0;
 };
 
@@ -93,20 +93,18 @@ class IEditorObjectAdapter
 public:
     virtual ~IEditorObjectAdapter() = default;
 
-    virtual rttr::type     getType() const                                             = 0;
-    virtual rttr::instance getInstance() const                                         = 0;
-    virtual rttr::instance getDefaultInstance() const                                  = 0;
+    virtual rttr::type     getType() const                                                   = 0;
+    virtual rttr::instance getInstance() const                                               = 0;
+    virtual rttr::instance getDefaultInstance() const                                        = 0;
     virtual bool           setProperty(const char* propertyName, const rttr::variant& value) = 0;
-    virtual bool           resetObject()                                               = 0;
+    virtual bool           resetObject()                                                     = 0;
 };
 
 template <typename T>
 class ObjectEditorAdapter final : public IEditorObjectAdapter
 {
 public:
-    explicit ObjectEditorAdapter(T& object) : _object(&object)
-    {
-    }
+    explicit ObjectEditorAdapter(T& object) : _object(&object) {}
 
     rttr::type getType() const override
     {
@@ -141,9 +139,7 @@ template <typename T>
 class ControlComponentEditorAdapter final : public IEditorObjectAdapter
 {
 public:
-    explicit ControlComponentEditorAdapter(Play::ControlComponent<T>& component) : _component(&component), _defaultObject(component.getCPUHandle())
-    {
-    }
+    explicit ControlComponentEditorAdapter(Play::ControlComponent<T>& component) : _component(&component), _defaultObject(component.getCPUHandle()) {}
 
     rttr::type getType() const override
     {

@@ -1,7 +1,9 @@
 #include "PlayScene.h"
-#include "Material.h"
+#include "Resource.h"
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include <array>
-#include <nvvkgltf/scene.hpp>
 #include <string>
 #include <nvutils/parallel_work.hpp>
 
@@ -276,27 +278,25 @@ void unpackFloat3(const std::vector<float>& src, std::vector<float3>& dst)
 
 } // namespace
 
-void RenderScene::fillDefaultMaterials(nvvkgltf::Scene& scene)
+void GaussianScene::clear()
 {
-    this->_defaultMaterials.clear();
-    this->_defaultMaterials.resize(scene.getModel().materials.size());
-    this->_defaultMaterials.assign(scene.getModel().materials.size(), FixedMaterial::Create());
+    _positions.clear();
+    _colors.clear();
+    _covariances.clear();
+    _rotations.clear();
+    _shRestCoefficients.clear();
+    _positionBuffer.reset();
+    _colorBuffer.reset();
+    _covarianceBuffer.reset();
+    _shRestBuffer.reset();
+    _splatMetaBuffer.reset();
+    _sceneUniformBuffer.reset();
+    _meta = {};
 }
 
 bool GaussianScene::load(const std::filesystem::path& filename)
 {
-    auto resetSceneData = [this]()
-    {
-        _positions.clear();
-        _colors.clear();
-        _covariances.clear();
-        _rotations.clear();
-        _shRestCoefficients.clear();
-        _meta = {};
-    };
-
-    resetSceneData();
-    _meta = {};
+    clear();
 
     const std::string  filenameString = filename.string();
     miniply::PLYReader reader(filenameString.c_str());
@@ -318,7 +318,7 @@ bool GaussianScene::load(const std::filesystem::path& filename)
         {
             if (!reader.load_element())
             {
-                resetSceneData();
+                clear();
                 return false;
             }
         }
@@ -328,7 +328,7 @@ bool GaussianScene::load(const std::filesystem::path& filename)
             const uint32_t rowCount = reader.num_rows();
             if (rowCount == 0)
             {
-                resetSceneData();
+                clear();
                 return false;
             }
 
@@ -351,7 +351,7 @@ bool GaussianScene::load(const std::filesystem::path& filename)
             };
             if (!extractFloatComponents(reader, elem, positionPatterns, components))
             {
-                resetSceneData();
+                clear();
                 return false;
             }
             unpackFloat3(components, _positions);
@@ -378,7 +378,7 @@ bool GaussianScene::load(const std::filesystem::path& filename)
             {
                 if (!extractFloatComponents(reader, shRestPropIdxs, _shRestCoefficients))
                 {
-                    resetSceneData();
+                    clear();
                     return false;
                 }
             }
@@ -437,18 +437,19 @@ bool GaussianScene::load(const std::filesystem::path& filename)
                                                                   _rotations[rotationBase + 2], _rotations[rotationBase + 3]};
                                                rotation = glm::normalize(rotation);
 
-                                               const glm::mat3 scaleMatrix           = glm::mat3(glm::scale(scale));
+                                               const glm::mat3 scaleMatrix           = glm::mat3(glm::scale(glm::mat4(1.0f), scale));
                                                const glm::mat3 rotationMatrix        = glm::mat3_cast(rotation);
                                                const glm::mat3 covarianceMatrix      = rotationMatrix * scaleMatrix;
                                                glm::mat3       transformedCovariance = covarianceMatrix * glm::transpose(covarianceMatrix);
+                                               const float*    covarianceData        = glm::value_ptr(transformedCovariance);
 
                                                const uint32_t stride6    = i * 6;
-                                               _covariances[stride6 + 0] = glm::value_ptr(transformedCovariance)[0];
-                                               _covariances[stride6 + 1] = glm::value_ptr(transformedCovariance)[3];
-                                               _covariances[stride6 + 2] = glm::value_ptr(transformedCovariance)[6];
-                                               _covariances[stride6 + 3] = glm::value_ptr(transformedCovariance)[4];
-                                               _covariances[stride6 + 4] = glm::value_ptr(transformedCovariance)[7];
-                                               _covariances[stride6 + 5] = glm::value_ptr(transformedCovariance)[8];
+                                               _covariances[stride6 + 0] = covarianceData[0];
+                                               _covariances[stride6 + 1] = covarianceData[3];
+                                               _covariances[stride6 + 2] = covarianceData[6];
+                                               _covariances[stride6 + 3] = covarianceData[4];
+                                               _covariances[stride6 + 4] = covarianceData[7];
+                                               _covariances[stride6 + 5] = covarianceData[8];
                                            });
 
             gotVertices = true;
@@ -463,7 +464,7 @@ bool GaussianScene::load(const std::filesystem::path& filename)
 
     if (!gotVertices)
     {
-        resetSceneData();
+        clear();
         return false;
     }
 

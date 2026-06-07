@@ -1,11 +1,11 @@
 #include "RuntimeGuiHost.h"
 
-#include <string>
+#include <QApplication>
+#include <QMetaObject>
 
 #include <nvutils/logger.hpp>
 
-#include "webview/webview.h"
-#include "webview/detail/json.hh"
+#include "editor/QtRuntimeEditorWindow.h"
 
 namespace Play::runtime
 {
@@ -43,6 +43,7 @@ bool RuntimeGuiHost::start()
 
     if (_thread)
     {
+        requestShowWindow();
         return true;
     }
 
@@ -79,13 +80,16 @@ void RuntimeGuiHost::stop()
         return;
     }
 
+    QApplication* application = nullptr;
     SDL_LockMutex(_mutex);
     _stopRequested = true;
-    if (_webview)
-    {
-        webview_dispatch(_webview, &RuntimeGuiHost::requestTerminate, nullptr);
-    }
+    application    = _application;
     SDL_UnlockMutex(_mutex);
+
+    if (application)
+    {
+        QMetaObject::invokeMethod(application, "quit", Qt::QueuedConnection);
+    }
 
     int threadStatus = 0;
     SDL_WaitThread(_thread, &threadStatus);
@@ -93,7 +97,8 @@ void RuntimeGuiHost::stop()
     _threadFinished = false;
 
     SDL_LockMutex(_mutex);
-    _webview = nullptr;
+    _application = nullptr;
+    _window      = nullptr;
     SDL_UnlockMutex(_mutex);
 
     SDL_DestroyMutex(_mutex);
@@ -105,83 +110,34 @@ int RuntimeGuiHost::threadMain(void* data)
     return static_cast<RuntimeGuiHost*>(data)->run();
 }
 
-void RuntimeGuiHost::requestTerminate(webview_t webview, void* arg)
-{
-    (void) arg;
-    webview_terminate(webview);
-}
-
-void RuntimeGuiHost::setEditorProperty(const char* id, const char* request, void* arg)
-{
-    RuntimeGuiHost* host = static_cast<RuntimeGuiHost*>(arg);
-    if (!host || !host->_webview)
-    {
-        return;
-    }
-
-    const std::string requestJson  = request ? request : "";
-    const std::string objectIdText = webview::detail::json_parse(requestJson, "", 0);
-    const std::string propertyName = webview::detail::json_parse(requestJson, "", 1);
-    const std::string value        = webview::detail::json_parse(requestJson, "", 2);
-
-    Play::editor::EditorObjectId objectId = 0;
-    const bool parsedId = parseEditorObjectId(objectIdText, objectId);
-    const bool changed  = parsedId && !propertyName.empty()
-                          && host->_editor.getEditorRegistry().setObjectProperty(objectId, propertyName.c_str(), rttr::variant(value));
-
-    webview_return(host->_webview, id, changed ? 0 : 1, changed ? "true" : "false");
-}
-
-void RuntimeGuiHost::resetEditorObject(const char* id, const char* request, void* arg)
-{
-    RuntimeGuiHost* host = static_cast<RuntimeGuiHost*>(arg);
-    if (!host || !host->_webview)
-    {
-        return;
-    }
-
-    const std::string requestJson  = request ? request : "";
-    const std::string objectIdText = webview::detail::json_parse(requestJson, "", 0);
-
-    Play::editor::EditorObjectId objectId = 0;
-    const bool parsedId = parseEditorObjectId(objectIdText, objectId);
-    const bool changed  = parsedId && host->_editor.getEditorRegistry().resetObject(objectId);
-
-    webview_return(host->_webview, id, changed ? 0 : 1, changed ? "true" : "false");
-}
-
 int RuntimeGuiHost::run()
 {
-    webview_t webview = webview_create(0, nullptr);
-    if (!webview)
-    {
-        LOGE("RuntimeGuiHost: webview_create failed. WebView2 runtime may be unavailable.\n");
-        markThreadFinished();
-        return 1;
-    }
+    char  applicationName[] = "VulkanPlayGroundControlPanel";
+    char* arguments[]       = {applicationName, nullptr};
+    int   argumentCount     = 1;
 
-    setWebview(webview);
+    QApplication application(argumentCount, arguments);
+    // Closing the panel should hide it, not tear down QApplication. Recreating QApplication in this SDL thread can trip Qt platform pixmap state.
+    application.setQuitOnLastWindowClosed(false);
+    setApplication(&application);
 
     SDL_LockMutex(_mutex);
     const bool shouldStop = _stopRequested;
     SDL_UnlockMutex(_mutex);
 
+    int result = 0;
     if (!shouldStop)
     {
-        const std::string html = _editor.buildHtml();
-
-        webview_set_title(webview, "VulkanPlayGround Runtime UI");
-        webview_set_size(webview, 920, 640, WEBVIEW_HINT_NONE);
-        webview_bind(webview, "setEditorProperty", &RuntimeGuiHost::setEditorProperty, this);
-        webview_bind(webview, "resetEditorObject", &RuntimeGuiHost::resetEditorObject, this);
-        webview_set_html(webview, html.c_str());
-        webview_run(webview);
+        Play::editor::QtRuntimeEditorWindow window(_editor);
+        setWindow(&window);
+        window.show();
+        result = application.exec();
+        setWindow(nullptr);
     }
 
-    setWebview(nullptr);
-    webview_destroy(webview);
+    setApplication(nullptr);
     markThreadFinished();
-    return 0;
+    return result;
 }
 
 void RuntimeGuiHost::cleanupFinishedThread()
@@ -209,10 +165,40 @@ void RuntimeGuiHost::cleanupFinishedThread()
     _mutex = nullptr;
 }
 
-void RuntimeGuiHost::setWebview(webview_t webview)
+void RuntimeGuiHost::requestShowWindow()
+{
+    Play::editor::QtRuntimeEditorWindow* window = nullptr;
+    SDL_LockMutex(_mutex);
+    window = _window;
+    SDL_UnlockMutex(_mutex);
+
+    if (!window)
+    {
+        return;
+    }
+
+    QMetaObject::invokeMethod(
+        window,
+        [window]()
+        {
+            window->showNormal();
+            window->raise();
+            window->activateWindow();
+        },
+        Qt::QueuedConnection);
+}
+
+void RuntimeGuiHost::setApplication(QApplication* application)
 {
     SDL_LockMutex(_mutex);
-    _webview = webview;
+    _application = application;
+    SDL_UnlockMutex(_mutex);
+}
+
+void RuntimeGuiHost::setWindow(Play::editor::QtRuntimeEditorWindow* window)
+{
+    SDL_LockMutex(_mutex);
+    _window = window;
     SDL_UnlockMutex(_mutex);
 }
 

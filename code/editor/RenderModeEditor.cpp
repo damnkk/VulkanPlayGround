@@ -1,12 +1,10 @@
 #include "editor/RenderModeEditor.h"
 
-#include "editor/EditorHtml.h"
-
 namespace Play::editor
 {
 
 RenderModeEditor::RenderModeEditor(const char* id, const char* title, EditorRegistry& editorRegistry, EditorRenderMode renderMode)
-    : _id(id ? id : ""), _title(title ? title : ""), _controlPanel(editorRegistry, renderMode)
+    : _id(id ? id : ""), _title(title ? title : ""), _sceneManagerEditor(id), _controlPanel(editorRegistry, renderMode)
 {
 }
 
@@ -25,27 +23,34 @@ void RenderModeEditor::setSceneManager(Play::SceneManager* sceneManager)
     _sceneManagerEditor.setSceneManager(sceneManager);
 }
 
-void RenderModeEditor::appendTabHtml(std::string& html, bool active) const
+void RenderModeEditor::buildSnapshot(EditorUiRenderMode& renderMode, bool active) const
 {
-    html += "<button class=\"render-mode-tab";
-    html += active ? " active" : "";
-    html += "\" data-render-mode=\"";
-    detail::appendHtmlText(html, _id);
-    html += "\">";
-    detail::appendHtmlText(html, _title);
-    html += "</button>";
+    renderMode.id     = _id;
+    renderMode.title  = _title;
+    renderMode.active = active;
+
+    _sceneManagerEditor.buildSnapshot(renderMode);
+    _controlPanel.buildSnapshot(renderMode);
 }
 
-void RenderModeEditor::appendPageHtml(std::string& html, bool active) const
+std::string RenderModeEditor::createSceneNode(const char* parentNodeKey, const char* nodeType)
 {
-    html += "<section class=\"render-mode-page";
-    html += active ? " active" : "";
-    html += "\" data-render-mode-page=\"";
-    detail::appendHtmlText(html, _id);
-    html += "\">";
-    _sceneManagerEditor.appendHtml(html);
-    _controlPanel.appendHtml(html);
-    html += "</section>";
+    return _sceneManagerEditor.createSceneNode(parentNodeKey, nodeType);
+}
+
+bool RenderModeEditor::setSceneNodeTransform(const char* nodeKey, const char* transformPath, const char* value)
+{
+    return _sceneManagerEditor.setSceneNodeTransform(nodeKey, transformPath, value);
+}
+
+bool RenderModeEditor::addSceneNodeComponent(const char* nodeKey, const char* componentType)
+{
+    return _sceneManagerEditor.addSceneNodeComponent(nodeKey, componentType);
+}
+
+bool RenderModeEditor::loadSceneNodeModel(const char* nodeKey, const char* path)
+{
+    return _sceneManagerEditor.loadSceneNodeModel(nodeKey, path);
 }
 
 } // namespace Play::editor

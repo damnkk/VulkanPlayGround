@@ -46,6 +46,7 @@ public:
     }
 
     Buffer*       getCurrentCameraBuffer() const;
+    const CameraData& getCurrentCameraData() const;
     SceneManager* getSceneManager()
     {
         return _scene.get();

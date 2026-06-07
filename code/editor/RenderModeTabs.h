@@ -1,9 +1,7 @@
 #ifndef PLAY_CODE_EDITOR_RENDERMODETABS_H
 #define PLAY_CODE_EDITOR_RENDERMODETABS_H
 
-
 #include "editor/EditorRegistry.h"
-#include "editor/EditorHtml.h"
 
 namespace Play
 {
@@ -31,7 +29,11 @@ public:
     RenderModeEditor* findRenderMode(const char* id);
     void              bindRenderSession(Play::RenderSession& renderSession, const char* activeMode);
     bool              requestActiveMode(const char* id);
-    void              appendHtml(std::string& html) const;
+    std::string       createSceneNode(const char* renderModeId, const char* parentNodeKey, const char* nodeType);
+    bool              setSceneNodeTransform(const char* renderModeId, const char* nodeKey, const char* transformPath, const char* value);
+    bool              addSceneNodeComponent(const char* renderModeId, const char* nodeKey, const char* componentType);
+    bool              loadSceneNodeModel(const char* renderModeId, const char* nodeKey, const char* path);
+    void              buildSnapshot(EditorUiSnapshot& snapshot) const;
 
 private:
     struct Impl;

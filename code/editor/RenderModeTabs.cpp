@@ -1,7 +1,6 @@
 #include "editor/RenderModeTabs.h"
 
 #include "core/runtime/RenderSession.h"
-#include "editor/EditorHtml.h"
 #include "editor/EditorRuntimeContext.h"
 #include "editor/RenderModeEditor.h"
 
@@ -58,7 +57,7 @@ RenderModeEditor* RenderModeTabs::findRenderMode(const char* id)
 
 void RenderModeTabs::bindRenderSession(Play::RenderSession& renderSession, const char* activeMode)
 {
-    _impl->activeMode = activeMode ? activeMode : "";
+    _impl->activeMode                = activeMode ? activeMode : "";
     Play::SceneManager* sceneManager = renderSession.getSceneManager();
     for (const std::unique_ptr<RenderModeEditor>& editor : _impl->editors)
     {
@@ -68,23 +67,52 @@ void RenderModeTabs::bindRenderSession(Play::RenderSession& renderSession, const
 
 bool RenderModeTabs::requestActiveMode(const char* id)
 {
+    if (isSameText(_impl->activeMode.c_str(), id))
+    {
+        return true;
+    }
+
+    if (!_context.requestRenderMode(id))
+    {
+        return false;
+    }
+
     _impl->activeMode = id ? id : "";
-    return _context.requestRenderMode(id);
+    return true;
 }
 
-void RenderModeTabs::appendHtml(std::string& html) const
+std::string RenderModeTabs::createSceneNode(const char* renderModeId, const char* parentNodeKey, const char* nodeType)
 {
-    html += "<section class=\"render-mode-tabs\"><nav class=\"tab-strip\">";
+    RenderModeEditor* editor = findRenderMode(renderModeId);
+    return editor ? editor->createSceneNode(parentNodeKey, nodeType) : std::string();
+}
+
+bool RenderModeTabs::setSceneNodeTransform(const char* renderModeId, const char* nodeKey, const char* transformPath, const char* value)
+{
+    RenderModeEditor* editor = findRenderMode(renderModeId);
+    return editor && editor->setSceneNodeTransform(nodeKey, transformPath, value);
+}
+
+bool RenderModeTabs::addSceneNodeComponent(const char* renderModeId, const char* nodeKey, const char* componentType)
+{
+    RenderModeEditor* editor = findRenderMode(renderModeId);
+    return editor && editor->addSceneNodeComponent(nodeKey, componentType);
+}
+
+bool RenderModeTabs::loadSceneNodeModel(const char* renderModeId, const char* nodeKey, const char* path)
+{
+    RenderModeEditor* editor = findRenderMode(renderModeId);
+    return editor && editor->loadSceneNodeModel(nodeKey, path);
+}
+
+void RenderModeTabs::buildSnapshot(EditorUiSnapshot& snapshot) const
+{
     for (const std::unique_ptr<RenderModeEditor>& editor : _impl->editors)
     {
-        editor->appendTabHtml(html, isSameText(editor->getId(), _impl->activeMode.c_str()));
+        EditorUiRenderMode renderMode;
+        editor->buildSnapshot(renderMode, isSameText(editor->getId(), _impl->activeMode.c_str()));
+        snapshot.renderModes.push_back(renderMode);
     }
-    html += "</nav><main class=\"render-mode-pages\">";
-    for (const std::unique_ptr<RenderModeEditor>& editor : _impl->editors)
-    {
-        editor->appendPageHtml(html, isSameText(editor->getId(), _impl->activeMode.c_str()));
-    }
-    html += "</main></section>";
 }
 
 } // namespace Play::editor
