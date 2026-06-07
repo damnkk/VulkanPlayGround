@@ -7,9 +7,8 @@ struct PerFrameConstant
 
 struct SceneConstant
 {
-    uint64_t sceneDescAddress;
-    uint32_t renderNodeId;
-    uint32_t textureOffset;
+    uint64_t instanceBufferAddress;
+    uint64_t instanceIndex;
 };
 
 struct GBufferPushConstant

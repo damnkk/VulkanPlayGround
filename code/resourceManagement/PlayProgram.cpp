@@ -347,6 +347,7 @@ uint64_t DescriptorSetBindings::getDescsetLayoutHash()
 
 DescriptorSetManager::DescriptorSetManager(const DescriptorSetManager&) {}
 
+// for filling per pass shader resource layout, to create pipeline layout
 void PlayProgram::setPassNode(RDG::PassNode* passNode)
 {
     _passNode = passNode;

@@ -1,6 +1,7 @@
 #include "GBufferPass.h"
 
 #include "DeferRendering.h"
+#include "Material.h"
 #include "PlayAllocator.h"
 #include "RDG/RDG.h"
 #include "SceneManager.h"
@@ -13,20 +14,15 @@ namespace Play
 namespace
 {
 
-constexpr VkBufferUsageFlags2 kGBufferGPUInstanceDataUsage = VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT;
+constexpr VkBufferUsageFlags2 kGBufferGPUInstanceDataUsage    = VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT;
 constexpr uint32_t            kGBufferInstanceFlagDoubleSided = 1 << 0;
 
 bool isBoundsInFrustum(const AABB& bounds, const glm::mat4& viewProj)
 {
     const glm::vec3 corners[] = {
-        {bounds.min.x, bounds.min.y, bounds.min.z},
-        {bounds.max.x, bounds.min.y, bounds.min.z},
-        {bounds.min.x, bounds.max.y, bounds.min.z},
-        {bounds.max.x, bounds.max.y, bounds.min.z},
-        {bounds.min.x, bounds.min.y, bounds.max.z},
-        {bounds.max.x, bounds.min.y, bounds.max.z},
-        {bounds.min.x, bounds.max.y, bounds.max.z},
-        {bounds.max.x, bounds.max.y, bounds.max.z},
+        {bounds.min.x, bounds.min.y, bounds.min.z}, {bounds.max.x, bounds.min.y, bounds.min.z}, {bounds.min.x, bounds.max.y, bounds.min.z},
+        {bounds.max.x, bounds.max.y, bounds.min.z}, {bounds.min.x, bounds.min.y, bounds.max.z}, {bounds.max.x, bounds.min.y, bounds.max.z},
+        {bounds.min.x, bounds.max.y, bounds.max.z}, {bounds.max.x, bounds.max.y, bounds.max.z},
     };
 
     uint32_t outsideLeft   = 0;
@@ -135,11 +131,7 @@ void GBufferPass::prepareRenderList()
     }
 
     const CameraData& cameraData = _ownedRender->getCurrentCameraData();
-    sceneManager->readSceneGraph(
-        [&](const CpuScene& scene)
-        {
-            collectVisibleInstances(scene, *gpuScene, cameraData);
-        });
+    sceneManager->readSceneGraph([&](const CpuScene& scene) { collectVisibleInstances(scene, *gpuScene, cameraData); });
 
     buildRenderList(*gpuScene);
     sortRenderList();
@@ -185,7 +177,7 @@ void GBufferPass::collectVisibleInstances(const CpuScene& scene, const GpuScene&
             }
 
             const uint32_t availableRenderables = static_cast<uint32_t>(model.renderables.size()) - firstRenderable;
-            uint32_t       renderableCount = modelComponent->usesAllRenderables() ? availableRenderables : modelComponent->renderableCount;
+            uint32_t       renderableCount      = modelComponent->usesAllRenderables() ? availableRenderables : modelComponent->renderableCount;
             if (renderableCount > availableRenderables)
             {
                 renderableCount = availableRenderables;
@@ -235,9 +227,9 @@ void GBufferPass::collectVisibleInstances(const CpuScene& scene, const GpuScene&
 
 void GBufferPass::buildRenderList(const GpuScene& gpuScene)
 {
-    const GpuSceneCommonData&           common      = gpuScene.getCommonData();
-    const std::vector<ModelAsset>&      models      = gpuScene.getModels();
-    const std::vector<GpuModelRange>&   modelRanges = gpuScene.getModelRanges();
+    const GpuSceneCommonData&         common      = gpuScene.getCommonData();
+    const std::vector<ModelAsset>&    models      = gpuScene.getModels();
+    const std::vector<GpuModelRange>& modelRanges = gpuScene.getModelRanges();
 
     for (uint32_t visibleIndex = 0; visibleIndex < _visibleInstances.size(); ++visibleIndex)
     {
@@ -264,7 +256,7 @@ void GBufferPass::buildRenderList(const GpuScene& gpuScene)
                 continue;
             }
 
-            const ModelSubmeshAsset& submesh = model.submeshes[renderable.submeshIndex];
+            const ModelSubmeshAsset& submesh       = model.submeshes[renderable.submeshIndex];
             const uint32_t           meshInfoIndex = submesh.meshID;
             if (meshInfoIndex == INVALID_SCENE_ID || meshInfoIndex >= common.meshInfos.size())
             {
@@ -310,16 +302,15 @@ void GBufferPass::buildRenderList(const GpuScene& gpuScene)
 
 void GBufferPass::sortRenderList()
 {
-    std::sort(
-        _renderItems.begin(), _renderItems.end(),
-        [](const GBufferRenderItem& lhs, const GBufferRenderItem& rhs)
-        {
-            if (lhs.sortKey == rhs.sortKey)
-            {
-                return lhs.depthKey < rhs.depthKey;
-            }
-            return lhs.sortKey < rhs.sortKey;
-        });
+    std::sort(_renderItems.begin(), _renderItems.end(),
+              [](const GBufferRenderItem& lhs, const GBufferRenderItem& rhs)
+              {
+                  if (lhs.sortKey == rhs.sortKey)
+                  {
+                      return lhs.depthKey < rhs.depthKey;
+                  }
+                  return lhs.sortKey < rhs.sortKey;
+              });
 }
 
 void GBufferPass::uploadGPUInstanceData()
@@ -353,9 +344,8 @@ void GBufferPass::uploadGPUInstanceData()
 
     if (!_gpuInstanceDataBuffer || _gpuInstanceDataBuffer->BufferSize() < dataSize)
     {
-        _gpuInstanceDataBuffer =
-            RefPtr<Buffer>(new Buffer("GBufferGPUInstanceData", kGBufferGPUInstanceDataUsage, dataSize,
-                                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
+        _gpuInstanceDataBuffer = RefPtr<Buffer>(new Buffer("GBufferGPUInstanceData", kGBufferGPUInstanceDataUsage, dataSize,
+                                                           VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
     }
 
     if (_gpuInstanceDataBuffer && _gpuInstanceDataBuffer->mapping)
@@ -418,29 +408,68 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
                                      .MipmapLevel(1)
                                      .finish();
 
-    rdgBuilder->createRenderPass("GBufferPass")
-        .color(0, BaseColorRT, VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-        .color(1, WorldNormalRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-        .color(2, PBRRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-        .color(3, EmissiveRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-        .color(4, Custom1RT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-        .color(5, VelocityRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-        .depth(DepthRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-        .execute(
-            [this](RDG::PassNode* node, RDG::RenderContext& context)
-            {
-                (void) node;
-                (void) context;
-                prepareRenderList();
-            })
-        .finish();
+    auto pass =
+        rdgBuilder->createRenderPass("GBufferPass")
+            .color(0, BaseColorRT, VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+            .color(1, WorldNormalRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+            .color(2, PBRRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+            .color(3, EmissiveRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+            .color(4, Custom1RT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+            .color(5, VelocityRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+            .depth(DepthRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+            .execute(
+                [this](RDG::PassNode* node, RDG::RenderContext& context)
+                {
+                    prepareRenderList();
+
+                    if (_renderItems.empty())
+                    {
+                        return;
+                    }
+
+                    RenderProgram* gbufferProgram = static_cast<RenderProgram*>(FixedMaterial::Create()->getProgram());
+                    if (!gbufferProgram)
+                    {
+                        return;
+                    }
+
+                    VkCommandBuffer cmd = context._currCmdBuffer;
+                    gbufferProgram->setPassNode(static_cast<RDG::RenderPassNode*>(node));
+                    gbufferProgram->bind(cmd);
+
+                    GBufferPushConstant* pushConstant = gbufferProgram->getDescriptorSetManager().getPushConstantData<GBufferPushConstant>();
+                    pushConstant->perFrameConstant.cameraBufferDeviceAddress = _ownedRender->getCurrentCameraBuffer()->address;
+                    pushConstant->sceneConstant.instanceBufferAddress        = _gpuInstanceDataBuffer ? _gpuInstanceDataBuffer->address : 0;
+
+                    context._pendingGfxState->bindDescriptorSet(cmd, gbufferProgram);
+
+                    VkViewport viewport = {
+                        0,    0,   static_cast<float>(vkDriver->getViewportSize().width), static_cast<float>(vkDriver->getViewportSize().height),
+                        0.0f, 1.0f};
+                    VkRect2D scissor = {{0, 0}, {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height}};
+                    vkCmdSetViewportWithCount(cmd, 1, &viewport);
+                    vkCmdSetScissorWithCount(cmd, 1, &scissor);
+
+                    for (const GBufferRenderItem& item : _renderItems)
+                    {
+                        if (item.indexCount == 0)
+                        {
+                            continue;
+                        }
+
+                        pushConstant->sceneConstant.instanceIndex = item.gpuInstanceIndex;
+                        gbufferProgram->getDescriptorSetManager().pushConstantRanges(cmd);
+                        vkCmdDraw(cmd, item.indexCount, 1, 0, 0);
+                    }
+                })
+            .finish();
 }
 
 } // namespace Play
