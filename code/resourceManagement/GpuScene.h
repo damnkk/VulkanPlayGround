@@ -73,6 +73,11 @@ public:
         return _models;
     }
 
+    const std::vector<GpuModelRange>& getModelRanges() const
+    {
+        return _modelRanges;
+    }
+
     const std::vector<RefPtr<Texture>>& getSceneTextures() const
     {
         return _sceneTextures;

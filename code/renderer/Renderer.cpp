@@ -48,6 +48,11 @@ Buffer* Renderer::getCurrentCameraBuffer() const
     return _cameraUniformData[vkDriver->getFrameCycleIndex()].get();
 }
 
+const CameraData& Renderer::getCurrentCameraData() const
+{
+    return _cameraDatas[vkDriver->getFrameCycleIndex()];
+}
+
 Renderer::Renderer()
 {
     addCamera();
@@ -78,6 +83,7 @@ void Renderer::updateCameraBuffer()
     data.invProjMatrix     = glm::inverse(data.projMatrix);
     data.invViewProjMatrix = glm::inverse(data.viewProjMatrix);
 
+    _cameraDatas[vkDriver->getFrameCycleIndex()] = data;
     memcpy(getCurrentCameraBuffer()->mapping, &data, sizeof(CameraData));
     PlayResourceManager::Instance().flushBuffer(*getCurrentCameraBuffer(), 0, VK_WHOLE_SIZE);
 }

@@ -91,6 +91,90 @@ void remapMaterialTextureInfos(shaderio::GltfShadeMaterial& material, const std:
     material.diffuseTransmissionColorTexture = remapTextureInfoIndex(material.diffuseTransmissionColorTexture, textureInfoRemap);
 }
 
+void appendModelRenderable(ModelAsset& asset, uint32_t submeshIndex, uint32_t nodeIndex, const glm::mat4& localToModel, bool& hasBounds)
+{
+    if (submeshIndex >= asset.submeshes.size())
+    {
+        return;
+    }
+
+    const ModelSubmeshAsset& submesh = asset.submeshes[submeshIndex];
+    if (submesh.meshID == INVALID_SCENE_ID)
+    {
+        return;
+    }
+
+    ModelRenderableTemplate renderable;
+    renderable.submeshIndex = submeshIndex;
+    renderable.nodeIndex    = nodeIndex;
+    renderable.localToModel = localToModel;
+    renderable.modelBounds  = transformAABB(submesh.bbox, localToModel);
+
+    if (hasBounds)
+    {
+        expandAABB(asset.bbox, renderable.modelBounds);
+    }
+    else
+    {
+        asset.bbox = renderable.modelBounds;
+        hasBounds  = true;
+    }
+
+    asset.renderables.push_back(renderable);
+}
+
+void collectModelNodeRenderables(ModelAsset& asset, uint32_t nodeIndex, const glm::mat4& parentTransform, bool& hasBounds)
+{
+    if (nodeIndex >= asset.nodes.size())
+    {
+        return;
+    }
+
+    const ModelNodeAsset& node = asset.nodes[nodeIndex];
+    glm::mat4            nodeToModel = parentTransform;
+    if (node.transformIdx != INVALID_SCENE_ID && node.transformIdx < asset.transforms.size())
+    {
+        nodeToModel = parentTransform * asset.transforms[node.transformIdx];
+    }
+
+    for (uint32_t submeshIndex : node.submeshIdx)
+    {
+        appendModelRenderable(asset, submeshIndex, nodeIndex, nodeToModel, hasBounds);
+    }
+
+    uint32_t childIndex = node.firstChild;
+    while (childIndex != INVALID_SCENE_ID && childIndex < asset.nodes.size())
+    {
+        const uint32_t nextSibling = asset.nodes[childIndex].nextSibling;
+        collectModelNodeRenderables(asset, childIndex, nodeToModel, hasBounds);
+        childIndex = nextSibling;
+    }
+}
+
+void buildModelRenderables(ModelAsset& asset)
+{
+    asset.renderables.clear();
+
+    bool hasBounds = false;
+    if (asset.rootNode != INVALID_SCENE_ID)
+    {
+        collectModelNodeRenderables(asset, asset.rootNode, glm::mat4(1.0f), hasBounds);
+    }
+
+    if (asset.renderables.empty())
+    {
+        for (uint32_t submeshIndex = 0; submeshIndex < asset.submeshes.size(); ++submeshIndex)
+        {
+            appendModelRenderable(asset, submeshIndex, INVALID_SCENE_ID, glm::mat4(1.0f), hasBounds);
+        }
+    }
+
+    if (!hasBounds)
+    {
+        asset.bbox = {};
+    }
+}
+
 void uploadModelGeometry(ModelAssetPackage& package, std::vector<MeshInfo>& meshInfos, bool& hasPendingUpload)
 {
     ModelGeometryPayload& geometry = package.geometry;
@@ -290,6 +374,8 @@ ModelAssetID GpuScene::registerModel(ModelAssetPackage&& package)
             submesh.meshID += meshInfoBase;
         }
     }
+
+    buildModelRenderables(package.asset);
 
     GpuModelRange range;
     range.firstMeshInfo    = meshInfoBase;

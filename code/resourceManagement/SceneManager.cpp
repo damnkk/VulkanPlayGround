@@ -117,7 +117,7 @@ void SceneManager::update()
                     component->model           = _gpuScene->registerModel(std::move(completion.result.model));
                     component->firstRenderable = 0;
                     component->renderableCount = component->model.isValid()
-                                                      ? static_cast<uint32_t>(_gpuScene->getModels()[component->model.index].submeshes.size())
+                                                      ? static_cast<uint32_t>(_gpuScene->getModels()[component->model.index].renderables.size())
                                                       : INVALID_SCENE_ID;
                     component->loadState       = CpuModelComponent::LoadState::eLoaded;
                     component->loadMessage.clear();

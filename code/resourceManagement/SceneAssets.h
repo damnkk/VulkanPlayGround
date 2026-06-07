@@ -15,6 +15,9 @@ struct AABB
     glm::vec3 max = {0.0f, 0.0f, 0.0f};
 };
 
+AABB transformAABB(const AABB& bounds, const glm::mat4& transform);
+void expandAABB(AABB& bounds, const AABB& other);
+
 struct ModelSubmeshAsset
 {
     uint32_t meshID = INVALID_SCENE_ID; // idx to meshInfos
@@ -33,12 +36,14 @@ struct ModelNodeAsset
     glm::vec3             scale        = {1.0f, 1.0f, 1.0f};
     std::vector<uint32_t> submeshIdx;
 };
-
+// Draw-ready submesh entry baked from the model node hierarchy.
+// It lets render passes expand a model instance without walking the asset tree every frame.
 struct ModelRenderableTemplate
 {
     uint32_t  submeshIndex = INVALID_SCENE_ID;
     uint32_t  nodeIndex    = INVALID_SCENE_ID;
     glm::mat4 localToModel = glm::mat4(1.0f);
+    AABB      modelBounds;
 };
 
 struct RayTracingASInfo
@@ -147,12 +152,15 @@ struct GltfShadeMaterial
 
 struct ModelAsset
 {
-    std::string                    name;
-    std::filesystem::path          sourcePath;
-    std::vector<ModelSubmeshAsset> submeshes;
-    std::vector<ModelNodeAsset>    nodes;
-    std::vector<glm::mat4>         transforms;
-    uint32_t                       rootNode = INVALID_SCENE_ID;
+    std::string                          name;
+    std::filesystem::path                sourcePath;
+    std::vector<ModelSubmeshAsset>       submeshes;
+    std::vector<ModelNodeAsset>          nodes;
+    // Pre-expanded renderable templates built once when the model is registered.
+    std::vector<ModelRenderableTemplate> renderables;
+    std::vector<glm::mat4>               transforms;
+    AABB                                 bbox;
+    uint32_t                             rootNode = INVALID_SCENE_ID;
 
     RefPtr<Buffer>                transformBuffer = nullptr;
     RefPtr<Buffer>                materialBuffer  = nullptr;
@@ -189,13 +197,13 @@ struct ModelMeshRange
 
 struct ModelGeometryPayload
 {
-    std::vector<glm::vec3> positions;
-    std::vector<glm::vec3> normals;
-    std::vector<glm::vec4> tangents;
-    std::vector<glm::vec2> texCoords0;
-    std::vector<glm::vec2> texCoords1;
-    std::vector<uint32_t>  colors;
-    std::vector<uint32_t>  indices;
+    std::vector<glm::vec3>      positions;
+    std::vector<glm::vec3>      normals;
+    std::vector<glm::vec4>      tangents;
+    std::vector<glm::vec2>      texCoords0;
+    std::vector<glm::vec2>      texCoords1;
+    std::vector<uint32_t>       colors;
+    std::vector<uint32_t>       indices;
     std::vector<ModelMeshRange> ranges;
 
     bool empty() const
