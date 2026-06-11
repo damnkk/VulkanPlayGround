@@ -191,7 +191,6 @@ void PendingState::bindDescriptorSet(VkCommandBuffer cmd, PlayProgram* program)
     }
     vkCmdBindDescriptorSets(cmd, bindPoint, program->getDescriptorSetManager().getPipelineLayout(), (uint32_t) DescriptorEnum::eGlobalDescriptorSet,
                             static_cast<uint32_t>(sets.size()), sets.data(), 0, nullptr);
-    program->getDescriptorSetManager().pushConstantRanges(cmd);
 }
 
 void RenderContext::bindProgram(PlayProgram* program, PassNode* passNode)

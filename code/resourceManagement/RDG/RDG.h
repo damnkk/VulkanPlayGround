@@ -125,6 +125,32 @@ struct RenderContext
     ~RenderContext() {}
     void bindProgram(PlayProgram* program, PassNode* passNode);
 
+    template <typename T>
+    void bindPushConstant(PlayProgram* program, const T& pushConstant)
+    {
+        if (!program->hasPushConstantRange())
+        {
+            LOGE("Push constant range is not registered");
+            return;
+        }
+
+        const VkPushConstantRange& range = program->getPushConstantRange();
+        if (range.size != static_cast<uint32_t>(sizeof(T)))
+        {
+            LOGE("Push constant type size mismatch");
+            return;
+        }
+
+        VkPipelineLayout layout = program->getPipelineLayout();
+        if (layout == VK_NULL_HANDLE)
+        {
+            LOGE("Pipeline layout is not ready, call bindProgram before bindPushConstant");
+            return;
+        }
+
+        vkCmdPushConstants(_currCmdBuffer, layout, range.stageFlags, range.offset, range.size, &pushConstant);
+    }
+
     PlayFrameData*                       _frameData           = nullptr;
     PassNode*                            _prevPassNode        = nullptr;
     VkCommandBuffer                      _currCmdBuffer       = VK_NULL_HANDLE;

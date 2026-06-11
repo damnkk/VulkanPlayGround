@@ -27,7 +27,7 @@ void GaussianDrawMeshPass::init()
     _meshRenderProgram = RefPtr<MeshRenderProgram>(new MeshRenderProgram());
     _meshRenderProgram->setMeshModuleID(meshId);
     _meshRenderProgram->setFragModuleID(fragId);
-    _meshRenderProgram->getDescriptorSetManager().initPushConstant<PerFrameConstant>();
+    _meshRenderProgram->initPushConstant<PerFrameConstant>();
     _meshRenderProgram->psoState().colorBlendEnables[0]                       = VK_TRUE;
     _meshRenderProgram->psoState().colorBlendEquations[0].alphaBlendOp        = VK_BLEND_OP_ADD;
     _meshRenderProgram->psoState().colorBlendEquations[0].colorBlendOp        = VK_BLEND_OP_ADD;
@@ -87,11 +87,12 @@ void GaussianDrawMeshPass::build(RDG::RDGBuilder* rdgBuilder)
                 {
                     VkCommandBuffer cmd = context._currCmdBuffer;
 
-                    GaussianScene&    gaussianScene         = _ownedRenderer->getSceneManager()->getGaussianScene();
-                    PerFrameConstant* pushConstant          = _meshRenderProgram->getDescriptorSetManager().getPushConstantData<PerFrameConstant>();
-                    pushConstant->cameraBufferDeviceAddress = _ownedRenderer->getCurrentCameraBuffer()->address;
+                    GaussianScene&   gaussianScene = _ownedRenderer->getSceneManager()->getGaussianScene();
+                    PerFrameConstant pushConstant = _meshRenderProgram->createPushConstant<PerFrameConstant>();
+                    pushConstant.cameraBufferDeviceAddress = _ownedRenderer->getCurrentCameraBuffer()->address;
 
                     context.bindProgram(_meshRenderProgram.get(), node);
+                    context.bindPushConstant(_meshRenderProgram.get(), pushConstant);
                     VkViewport viewport = {
                         0,    0,    static_cast<float>(vkDriver->getViewportSize().width), static_cast<float>(vkDriver->getViewportSize().height),
                         0.0f, 1.0f,

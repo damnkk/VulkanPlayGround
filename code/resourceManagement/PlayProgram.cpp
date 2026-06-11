@@ -9,28 +9,6 @@
 namespace Play
 {
 
-PushConstantManager::PushConstantManager()
-{
-    _maxSize = vkDriver->_physicalDeviceProperties2.properties.limits.maxPushConstantsSize;
-}
-
-uint32_t PushConstantManager::getMaxSize() const
-{
-    return _maxSize;
-}
-
-void PushConstantManager::clear()
-{
-    // Do not clear _ranges as it holds the layout
-    std::fill(_constantData.begin(), _constantData.end(), 0);
-}
-
-void PushConstantManager::pushConstantRanges(VkCommandBuffer cmdBuf, VkPipelineLayout layout)
-{
-    // Push the fixed size (128 bytes)
-    vkCmdPushConstants(cmdBuf, layout, _range.stageFlags, _range.offset, _range.size, _constantData.data());
-}
-
 DescriptorSetManager::DescriptorSetManager() {}
 
 DescriptorSetManager::~DescriptorSetManager()
@@ -94,8 +72,8 @@ void DescriptorSetManager::finalizePipelineLayoutImpl()
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
     pipelineLayoutCreateInfo.setLayoutCount         = static_cast<uint32_t>(_descSetLayouts.size());
     pipelineLayoutCreateInfo.pSetLayouts            = _descSetLayouts.data();
-    pipelineLayoutCreateInfo.pushConstantRangeCount = _constantRanges.haveRange() ? 1 : 0;
-    pipelineLayoutCreateInfo.pPushConstantRanges    = &_constantRanges.getRange();
+    pipelineLayoutCreateInfo.pushConstantRangeCount = _hasPushConstantRange ? 1 : 0;
+    pipelineLayoutCreateInfo.pPushConstantRanges    = _hasPushConstantRange ? &_pushConstantRange : nullptr;
     NVVK_CHECK(vkCreatePipelineLayout(vkDriver->getDevice(), &pipelineLayoutCreateInfo, nullptr, &_pipelineLayout));
 
     return;

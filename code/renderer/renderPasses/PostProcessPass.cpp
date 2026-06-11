@@ -19,7 +19,7 @@ void PostProcessPass::init()
 
     _postProgram = RefPtr<ComputeProgram>(new ComputeProgram());
     _postProgram->setComputeModuleID(PostProcesscId);
-    _postProgram->getDescriptorSetManager().initPushConstant<PerFrameConstant>();
+    _postProgram->initPushConstant<PerFrameConstant>();
     _tonemapper.init(&PlayResourceManager::Instance(), {shadermodule->_spvCode});
     _tonemapperControlComponent.flushToGPU();
     vkDriver->updateGlobalTonemapperBuffer(_tonemapperControlComponent.getGPUBuffer());

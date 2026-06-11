@@ -16,7 +16,7 @@ FixedMaterial* FixedMaterial::Create()
 
     if (!fixedMaterial._program)
     {
-        commonFixedProgram->getDescriptorSetManager().initPushConstant<GBufferPushConstant>();
+        commonFixedProgram->initPushConstant<GBufferPushConstant>();
         commonFixedProgram->psoState().colorWriteMasks.resize(
             GBufferConfig::RT_COUNT, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
         commonFixedProgram->psoState().colorBlendEnables.resize(GBufferConfig::RT_COUNT, VK_FALSE);

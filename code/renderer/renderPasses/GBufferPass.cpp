@@ -442,9 +442,9 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
 
                     VkCommandBuffer cmd = context._currCmdBuffer;
 
-                    GBufferPushConstant* pushConstant = gbufferProgram->getDescriptorSetManager().getPushConstantData<GBufferPushConstant>();
-                    pushConstant->perFrameConstant.cameraBufferDeviceAddress = _ownedRender->getCurrentCameraBuffer()->address;
-                    pushConstant->sceneConstant.instanceBufferAddress        = _gpuInstanceDataBuffer ? _gpuInstanceDataBuffer->address : 0;
+                    GBufferPushConstant pushConstant = gbufferProgram->createPushConstant<GBufferPushConstant>();
+                    pushConstant.perFrameConstant.cameraBufferDeviceAddress = _ownedRender->getCurrentCameraBuffer()->address;
+                    pushConstant.sceneConstant.instanceBufferAddress        = _gpuInstanceDataBuffer ? _gpuInstanceDataBuffer->address : 0;
 
                     context.bindProgram(gbufferProgram, node);
 
@@ -462,8 +462,8 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
                             continue;
                         }
 
-                        pushConstant->sceneConstant.instanceIndex = item.gpuInstanceIndex;
-                        gbufferProgram->getDescriptorSetManager().pushConstantRanges(cmd);
+                        pushConstant.sceneConstant.instanceIndex = item.gpuInstanceIndex;
+                        context.bindPushConstant(gbufferProgram, pushConstant);
                         vkCmdDraw(cmd, item.indexCount, 1, 0, 0);
                     }
                 })

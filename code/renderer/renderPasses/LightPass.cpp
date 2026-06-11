@@ -19,7 +19,7 @@ void LightPass::init()
                                                      ShaderStage::eFragment);
     auto fullScreenVertID = ShaderManager::Instance().getShaderIdByName(BuiltinShaders::BUILTIN_FULL_SCREEN_QUAD_VERT_SHADER_NAME);
     _lightPassProgram     = RefPtr<RenderProgram>(new RenderProgram(fullScreenVertID, lightPassFragID));
-    _lightPassProgram->getDescriptorSetManager().initPushConstant<PerFrameConstant>();
+    _lightPassProgram->initPushConstant<PerFrameConstant>();
     _lightPassProgram->psoState().rasterizationState.frontFace = VK_FRONT_FACE_CLOCKWISE;
     _lightPassProgram->psoState().rasterizationState.cullMode  = VK_CULL_MODE_NONE;
 }
@@ -55,10 +55,11 @@ void LightPass::build(RDG::RDGBuilder* rdgBuilder)
             .execute(
                 [this](RDG::PassNode* node, RDG::RenderContext& context)
                 {
-                    VkCommandBuffer   cmd              = context._currCmdBuffer;
-                    PerFrameConstant* perFrameConstant = this->_lightPassProgram->getDescriptorSetManager().getPushConstantData<PerFrameConstant>();
-                    perFrameConstant->cameraBufferDeviceAddress = _ownedRender->getCurrentCameraBuffer()->address;
+                    VkCommandBuffer  cmd              = context._currCmdBuffer;
+                    PerFrameConstant perFrameConstant = this->_lightPassProgram->createPushConstant<PerFrameConstant>();
+                    perFrameConstant.cameraBufferDeviceAddress = _ownedRender->getCurrentCameraBuffer()->address;
                     context.bindProgram(this->_lightPassProgram.get(), node);
+                    context.bindPushConstant(this->_lightPassProgram.get(), perFrameConstant);
                     VkViewport viewport = {0, 0, (float) vkDriver->getViewportSize().width, (float) vkDriver->getViewportSize().height, 0.0f, 1.0f};
                     VkRect2D   scissor  = {{0, 0}, {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height}};
                     vkCmdSetViewportWithCount(cmd, 1, &viewport);

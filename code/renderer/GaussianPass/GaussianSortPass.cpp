@@ -27,7 +27,7 @@ void GaussianSortPass::init()
     auto distanceComp = ShaderManager::Instance().loadShaderFromFile("DistanceComp", "./gaussian/gaussianCulling.comp.slang", ShaderStage::eCompute);
     _distanceProgram  = RefPtr<ComputeProgram>(new ComputeProgram());
     _distanceProgram->setComputeModuleID(distanceComp);
-    _distanceProgram->getDescriptorSetManager().initPushConstant<PerFrameConstant>();
+    _distanceProgram->initPushConstant<PerFrameConstant>();
 }
 
 void GaussianSortPass::build(RDG::RDGBuilder* rdgBuilder)
@@ -87,11 +87,12 @@ void GaussianSortPass::build(RDG::RDGBuilder* rdgBuilder)
                             0, 1, &barrier, 0, NULL, 0, NULL);
                     }
 
-                    GaussianScene&    gaussianScene = _ownedRenderer->getSceneManager()->getGaussianScene();
-                    PerFrameConstant* pushConstant  = _distanceProgram->getDescriptorSetManager().getPushConstantData<PerFrameConstant>();
+                    GaussianScene&   gaussianScene = _ownedRenderer->getSceneManager()->getGaussianScene();
+                    PerFrameConstant pushConstant = _distanceProgram->createPushConstant<PerFrameConstant>();
 
-                    pushConstant->cameraBufferDeviceAddress = _ownedRenderer->getCurrentCameraBuffer()->address;
+                    pushConstant.cameraBufferDeviceAddress = _ownedRenderer->getCurrentCameraBuffer()->address;
                     context.bindProgram(_distanceProgram.get(), node);
+                    context.bindPushConstant(_distanceProgram.get(), pushConstant);
                     size_t splatCount = _ownedRenderer->getSceneManager()->getGaussianScene().getVertexCount();
                     vkCmdDispatch(context._currCmdBuffer, nvvk::getGroupCounts(splatCount, 256), 1, 1);
                     VkMemoryBarrier barrier = {VK_STRUCTURE_TYPE_MEMORY_BARRIER};
