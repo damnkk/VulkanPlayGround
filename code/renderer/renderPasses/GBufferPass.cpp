@@ -441,14 +441,12 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
                     }
 
                     VkCommandBuffer cmd = context._currCmdBuffer;
-                    gbufferProgram->setPassNode(static_cast<RDG::RenderPassNode*>(node));
-                    gbufferProgram->bind(cmd);
 
                     GBufferPushConstant* pushConstant = gbufferProgram->getDescriptorSetManager().getPushConstantData<GBufferPushConstant>();
                     pushConstant->perFrameConstant.cameraBufferDeviceAddress = _ownedRender->getCurrentCameraBuffer()->address;
                     pushConstant->sceneConstant.instanceBufferAddress        = _gpuInstanceDataBuffer ? _gpuInstanceDataBuffer->address : 0;
 
-                    context._pendingGfxState->bindDescriptorSet(cmd, gbufferProgram);
+                    context.bindProgram(gbufferProgram, node);
 
                     VkViewport viewport = {
                         0,    0,   static_cast<float>(vkDriver->getViewportSize().width), static_cast<float>(vkDriver->getViewportSize().height),

@@ -20,6 +20,7 @@ namespace RDG
 {
 class PassNode;
 class RenderPassNode;
+struct PendingState;
 } // namespace RDG
 using ShaderID = uint32_t;
 
@@ -210,19 +211,17 @@ class PlayProgram : public RefCounted
 public:
     PlayProgram()
     {
-        if (vkDriver)
-            vkDriver->registerObject(this);
+        if (vkDriver) vkDriver->registerObject(this);
     }
     virtual ~PlayProgram()
     {
         // 由 onDestroy() 处理资源清理
     }
 
-    PlayProgram(const PlayProgram&) = delete;
+    PlayProgram(const PlayProgram&)            = delete;
     PlayProgram& operator=(const PlayProgram&) = delete;
 
     virtual ProgramType   getProgramType() const = 0;
-    virtual void          setPassNode(RDG::PassNode* passNode);
     DescriptorSetManager& getDescriptorSetManager()
     {
         return _descriptorSetManager;
@@ -244,15 +243,16 @@ public:
         LOGW("Undefined program type, return VK_PIPELINE_BIND_POINT_MAX_ENUM\n");
         return VK_PIPELINE_BIND_POINT_MAX_ENUM;
     }
-    virtual void bind(VkCommandBuffer cmdBuf) = 0;
+    RTTR_ENABLE(RefCounted)
+
+protected:
+    friend struct RDG::PendingState;
+    virtual void setPassNode(RDG::PassNode* passNode);
+    virtual void bindPipeline(VkCommandBuffer cmdBuf) = 0;
     virtual void finish()
     {
         _descriptorSetManager.finalizePipelineLayout();
     };
-
-    RTTR_ENABLE(RefCounted)
-
-protected:
     void onDestroy() override;
 
     RDG::PassNode*       _passNode = nullptr;
@@ -267,8 +267,7 @@ public:
     {
         _programType = ProgramType::eRenderProgram;
     }
-    RenderProgram(ShaderID vertexModuleID, ShaderID fragModuleID)
-        : _vertexModuleID(vertexModuleID), _fragModuleID(fragModuleID)
+    RenderProgram(ShaderID vertexModuleID, ShaderID fragModuleID) : _vertexModuleID(vertexModuleID), _fragModuleID(fragModuleID)
     {
         _programType = ProgramType::eRenderProgram;
     }
@@ -284,7 +283,6 @@ public:
     }
     RenderProgram& setFragModuleID(ShaderID fragModuleID);
 
-    void                bind(VkCommandBuffer cmdBuf) override;
     virtual ProgramType getProgramType() const override
     {
         return _programType;
@@ -299,10 +297,13 @@ public:
 
     RTTR_ENABLE(PlayProgram)
 
+protected:
+    void bindPipeline(VkCommandBuffer cmdBuf) override;
+
 private:
-    VkPipeline  getOrCreatePipeline();
-    ShaderID    _vertexModuleID = ~0U;
-    ShaderID    _fragModuleID   = ~0U;
+    VkPipeline getOrCreatePipeline();
+    ShaderID   _vertexModuleID = ~0U;
+    ShaderID   _fragModuleID   = ~0U;
 
     PSOState _psoState;
 };
@@ -324,7 +325,6 @@ public:
         return _computeModuleID;
     }
 
-    void                bind(VkCommandBuffer cmdBuf) override;
     virtual ProgramType getProgramType() const override
     {
         return _programType;
@@ -332,9 +332,12 @@ public:
 
     RTTR_ENABLE(PlayProgram)
 
+protected:
+    void bindPipeline(VkCommandBuffer cmdBuf) override;
+
 private:
-    VkPipeline  getOrCreatePipeline();
-    ShaderID    _computeModuleID = ~0U;
+    VkPipeline getOrCreatePipeline();
+    ShaderID   _computeModuleID = ~0U;
 };
 
 class RTProgram : public PlayProgram
@@ -355,7 +358,6 @@ public:
     RTProgram& setRayMissModuleID(ShaderID rayMissModuleID);
     RTProgram& setRayIntersectModuleID(ShaderID rayIntersectModuleID);
 
-    void                bind(VkCommandBuffer cmdBuf) override;
     virtual ProgramType getProgramType() const override
     {
         return _programType;
@@ -363,13 +365,16 @@ public:
 
     RTTR_ENABLE(PlayProgram)
 
+protected:
+    void bindPipeline(VkCommandBuffer cmdBuf) override;
+
 private:
-    VkPipeline  getOrCreatePipeline();
-    ShaderID    _rayGenModuleID       = ~0U;
-    ShaderID    _rayCHitModuleID      = ~0U;
-    ShaderID    _rayAHitModuleID      = ~0U;
-    ShaderID    _rayMissModuleID      = ~0U;
-    ShaderID    _rayIntersectModuleID = ~0U;
+    VkPipeline getOrCreatePipeline();
+    ShaderID   _rayGenModuleID       = ~0U;
+    ShaderID   _rayCHitModuleID      = ~0U;
+    ShaderID   _rayAHitModuleID      = ~0U;
+    ShaderID   _rayMissModuleID      = ~0U;
+    ShaderID   _rayIntersectModuleID = ~0U;
 };
 
 class MeshRenderProgram : public PlayProgram
@@ -379,8 +384,7 @@ public:
     {
         _programType = ProgramType::eMeshRenderProgram;
     }
-    MeshRenderProgram(VkDevice device, ShaderID meshModuleID, ShaderID fragModuleID)
-        : _meshModuleID(meshModuleID), _fragModuleID(fragModuleID)
+    MeshRenderProgram(VkDevice device, ShaderID meshModuleID, ShaderID fragModuleID) : _meshModuleID(meshModuleID), _fragModuleID(fragModuleID)
     {
         _programType = ProgramType::eMeshRenderProgram;
     }
@@ -407,7 +411,6 @@ public:
         return _psoState;
     }
 
-    void                bind(VkCommandBuffer cmdBuf) override;
     virtual ProgramType getProgramType() const override
     {
         return _programType;
@@ -415,12 +418,15 @@ public:
 
     RTTR_ENABLE(PlayProgram)
 
+protected:
+    void bindPipeline(VkCommandBuffer cmdBuf) override;
+
 private:
-    VkPipeline  getOrCreatePipeline();
-    ShaderID    _taskModuleID = ~0U;
-    ShaderID    _meshModuleID = ~0U;
-    ShaderID    _fragModuleID = ~0U;
-    PSOState    _psoState;
+    VkPipeline getOrCreatePipeline();
+    ShaderID   _taskModuleID = ~0U;
+    ShaderID   _meshModuleID = ~0U;
+    ShaderID   _fragModuleID = ~0U;
+    PSOState   _psoState;
 };
 } // namespace Play
 

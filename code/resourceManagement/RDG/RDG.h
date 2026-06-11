@@ -21,6 +21,7 @@ GPU resource when RDG compile.
 namespace Play
 {
 class RenderPass;
+class PlayProgram;
 } // namespace Play
 namespace Play::RDG
 {
@@ -79,9 +80,15 @@ private:
     std::unordered_map<std::string, PassNode*>     _passMap;
 };
 
+struct RenderContext;
 struct PendingState
 {
+private:
+    friend struct RenderContext;
+    void            bindProgram(VkCommandBuffer cmd, PlayProgram* program, PassNode* passNode);
     void            bindDescriptorSet(VkCommandBuffer cmd, PlayProgram* program);
+
+public:
     VkDescriptorSet _globalDescriptorSet = VK_NULL_HANDLE;
     VkDescriptorSet _frameDescriptorSet  = VK_NULL_HANDLE;
     VkDescriptorSet _sceneDescriptorSet  = VK_NULL_HANDLE;
@@ -116,6 +123,8 @@ struct RenderContext
         _pendingRTState      = std::make_shared<PendingRTState>(this);
     }
     ~RenderContext() {}
+    void bindProgram(PlayProgram* program, PassNode* passNode);
+
     PlayFrameData*                       _frameData           = nullptr;
     PassNode*                            _prevPassNode        = nullptr;
     VkCommandBuffer                      _currCmdBuffer       = VK_NULL_HANDLE;

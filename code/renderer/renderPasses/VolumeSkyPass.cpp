@@ -97,9 +97,7 @@ void VolumeSkyPass::build(RDG::RDGBuilder* rdgBuilder)
                     PerFrameConstant* perFrameConstant =
                         this->_transmittanceLutProgram->getDescriptorSetManager().getPushConstantData<PerFrameConstant>();
                     perFrameConstant->cameraBufferDeviceAddress = ownedRender->getCurrentCameraBuffer()->address;
-                    _transmittanceLutProgram->setPassNode(passNode);
-                    _transmittanceLutProgram->bind(context._currCmdBuffer);
-                    context._pendingComputeState->bindDescriptorSet(context._currCmdBuffer, _transmittanceLutProgram.get());
+                    context.bindProgram(_transmittanceLutProgram.get(), passNode);
                     vkCmdDispatch(context._currCmdBuffer, (kTransmittanceLutWidth + kTransmittanceGroupSize - 1) / kTransmittanceGroupSize,
                                   (kTransmittanceLutHeight + kTransmittanceGroupSize - 1) / kTransmittanceGroupSize, 1);
                 })
@@ -116,9 +114,7 @@ void VolumeSkyPass::build(RDG::RDGBuilder* rdgBuilder)
                     PerFrameConstant* perFrameConstant =
                         this->_multiScatteringLutProgram->getDescriptorSetManager().getPushConstantData<PerFrameConstant>();
                     perFrameConstant->cameraBufferDeviceAddress = ownedRender->getCurrentCameraBuffer()->address;
-                    _multiScatteringLutProgram->setPassNode(passNode);
-                    _multiScatteringLutProgram->bind(context._currCmdBuffer);
-                    context._pendingComputeState->bindDescriptorSet(context._currCmdBuffer, _multiScatteringLutProgram.get());
+                    context.bindProgram(_multiScatteringLutProgram.get(), passNode);
                     vkCmdDispatch(context._currCmdBuffer, kMultiScatteringLutWidth, kMultiScatteringLutHeight, 1);
                 })
             .finish();
@@ -135,9 +131,7 @@ void VolumeSkyPass::build(RDG::RDGBuilder* rdgBuilder)
                     PerFrameConstant* perFrameConstant =
                         this->_skyViewLutProgram->getDescriptorSetManager().getPushConstantData<PerFrameConstant>();
                     perFrameConstant->cameraBufferDeviceAddress = ownedRender->getCurrentCameraBuffer()->address;
-                    _skyViewLutProgram->setPassNode(passNode);
-                    _skyViewLutProgram->bind(context._currCmdBuffer);
-                    context._pendingComputeState->bindDescriptorSet(context._currCmdBuffer, _skyViewLutProgram.get());
+                    context.bindProgram(_skyViewLutProgram.get(), passNode);
                     vkCmdDispatch(context._currCmdBuffer, (kSkyViewLutWidth + kSkyViewGroupSize - 1) / kSkyViewGroupSize,
                                   (kSkyViewLutHeight + kSkyViewGroupSize - 1) / kSkyViewGroupSize, 1);
                 })
@@ -155,9 +149,7 @@ void VolumeSkyPass::build(RDG::RDGBuilder* rdgBuilder)
                     VkCommandBuffer   cmd              = context._currCmdBuffer;
                     PerFrameConstant* perFrameConstant = this->_skyBoxProgram->getDescriptorSetManager().getPushConstantData<PerFrameConstant>();
                     perFrameConstant->cameraBufferDeviceAddress = ownedRender->getCurrentCameraBuffer()->address;
-                    this->_skyBoxProgram->setPassNode(static_cast<RDG::RenderPassNode*>(passNode));
-                    this->_skyBoxProgram->bind(cmd);
-                    context._pendingGfxState->bindDescriptorSet(cmd, this->_skyBoxProgram.get());
+                    context.bindProgram(this->_skyBoxProgram.get(), passNode);
                     VkViewport viewport = {0, 0, (float) vkDriver->getViewportSize().width, (float) vkDriver->getViewportSize().height, 0.0f, 1.0f};
                     VkRect2D   scissor  = {{0, 0}, {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height}};
                     vkCmdSetViewportWithCount(cmd, 1, &viewport);

@@ -367,7 +367,7 @@ RenderProgram& RenderProgram::setFragModuleID(ShaderID fragModuleID)
     return *this;
 }
 
-void RenderProgram::bind(VkCommandBuffer cmdBuf)
+void RenderProgram::bindPipeline(VkCommandBuffer cmdBuf)
 {
     VkPipeline gfxPipeline = getOrCreatePipeline();
     vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, gfxPipeline);
@@ -389,7 +389,7 @@ ComputeProgram& ComputeProgram::setComputeModuleID(ShaderID computeModuleID)
     return *this;
 }
 
-void ComputeProgram::bind(VkCommandBuffer cmdBuf)
+void ComputeProgram::bindPipeline(VkCommandBuffer cmdBuf)
 {
     VkPipeline computePipeline = getOrCreatePipeline();
     vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
@@ -430,7 +430,7 @@ RTProgram& RTProgram::setRayIntersectModuleID(ShaderID rayIntersectModuleID)
     return *this;
 }
 
-void RTProgram::bind(VkCommandBuffer cmdBuf) {}
+void RTProgram::bindPipeline(VkCommandBuffer cmdBuf) {}
 
 VkPipeline RTProgram::getOrCreatePipeline()
 {
@@ -455,7 +455,7 @@ MeshRenderProgram& MeshRenderProgram::setFragModuleID(ShaderID fragModuleID)
     return *this;
 }
 
-void MeshRenderProgram::bind(VkCommandBuffer cmdBuf)
+void MeshRenderProgram::bindPipeline(VkCommandBuffer cmdBuf)
 {
     VkPipeline meshPipeline = getOrCreatePipeline();
     vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, meshPipeline);

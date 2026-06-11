@@ -13,7 +13,6 @@
 #include "core/runtime/EngineLoop.h"
 #include "debugger/debugger.h"
 
-
 int main(int argc, char** argv)
 {
     nvutils::Logger::getInstance().breakOnError(false);
@@ -43,8 +42,7 @@ int main(int argc, char** argv)
 
         auto afterMathExtList = Play::NsightDebugger::initInjection();
 
-        VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures = {
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR, nullptr, VK_TRUE};
+        VkPhysicalDeviceRayQueryFeaturesKHR         rayQueryFeatures = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR, nullptr, VK_TRUE};
         VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptorBufferFeatures = {
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT, nullptr, VK_TRUE, VK_TRUE, VK_TRUE, VK_TRUE};
         VkPhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures = {
@@ -67,7 +65,7 @@ int main(int argc, char** argv)
         };
 
         nvvk::ContextInitInfo vkSetup{
-            .instanceExtensions     = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME},
+            .instanceExtensions = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME},
             .deviceExtensions =
                 {
                     {VK_EXT_MESH_SHADER_EXTENSION_NAME, &meshShaderFeatures, true},

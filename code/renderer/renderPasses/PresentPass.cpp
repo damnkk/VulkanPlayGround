@@ -34,9 +34,7 @@ void PresentPass::build(RDG::RDGBuilder* rdgBuilder)
             [this](RDG::PassNode* passNode, RDG::RenderContext& context)
             {
                 VkCommandBuffer cmd = context._currCmdBuffer;
-                this->_presentProgram->setPassNode(static_cast<RDG::RenderPassNode*>(passNode));
-                this->_presentProgram->bind(cmd);
-                context._pendingGfxState->bindDescriptorSet(cmd, this->_presentProgram.get());
+                context.bindProgram(this->_presentProgram.get(), passNode);
                 VkViewport viewport = {0, 0, (float) vkDriver->getViewportSize().width, (float) vkDriver->getViewportSize().height, 0.0f, 1.0f};
                 VkRect2D   scissor  = {{0, 0}, {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height}};
                 vkCmdSetViewportWithCount(cmd, 1, &viewport);

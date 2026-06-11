@@ -91,9 +91,7 @@ void GaussianDrawMeshPass::build(RDG::RDGBuilder* rdgBuilder)
                     PerFrameConstant* pushConstant          = _meshRenderProgram->getDescriptorSetManager().getPushConstantData<PerFrameConstant>();
                     pushConstant->cameraBufferDeviceAddress = _ownedRenderer->getCurrentCameraBuffer()->address;
 
-                    _meshRenderProgram->setPassNode(static_cast<RDG::RenderPassNode*>(node));
-                    _meshRenderProgram->bind(cmd);
-                    context._pendingGfxState->bindDescriptorSet(cmd, _meshRenderProgram.get());
+                    context.bindProgram(_meshRenderProgram.get(), node);
                     VkViewport viewport = {
                         0,    0,    static_cast<float>(vkDriver->getViewportSize().width), static_cast<float>(vkDriver->getViewportSize().height),
                         0.0f, 1.0f,
@@ -116,9 +114,7 @@ void GaussianDrawMeshPass::build(RDG::RDGBuilder* rdgBuilder)
                 [this](RDG::PassNode* node, RDG::RenderContext& context)
                 {
                     VkCommandBuffer cmd = context._currCmdBuffer;
-                    _presentProgram->setPassNode(static_cast<RDG::RenderPassNode*>(node));
-                    _presentProgram->bind(cmd);
-                    context._pendingGfxState->bindDescriptorSet(cmd, _presentProgram.get());
+                    context.bindProgram(_presentProgram.get(), node);
 
                     VkViewport viewport = {
                         0,    0,    static_cast<float>(vkDriver->getViewportSize().width), static_cast<float>(vkDriver->getViewportSize().height),

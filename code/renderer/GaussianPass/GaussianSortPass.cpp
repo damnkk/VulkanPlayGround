@@ -91,9 +91,7 @@ void GaussianSortPass::build(RDG::RDGBuilder* rdgBuilder)
                     PerFrameConstant* pushConstant  = _distanceProgram->getDescriptorSetManager().getPushConstantData<PerFrameConstant>();
 
                     pushConstant->cameraBufferDeviceAddress = _ownedRenderer->getCurrentCameraBuffer()->address;
-                    _distanceProgram->setPassNode(static_cast<RDG::RenderPassNode*>(node));
-                    _distanceProgram->bind(context._currCmdBuffer);
-                    context._pendingComputeState->bindDescriptorSet(context._currCmdBuffer, _distanceProgram.get());
+                    context.bindProgram(_distanceProgram.get(), node);
                     size_t splatCount = _ownedRenderer->getSceneManager()->getGaussianScene().getVertexCount();
                     vkCmdDispatch(context._currCmdBuffer, nvvk::getGroupCounts(splatCount, 256), 1, 1);
                     VkMemoryBarrier barrier = {VK_STRUCTURE_TYPE_MEMORY_BARRIER};

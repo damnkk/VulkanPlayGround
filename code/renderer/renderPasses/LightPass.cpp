@@ -58,9 +58,7 @@ void LightPass::build(RDG::RDGBuilder* rdgBuilder)
                     VkCommandBuffer   cmd              = context._currCmdBuffer;
                     PerFrameConstant* perFrameConstant = this->_lightPassProgram->getDescriptorSetManager().getPushConstantData<PerFrameConstant>();
                     perFrameConstant->cameraBufferDeviceAddress = _ownedRender->getCurrentCameraBuffer()->address;
-                    this->_lightPassProgram->setPassNode(static_cast<RDG::RenderPassNode*>(node));
-                    this->_lightPassProgram->bind(cmd);
-                    context._pendingGfxState->bindDescriptorSet(cmd, this->_lightPassProgram.get());
+                    context.bindProgram(this->_lightPassProgram.get(), node);
                     VkViewport viewport = {0, 0, (float) vkDriver->getViewportSize().width, (float) vkDriver->getViewportSize().height, 0.0f, 1.0f};
                     VkRect2D   scissor  = {{0, 0}, {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height}};
                     vkCmdSetViewportWithCount(cmd, 1, &viewport);

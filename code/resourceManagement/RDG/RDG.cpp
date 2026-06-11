@@ -160,6 +160,13 @@ PassNode* BlackBoard::getPass(std::string name)
     return _passMap[name];
 }
 
+void PendingState::bindProgram(VkCommandBuffer cmd, PlayProgram* program, PassNode* passNode)
+{
+    program->setPassNode(passNode);
+    program->bindPipeline(cmd);
+    bindDescriptorSet(cmd, program);
+}
+
 void PendingState::bindDescriptorSet(VkCommandBuffer cmd, PlayProgram* program)
 {
     VkDescriptorSet                drawObjectSet = vkDriver->getDescriptorSetCache()->requestDescriptorSet(&program->getDescriptorSetManager(),
@@ -169,6 +176,7 @@ void PendingState::bindDescriptorSet(VkCommandBuffer cmd, PlayProgram* program)
     switch (program->getProgramType())
     {
         case ProgramType::eRenderProgram:
+        case ProgramType::eMeshRenderProgram:
             bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
             break;
         case ProgramType::eComputeProgram:
@@ -184,6 +192,31 @@ void PendingState::bindDescriptorSet(VkCommandBuffer cmd, PlayProgram* program)
     vkCmdBindDescriptorSets(cmd, bindPoint, program->getDescriptorSetManager().getPipelineLayout(), (uint32_t) DescriptorEnum::eGlobalDescriptorSet,
                             static_cast<uint32_t>(sets.size()), sets.data(), 0, nullptr);
     program->getDescriptorSetManager().pushConstantRanges(cmd);
+}
+
+void RenderContext::bindProgram(PlayProgram* program, PassNode* passNode)
+{
+    switch (program->getProgramType())
+    {
+        case ProgramType::eRenderProgram:
+        case ProgramType::eMeshRenderProgram:
+        {
+            _pendingGfxState->bindProgram(_currCmdBuffer, program, passNode);
+            break;
+        }
+        case ProgramType::eComputeProgram:
+        {
+            _pendingComputeState->bindProgram(_currCmdBuffer, program, passNode);
+            break;
+        }
+        case ProgramType::eRTProgram:
+        {
+            _pendingRTState->bindProgram(_currCmdBuffer, program, passNode);
+            break;
+        }
+        default:
+            break;
+    }
 }
 
 RDGBuilder::RDGBuilder()
