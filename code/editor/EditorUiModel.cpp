@@ -185,6 +185,56 @@ bool isFloatingNumericType(rttr::type type)
     return type == rttr::type::get<float>() || type == rttr::type::get<double>() || getVectorComponentCount(type) > 0;
 }
 
+bool makeTypedPropertyValue(rttr::type targetType, const rttr::variant& value, rttr::variant& typedValue)
+{
+    if (value.get_type() == targetType)
+    {
+        typedValue = value;
+        return true;
+    }
+
+    bool ok = false;
+    if (targetType == rttr::type::get<float>())
+    {
+        const float numericValue = value.to_float(&ok);
+        if (ok)
+        {
+            typedValue = rttr::variant(numericValue);
+            return true;
+        }
+    }
+    else if (targetType == rttr::type::get<double>())
+    {
+        const double numericValue = value.to_double(&ok);
+        if (ok)
+        {
+            typedValue = rttr::variant(numericValue);
+            return true;
+        }
+    }
+    else if (targetType == rttr::type::get<int>())
+    {
+        const double numericValue = value.to_double(&ok);
+        if (ok)
+        {
+            typedValue = rttr::variant(static_cast<int>(numericValue));
+            return true;
+        }
+    }
+    else if (targetType == rttr::type::get<unsigned int>())
+    {
+        const double numericValue = value.to_double(&ok);
+        if (ok && numericValue >= 0.0)
+        {
+            typedValue = rttr::variant(static_cast<unsigned int>(numericValue));
+            return true;
+        }
+    }
+
+    typedValue = value;
+    return typedValue.convert(rttr::type(targetType));
+}
+
 std::string makeNumericStep(const rttr::property& property, const rttr::variant& value)
 {
     const std::string metadataStep = metadataToString(property, "ui.step");
@@ -435,8 +485,8 @@ bool setReflectedProperty(rttr::type type, rttr::instance instance, const char* 
         return property.set_value(instance, typedValue);
     }
 
-    rttr::variant typedValue = value;
-    if (typedValue.get_type() != property.get_type() && !typedValue.convert(property.get_type()))
+    rttr::variant typedValue;
+    if (!makeTypedPropertyValue(property.get_type(), value, typedValue))
     {
         return false;
     }

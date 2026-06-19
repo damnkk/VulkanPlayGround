@@ -91,9 +91,24 @@ struct AABB
     vec3 Max;
 };
 
-vec3 GetNormalizedTexcoord(vec3 position, AABB aabb)
+vec3 GetRawNormalizedTexcoord(vec3 position, AABB aabb)
 {
     return (position - aabb.Min) / (aabb.Max - aabb.Min);
+}
+
+vec3 RemapVolumeTexcoord(vec3 texcoord)
+{
+    return vec3(1.0 - texcoord.x, texcoord.z, texcoord.y);
+}
+
+vec3 RemapVolumeGradient(vec3 gradient)
+{
+    return vec3(-gradient.x, gradient.z, gradient.y);
+}
+
+vec3 GetNormalizedTexcoord(vec3 position, AABB aabb)
+{
+    return RemapVolumeTexcoord(GetRawNormalizedTexcoord(position, aabb));
 }
 
 struct Intersection

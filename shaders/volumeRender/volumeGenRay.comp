@@ -47,7 +47,7 @@ float GetIntensity(VolumeDesc desc, vec3 position)
 
 vec3 GetGradient(VolumeDesc desc, vec3 position)
 {
-    return texture(gradientTexture, GetNormalizedTexcoord(position, desc.BoundingBox)).rgb;
+    return RemapVolumeGradient(texture(gradientTexture, GetNormalizedTexcoord(position, desc.BoundingBox)).rgb);
 }
 
 float GetOpacity(VolumeDesc desc, vec3 position)
@@ -157,11 +157,7 @@ void main()
     }
     if (event.IsValid)
     {
-        vec3 normal   = vec3(0.0);
-        vec4 position = vec4(0.0);
-        normal        = event.Normal;
-        position =
-            volumeUniform.ProjectMatrix * volumeUniform.ViewMatrix * vec4(event.Position, 1.0);
+        vec4 position = volumeUniform.ProjectMatrix * volumeUniform.ViewMatrix * vec4(event.Position, 1.0);
         position /= position.w;
         imageStore(diffuseRT, localID, vec4(event.Diffuse, 1.0));
         imageStore(specularRT, localID, vec4(event.Specular, 1.0));

@@ -51,6 +51,6 @@ void main()
     vec2  resolution  = vec2(volumeUniform.RTDimensions);
     vec2  uv          = localID / resolution;
     vec4  color       = texture(accumulateRT, uv);
-    vec3  mappedColor = ToneMapUncharted2Function(color.xyz, 1.5);
+    vec3  mappedColor = ToneMapUncharted2Function(color.xyz, volumeUniform.Exposure);
     imageStore(postProcessRT, localID, vec4(mappedColor, 1.0));
 }
