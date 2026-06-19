@@ -2,8 +2,8 @@
 // that generates rays for volume rendering
 #version 450
 #extension GL_EXT_shader_image_load_formatted : enable // The folowing extension allow to pass
-layout(set = 0, binding = 0) uniform sampler3D volumeTexture; // 3D texture for volume data
-layout(set = 0, binding = 1,
+layout(set = 3, binding = 0) uniform sampler3D volumeTexture; // 3D texture for volume data
+layout(set = 3, binding = 1,
        rgba16f) uniform image3D gradientTexture;                 // 2D texture for gradient data
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in; // Work group size
 
@@ -86,6 +86,11 @@ vec3 Gradient(uvec3 location)
 
 void main()
 {
+    ivec3 dimension = textureSize(volumeTexture, 0);
+    if (any(greaterThanEqual(gl_GlobalInvocationID.xyz, uvec3(dimension))))
+    {
+        return;
+    }
     // Get the local work group ID
     vec3 gradient = Gradient(gl_GlobalInvocationID.xyz);
     // Store the gradient in the output texture

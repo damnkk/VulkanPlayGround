@@ -12,7 +12,8 @@ RTTR_REGISTRATION
 {
     rttr::registration::enumeration<Play::editor::EditorRenderMode>("Play::editor::EditorRenderMode")(
         rttr::value("Any", Play::editor::EditorRenderMode::Any), rttr::value("Defer", Play::editor::EditorRenderMode::Defer),
-        rttr::value("Gaussian", Play::editor::EditorRenderMode::Gaussian), rttr::value("Raytrace", Play::editor::EditorRenderMode::Raytrace));
+        rttr::value("Gaussian", Play::editor::EditorRenderMode::Gaussian), rttr::value("Raytrace", Play::editor::EditorRenderMode::Raytrace),
+        rttr::value("Volume", Play::editor::EditorRenderMode::Volume));
 
     rttr::registration::enumeration<Play::editor::EditorObjectCapability>("Play::editor::EditorObjectCapability")(
         rttr::value("None", Play::editor::EditorObjectCapability::None), rttr::value("Editable", Play::editor::EditorObjectCapability::Editable),

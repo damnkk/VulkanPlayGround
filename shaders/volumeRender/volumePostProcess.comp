@@ -5,12 +5,12 @@
 #extension GL_EXT_scalar_block_layout : enable
 #include "volumeRender/common.glsl"
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
-layout(set = 0, binding = 0) uniform sampler2D accumulateRT; // 3D texture for volume data
-layout(set = 0, binding = 1, scalar) uniform vUniform
+layout(set = 3, binding = 0) uniform sampler2D accumulateRT; // 3D texture for volume data
+layout(set = 3, binding = 1, scalar) uniform vUniform
 {
     VolumeUniform volumeUniform;
 };
-layout(set = 0, binding = 2,
+layout(set = 3, binding = 2,
        rgba8) uniform image2D postProcessRT; // 2D texture for depth information
 vec3 Uncharted2Function(float A, float B, float C, float D, float E, float F, vec3 x)
 {

@@ -8,6 +8,7 @@ RuntimeEditor::RuntimeEditor() : _renderModeTabs(_runtimeContext, _editorRegistr
     _renderModeTabs.addRenderMode("defer", "Defer", EditorRenderMode::Defer);
     _renderModeTabs.addRenderMode("gaussian", "Gaussian", EditorRenderMode::Gaussian);
     _renderModeTabs.addRenderMode("raytrace", "Ray Tracing", EditorRenderMode::Raytrace);
+    _renderModeTabs.addRenderMode("volume", "Volume", EditorRenderMode::Volume);
 }
 
 void RuntimeEditor::bindRuntime(Play::runtime::VulkanRuntime& runtime, Play::RenderSession& renderSession, const char* activeMode)

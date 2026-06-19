@@ -325,8 +325,11 @@ DescriptorSetCache::CacheNode::CachedSet DescriptorSetCache::createDescriptorSet
 
                 for (int i = 0; i < binding.descriptorCount; ++i)
                 {
-                    imageInfos[i]         = descriptorInfo[i + offset].image;
-                    imageInfos[i].sampler = VK_NULL_HANDLE;
+                    imageInfos[i] = descriptorInfo[i + offset].image;
+                    if (binding.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE || binding.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
+                    {
+                        imageInfos[i].sampler = VK_NULL_HANDLE;
+                    }
                 }
                 writeSet.pImageInfo = imageInfos.data();
                 break;

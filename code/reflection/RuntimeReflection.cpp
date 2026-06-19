@@ -13,12 +13,14 @@
 #include "renderer/GaussianRenderer.h"
 #include "renderer/GBufferConfig.h"
 #include "renderer/Renderer.h"
+#include "renderer/VolumeRenderer.h"
 #include "renderer/renderPasses/GBufferPass.h"
 #include "renderer/renderPasses/LightPass.h"
 #include "renderer/renderPasses/PostProcessPass.h"
 #include "renderer/renderPasses/PresentPass.h"
 #include "renderer/renderPasses/RenderPass.h"
 #include "renderer/renderPasses/VolumeSkyPass.h"
+#include "renderer/renderPasses/VolumeRenderPass.h"
 #include "resourceManagement/Material.h"
 #include "resourceManagement/PlayProgram.h"
 #include "resourceManagement/PlayScene.h"
@@ -39,6 +41,7 @@ RTTR_REGISTRATION
     rttr::registration::class_<Play::Renderer>("Play::Renderer");
     rttr::registration::class_<Play::DeferRenderer>("Play::DeferRenderer");
     rttr::registration::class_<Play::GaussianRenderer>("Play::GaussianRenderer");
+    rttr::registration::class_<Play::VolumeRenderer>("Play::VolumeRenderer");
 
     rttr::registration::class_<Play::BasePass>("Play::BasePass");
     rttr::registration::class_<Play::GBufferPass>("Play::GBufferPass");
@@ -46,6 +49,7 @@ RTTR_REGISTRATION
     rttr::registration::class_<Play::PostProcessPass>("Play::PostProcessPass");
     rttr::registration::class_<Play::PresentPass>("Play::PresentPass");
     rttr::registration::class_<Play::VolumeSkyPass>("Play::VolumeSkyPass");
+    rttr::registration::class_<Play::VolumeRenderPass>("Play::VolumeRenderPass");
     rttr::registration::class_<Play::GaussianSortPass>("Play::GaussianSortPass");
     rttr::registration::class_<Play::GaussianDrawMeshPass>("Play::GaussianDrawMeshPass");
 
@@ -75,6 +79,17 @@ RTTR_REGISTRATION
         .property("solar_irradiance", &AtmosphereParameters::solar_irradiance)
         .property("sun_angular_radius", &AtmosphereParameters::sun_angular_radius)
         .property("mu_s_min", &AtmosphereParameters::mu_s_min);
+
+    rttr::registration::class_<Play::VolumeRenderParameters>("Play::VolumeRenderParameters")
+        .property("Density", &Play::VolumeRenderParameters::Density)(
+            rttr::metadata("ui.widget", "slider"), rttr::metadata("ui.min", 0.0f), rttr::metadata("ui.max", 500.0f),
+            rttr::metadata("ui.step", 1.0f))
+        .property("Exposure", &Play::VolumeRenderParameters::Exposure)(
+            rttr::metadata("ui.widget", "slider"), rttr::metadata("ui.min", 0.0f), rttr::metadata("ui.max", 8.0f),
+            rttr::metadata("ui.step", 0.01f))
+        .property("StepCount", &Play::VolumeRenderParameters::StepCount)
+        .property("BBoxMin", &Play::VolumeRenderParameters::BBoxMin)
+        .property("BBoxMax", &Play::VolumeRenderParameters::BBoxMax);
 
     rttr::registration::class_<shaderio::TonemapperData>("shaderio::TonemapperData")
         .property("isActive", &shaderio::TonemapperData::isActive)

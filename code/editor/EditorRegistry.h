@@ -24,7 +24,8 @@ enum class EditorRenderMode
     Any,
     Defer,
     Gaussian,
-    Raytrace
+    Raytrace,
+    Volume
 };
 
 enum class EditorObjectCapability

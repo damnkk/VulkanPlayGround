@@ -7,19 +7,19 @@
 #include "random.h.slang"
 #include "constants.h.slang"
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
-layout(set = 0, binding = 0) uniform sampler3D volumeTexture; // 3D texture for volume data
-layout(set     = 0,
+layout(set = 3, binding = 0) uniform sampler3D volumeTexture; // 3D texture for volume data
+layout(set     = 3,
        binding = 1) uniform sampler1D opacityLookupTexture; // 2D texture for the output image
-layout(set = 0, binding = 2) uniform sampler2D diffuseRT;   // 2D texture for the output image
-layout(set = 0, binding = 3) uniform sampler2D specularRT;  // 2D texture for the output image
-layout(set = 0, binding = 4) uniform sampler2D normalRT;    // 2D texture for the output image
-layout(set = 0, binding = 5) uniform sampler2D depthRT;     // 2D texture for the output image
-layout(set = 0, binding = 6) uniform sampler2D envTexture;  // 2D texture for the output image
-layout(set = 0, binding = 7, scalar) uniform vUniform
+layout(set = 3, binding = 2) uniform sampler2D diffuseRT;   // 2D texture for the output image
+layout(set = 3, binding = 3) uniform sampler2D specularRT;  // 2D texture for the output image
+layout(set = 3, binding = 4) uniform sampler2D normalRT;    // 2D texture for the output image
+layout(set = 3, binding = 5) uniform sampler2D depthRT;     // 2D texture for the output image
+layout(set = 3, binding = 6) uniform sampler2D envTexture;  // 2D texture for the output image
+layout(set = 3, binding = 7, scalar) uniform vUniform
 {
     VolumeUniform volumeUniform;
 };
-layout(set = 0, binding = 8, rgba16f) uniform image2D radianceRT; // 2D texture for the output image
+layout(set = 3, binding = 8, rgba16f) uniform image2D radianceRT; // 2D texture for the output image
 struct VolumeDesc
 {
     AABB  BoundingBox;

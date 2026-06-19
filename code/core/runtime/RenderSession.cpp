@@ -2,6 +2,7 @@
 
 #include "DeferRendering.h"
 #include "GaussianRenderer.h"
+#include "VolumeRenderer.h"
 #include "VulkanDriver.h"
 
 #include <nvutils/logger.hpp>
@@ -60,6 +61,11 @@ bool RenderSession::init()
         case eGaussianRendering:
         {
             _renderer = std::make_unique<GaussianRenderer>(*this);
+            break;
+        }
+        case eVolumeRendering:
+        {
+            _renderer = std::make_unique<VolumeRenderer>(*this);
             break;
         }
         default:

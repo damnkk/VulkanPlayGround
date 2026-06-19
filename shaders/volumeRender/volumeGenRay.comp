@@ -7,22 +7,22 @@
 #include "slang_types.h"
 #include "random.h.slang"
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
-layout(set = 0, binding = 0) uniform sampler3D volumeTexture;   // 3D texture for volume data
-layout(set = 0, binding = 1) uniform sampler3D gradientTexture; // 2D texture for depth information
-layout(set = 0, binding = 2) uniform sampler1D diffuseLookupTexture;
-layout(set = 0, binding = 3) uniform sampler1D specularLookupTexture;
-layout(set = 0, binding = 4) uniform sampler1D
+layout(set = 3, binding = 0) uniform sampler3D volumeTexture;   // 3D texture for volume data
+layout(set = 3, binding = 1) uniform sampler3D gradientTexture; // 2D texture for depth information
+layout(set = 3, binding = 2) uniform sampler1D diffuseLookupTexture;
+layout(set = 3, binding = 3) uniform sampler1D specularLookupTexture;
+layout(set = 3, binding = 4) uniform sampler1D
     roughnessLookupTexture; // 2D texture for roughness information
-layout(set     = 0,
+layout(set     = 3,
        binding = 5) uniform sampler1D opacityLookupTexture; // 2D texture for normal information
-layout(set = 0, binding = 6, scalar) uniform vUniform
+layout(set = 3, binding = 6, scalar) uniform vUniform
 {
     VolumeUniform volumeUniform;
 };
-layout(set = 0, binding = 7, rgba16f) uniform image2D diffuseRT;
-layout(set = 0, binding = 8, rgba16f) uniform image2D specularRT;
-layout(set = 0, binding = 9, rgba16f) uniform image2D normalRT; // 2D texture for normal information
-layout(set = 0, binding = 10, r32f) uniform image2D depthRT;    // 2D texture for normal information
+layout(set = 3, binding = 7, rgba16f) uniform image2D diffuseRT;
+layout(set = 3, binding = 8, rgba16f) uniform image2D specularRT;
+layout(set = 3, binding = 9, rgba16f) uniform image2D normalRT; // 2D texture for normal information
+layout(set = 3, binding = 10, r32f) uniform image2D depthRT;    // 2D texture for normal information
 struct VolumeDesc
 {
     AABB  BoundingBox;

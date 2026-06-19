@@ -6,6 +6,7 @@
 #include "RenderPass.h"
 #include "VulkanDriver.h"
 #include "DescriptorManager.h"
+#include "PlayAllocator.h"
 #include <nvutils/logger.hpp>
 #include <nvvk/check_error.hpp>
 #include <nvvk/barriers.hpp>
@@ -262,6 +263,10 @@ void RDGBuilder::prepareDescriptorSets(RenderContext& context, PassNode* pass)
         if (state.textureStates.front().isAttachment) continue;
         assert(state.texture->getRHI());
         TextureAccessInfo accessInfo = state.textureStates[0];
+        if (accessInfo.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER && state.texture->_rhi->descriptor.sampler == VK_NULL_HANDLE)
+        {
+            PlayResourceManager::Instance().acquireSampler(state.texture->_rhi->descriptor.sampler);
+        }
         programDescManager.setDescInfo(accessInfo.binding, state.texture->_rhi->descriptor.imageView, accessInfo.layout,
                                        state.texture->_rhi->descriptor.sampler);
     }
