@@ -162,10 +162,11 @@ struct ModelAsset
     AABB                                 bbox;
     uint32_t                             rootNode = INVALID_SCENE_ID;
 
-    RefPtr<Buffer>                transformBuffer = nullptr;
-    RefPtr<Buffer>                materialBuffer  = nullptr;
-    RefPtr<Buffer>                meshInfoBuffer  = nullptr;
-    RefPtr<Buffer>                lightInfoBuffer = nullptr;
+    RefPtr<Buffer>                transformBuffer    = nullptr;
+    RefPtr<Buffer>                materialBuffer     = nullptr;
+    RefPtr<Buffer>                textureInfoBuffer  = nullptr;
+    RefPtr<Buffer>                meshInfoBuffer     = nullptr;
+    RefPtr<Buffer>                lightInfoBuffer    = nullptr;
     std::vector<RayTracingASInfo> accelerationStructures;
 
     uint32_t generation = 1;
@@ -176,7 +177,7 @@ struct ModelTextureResource
     std::string           name;
     std::filesystem::path sourcePath;
     RefPtr<Texture>       texture;
-    uint32_t              mipLevels = 1;
+    uint32_t              mipLevels = 0;
     bool                  isSrgb    = true;
 
     bool isResident() const

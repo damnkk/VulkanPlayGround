@@ -16,6 +16,7 @@ enum class ModelFileFormat : uint32_t
 struct ModelLoadingConfig
 {
     static uint32_t DefaultAssimpPostProcessFlags();
+    static constexpr uint32_t kAutoTextureMipLevels = 0;
 
     ModelFileFormat format                          = ModelFileFormat::eAuto;
     uint32_t        assimpPostProcessFlags          = DefaultAssimpPostProcessFlags();
@@ -26,13 +27,14 @@ struct ModelLoadingConfig
     bool            registerEmbeddedTexturePlaceholders = true;
     bool            srgbBaseColorTextures           = true;
     bool            srgbEmissiveTextures            = true;
-    uint32_t        textureMipLevels                = 1;
+    uint32_t        textureMipLevels                = kAutoTextureMipLevels;
 };
 
 struct ModelLoadRequestID
 {
     uint32_t index      = ~0u;
     uint32_t generation = 0;
+
 
     bool isValid() const
     {

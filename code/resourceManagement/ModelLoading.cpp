@@ -409,7 +409,7 @@ shaderio::GltfShadeMaterial importMaterial(const aiMaterial* material, ModelAsse
     float opacity = 1.0f;
     if (aiGetMaterialFloat(material, AI_MATKEY_OPACITY, &opacity) == AI_SUCCESS)
     {
-        importedMaterial.pbrBaseColorFactor.z = opacity;
+        importedMaterial.pbrBaseColorFactor.w = opacity;
     }
 
     int twoSided = 0;
@@ -688,8 +688,7 @@ private:
 uint32_t ModelLoadingConfig::DefaultAssimpPostProcessFlags()
 {
     return aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_CalcTangentSpace | aiProcess_JoinIdenticalVertices |
-           aiProcess_ImproveCacheLocality | aiProcess_SortByPType | aiProcess_FindInvalidData | aiProcess_GenBoundingBoxes |
-           aiProcess_TransformUVCoords;
+           aiProcess_ImproveCacheLocality | aiProcess_SortByPType | aiProcess_FindInvalidData | aiProcess_GenBoundingBoxes | aiProcess_FlipUVs;
 }
 
 ModelImportResult model_loading::importModelFromFile(const std::filesystem::path& path, const ModelLoadingConfig& loadingConfig)

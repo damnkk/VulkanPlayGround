@@ -1,7 +1,5 @@
-// Simple pass-through vertex shader for post-process full screen quad
-#include "PConstantType.h.slang"
-#include "Hdevice.h"
-#include "gltf_scene_io.h.slang"
+#include "common.slang"
+#include "GBufferCommon.h.slang"
 
 struct VertexInput
 {
@@ -12,38 +10,9 @@ struct VertexOutput
 {
     float4 position : SV_Position;
     float3 normal : NORMAL;
+    float4 tangent : TANGENT;
     float2 uv : TEXCOORD0;
-};
-
-struct MeshInfo
-{
-    uint64_t vertexBufferAddress;
-    uint64_t IndexBufferAddress;
-    uint indexCount;
-    uint materialIdx;
-};
-
-struct VertexStreamInfo
-{
-    uint64_t positionBufferAddress;
-    uint64_t normalBufferAddress;
-    uint64_t tangentBufferAddress;
-    uint64_t texCoord0BufferAddress;
-    uint64_t texCoord1BufferAddress;
-    uint64_t colorBufferAddress;
-};
-
-struct GBufferGPUInstanceData
-{
-    float4x4 objectToWorld;
-    float4x4 worldToObject;
-    uint64_t meshInfoAddress;
-    uint64_t materialAddress;
-    uint64_t textureInfoAddress;
-    uint meshInfoIndex;
-    uint materialIndex;
-    uint textureInfoOffset;
-    uint flags;
+    float2 uv1 : TEXCOORD1;
 };
 
 [[vk::push_constant]]
@@ -66,16 +35,22 @@ VertexOutput main(VertexInput vin)
 
     float3* positions = (float3*) vertexStream.positionBufferAddress;
     float3* normals = (float3*) vertexStream.normalBufferAddress;
+    float4* tangents = (float4*) vertexStream.tangentBufferAddress;
     float2* texCoords0 = (float2*) vertexStream.texCoord0BufferAddress;
+    float2* texCoords1 = (float2*) vertexStream.texCoord1BufferAddress;
 
     float3 position = positions[vertexIndex];
     float3 normal = normals[vertexIndex];
+    float4 tangent = tangents[vertexIndex];
     float2 uv = texCoords0[vertexIndex];
+    float2 uv1 = texCoords1[vertexIndex];
 
     VertexOutput vout;
     vout.uv       = uv;
+    vout.uv1      = uv1;
     vout.position = mul(mul(mul(float4(position, 1.0), instance.objectToWorld), camData->viewMatrix), camData->projMatrix);
     vout.normal   = normalize(mul(float4(normal, 0.0), instance.worldToObject).xyz);
+    vout.tangent  = float4(normalize(mul(tangent.xyz, (float3x3) instance.objectToWorld)), tangent.w);
     return vout;
 }
 

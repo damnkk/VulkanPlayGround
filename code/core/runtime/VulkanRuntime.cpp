@@ -873,7 +873,9 @@ void VulkanRuntime::updateGlobalDescriptorSet()
     samplerCreateInfo.addressModeU  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     samplerCreateInfo.addressModeV  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     samplerCreateInfo.addressModeW  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerCreateInfo.mipmapMode    = VK_SAMPLER_MIPMAP_MODE_LINEAR;
     samplerCreateInfo.mipLodBias    = 0.0F;
+    samplerCreateInfo.maxLod        = VK_LOD_CLAMP_NONE;
     samplerCreateInfo.maxAnisotropy = 1.0F;
     samplerCreateInfo.compareEnable = VK_FALSE;
     Play::PlayResourceManager::Instance().acquireSampler(samplerList[0], samplerCreateInfo);

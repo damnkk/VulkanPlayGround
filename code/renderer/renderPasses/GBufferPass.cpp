@@ -108,6 +108,16 @@ uint64_t materialAddressForModel(const ModelAsset& model, const GpuModelRange& r
     return model.materialBuffer->address + localMaterialIndex * sizeof(shaderio::GltfShadeMaterial);
 }
 
+uint64_t textureInfoAddressForModel(const ModelAsset& model, const GpuModelRange& range)
+{
+    if (!model.textureInfoBuffer || range.textureInfoCount == 0)
+    {
+        return 0;
+    }
+
+    return model.textureInfoBuffer->address;
+}
+
 } // namespace
 
 void GBufferPass::init() {}
@@ -274,7 +284,7 @@ void GBufferPass::buildRenderList(const GpuScene& gpuScene)
             gpuInstanceData.worldToObject      = glm::inverse(gpuInstanceData.objectToWorld);
             gpuInstanceData.meshInfoAddress    = meshInfoAddressForModel(model, range, meshInfoIndex);
             gpuInstanceData.materialAddress    = materialAddressForModel(model, range, meshInfo.materialIdx);
-            gpuInstanceData.textureInfoAddress = 0;
+            gpuInstanceData.textureInfoAddress = textureInfoAddressForModel(model, range);
             gpuInstanceData.meshInfoIndex      = meshInfoIndex;
             gpuInstanceData.materialIndex      = meshInfo.materialIdx;
             gpuInstanceData.textureInfoOffset  = range.firstTextureInfo;

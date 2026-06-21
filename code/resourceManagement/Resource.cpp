@@ -9,6 +9,19 @@
 namespace Play
 {
 
+namespace
+{
+uint32_t resolveTextureMipLevels(uint32_t requestedMipLevels, VkExtent2D extent)
+{
+    const uint32_t maxMipLevels = nvvk::mipLevels(extent);
+    if (requestedMipLevels == 0 || requestedMipLevels > maxMipLevels)
+    {
+        return maxMipLevels;
+    }
+    return requestedMipLevels;
+}
+} // namespace
+
 // ==================== Texture 实现 ====================
 
 Texture::Texture()
@@ -221,12 +234,15 @@ Texture::Texture(const std::filesystem::path& imagePath, VkImageLayout finalLayo
             return;
         }
 
+        const VkExtent2D imageExtent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
+        mipLevels                    = resolveTextureMipLevels(mipLevels, imageExtent);
+
         // 创建 image
         VkImageCreateInfo imageInfo{
             .sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
             .imageType     = VK_IMAGE_TYPE_2D,
             .format        = VK_FORMAT_R32G32B32A32_SFLOAT,
-            .extent        = {(uint32_t) width, (uint32_t) height, 1},
+            .extent        = {imageExtent.width, imageExtent.height, 1},
             .mipLevels     = mipLevels,
             .arrayLayers   = 1,
             .samples       = VK_SAMPLE_COUNT_1_BIT,
@@ -320,12 +336,15 @@ Texture::Texture(const std::filesystem::path& imagePath, VkImageLayout finalLayo
                 break;
         }
 
+        const VkExtent2D imageExtent = {static_cast<uint32_t>(w), static_cast<uint32_t>(h)};
+        mipLevels                    = resolveTextureMipLevels(mipLevels, imageExtent);
+
         // 创建 image
         VkImageCreateInfo imageInfo{
             .sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
             .imageType     = VK_IMAGE_TYPE_2D,
             .format        = format,
-            .extent        = {(uint32_t) w, (uint32_t) h, 1},
+            .extent        = {imageExtent.width, imageExtent.height, 1},
             .mipLevels     = mipLevels,
             .arrayLayers   = 1,
             .samples       = VK_SAMPLE_COUNT_1_BIT,

@@ -134,7 +134,9 @@ void VulkanDriver::updateGlobalDescriptorSet()
     samplerCreateInfo.addressModeU  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     samplerCreateInfo.addressModeV  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     samplerCreateInfo.addressModeW  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerCreateInfo.mipmapMode    = VK_SAMPLER_MIPMAP_MODE_LINEAR;
     samplerCreateInfo.mipLodBias    = 0.0f;
+    samplerCreateInfo.maxLod        = VK_LOD_CLAMP_NONE;
     samplerCreateInfo.maxAnisotropy = 1.0f;
     samplerCreateInfo.compareEnable = VK_FALSE;
     PlayResourceManager::Instance().acquireSampler(samplerList[0], samplerCreateInfo);

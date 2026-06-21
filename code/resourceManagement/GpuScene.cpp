@@ -339,6 +339,13 @@ ModelAssetID GpuScene::registerModel(ModelAssetPackage&& package)
         uploadedMaterials.push_back(material);
     }
 
+    std::vector<shaderio::GltfTextureInfo> uploadedTextureInfos;
+    uploadedTextureInfos.reserve(_common.textureInfos.size() - textureInfoBase);
+    for (uint32_t textureInfoIndex = textureInfoBase; textureInfoIndex < _common.textureInfos.size(); ++textureInfoIndex)
+    {
+        uploadedTextureInfos.push_back(_common.textureInfos[textureInfoIndex]);
+    }
+
     std::vector<MeshInfo> uploadedMeshInfos;
     uploadedMeshInfos.reserve(package.meshInfos.size());
     for (MeshInfo meshInfo : package.meshInfos)
@@ -352,9 +359,10 @@ ModelAssetID GpuScene::registerModel(ModelAssetPackage&& package)
 
     bool hasPendingUpload = false;
     uploadModelGeometry(package, uploadedMeshInfos, hasPendingUpload);
-    package.asset.transformBuffer = createAndAppendBuffer(package.asset.name + "_TransformBuffer", package.asset.transforms, hasPendingUpload);
-    package.asset.materialBuffer  = createAndAppendBuffer(package.asset.name + "_MaterialBuffer", uploadedMaterials, hasPendingUpload);
-    package.asset.meshInfoBuffer  = createAndAppendBuffer(package.asset.name + "_MeshInfoBuffer", uploadedMeshInfos, hasPendingUpload);
+    package.asset.transformBuffer   = createAndAppendBuffer(package.asset.name + "_TransformBuffer", package.asset.transforms, hasPendingUpload);
+    package.asset.materialBuffer    = createAndAppendBuffer(package.asset.name + "_MaterialBuffer", uploadedMaterials, hasPendingUpload);
+    package.asset.textureInfoBuffer = createAndAppendBuffer(package.asset.name + "_TextureInfoBuffer", uploadedTextureInfos, hasPendingUpload);
+    package.asset.meshInfoBuffer    = createAndAppendBuffer(package.asset.name + "_MeshInfoBuffer", uploadedMeshInfos, hasPendingUpload);
     submitPendingUploads(hasPendingUpload);
 
     for (const shaderio::GltfShadeMaterial& material : uploadedMaterials)
