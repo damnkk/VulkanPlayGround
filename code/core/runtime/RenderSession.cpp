@@ -3,7 +3,7 @@
 #include "DeferRendering.h"
 #include "GaussianRenderer.h"
 #include "VolumeRenderer.h"
-#include "VulkanDriver.h"
+#include "core/runtime/VulkanRuntime.h"
 
 #include <nvutils/logger.hpp>
 

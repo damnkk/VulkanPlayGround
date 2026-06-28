@@ -2,10 +2,9 @@
 #include <nvutils/hash_operations.hpp>
 #include <nvutils/parallel_work.hpp>
 #include <nvvk/check_error.hpp>
-#include "PlayProgram.h"
 #include <list>
 #include <unordered_set>
-#include "VulkanDriver.h"
+#include "core/runtime/VulkanRuntime.h"
 #include "RDG/RDGPasses.hpp"
 namespace Play
 {
@@ -194,6 +193,201 @@ PipelineKey PSOState::getPipelineKey()
     return key;
 }
 
+
+PipelineKey GraphicsShaderSet::getShaderKey() const
+{
+    PipelineKey key = 0;
+    nvutils::hashCombine(key, vertexModuleID);
+    nvutils::hashCombine(key, fragModuleID);
+    nvutils::hashCombine(key, taskModuleID);
+    nvutils::hashCombine(key, meshModuleID);
+    return key;
+}
+
+PipelineKey RenderTargetState::getPipelineKey() const
+{
+    PipelineKey key = 0;
+    for (const VkFormat format : colorFormats)
+    {
+        nvutils::hashCombine(key, format);
+    }
+    nvutils::hashCombine(key, depthAttachmentFormat);
+    nvutils::hashCombine(key, stencilAttachmentFormat);
+    nvutils::hashCombine(key, sampleCount);
+    return key;
+}
+
+PipelineLayoutDesc& PipelineLayoutDesc::setDescriptorSetLayout(DescriptorEnum setSlot, VkDescriptorSetLayout layout)
+{
+    if (setSlot == DescriptorEnum::eCount) return *this;
+    _setLayouts[static_cast<uint32_t>(setSlot)] = layout;
+    return *this;
+}
+
+PipelineLayoutDesc& PipelineLayoutDesc::setDescriptorSet(DescriptorEnum setSlot, DescriptorSetBindings& descriptorSet)
+{
+    descriptorSet.setDescriptorSetSlot(setSlot);
+    return setDescriptorSetLayout(setSlot, descriptorSet.finalizeLayout());
+}
+
+PipelineLayoutDesc& PipelineLayoutDesc::setPassDescriptorSet(DescriptorSetBindings& descriptorSet)
+{
+    return setDescriptorSet(DescriptorEnum::ePerPassDescriptorSet, descriptorSet);
+}
+
+PipelineLayoutDesc& PipelineLayoutDesc::setMaterialDescriptorSet(DescriptorSetBindings& descriptorSet)
+{
+    return setDescriptorSet(DescriptorEnum::eDrawObjectDescriptorSet, descriptorSet);
+}
+
+PipelineLayoutDesc& PipelineLayoutDesc::setPushConstantRange(const VkPushConstantRange& range)
+{
+    _pushConstantRange    = range;
+    _hasPushConstantRange = range.size > 0;
+    return *this;
+}
+
+uint32_t PipelineLayoutDesc::getSetLayoutCount() const
+{
+    uint32_t count = 0;
+    for (uint32_t index = 0; index < static_cast<uint32_t>(DescriptorEnum::eCount); ++index)
+    {
+        if (_setLayouts[index] != VK_NULL_HANDLE)
+        {
+            count = index + 1;
+        }
+    }
+    return count;
+}
+
+PipelineKey PipelineLayoutDesc::getPipelineKey() const
+{
+    PipelineKey key = 0;
+    const uint32_t setCount = getSetLayoutCount();
+    nvutils::hashCombine(key, setCount);
+    for (uint32_t index = 0; index < setCount; ++index)
+    {
+        nvutils::hashCombine(key, _setLayouts[index]);
+    }
+    nvutils::hashCombine(key, _hasPushConstantRange);
+    if (_hasPushConstantRange)
+    {
+        nvutils::hashCombine(key, _pushConstantRange.stageFlags);
+        nvutils::hashCombine(key, _pushConstantRange.offset);
+        nvutils::hashCombine(key, _pushConstantRange.size);
+    }
+    return key;
+}
+
+PipelineLayoutCache::~PipelineLayoutCache()
+{
+    for (auto& [key, layout] : _pipelineLayoutMap)
+    {
+        if (layout && layout->vkHandle != VK_NULL_HANDLE)
+        {
+            vkDestroyPipelineLayout(vkDriver->getDevice(), layout->vkHandle, nullptr);
+            layout->vkHandle = VK_NULL_HANDLE;
+        }
+    }
+    if (_emptyDescriptorSetLayout != VK_NULL_HANDLE)
+    {
+        vkDestroyDescriptorSetLayout(vkDriver->getDevice(), _emptyDescriptorSetLayout, nullptr);
+        _emptyDescriptorSetLayout = VK_NULL_HANDLE;
+    }
+}
+
+VkDescriptorSetLayout PipelineLayoutCache::getEmptyDescriptorSetLayout()
+{
+    if (_emptyDescriptorSetLayout != VK_NULL_HANDLE) return _emptyDescriptorSetLayout;
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    layoutInfo.bindingCount = 0;
+    layoutInfo.pBindings    = nullptr;
+    NVVK_CHECK(vkCreateDescriptorSetLayout(vkDriver->getDevice(), &layoutInfo, nullptr, &_emptyDescriptorSetLayout));
+    return _emptyDescriptorSetLayout;
+}
+
+PipelineLayout* PipelineLayoutCache::getOrCreatePipelineLayout(const PipelineLayoutDesc& desc)
+{
+    PipelineKey key = desc.getPipelineKey();
+    auto        iter = _pipelineLayoutMap.find(key);
+    if (iter != _pipelineLayoutMap.end())
+    {
+        return iter->second.get();
+    }
+
+    auto layout = std::make_unique<PipelineLayout>();
+    layout->hash = key;
+    layout->setCount = desc.getSetLayoutCount();
+    layout->setLayouts = desc.getSetLayouts();
+    layout->hasPushConstant = desc.hasPushConstantRange();
+    layout->pushConstantRange = desc.getPushConstantRange();
+
+    std::vector<VkDescriptorSetLayout> setLayouts(layout->setCount);
+    for (uint32_t index = 0; index < layout->setCount; ++index)
+    {
+        setLayouts[index] = layout->setLayouts[index] != VK_NULL_HANDLE ? layout->setLayouts[index] : getEmptyDescriptorSetLayout();
+    }
+
+    VkPipelineLayoutCreateInfo createInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    createInfo.setLayoutCount         = layout->setCount;
+    createInfo.pSetLayouts            = setLayouts.empty() ? nullptr : setLayouts.data();
+    createInfo.pushConstantRangeCount = layout->hasPushConstant ? 1 : 0;
+    createInfo.pPushConstantRanges    = layout->hasPushConstant ? &layout->pushConstantRange : nullptr;
+    NVVK_CHECK(vkCreatePipelineLayout(vkDriver->getDevice(), &createInfo, nullptr, &layout->vkHandle));
+
+    PipelineLayout* result = layout.get();
+    _pipelineLayoutMap[key] = std::move(layout);
+    return result;
+}
+
+GraphicsPipelineStateInitializer& GraphicsPipelineStateInitializer::setShader(ShaderID vertexModuleID, ShaderID fragModuleID)
+{
+    shaderSet.vertexModuleID = vertexModuleID;
+    shaderSet.fragModuleID   = fragModuleID;
+    shaderSet.taskModuleID   = ~0U;
+    shaderSet.meshModuleID   = ~0U;
+    return *this;
+}
+
+GraphicsPipelineStateInitializer& GraphicsPipelineStateInitializer::setMeshShader(ShaderID meshModuleID, ShaderID fragModuleID, ShaderID taskModuleID)
+{
+    shaderSet.vertexModuleID = ~0U;
+    shaderSet.fragModuleID   = fragModuleID;
+    shaderSet.taskModuleID   = taskModuleID;
+    shaderSet.meshModuleID   = meshModuleID;
+    return *this;
+}
+
+GraphicsPipelineStateInitializer& GraphicsPipelineStateInitializer::setPassDescriptorSet(DescriptorSetBindings& descriptorSet)
+{
+    passDescriptorSet = &descriptorSet;
+    passDescriptorSet->setDescriptorSetSlot(DescriptorEnum::ePerPassDescriptorSet);
+    return *this;
+}
+
+GraphicsPipelineStateInitializer& GraphicsPipelineStateInitializer::setMaterialDescriptorSet(DescriptorSetBindings& descriptorSet)
+{
+    materialDescriptorSet = &descriptorSet;
+    materialDescriptorSet->setDescriptorSetSlot(DescriptorEnum::eDrawObjectDescriptorSet);
+    return *this;
+}
+
+GraphicsPipelineStateInitializer& GraphicsPipelineStateInitializer::setPushConstantRange(const VkPushConstantRange& range)
+{
+    pushConstantRange    = range;
+    hasPushConstantRange = range.size > 0;
+    return *this;
+}
+
+PipelineKey GraphicsPipelineStateInitializer::getPipelineKey()
+{
+    PipelineKey key = psoState.getPipelineKey();
+    nvutils::hashCombine(key, shaderSet.getShaderKey());
+    nvutils::hashCombine(key, renderTargetState.getPipelineKey());
+    nvutils::hashCombine(key, pipelineLayout ? pipelineLayout->hash : 0);
+    return key;
+}
 PplCacheBlockManager::PplCacheBlockManager()
 {
     loadAllBlockFromDisk();
@@ -388,117 +582,125 @@ PipelineCacheManager::~PipelineCacheManager()
     }
 }
 
-VkPipeline PipelineCacheManager::getOrCreateGraphicsPipeline(RenderProgram* program)
+
+PipelineLayout* PipelineCacheManager::getOrCreatePipelineLayout(const PipelineLayoutDesc& desc)
 {
-    uint64_t key = program->psoState().getPipelineKey();
-    nvutils::hashCombine(key, program->getVertexModuleID());
-    nvutils::hashCombine(key, program->getFragModuleID());
+    return _pipelineLayoutCache.getOrCreatePipelineLayout(desc);
+}
+
+ComputePipelineStateInitializer& ComputePipelineStateInitializer::setShader(ShaderID moduleID)
+{
+    computeModuleID = moduleID;
+    return *this;
+}
+
+ComputePipelineStateInitializer& ComputePipelineStateInitializer::setPassDescriptorSet(DescriptorSetBindings& descriptorSet)
+{
+    passDescriptorSet = &descriptorSet;
+    passDescriptorSet->setDescriptorSetSlot(DescriptorEnum::ePerPassDescriptorSet);
+    return *this;
+}
+
+ComputePipelineStateInitializer& ComputePipelineStateInitializer::setMaterialDescriptorSet(DescriptorSetBindings& descriptorSet)
+{
+    materialDescriptorSet = &descriptorSet;
+    materialDescriptorSet->setDescriptorSetSlot(DescriptorEnum::eDrawObjectDescriptorSet);
+    return *this;
+}
+
+ComputePipelineStateInitializer& ComputePipelineStateInitializer::setPushConstantRange(const VkPushConstantRange& range)
+{
+    pushConstantRange    = range;
+    hasPushConstantRange = range.size > 0;
+    return *this;
+}
+
+PipelineKey ComputePipelineStateInitializer::getPipelineKey()
+{
+    PipelineKey key = 0;
+    nvutils::hashCombine(key, computeModuleID);
+    nvutils::hashCombine(key, pipelineLayout ? pipelineLayout->hash : 0);
+    return key;
+}
+VkPipeline PipelineCacheManager::getOrCreateGraphicsPipeline(GraphicsPipelineStateInitializer& initializer)
+{
+    if (!initializer.pipelineLayout || initializer.pipelineLayout->vkHandle == VK_NULL_HANDLE)
+    {
+        LOGE("Graphics pipeline initializer has no resolved pipeline layout");
+        return VK_NULL_HANDLE;
+    }
+
+    uint64_t key = initializer.getPipelineKey();
     if (_pipelineMap.find(key) != _pipelineMap.end())
     {
         return _pipelineMap[key];
     }
-    auto vShaderModule = ShaderManager::Instance().getShaderById(program->getVertexModuleID());
-    auto fShaderModule = ShaderManager::Instance().getShaderById(program->getFragModuleID());
+
     _gfxPipelineCreator.clearShaders();
-    _gfxPipelineCreator.addShader(VK_SHADER_STAGE_VERTEX_BIT, vShaderModule->_entryPoint.c_str(), vShaderModule->_shaderModule);
-    _gfxPipelineCreator.addShader(VK_SHADER_STAGE_FRAGMENT_BIT, fShaderModule->_entryPoint.c_str(), fShaderModule->_shaderModule);
-
-    _gfxPipelineCreator.pipelineInfo.layout = program->getDescriptorSetManager().getPipelineLayout();
-
-    if (vkDriver->_enableDynamicRendering)
+    if (initializer.shaderSet.isMeshPipeline())
     {
-        DynamicRenderPass* dRenderPass                             = dynamic_cast<DynamicRenderPass*>(program->getPassNode()->getRenderPass());
-        _gfxPipelineCreator.renderingState.depthAttachmentFormat   = dRenderPass->getDepthAttachmentFormat();
-        _gfxPipelineCreator.renderingState.stencilAttachmentFormat = dRenderPass->getStencilAttachmentFormat();
-        _gfxPipelineCreator.colorFormats                           = dRenderPass->getColorAttachmentFormats();
+        if (initializer.shaderSet.taskModuleID != ~0U)
+        {
+            auto taskShaderModule = ShaderManager::Instance().getShaderById(initializer.shaderSet.taskModuleID);
+            _gfxPipelineCreator.addShader(VK_SHADER_STAGE_TASK_BIT_EXT, taskShaderModule->_entryPoint.c_str(), taskShaderModule->_shaderModule);
+        }
+        auto meshShaderModule = ShaderManager::Instance().getShaderById(initializer.shaderSet.meshModuleID);
+        auto fragShaderModule = ShaderManager::Instance().getShaderById(initializer.shaderSet.fragModuleID);
+        _gfxPipelineCreator.addShader(VK_SHADER_STAGE_MESH_BIT_EXT, meshShaderModule->_entryPoint.c_str(), meshShaderModule->_shaderModule);
+        _gfxPipelineCreator.addShader(VK_SHADER_STAGE_FRAGMENT_BIT, fragShaderModule->_entryPoint.c_str(), fragShaderModule->_shaderModule);
     }
     else
     {
-        LOGE("Not support general render pass");
+        auto vertexShaderModule = ShaderManager::Instance().getShaderById(initializer.shaderSet.vertexModuleID);
+        auto fragShaderModule   = ShaderManager::Instance().getShaderById(initializer.shaderSet.fragModuleID);
+        _gfxPipelineCreator.addShader(VK_SHADER_STAGE_VERTEX_BIT, vertexShaderModule->_entryPoint.c_str(), vertexShaderModule->_shaderModule);
+        _gfxPipelineCreator.addShader(VK_SHADER_STAGE_FRAGMENT_BIT, fragShaderModule->_entryPoint.c_str(), fragShaderModule->_shaderModule);
     }
+
+    _gfxPipelineCreator.pipelineInfo.layout                 = initializer.pipelineLayout->vkHandle;
+    _gfxPipelineCreator.renderingState.depthAttachmentFormat = initializer.renderTargetState.depthAttachmentFormat;
+    _gfxPipelineCreator.renderingState.stencilAttachmentFormat = initializer.renderTargetState.stencilAttachmentFormat;
+    _gfxPipelineCreator.colorFormats = initializer.renderTargetState.colorFormats;
+
     auto       block = _cacheBlockManager->getOrCreateBlock(key);
     VkPipeline pipeline;
     block->createPipeline(
-        [pipelineCreatorPtr = &_gfxPipelineCreator, program, pipelinePtr = &pipeline](PplCacheBlock* block)
+        [pipelineCreatorPtr = &_gfxPipelineCreator, initializerPtr = &initializer, pipelinePtr = &pipeline](PplCacheBlock* block)
         {
-            pipelineCreatorPtr->createGraphicsPipeline(vkDriver->getDevice(), block->_vkHandle, program->psoState(), pipelinePtr);
+            pipelineCreatorPtr->createGraphicsPipeline(vkDriver->getDevice(), block->_vkHandle, initializerPtr->psoState, pipelinePtr);
             return *pipelinePtr;
         });
     _pipelineMap[key] = pipeline;
     return pipeline;
 }
-
-VkPipeline PipelineCacheManager::getOrCreateGraphicsPipeline(MeshRenderProgram* program)
+VkPipeline PipelineCacheManager::getOrCreateComputePipeline(ComputePipelineStateInitializer& initializer)
 {
-    uint64_t key = program->psoState().getPipelineKey();
-    nvutils::hashCombine(key, program->getMeshModuleID());
-    nvutils::hashCombine(key, program->getFragModuleID());
-    nvutils::hashCombine(key, program->getTaskModuleID());
+    if (!initializer.pipelineLayout || initializer.pipelineLayout->vkHandle == VK_NULL_HANDLE)
+    {
+        LOGE("Compute pipeline initializer has no resolved pipeline layout");
+        return VK_NULL_HANDLE;
+    }
+
+    uint64_t key = initializer.getPipelineKey();
     if (_pipelineMap.find(key) != _pipelineMap.end())
     {
         return _pipelineMap[key];
     }
 
-    auto mShaderModule = ShaderManager::Instance().getShaderById(program->getMeshModuleID());
-    auto fShaderModule = ShaderManager::Instance().getShaderById(program->getFragModuleID());
-    _gfxPipelineCreator.clearShaders();
-
-    if (program->getTaskModuleID() != ~0U)
-    {
-        auto tShaderModule = ShaderManager::Instance().getShaderById(program->getTaskModuleID());
-        _gfxPipelineCreator.addShader(VK_SHADER_STAGE_TASK_BIT_EXT, tShaderModule->_entryPoint.c_str(), tShaderModule->_shaderModule);
-    }
-
-    _gfxPipelineCreator.addShader(VK_SHADER_STAGE_MESH_BIT_EXT, mShaderModule->_entryPoint.c_str(), mShaderModule->_shaderModule);
-    _gfxPipelineCreator.addShader(VK_SHADER_STAGE_FRAGMENT_BIT, fShaderModule->_entryPoint.c_str(), fShaderModule->_shaderModule);
-
-    _gfxPipelineCreator.pipelineInfo.layout = program->getDescriptorSetManager().getPipelineLayout();
-
-    if (vkDriver->_enableDynamicRendering)
-    {
-        DynamicRenderPass* dRenderPass                             = dynamic_cast<DynamicRenderPass*>(program->getPassNode()->getRenderPass());
-        _gfxPipelineCreator.renderingState.depthAttachmentFormat   = dRenderPass->getDepthAttachmentFormat();
-        _gfxPipelineCreator.renderingState.stencilAttachmentFormat = dRenderPass->getStencilAttachmentFormat();
-        _gfxPipelineCreator.colorFormats                           = dRenderPass->getColorAttachmentFormats();
-    }
-    else
-    {
-        LOGE("Not support general render pass");
-    }
-
-    auto       block = _cacheBlockManager->getOrCreateBlock(key);
-    VkPipeline pipeline;
-    block->createPipeline(
-        [pipelineCreatorPtr = &_gfxPipelineCreator, program, pipelinePtr = &pipeline](PplCacheBlock* block)
-        {
-            pipelineCreatorPtr->createGraphicsPipeline(vkDriver->getDevice(), block->_vkHandle, program->psoState(), pipelinePtr);
-            return *pipelinePtr;
-        });
-
-    _pipelineMap[key] = pipeline;
-    return pipeline;
-}
-
-VkPipeline PipelineCacheManager::getOrCreateComputePipeline(ComputeProgram* program)
-{
-    uint64_t key = program->getComputeModuleID();
-    if (_pipelineMap.find(key) != _pipelineMap.end())
-    {
-        return _pipelineMap[key];
-    }
-    auto                        cShaderModule = ShaderManager::Instance().getShaderById(program->getComputeModuleID());
+    auto                        cShaderModule = ShaderManager::Instance().getShaderById(initializer.computeModuleID);
     VkComputePipelineCreateInfo createInfo{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
     createInfo.stage        = {};
     createInfo.stage.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     createInfo.stage.module = cShaderModule->_shaderModule;
     createInfo.stage.pName  = cShaderModule->_entryPoint.c_str();
     createInfo.stage.stage  = VK_SHADER_STAGE_COMPUTE_BIT;
-    createInfo.layout       = program->getDescriptorSetManager().getPipelineLayout();
+    createInfo.layout       = initializer.pipelineLayout->vkHandle;
     createInfo.flags        = 0;
-    auto       block        = _cacheBlockManager->getOrCreateBlock(key);
+
+    auto       block = _cacheBlockManager->getOrCreateBlock(key);
     VkPipeline pipeline;
     block->createPipeline(
-        [pipelineCreatorPtr = &createInfo, program, pipelinePtr = &pipeline](PplCacheBlock* block)
+        [pipelineCreatorPtr = &createInfo, pipelinePtr = &pipeline](PplCacheBlock* block)
         {
             vkCreateComputePipelines(vkDriver->getDevice(), block->_vkHandle, 1, pipelineCreatorPtr, nullptr, pipelinePtr);
             return *pipelinePtr;
@@ -506,7 +708,6 @@ VkPipeline PipelineCacheManager::getOrCreateComputePipeline(ComputeProgram* prog
     _pipelineMap[key] = pipeline;
     return pipeline;
 }
-
 VkPipeline PipelineCacheManager::getOrCreateRTPipeline(RTPipelineState& rtState)
 {
     return VK_NULL_HANDLE;

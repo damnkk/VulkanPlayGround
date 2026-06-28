@@ -11,7 +11,7 @@
 #include "DescriptorManager.h"
 #include "RenderPass.h"
 #include "PConstantType.h.slang"
-#include "VulkanDriver.h"
+#include "core/runtime/VulkanRuntime.h"
 #include "core/RefCounted.h"
 #include <rttr/rttr_enable.h>
 namespace Play
@@ -23,70 +23,6 @@ class RenderPassNode;
 struct PendingState;
 } // namespace RDG
 using ShaderID = uint32_t;
-
-struct BindInfo
-{
-    uint32_t           bindingIdx;
-    uint32_t           descriptorCount;
-    VkDescriptorType   descriptorType;
-    VkShaderStageFlags shaderStageFlags;
-};
-#include "PConstantType.h.slang"
-
-union DescriptorInfo
-{
-    VkDescriptorBufferInfo     buffer;
-    VkDescriptorImageInfo      image;
-    VkAccelerationStructureKHR accel;
-};
-
-class DescriptorSetBindings : public nvvk::DescriptorBindings
-{
-public:
-    DescriptorSetBindings();
-    ~DescriptorSetBindings();
-    DescriptorSetBindings& addBinding(uint32_t bindingIdx, uint32_t descriptorCount, VkDescriptorType descriptorType,
-                                      VkShaderStageFlags shaderStageFlags);
-    DescriptorSetBindings& addBinding(const BindInfo& bindingInfo);
-    void                   setDescInfo(uint32_t bindingIdx, const nvvk::Buffer& buffer, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE);
-
-    void setDescInfo(uint32_t bindingIdx, const nvvk::Image& image);
-    void setDescInfo(uint32_t bindingIdx, VkBuffer buffer, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE);
-    void setDescInfo(uint32_t bindingIdx, const VkDescriptorBufferInfo& bufferInfo);
-    void setDescInfo(uint32_t bindingIdx, VkImageView imageView, VkImageLayout imageLayout, VkSampler sampler = nullptr);
-    void setDescInfo(uint32_t bindingIdx, const VkDescriptorImageInfo& imageInfo);
-    void setDescInfo(uint32_t bindingIdx, VkAccelerationStructureKHR accel);
-
-    // writeSet.descriptorCount many elements
-    void                         setDescInfo(uint32_t bindingIdx, const nvvk::Buffer* buffers, uint32_t count); // offset 0 and VK_WHOLE_SIZE
-    void                         setDescInfo(uint32_t bindingIdx, const nvvk::Image* images, uint32_t count);
-    void                         setDescInfo(uint32_t bindingIdx, const VkDescriptorBufferInfo* bufferInfos, uint32_t count);
-    void                         setDescInfo(uint32_t bindingIdx, const VkDescriptorImageInfo* imageInfos, uint32_t count);
-    void                         setDescInfo(uint32_t bindingIdx, const VkAccelerationStructureKHR* accels, uint32_t count);
-    int                          descriptorOffset(uint32_t bindingIdx);
-    uint64_t                     getBindingsHash(); // flush dirty flag
-    uint64_t                     getDescsetLayoutHash();
-    VkDescriptorSetLayout        finalizeLayout(); // flush recorded flag
-    const VkDescriptorSetLayout& getSetLayout()
-    {
-        return _layout;
-    }
-
-    const std::vector<DescriptorInfo>& getDescriptorInfos()
-    {
-        return _descInfos;
-    }
-
-protected:
-    std::vector<BindInfo>       _bindingInfos;
-    uint64_t                    _setBindingHash;
-    VkDescriptorSetLayout       _layout = VK_NULL_HANDLE;
-    std::vector<DescriptorInfo> _descInfos;
-
-private:
-    bool    _setLayoutDirty = true; // layout changing state
-    uint8_t _descInfoDirty  = 0;    // descinfo changing state | bit0: binding changed, bit1: constant range changed
-};
 
 class DescriptorSetManager : public DescriptorSetBindings
 {

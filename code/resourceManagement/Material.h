@@ -520,6 +520,8 @@ public:
     }
 
     bool buildDrawObjectDescriptorBindings(DescriptorSetBindings& descriptorBindings, bool requireBoundResources = false) const;
+    bool buildDescriptorSetState(DescriptorSetBindings& descriptorBindings, bool requireBoundResources = false) const;
+    DescriptorSetBindings& getDescriptorSetState(bool requireBoundResources = false);
 
     RTTR_ENABLE()
 
@@ -662,6 +664,8 @@ private:
     MaterialDescriptorBindingMap    _descriptorBindings;
     MaterialParameterDeclarationMap _parameterDeclarations;
     MaterialRenderState             _renderState;
+    DescriptorSetBindings           _descriptorSetState{DescriptorEnum::eDrawObjectDescriptorSet};
+    uint32_t                        _descriptorSetStateVersion = 0;
 };
 
 inline std::shared_ptr<MaterialInstance> Material::createMaterialInstance()

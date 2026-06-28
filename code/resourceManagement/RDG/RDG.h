@@ -18,10 +18,12 @@ GPU resource when RDG compile.
 #include "core/runtime/VulkanRuntime.h"
 #include "RDGResources.h"
 #include "RDGPasses.hpp"
+#include "PipelineCacheManager.h"
 namespace Play
 {
 class RenderPass;
-class PlayProgram;
+class GraphicsPipelineStateInitializer;
+class ComputePipelineStateInitializer;
 } // namespace Play
 namespace Play::RDG
 {
@@ -85,8 +87,6 @@ struct PendingState
 {
 private:
     friend struct RenderContext;
-    void            bindProgram(VkCommandBuffer cmd, PlayProgram* program, PassNode* passNode);
-    void            bindDescriptorSet(VkCommandBuffer cmd, PlayProgram* program);
 
 public:
     VkDescriptorSet _globalDescriptorSet = VK_NULL_HANDLE;
@@ -123,37 +123,33 @@ struct RenderContext
         _pendingRTState      = std::make_shared<PendingRTState>(this);
     }
     ~RenderContext() {}
-    void bindProgram(PlayProgram* program, PassNode* passNode);
+    void bindPipeline(GraphicsPipelineStateInitializer& initializer);
+    void bindPipeline(ComputePipelineStateInitializer& initializer);
 
     template <typename T>
-    void bindPushConstant(PlayProgram* program, const T& pushConstant)
+    void bindPushConstant(const T& pushConstant)
     {
-        if (!program->hasPushConstantRange())
+        if (!_boundPipelineLayout || !_boundPipelineLayout->hasPushConstant)
         {
             LOGE("Push constant range is not registered");
             return;
         }
 
-        const VkPushConstantRange& range = program->getPushConstantRange();
+        const VkPushConstantRange& range = _boundPipelineLayout->pushConstantRange;
         if (range.size != static_cast<uint32_t>(sizeof(T)))
         {
             LOGE("Push constant type size mismatch");
             return;
         }
 
-        VkPipelineLayout layout = program->getPipelineLayout();
-        if (layout == VK_NULL_HANDLE)
-        {
-            LOGE("Pipeline layout is not ready, call bindProgram before bindPushConstant");
-            return;
-        }
-
-        vkCmdPushConstants(_currCmdBuffer, layout, range.stageFlags, range.offset, range.size, &pushConstant);
+        vkCmdPushConstants(_currCmdBuffer, _boundPipelineLayout->vkHandle, range.stageFlags, range.offset, range.size, &pushConstant);
     }
 
     PlayFrameData*                       _frameData           = nullptr;
     PassNode*                            _prevPassNode        = nullptr;
     VkCommandBuffer                      _currCmdBuffer       = VK_NULL_HANDLE;
+    PipelineLayout*                      _boundPipelineLayout = nullptr;
+    VkPipelineBindPoint                  _boundPipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     std::shared_ptr<PendingComputeState> _pendingComputeState = nullptr;
     std::shared_ptr<PendingGfxState>     _pendingGfxState     = nullptr;
     std::shared_ptr<PendingRTState>      _pendingRTState      = nullptr;

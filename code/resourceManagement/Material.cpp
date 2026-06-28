@@ -356,6 +356,27 @@ MaterialParamValidationResult MaterialInstance::validateOverrideParamMap() const
     return result;
 }
 
+DescriptorSetBindings& MaterialInstance::getDescriptorSetState(bool requireBoundResources)
+{
+    if (isOutOfDate())
+    {
+        syncFromMaterial(true);
+    }
+    if (_descriptorSetStateVersion != _sourceMaterialVersion)
+    {
+        _descriptorSetState.reset(MATERIAL_DESCRIPTOR_SET);
+        _descriptorSetStateVersion = _sourceMaterialVersion;
+    }
+    buildDescriptorSetState(_descriptorSetState, requireBoundResources);
+    return _descriptorSetState;
+}
+
+bool MaterialInstance::buildDescriptorSetState(DescriptorSetBindings& descriptorBindings, bool requireBoundResources) const
+{
+    descriptorBindings.setDescriptorSetSlot(MATERIAL_DESCRIPTOR_SET);
+    return buildDrawObjectDescriptorBindings(descriptorBindings, requireBoundResources);
+}
+
 bool MaterialInstance::buildDrawObjectDescriptorBindings(DescriptorSetBindings& descriptorBindings, bool requireBoundResources) const
 {
     bool supportedLayout     = true;

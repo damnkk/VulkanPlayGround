@@ -4,7 +4,7 @@
 #include <optional>
 #include "nvvk/check_error.hpp"
 
-#include "PlayProgram.h"
+#include "DescriptorManager.h"
 #include "RDGResources.h"
 #include "utils.hpp"
 #include "BaseDag.h"
@@ -21,7 +21,6 @@ namespace Play::RDG
 RDGpass的构建交给上层逻辑pass的Build函数,pass本身只维护资源依赖逻辑,渲染逻辑以及相关的管线资源都交给上层逻辑pass管理,
 由逻辑pass向底层RHI缓存进行申请
 */
-using DescSetManagerRef = std::shared_ptr<Play::DescriptorSetManager>;
 struct Scene;
 class RenderDependencyGraph;
 class RDGBuilder;
@@ -56,7 +55,7 @@ struct RDGBufferState
 class PassNode : public Node
 {
 public:
-    PassNode(size_t id, std::string name, NodeType type) : Node(id, type), _name(std::move(name)) {}
+    PassNode(size_t id, std::string name, NodeType type) : Node(id, type), _name(std::move(name)), _descBindings(DescriptorEnum::ePerPassDescriptorSet) {}
     ~PassNode() override;
 
     void setFunc(std::function<void(PassNode* passNode, RenderContext& context)> func)

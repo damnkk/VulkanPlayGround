@@ -4,7 +4,7 @@
 #include "spirv_reflect.h"
 #include "ShaderManager.hpp"
 #include "crc32c/crc32c.h"
-#include "VulkanDriver.h"
+#include "core/runtime/VulkanRuntime.h"
 #include "RDG/RDGPasses.hpp"
 namespace Play
 {
@@ -36,10 +36,47 @@ void PlayProgram::onDestroy()
 }
 
 DescriptorSetBindings::DescriptorSetBindings() {}
+DescriptorSetBindings::DescriptorSetBindings(DescriptorEnum setSlot) : _setSlot(setSlot) {}
 DescriptorSetBindings::~DescriptorSetBindings() {}
+
+void DescriptorSetBindings::reset(DescriptorEnum setSlot)
+{
+    if (_layout != VK_NULL_HANDLE)
+    {
+        vkDestroyDescriptorSetLayout(vkDriver->getDevice(), _layout, nullptr);
+        _layout = VK_NULL_HANDLE;
+    }
+
+    nvvk::DescriptorBindings::clear();
+    _bindingInfos.clear();
+    _descInfos.clear();
+    _setBindingHash = 0;
+    if (setSlot != DescriptorEnum::eCount)
+    {
+        _setSlot = setSlot;
+    }
+    _setLayoutDirty      = true;
+    _descInfoDirty      |= 1 << 0;
+    _descriptorSetDirty  = true;
+    _cachedDescriptorSet = VK_NULL_HANDLE;
+}
+
+void DescriptorSetBindings::markLayoutDirty()
+{
+    _setLayoutDirty      = true;
+    _descInfoDirty      |= 1 << 0;
+    _descriptorSetDirty  = true;
+    _cachedDescriptorSet = VK_NULL_HANDLE;
+}
+
+void DescriptorSetBindings::markDescriptorInfoDirty()
+{
+    _descInfoDirty      |= 1 << 0;
+    _descriptorSetDirty = true;
+}
+
 DescriptorSetBindings& DescriptorSetBindings::addBinding(const BindInfo& bindingInfo)
 {
-    _setLayoutDirty = true;
     for (int i = 0; i < _bindingInfos.size(); i++)
     {
         if (_bindingInfos[i].bindingIdx == bindingInfo.bindingIdx)
@@ -49,12 +86,29 @@ DescriptorSetBindings& DescriptorSetBindings::addBinding(const BindInfo& binding
                 LOGE("Descriptor type mismatch");
                 return *this;
             }
-            _bindingInfos[i].shaderStageFlags |= bindingInfo.shaderStageFlags;
-            _bindingInfos[i].descriptorCount += bindingInfo.descriptorCount;
+
+            bool layoutChanged = false;
+            VkShaderStageFlags mergedStageFlags = _bindingInfos[i].shaderStageFlags | bindingInfo.shaderStageFlags;
+            if (_bindingInfos[i].shaderStageFlags != mergedStageFlags)
+            {
+                _bindingInfos[i].shaderStageFlags = mergedStageFlags;
+                layoutChanged = true;
+            }
+            if (_bindingInfos[i].descriptorCount < bindingInfo.descriptorCount)
+            {
+                _bindingInfos[i].descriptorCount = bindingInfo.descriptorCount;
+                layoutChanged = true;
+            }
+            if (layoutChanged)
+            {
+                markLayoutDirty();
+            }
             return *this;
         }
     }
+
     _bindingInfos.push_back(bindingInfo);
+    markLayoutDirty();
     return *this;
 }
 
@@ -119,6 +173,8 @@ VkDescriptorSetLayout DescriptorSetBindings::finalizeLayout()
         vkDestroyDescriptorSetLayout(vkDriver->getDevice(), _layout, nullptr);
         _layout = VK_NULL_HANDLE;
     }
+
+    nvvk::DescriptorBindings::clear();
     uint32_t descriptorCount = 0;
     for (const auto& binding : _bindingInfos)
     {
@@ -127,7 +183,9 @@ VkDescriptorSetLayout DescriptorSetBindings::finalizeLayout()
     }
     _descInfos.resize(descriptorCount);
     createDescriptorSetLayout(vkDriver->getDevice(), 0, &_layout);
-    _setLayoutDirty = false;
+    _setLayoutDirty      = false;
+    _descriptorSetDirty  = true;
+    _cachedDescriptorSet = VK_NULL_HANDLE;
     return _layout;
 }
 
@@ -138,7 +196,7 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const nvvk::Buffer&
     {
         return;
     }
-    _descInfoDirty |= 1 << 0;
+    markDescriptorInfoDirty();
     bufferInfo.buffer = buffer.buffer;
     bufferInfo.offset = offset;
     bufferInfo.range  = range;
@@ -152,7 +210,7 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const nvvk::Image& 
     {
         return;
     }
-    _descInfoDirty |= 1 << 0;
+    markDescriptorInfoDirty();
     imageInfo.image = image.descriptor;
 }
 
@@ -163,7 +221,7 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, VkBuffer buffer, Vk
     {
         return;
     }
-    _descInfoDirty |= 1 << 0;
+    markDescriptorInfoDirty();
     bufferInfo.buffer = buffer;
     bufferInfo.offset = offset;
     bufferInfo.range  = range;
@@ -176,7 +234,7 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const VkDescriptorB
     {
         return;
     }
-    _descInfoDirty |= 1 << 0;
+    markDescriptorInfoDirty();
     destBufferInfo = bufferInfo;
 }
 
@@ -187,7 +245,7 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, VkImageView imageVi
     {
         return;
     }
-    _descInfoDirty |= 1 << 0;
+    markDescriptorInfoDirty();
     imageInfo.imageLayout = imageLayout;
     imageInfo.imageView   = imageView;
     imageInfo.sampler     = sampler;
@@ -201,7 +259,7 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const VkDescriptorI
     {
         return;
     }
-    _descInfoDirty |= 1 << 0;
+    markDescriptorInfoDirty();
     destImageInfo = imageInfo;
 }
 
@@ -212,7 +270,7 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, VkAccelerationStruc
     {
         return;
     }
-    _descInfoDirty |= 1 << 0;
+    markDescriptorInfoDirty();
     accelInfo = accel;
 }
 
@@ -225,7 +283,7 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const nvvk::Buffer*
         {
             continue;
         }
-        _descInfoDirty |= 1 << 0;
+        markDescriptorInfoDirty();
         bufferInfo.buffer = buffers[i].buffer;
     }
 }
@@ -240,7 +298,7 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const nvvk::Image* 
         {
             continue;
         }
-        _descInfoDirty |= 1 << 0;
+        markDescriptorInfoDirty();
         imageInfo = images[i].descriptor;
     }
 }
@@ -255,7 +313,7 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const VkDescriptorB
         {
             continue;
         }
-        _descInfoDirty |= 1 << 0;
+        markDescriptorInfoDirty();
         destBufferInfo = bufferInfos[i];
     }
 }
@@ -264,13 +322,13 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const VkDescriptorI
 {
     for (uint32_t i = 0; i < count; ++i)
     {
-        auto& imageInfo = _descInfos[descriptorOffset(bindingIdx) + 1].image;
+        auto& imageInfo = _descInfos[descriptorOffset(bindingIdx) + i].image;
         if (imageInfo.imageLayout == imageInfos[i].imageLayout && imageInfo.imageView == imageInfos[i].imageView &&
             imageInfo.sampler == imageInfos[i].sampler)
         {
             continue;
         }
-        _descInfoDirty |= 1 << 0;
+        markDescriptorInfoDirty();
         imageInfo = imageInfos[i];
     }
 }
@@ -284,7 +342,7 @@ void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const VkAcceleratio
         {
             continue;
         }
-        _descInfoDirty |= 1 << 0;
+        markDescriptorInfoDirty();
         accelInfo = accels[i];
     }
 }
@@ -323,6 +381,28 @@ uint64_t DescriptorSetBindings::getDescsetLayoutHash()
     return memoryHash(_bindingInfos);
 }
 
+VkDescriptorSet DescriptorSetBindings::getOrAcquireDescriptorSet(DescriptorEnum setSlot)
+{
+    if (setSlot != DescriptorEnum::eCount)
+    {
+        _setSlot = setSlot;
+    }
+    if (_setSlot == DescriptorEnum::eCount)
+    {
+        LOGE("Descriptor set slot is not specified");
+        return VK_NULL_HANDLE;
+    }
+
+    finalizeLayout();
+    if (!_descriptorSetDirty && _cachedDescriptorSet != VK_NULL_HANDLE)
+    {
+        return _cachedDescriptorSet;
+    }
+
+    _cachedDescriptorSet = vkDriver->getDescriptorSetCache()->requestDescriptorSet(this, static_cast<uint32_t>(_setSlot));
+    _descriptorSetDirty  = false;
+    return _cachedDescriptorSet;
+}
 DescriptorSetManager::DescriptorSetManager(const DescriptorSetManager&) {}
 
 // for filling per pass shader resource layout, to create pipeline layout

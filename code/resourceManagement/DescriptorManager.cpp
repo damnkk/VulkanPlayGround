@@ -1,7 +1,6 @@
 #include "DescriptorManager.h"
-#include "PlayProgram.h"
 #include "nvvk/check_error.hpp"
-#include "VulkanDriver.h"
+#include "core/runtime/VulkanRuntime.h"
 
 namespace Play
 {
@@ -11,6 +10,331 @@ std::unordered_map<DescriptorEnum, size_t> DescriptorSetOffsetMap = {
     {DescriptorEnum::eFrameDescriptorSet, PER_FRAME_DESCRIPTOR_SET_OFFSET},
     {DescriptorEnum::ePerPassDescriptorSet, PER_PASS_DESCRIPTOR_SET_OFFSET},
     {DescriptorEnum::eDrawObjectDescriptorSet, PER_DRAW_OBJECT_DESCRIPTOR_SET_OFFSET}};
+
+DescriptorSetBindings::DescriptorSetBindings() {}
+DescriptorSetBindings::DescriptorSetBindings(DescriptorEnum setSlot) : _setSlot(setSlot) {}
+DescriptorSetBindings::~DescriptorSetBindings() {}
+
+void DescriptorSetBindings::reset(DescriptorEnum setSlot)
+{
+    if (_layout != VK_NULL_HANDLE)
+    {
+        vkDestroyDescriptorSetLayout(vkDriver->getDevice(), _layout, nullptr);
+        _layout = VK_NULL_HANDLE;
+    }
+
+    nvvk::DescriptorBindings::clear();
+    _bindingInfos.clear();
+    _descInfos.clear();
+    _setBindingHash = 0;
+    if (setSlot != DescriptorEnum::eCount)
+    {
+        _setSlot = setSlot;
+    }
+    _setLayoutDirty      = true;
+    _descInfoDirty      |= 1 << 0;
+    _descriptorSetDirty  = true;
+    _cachedDescriptorSet = VK_NULL_HANDLE;
+}
+
+void DescriptorSetBindings::markLayoutDirty()
+{
+    _setLayoutDirty      = true;
+    _descInfoDirty      |= 1 << 0;
+    _descriptorSetDirty  = true;
+    _cachedDescriptorSet = VK_NULL_HANDLE;
+}
+
+void DescriptorSetBindings::markDescriptorInfoDirty()
+{
+    _descInfoDirty      |= 1 << 0;
+    _descriptorSetDirty = true;
+}
+
+DescriptorSetBindings& DescriptorSetBindings::addBinding(const BindInfo& bindingInfo)
+{
+    for (int i = 0; i < _bindingInfos.size(); i++)
+    {
+        if (_bindingInfos[i].bindingIdx == bindingInfo.bindingIdx)
+        {
+            if (_bindingInfos[i].descriptorType != bindingInfo.descriptorType)
+            {
+                LOGE("Descriptor type mismatch");
+                return *this;
+            }
+
+            bool layoutChanged = false;
+            VkShaderStageFlags mergedStageFlags = _bindingInfos[i].shaderStageFlags | bindingInfo.shaderStageFlags;
+            if (_bindingInfos[i].shaderStageFlags != mergedStageFlags)
+            {
+                _bindingInfos[i].shaderStageFlags = mergedStageFlags;
+                layoutChanged = true;
+            }
+            if (_bindingInfos[i].descriptorCount < bindingInfo.descriptorCount)
+            {
+                _bindingInfos[i].descriptorCount = bindingInfo.descriptorCount;
+                layoutChanged = true;
+            }
+            if (layoutChanged)
+            {
+                markLayoutDirty();
+            }
+            return *this;
+        }
+    }
+
+    _bindingInfos.push_back(bindingInfo);
+    markLayoutDirty();
+    return *this;
+}
+
+DescriptorSetBindings& DescriptorSetBindings::addBinding(uint32_t bindingIdx, uint32_t descriptorCount, VkDescriptorType descriptorType,
+                                                         VkShaderStageFlags shaderStageFlags)
+{
+    BindInfo bindingInfo = {bindingIdx, descriptorCount, descriptorType, shaderStageFlags};
+    return addBinding(bindingInfo);
+}
+
+VkDescriptorSetLayout DescriptorSetBindings::finalizeLayout()
+{
+    if (!_setLayoutDirty) return _layout;
+    if (_layout != VK_NULL_HANDLE)
+    {
+        vkDestroyDescriptorSetLayout(vkDriver->getDevice(), _layout, nullptr);
+        _layout = VK_NULL_HANDLE;
+    }
+
+    nvvk::DescriptorBindings::clear();
+    uint32_t descriptorCount = 0;
+    for (const auto& binding : _bindingInfos)
+    {
+        descriptorCount += binding.descriptorCount;
+        nvvk::DescriptorBindings::addBinding(binding.bindingIdx, binding.descriptorType, binding.descriptorCount, binding.shaderStageFlags);
+    }
+    _descInfos.resize(descriptorCount);
+    createDescriptorSetLayout(vkDriver->getDevice(), 0, &_layout);
+    _setLayoutDirty      = false;
+    _descriptorSetDirty  = true;
+    _cachedDescriptorSet = VK_NULL_HANDLE;
+    return _layout;
+}
+
+void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const nvvk::Buffer& buffer, VkDeviceSize offset, VkDeviceSize range)
+{
+    auto& bufferInfo = _descInfos[descriptorOffset(bindingIdx)].buffer;
+    if (bufferInfo.buffer == buffer.buffer && bufferInfo.offset == offset && bufferInfo.range == range)
+    {
+        return;
+    }
+    markDescriptorInfoDirty();
+    bufferInfo.buffer = buffer.buffer;
+    bufferInfo.offset = offset;
+    bufferInfo.range  = range;
+}
+
+void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const nvvk::Image& image)
+{
+    auto& imageInfo = _descInfos[descriptorOffset(bindingIdx)];
+    if (imageInfo.image.imageLayout == image.descriptor.imageLayout && imageInfo.image.imageView == image.descriptor.imageView &&
+        imageInfo.image.sampler == image.descriptor.sampler)
+    {
+        return;
+    }
+    markDescriptorInfoDirty();
+    imageInfo.image = image.descriptor;
+}
+
+void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, VkBuffer buffer, VkDeviceSize offset, VkDeviceSize range)
+{
+    auto& bufferInfo = _descInfos[descriptorOffset(bindingIdx)].buffer;
+    if (bufferInfo.buffer == buffer && bufferInfo.offset == offset && bufferInfo.range == range)
+    {
+        return;
+    }
+    markDescriptorInfoDirty();
+    bufferInfo.buffer = buffer;
+    bufferInfo.offset = offset;
+    bufferInfo.range  = range;
+}
+
+void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const VkDescriptorBufferInfo& bufferInfo)
+{
+    auto& destBufferInfo = _descInfos[descriptorOffset(bindingIdx)].buffer;
+    if (destBufferInfo.buffer == bufferInfo.buffer && destBufferInfo.offset == bufferInfo.offset && destBufferInfo.range == bufferInfo.range)
+    {
+        return;
+    }
+    markDescriptorInfoDirty();
+    destBufferInfo = bufferInfo;
+}
+
+void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, VkImageView imageView, VkImageLayout imageLayout, VkSampler sampler)
+{
+    auto& imageInfo = _descInfos[descriptorOffset(bindingIdx)].image;
+    if (imageInfo.imageLayout == imageLayout && imageInfo.imageView == imageView && imageInfo.sampler == sampler)
+    {
+        return;
+    }
+    markDescriptorInfoDirty();
+    imageInfo.imageLayout = imageLayout;
+    imageInfo.imageView   = imageView;
+    imageInfo.sampler     = sampler;
+}
+
+void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const VkDescriptorImageInfo& imageInfo)
+{
+    auto& destImageInfo = _descInfos[descriptorOffset(bindingIdx)].image;
+    if (destImageInfo.imageLayout == imageInfo.imageLayout && destImageInfo.imageView == imageInfo.imageView &&
+        destImageInfo.sampler == imageInfo.sampler)
+    {
+        return;
+    }
+    markDescriptorInfoDirty();
+    destImageInfo = imageInfo;
+}
+
+void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, VkAccelerationStructureKHR accel)
+{
+    auto& accelInfo = _descInfos[descriptorOffset(bindingIdx)].accel;
+    if (accelInfo == accel)
+    {
+        return;
+    }
+    markDescriptorInfoDirty();
+    accelInfo = accel;
+}
+
+void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const nvvk::Buffer* buffers, uint32_t count)
+{
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        auto& bufferInfo = _descInfos[descriptorOffset(bindingIdx) + i].buffer;
+        if (bufferInfo.buffer == buffers[i].buffer)
+        {
+            continue;
+        }
+        markDescriptorInfoDirty();
+        bufferInfo.buffer = buffers[i].buffer;
+    }
+}
+
+void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const nvvk::Image* images, uint32_t count)
+{
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        auto& imageInfo = _descInfos[descriptorOffset(bindingIdx) + i].image;
+        if (imageInfo.imageLayout == images[i].descriptor.imageLayout && imageInfo.imageView == images[i].descriptor.imageView &&
+            imageInfo.sampler == images[i].descriptor.sampler)
+        {
+            continue;
+        }
+        markDescriptorInfoDirty();
+        imageInfo = images[i].descriptor;
+    }
+}
+
+void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const VkDescriptorBufferInfo* bufferInfos, uint32_t count)
+{
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        auto& destBufferInfo = _descInfos[descriptorOffset(bindingIdx) + i].buffer;
+        if (destBufferInfo.buffer == bufferInfos[i].buffer && destBufferInfo.offset == bufferInfos[i].offset &&
+            destBufferInfo.range == bufferInfos[i].range)
+        {
+            continue;
+        }
+        markDescriptorInfoDirty();
+        destBufferInfo = bufferInfos[i];
+    }
+}
+
+void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const VkDescriptorImageInfo* imageInfos, uint32_t count)
+{
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        auto& imageInfo = _descInfos[descriptorOffset(bindingIdx) + i].image;
+        if (imageInfo.imageLayout == imageInfos[i].imageLayout && imageInfo.imageView == imageInfos[i].imageView &&
+            imageInfo.sampler == imageInfos[i].sampler)
+        {
+            continue;
+        }
+        markDescriptorInfoDirty();
+        imageInfo = imageInfos[i];
+    }
+}
+
+void DescriptorSetBindings::setDescInfo(uint32_t bindingIdx, const VkAccelerationStructureKHR* accels, uint32_t count)
+{
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        auto& accelInfo = _descInfos[descriptorOffset(bindingIdx) + i].accel;
+        if (accelInfo == accels[i])
+        {
+            continue;
+        }
+        markDescriptorInfoDirty();
+        accelInfo = accels[i];
+    }
+}
+
+int DescriptorSetBindings::descriptorOffset(uint32_t bindingIdx)
+{
+    int  offset     = 0;
+    bool gotBinding = false;
+    // bindInfo with same setIdx and bindingIdx would be merge to one bindingInfo
+    std::for_each(_bindingInfos.begin(), _bindingInfos.end(),
+                  [&](const BindInfo& bindInfo)
+                  {
+                      if (bindInfo.bindingIdx == bindingIdx) gotBinding = true;
+                      if (bindInfo.bindingIdx < bindingIdx)
+                      {
+                          offset += bindInfo.descriptorCount;
+                      }
+                  });
+    assert(gotBinding);
+    return gotBinding ? offset : -1; // 或者其他适当的错误值
+}
+
+uint64_t DescriptorSetBindings::getBindingsHash()
+{
+    if (_descInfoDirty)
+    {
+        _setBindingHash = memoryHash(_descInfos);
+
+        _descInfoDirty = 0;
+    }
+    return _setBindingHash;
+}
+
+uint64_t DescriptorSetBindings::getDescsetLayoutHash()
+{
+    return memoryHash(_bindingInfos);
+}
+
+VkDescriptorSet DescriptorSetBindings::getOrAcquireDescriptorSet(DescriptorEnum setSlot)
+{
+    if (setSlot != DescriptorEnum::eCount)
+    {
+        _setSlot = setSlot;
+    }
+    if (_setSlot == DescriptorEnum::eCount)
+    {
+        LOGE("Descriptor set slot is not specified");
+        return VK_NULL_HANDLE;
+    }
+
+    finalizeLayout();
+    if (!_descriptorSetDirty && _cachedDescriptorSet != VK_NULL_HANDLE)
+    {
+        return _cachedDescriptorSet;
+    }
+
+    _cachedDescriptorSet = vkDriver->getDescriptorSetCache()->requestDescriptorSet(this, static_cast<uint32_t>(_setSlot));
+    _descriptorSetDirty  = false;
+    return _cachedDescriptorSet;
+}
+
+
 
 DescriptorBufferManagerExt::~DescriptorBufferManagerExt() {}
 
@@ -128,26 +452,6 @@ void DescriptorBufferManagerExt::deinit() {}
 //     }
 // }
 
-// void DescriptorBufferManagerExt::cmdBindDescriptorBuffers(VkCommandBuffer cmdBuf, PlayProgram* program)
-// {
-//     VkDescriptorBufferBindingInfoEXT descriptorBufferBindingInfo[2] = {{VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT}};
-//     descriptorBufferBindingInfo[0].address                          = _descBuffer->address;
-//     descriptorBufferBindingInfo[0].usage                            = VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT;
-
-//     vkCmdBindDescriptorBuffersEXT(cmdBuf, 2, descriptorBufferBindingInfo);
-//     VkPipelineLayout    layout    = program->getDescriptorSetManager().getPipelineLayout();
-//     VkPipelineBindPoint bindPoint = program->getPipelineBindPoint();
-//     // a series of descriptor sets' binding info
-//     const auto& setBindingInfo = program->getDescriptorSetManager().getSetBindingInfo();
-//     // for each set
-//     uint32_t bufferInfoIdx = 0;
-//     for (int setIdx = 0; setIdx < setBindingInfo.size(); ++setIdx)
-//     {
-//         vkCmdSetDescriptorBufferOffsetsEXT(cmdBuf, bindPoint, layout, setIdx, 1, &bufferInfoIdx,
-//                                            &DescriptorSetOffsetMap[static_cast<DescriptorEnum>(setIdx)]);
-//     }
-// }
-
 size_t DescriptorBufferManagerExt::getDescriptorSize(VkDescriptorType descriptorType)
 {
     if (descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
@@ -214,6 +518,10 @@ DescriptorSetCache::~DescriptorSetCache()
 
 VkDescriptorSet DescriptorSetCache::requestDescriptorSet(DescriptorSetBindings* setManager, uint32_t setIdx)
 {
+    if (setManager && setIdx >= static_cast<uint32_t>(DescriptorEnum::ePerPassDescriptorSet))
+    {
+        setManager->finalizeLayout();
+    }
     // if the set is global set(engine/perScene/perFrame), return the cached set directly
     if (setIdx < static_cast<uint32_t>(DescriptorEnum::ePerPassDescriptorSet))
     {

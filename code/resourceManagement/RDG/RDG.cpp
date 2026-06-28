@@ -4,7 +4,7 @@
 #include "utils.hpp"
 #include "RenderPassCache.h"
 #include "RenderPass.h"
-#include "VulkanDriver.h"
+#include "core/runtime/VulkanRuntime.h"
 #include "DescriptorManager.h"
 #include "PlayAllocator.h"
 #include <nvutils/logger.hpp>
@@ -161,64 +161,149 @@ PassNode* BlackBoard::getPass(std::string name)
     return _passMap[name];
 }
 
-void PendingState::bindProgram(VkCommandBuffer cmd, PlayProgram* program, PassNode* passNode)
+void RenderContext::bindPipeline(GraphicsPipelineStateInitializer& initializer)
 {
-    program->setPassNode(passNode);
-    program->bindPipeline(cmd);
-    bindDescriptorSet(cmd, program);
-}
-
-void PendingState::bindDescriptorSet(VkCommandBuffer cmd, PlayProgram* program)
-{
-    VkDescriptorSet                drawObjectSet = vkDriver->getDescriptorSetCache()->requestDescriptorSet(&program->getDescriptorSetManager(),
-                                                                                                           (uint32_t) DescriptorEnum::eDrawObjectDescriptorSet);
-    std::array<VkDescriptorSet, 5> sets      = {_globalDescriptorSet, _sceneDescriptorSet, _frameDescriptorSet, _passDescriptorSet, drawObjectSet};
-    VkPipelineBindPoint            bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    switch (program->getProgramType())
+    if (!_pendingGfxState || !_pendingGfxState->_renderPass)
     {
-        case ProgramType::eRenderProgram:
-        case ProgramType::eMeshRenderProgram:
-            bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-            break;
-        case ProgramType::eComputeProgram:
-            bindPoint = VK_PIPELINE_BIND_POINT_COMPUTE;
-            break;
-        case ProgramType::eRTProgram:
-            bindPoint = VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR;
-            break;
-        default:
-            bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-            break;
+        LOGE("Graphics render pass is not prepared");
+        return;
     }
-    vkCmdBindDescriptorSets(cmd, bindPoint, program->getDescriptorSetManager().getPipelineLayout(), (uint32_t) DescriptorEnum::eGlobalDescriptorSet,
-                            static_cast<uint32_t>(sets.size()), sets.data(), 0, nullptr);
-}
 
-void RenderContext::bindProgram(PlayProgram* program, PassNode* passNode)
-{
-    switch (program->getProgramType())
+    DescriptorSetCache* descriptorCache = vkDriver->getDescriptorSetCache();
+    CommonDescriptorSet globalSet       = descriptorCache->getEngineDescriptorSet();
+    CommonDescriptorSet sceneSet        = descriptorCache->getSceneDescriptorSet();
+    CommonDescriptorSet frameSet        = descriptorCache->getFrameDescriptorSet();
+
+    VkDescriptorSet passSet = VK_NULL_HANDLE;
+    if (initializer.passDescriptorSet)
     {
-        case ProgramType::eRenderProgram:
-        case ProgramType::eMeshRenderProgram:
-        {
-            _pendingGfxState->bindProgram(_currCmdBuffer, program, passNode);
-            break;
-        }
-        case ProgramType::eComputeProgram:
-        {
-            _pendingComputeState->bindProgram(_currCmdBuffer, program, passNode);
-            break;
-        }
-        case ProgramType::eRTProgram:
-        {
-            _pendingRTState->bindProgram(_currCmdBuffer, program, passNode);
-            break;
-        }
-        default:
-            break;
+        passSet = initializer.passDescriptorSet->getOrAcquireDescriptorSet(DescriptorEnum::ePerPassDescriptorSet);
+    }
+
+    VkDescriptorSet materialSet = VK_NULL_HANDLE;
+    if (initializer.materialDescriptorSet)
+    {
+        materialSet = initializer.materialDescriptorSet->getOrAcquireDescriptorSet(DescriptorEnum::eDrawObjectDescriptorSet);
+    }
+
+    PipelineLayoutDesc layoutDesc;
+    layoutDesc.setDescriptorSetLayout(DescriptorEnum::eGlobalDescriptorSet, globalSet.layout);
+    layoutDesc.setDescriptorSetLayout(DescriptorEnum::eSceneDescriptorSet, sceneSet.layout);
+    layoutDesc.setDescriptorSetLayout(DescriptorEnum::eFrameDescriptorSet, frameSet.layout);
+    if (initializer.passDescriptorSet)
+    {
+        layoutDesc.setPassDescriptorSet(*initializer.passDescriptorSet);
+    }
+    if (initializer.materialDescriptorSet)
+    {
+        layoutDesc.setMaterialDescriptorSet(*initializer.materialDescriptorSet);
+    }
+    if (initializer.hasPushConstantRange)
+    {
+        layoutDesc.setPushConstantRange(initializer.pushConstantRange);
+    }
+
+    auto* dynamicRenderPass = dynamic_cast<DynamicRenderPass*>(_pendingGfxState->_renderPass);
+    if (dynamicRenderPass)
+    {
+        initializer.renderTargetState.colorFormats             = dynamicRenderPass->getColorAttachmentFormats();
+        initializer.renderTargetState.depthAttachmentFormat    = dynamicRenderPass->getDepthAttachmentFormat();
+        initializer.renderTargetState.stencilAttachmentFormat  = dynamicRenderPass->getStencilAttachmentFormat();
+    }
+
+    initializer.pipelineLayout = vkDriver->getPipelineCacheManager()->getOrCreatePipelineLayout(layoutDesc);
+    VkPipeline pipeline       = vkDriver->getPipelineCacheManager()->getOrCreateGraphicsPipeline(initializer);
+    if (pipeline == VK_NULL_HANDLE)
+    {
+        LOGE("Graphics pipeline creation failed");
+        return;
+    }
+
+    vkCmdBindPipeline(_currCmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+    _boundPipelineLayout    = initializer.pipelineLayout;
+    _boundPipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+
+    std::array<VkDescriptorSet, 3> persistentSets = {globalSet.set, sceneSet.set, frameSet.set};
+    vkCmdBindDescriptorSets(_currCmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, initializer.pipelineLayout->vkHandle,
+                            static_cast<uint32_t>(DescriptorEnum::eGlobalDescriptorSet), static_cast<uint32_t>(persistentSets.size()),
+                            persistentSets.data(), 0, nullptr);
+
+    if (passSet != VK_NULL_HANDLE)
+    {
+        vkCmdBindDescriptorSets(_currCmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, initializer.pipelineLayout->vkHandle,
+                                static_cast<uint32_t>(DescriptorEnum::ePerPassDescriptorSet), 1, &passSet, 0, nullptr);
+    }
+    if (materialSet != VK_NULL_HANDLE)
+    {
+        vkCmdBindDescriptorSets(_currCmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, initializer.pipelineLayout->vkHandle,
+                                static_cast<uint32_t>(DescriptorEnum::eDrawObjectDescriptorSet), 1, &materialSet, 0, nullptr);
     }
 }
 
+void RenderContext::bindPipeline(ComputePipelineStateInitializer& initializer)
+{
+    DescriptorSetCache* descriptorCache = vkDriver->getDescriptorSetCache();
+    CommonDescriptorSet globalSet       = descriptorCache->getEngineDescriptorSet();
+    CommonDescriptorSet sceneSet        = descriptorCache->getSceneDescriptorSet();
+    CommonDescriptorSet frameSet        = descriptorCache->getFrameDescriptorSet();
+
+    VkDescriptorSet passSet = VK_NULL_HANDLE;
+    if (initializer.passDescriptorSet)
+    {
+        passSet = initializer.passDescriptorSet->getOrAcquireDescriptorSet(DescriptorEnum::ePerPassDescriptorSet);
+    }
+
+    VkDescriptorSet materialSet = VK_NULL_HANDLE;
+    if (initializer.materialDescriptorSet)
+    {
+        materialSet = initializer.materialDescriptorSet->getOrAcquireDescriptorSet(DescriptorEnum::eDrawObjectDescriptorSet);
+    }
+
+    PipelineLayoutDesc layoutDesc;
+    layoutDesc.setDescriptorSetLayout(DescriptorEnum::eGlobalDescriptorSet, globalSet.layout);
+    layoutDesc.setDescriptorSetLayout(DescriptorEnum::eSceneDescriptorSet, sceneSet.layout);
+    layoutDesc.setDescriptorSetLayout(DescriptorEnum::eFrameDescriptorSet, frameSet.layout);
+    if (initializer.passDescriptorSet)
+    {
+        layoutDesc.setPassDescriptorSet(*initializer.passDescriptorSet);
+    }
+    if (initializer.materialDescriptorSet)
+    {
+        layoutDesc.setMaterialDescriptorSet(*initializer.materialDescriptorSet);
+    }
+    if (initializer.hasPushConstantRange)
+    {
+        layoutDesc.setPushConstantRange(initializer.pushConstantRange);
+    }
+
+    initializer.pipelineLayout = vkDriver->getPipelineCacheManager()->getOrCreatePipelineLayout(layoutDesc);
+    VkPipeline pipeline       = vkDriver->getPipelineCacheManager()->getOrCreateComputePipeline(initializer);
+    if (pipeline == VK_NULL_HANDLE)
+    {
+        LOGE("Compute pipeline creation failed");
+        return;
+    }
+
+    vkCmdBindPipeline(_currCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+    _boundPipelineLayout    = initializer.pipelineLayout;
+    _boundPipelineBindPoint = VK_PIPELINE_BIND_POINT_COMPUTE;
+
+    std::array<VkDescriptorSet, 3> persistentSets = {globalSet.set, sceneSet.set, frameSet.set};
+    vkCmdBindDescriptorSets(_currCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, initializer.pipelineLayout->vkHandle,
+                            static_cast<uint32_t>(DescriptorEnum::eGlobalDescriptorSet), static_cast<uint32_t>(persistentSets.size()),
+                            persistentSets.data(), 0, nullptr);
+
+    if (passSet != VK_NULL_HANDLE)
+    {
+        vkCmdBindDescriptorSets(_currCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, initializer.pipelineLayout->vkHandle,
+                                static_cast<uint32_t>(DescriptorEnum::ePerPassDescriptorSet), 1, &passSet, 0, nullptr);
+    }
+    if (materialSet != VK_NULL_HANDLE)
+    {
+        vkCmdBindDescriptorSets(_currCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, initializer.pipelineLayout->vkHandle,
+                                static_cast<uint32_t>(DescriptorEnum::eDrawObjectDescriptorSet), 1, &materialSet, 0, nullptr);
+    }
+}
 RDGBuilder::RDGBuilder()
 {
     _dag           = std::make_unique<Dag>();
@@ -255,8 +340,7 @@ void RDGBuilder::beforePassExecute() {}
 
 void RDGBuilder::prepareDescriptorSets(RenderContext& context, PassNode* pass)
 {
-    DescriptorSetCache* descCache          = vkDriver->getDescriptorSetCache();
-    auto&               programDescManager = pass->_descBindings;
+    auto& programDescManager = pass->_descBindings;
 
     for (auto& state : pass->_textureStates)
     {
@@ -278,7 +362,7 @@ void RDGBuilder::prepareDescriptorSets(RenderContext& context, PassNode* pass)
         programDescManager.setDescInfo(bufferInfo.binding, *state.buffer->_rhi);
     }
 
-    VkDescriptorSet currPassSet = descCache->requestDescriptorSet(&programDescManager, (uint32_t) DescriptorEnum::ePerPassDescriptorSet);
+    VkDescriptorSet currPassSet = programDescManager.getOrAcquireDescriptorSet(DescriptorEnum::ePerPassDescriptorSet);
     switch (pass->type())
     {
         case PassNode::Type::Render:

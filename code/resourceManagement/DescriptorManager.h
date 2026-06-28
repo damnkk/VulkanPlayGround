@@ -3,10 +3,9 @@
 #include "Resource.h"
 #include "utils.hpp"
 #include "core/RefCounted.h"
+#include <nvvk/descriptors.hpp>
 namespace Play
 {
-class DescriptorSetBindings;
-class PlayProgram;
 enum class DescriptorEnum : uint32_t
 {
     eGlobalDescriptorSet,
@@ -15,6 +14,110 @@ enum class DescriptorEnum : uint32_t
     ePerPassDescriptorSet,
     eDrawObjectDescriptorSet,
     eCount
+};
+struct BindInfo
+{
+    uint32_t           bindingIdx;
+    uint32_t           descriptorCount;
+    VkDescriptorType   descriptorType;
+    VkShaderStageFlags shaderStageFlags;
+};
+
+union DescriptorInfo
+{
+    VkDescriptorBufferInfo     buffer;
+    VkDescriptorImageInfo      image;
+    VkAccelerationStructureKHR accel;
+};
+
+class DescriptorSetBindings : public nvvk::DescriptorBindings
+{
+public:
+    DescriptorSetBindings();
+    explicit DescriptorSetBindings(DescriptorEnum setSlot);
+    ~DescriptorSetBindings();
+    void reset(DescriptorEnum setSlot = DescriptorEnum::eCount);
+    DescriptorSetBindings& addBinding(uint32_t bindingIdx, uint32_t descriptorCount, VkDescriptorType descriptorType,
+                                      VkShaderStageFlags shaderStageFlags);
+    DescriptorSetBindings& addBinding(const BindInfo& bindingInfo);
+
+    void setDescriptorSetSlot(DescriptorEnum setSlot)
+    {
+        _setSlot = setSlot;
+    }
+
+    DescriptorEnum getDescriptorSetSlot() const
+    {
+        return _setSlot;
+    }
+
+    void setDescInfo(uint32_t bindingIdx, const nvvk::Buffer& buffer, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE);
+
+    void setDescInfo(uint32_t bindingIdx, const nvvk::Image& image);
+    void setDescInfo(uint32_t bindingIdx, VkBuffer buffer, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE);
+    void setDescInfo(uint32_t bindingIdx, const VkDescriptorBufferInfo& bufferInfo);
+    void setDescInfo(uint32_t bindingIdx, VkImageView imageView, VkImageLayout imageLayout, VkSampler sampler = nullptr);
+    void setDescInfo(uint32_t bindingIdx, const VkDescriptorImageInfo& imageInfo);
+    void setDescInfo(uint32_t bindingIdx, VkAccelerationStructureKHR accel);
+
+    // writeSet.descriptorCount many elements
+    void setDescInfo(uint32_t bindingIdx, const nvvk::Buffer* buffers, uint32_t count); // offset 0 and VK_WHOLE_SIZE
+    void setDescInfo(uint32_t bindingIdx, const nvvk::Image* images, uint32_t count);
+    void setDescInfo(uint32_t bindingIdx, const VkDescriptorBufferInfo* bufferInfos, uint32_t count);
+    void setDescInfo(uint32_t bindingIdx, const VkDescriptorImageInfo* imageInfos, uint32_t count);
+    void setDescInfo(uint32_t bindingIdx, const VkAccelerationStructureKHR* accels, uint32_t count);
+
+    int                   descriptorOffset(uint32_t bindingIdx);
+    uint64_t              getBindingsHash(); // flush dirty flag
+    uint64_t              getDescsetLayoutHash();
+    VkDescriptorSetLayout finalizeLayout(); // flush recorded flag
+    VkDescriptorSet       getOrAcquireDescriptorSet(DescriptorEnum setSlot = DescriptorEnum::eCount);
+
+    bool isLayoutDirty() const
+    {
+        return _setLayoutDirty;
+    }
+
+    bool isDescriptorInfoDirty() const
+    {
+        return _descInfoDirty != 0;
+    }
+
+    bool isDescriptorSetDirty() const
+    {
+        return _descriptorSetDirty;
+    }
+
+    const VkDescriptorSetLayout& getSetLayout()
+    {
+        return _layout;
+    }
+
+    VkDescriptorSet getCachedDescriptorSet() const
+    {
+        return _cachedDescriptorSet;
+    }
+
+    const std::vector<DescriptorInfo>& getDescriptorInfos()
+    {
+        return _descInfos;
+    }
+
+protected:
+    std::vector<BindInfo>       _bindingInfos;
+    uint64_t                    _setBindingHash = 0;
+    VkDescriptorSetLayout       _layout         = VK_NULL_HANDLE;
+    std::vector<DescriptorInfo> _descInfos;
+
+private:
+    void markLayoutDirty();
+    void markDescriptorInfoDirty();
+
+    DescriptorEnum  _setSlot             = DescriptorEnum::eCount;
+    VkDescriptorSet _cachedDescriptorSet = VK_NULL_HANDLE;
+    bool            _setLayoutDirty      = true; // layout changing state
+    uint8_t         _descInfoDirty       = 0;    // descinfo changing state | bit0: binding changed, bit1: constant range changed
+    bool            _descriptorSetDirty  = true;
 };
 // 256 descriptor slot for global
 const size_t GLOBAL_DESCRIPTOR_SET_OFFSET = 0;
@@ -46,7 +149,6 @@ public:
     void updateDescriptor(uint32_t setIdx, uint32_t bindingIdx, VkDescriptorType descriptorType, uint32_t descriptorCount,
                           nvvk::AccelerationStructure* accels);
 
-    void cmdBindDescriptorBuffers(VkCommandBuffer cmdBuf, PlayProgram* program);
 
 protected:
     size_t getDescriptorSize(VkDescriptorType descriptorType);
