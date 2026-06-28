@@ -5,22 +5,21 @@
 #include <vulkan/vulkan_core.h>
 #include "RenderPass.h"
 #include "core/RefCounted.h"
-#include "PlayProgram.h"
+#include "PipelineCacheManager.h"
 
 namespace Play
 {
 class Buffer;
-class ComputeProgram;
 class Texture;
 class VolumeRenderer;
 
 struct VolumeRenderParameters
 {
-    float    Density  = 100.0f;
-    float    Exposure = 1.0f;
-    uint32_t StepCount = 180;
-    glm::vec3 BBoxMin = glm::vec3(-0.5f, -0.5f, -0.65f);
-    glm::vec3 BBoxMax = glm::vec3(0.5f, 0.5f, 0.65f);
+    float     Density   = 100.0f;
+    float     Exposure  = 1.0f;
+    uint32_t  StepCount = 180;
+    glm::vec3 BBoxMin   = glm::vec3(-0.5f, -0.5f, -0.65f);
+    glm::vec3 BBoxMax   = glm::vec3(0.5f, 0.5f, 0.65f);
 };
 
 struct VolumeUniformData
@@ -35,13 +34,13 @@ struct VolumeUniformData
     glm::mat4 InvWorldMatrix;
     glm::mat4 InvNormalMatrix;
 
-    uint32_t frameCount;
-    float    StepSize;
+    uint32_t  frameCount;
+    float     StepSize;
     glm::vec2 FrameOffset;
 
     glm::vec2 RTDimensions;
-    float    Density;
-    float    Exposure;
+    float     Density;
+    float     Exposure;
     glm::vec3 CameraPos;
     glm::vec3 BBoxMin;
     glm::vec3 BBoxMax;
@@ -85,22 +84,22 @@ private:
 
     VolumeRenderer* _ownedRenderer = nullptr;
 
-    RefPtr<ComputeProgram> _gradientProgram;
-    RefPtr<ComputeProgram> _generateRaysProgram;
-    RefPtr<ComputeProgram> _radianceProgram;
-    RefPtr<ComputeProgram> _accumulateProgram;
-    RefPtr<ComputeProgram> _postProcessProgram;
+    ComputePipelineStateInitializer _gradientPipeline;
+    ComputePipelineStateInitializer _generateRaysPipeline;
+    ComputePipelineStateInitializer _radiancePipeline;
+    ComputePipelineStateInitializer _accumulatePipeline;
+    ComputePipelineStateInitializer _postProcessPipeline;
 
     RefPtr<Texture> _textures[static_cast<uint32_t>(TextureSlot::eCount)];
-    RefPtr<Buffer> _uniformBuffer;
-    VkExtent3D _volumeExtent = {1, 1, 1};
+    RefPtr<Buffer>  _uniformBuffer;
+    VkExtent3D      _volumeExtent = {1, 1, 1};
 
-    VolumeRenderParameters _parameters;
+    VolumeRenderParameters         _parameters;
     mutable VolumeRenderParameters _lastParameters;
-    glm::mat4 _lastViewMatrix = glm::mat4(0.0f);
-    glm::mat4 _lastProjectMatrix = glm::mat4(0.0f);
-    uint32_t _frameCount = 0;
-    bool     _gradientGenerated = false;
+    glm::mat4                      _lastViewMatrix    = glm::mat4(0.0f);
+    glm::mat4                      _lastProjectMatrix = glm::mat4(0.0f);
+    uint32_t                       _frameCount        = 0;
+    bool                           _gradientGenerated = false;
 };
 
 } // namespace Play

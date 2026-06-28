@@ -4,6 +4,7 @@
 #include "RDG/RDG.h"
 #include "DeferRendering.h"
 #include "editor/EditorRegistry.h"
+#include "PConstantType.h.slang"
 
 namespace
 {
@@ -20,10 +21,7 @@ constexpr uint32_t         kSkyViewGroupSize          = 8;
 namespace Play
 {
 
-VolumeSkyPass::~VolumeSkyPass()
-{
-    // RefPtr 自动释放
-}
+VolumeSkyPass::~VolumeSkyPass() = default;
 
 void VolumeSkyPass::init()
 {
@@ -37,26 +35,21 @@ void VolumeSkyPass::init()
     auto skyViewComp = ShaderManager::Instance().loadShaderFromFile("skyViewLutComp", "newShaders/deferRenderer/atmosphere/skyViewLut.comp.slang",
                                                                     ShaderStage::eCompute);
 
-    _transmittanceLutProgram = RefPtr<ComputeProgram>(new ComputeProgram());
-    _transmittanceLutProgram->setComputeModuleID(transmittanceComp);
-    _transmittanceLutProgram->initPushConstant<PerFrameConstant>();
+    _transmittanceLutPipeline.setShader(transmittanceComp);
+    _transmittanceLutPipeline.setPushConstant<PerFrameConstant>();
 
-    _multiScatteringLutProgram = RefPtr<ComputeProgram>(new ComputeProgram());
-    _multiScatteringLutProgram->setComputeModuleID(multiScatteringComp);
-    _multiScatteringLutProgram->initPushConstant<PerFrameConstant>();
+    _multiScatteringLutPipeline.setShader(multiScatteringComp);
+    _multiScatteringLutPipeline.setPushConstant<PerFrameConstant>();
 
-    _skyViewLutProgram = RefPtr<ComputeProgram>(new ComputeProgram());
-    _skyViewLutProgram->setComputeModuleID(skyViewComp);
-    _skyViewLutProgram->initPushConstant<PerFrameConstant>();
+    _skyViewLutPipeline.setShader(skyViewComp);
+    _skyViewLutPipeline.setPushConstant<PerFrameConstant>();
 
-    _skyBoxProgram = RefPtr<RenderProgram>(new RenderProgram());
-    _skyBoxProgram->setFragModuleID(skyBoxfId);
-    _skyBoxProgram->setVertexModuleID(skyBoxvId);
-    _skyBoxProgram->initPushConstant<PerFrameConstant>();
-    _skyBoxProgram->psoState().rasterizationState.frontFace       = VK_FRONT_FACE_CLOCKWISE;
-    _skyBoxProgram->psoState().rasterizationState.cullMode        = VK_CULL_MODE_NONE;
-    _skyBoxProgram->psoState().depthStencilState.depthWriteEnable = VK_FALSE;
-    _skyBoxProgram->psoState().depthStencilState.depthTestEnable  = VK_FALSE;
+    _skyBoxPipeline.setShader(skyBoxvId, skyBoxfId);
+    _skyBoxPipeline.setPushConstant<PerFrameConstant>();
+    _skyBoxPipeline.psoState.rasterizationState.frontFace       = VK_FRONT_FACE_CLOCKWISE;
+    _skyBoxPipeline.psoState.rasterizationState.cullMode        = VK_CULL_MODE_NONE;
+    _skyBoxPipeline.psoState.depthStencilState.depthWriteEnable = VK_FALSE;
+    _skyBoxPipeline.psoState.depthStencilState.depthTestEnable  = VK_FALSE;
 
     _transmittanceLut              = RefPtr<Texture>(new Texture(kTransmittanceLutWidth, kTransmittanceLutHeight, VK_FORMAT_R16G16B16A16_SFLOAT,
                                                                  VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_LAYOUT_GENERAL));
@@ -94,10 +87,10 @@ void VolumeSkyPass::build(RDG::RDGBuilder* rdgBuilder)
             .execute(
                 [this, ownedRender](RDG::PassNode* passNode, RDG::RenderContext& context)
                 {
-                    PerFrameConstant perFrameConstant = _transmittanceLutProgram->createPushConstant<PerFrameConstant>();
+                    PerFrameConstant perFrameConstant{};
                     perFrameConstant.cameraBufferDeviceAddress = ownedRender->getCurrentCameraBuffer()->address;
-                    context.bindProgram(_transmittanceLutProgram.get(), passNode);
-                    context.bindPushConstant(_transmittanceLutProgram.get(), perFrameConstant);
+                    context.bindPipeline(_transmittanceLutPipeline);
+                    context.bindPushConstant(perFrameConstant);
                     vkCmdDispatch(context._currCmdBuffer, (kTransmittanceLutWidth + kTransmittanceGroupSize - 1) / kTransmittanceGroupSize,
                                   (kTransmittanceLutHeight + kTransmittanceGroupSize - 1) / kTransmittanceGroupSize, 1);
                 })
@@ -111,10 +104,10 @@ void VolumeSkyPass::build(RDG::RDGBuilder* rdgBuilder)
             .execute(
                 [this, ownedRender](RDG::PassNode* passNode, RDG::RenderContext& context)
                 {
-                    PerFrameConstant perFrameConstant = _multiScatteringLutProgram->createPushConstant<PerFrameConstant>();
+                    PerFrameConstant perFrameConstant{};
                     perFrameConstant.cameraBufferDeviceAddress = ownedRender->getCurrentCameraBuffer()->address;
-                    context.bindProgram(_multiScatteringLutProgram.get(), passNode);
-                    context.bindPushConstant(_multiScatteringLutProgram.get(), perFrameConstant);
+                    context.bindPipeline(_multiScatteringLutPipeline);
+                    context.bindPushConstant(perFrameConstant);
                     vkCmdDispatch(context._currCmdBuffer, kMultiScatteringLutWidth, kMultiScatteringLutHeight, 1);
                 })
             .finish();
@@ -128,10 +121,10 @@ void VolumeSkyPass::build(RDG::RDGBuilder* rdgBuilder)
             .execute(
                 [this, ownedRender](RDG::PassNode* passNode, RDG::RenderContext& context)
                 {
-                    PerFrameConstant perFrameConstant = _skyViewLutProgram->createPushConstant<PerFrameConstant>();
+                    PerFrameConstant perFrameConstant{};
                     perFrameConstant.cameraBufferDeviceAddress = ownedRender->getCurrentCameraBuffer()->address;
-                    context.bindProgram(_skyViewLutProgram.get(), passNode);
-                    context.bindPushConstant(_skyViewLutProgram.get(), perFrameConstant);
+                    context.bindPipeline(_skyViewLutPipeline);
+                    context.bindPushConstant(perFrameConstant);
                     vkCmdDispatch(context._currCmdBuffer, (kSkyViewLutWidth + kSkyViewGroupSize - 1) / kSkyViewGroupSize,
                                   (kSkyViewLutHeight + kSkyViewGroupSize - 1) / kSkyViewGroupSize, 1);
                 })
@@ -142,15 +135,15 @@ void VolumeSkyPass::build(RDG::RDGBuilder* rdgBuilder)
             .color(0, SkyBoxRT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
             .read(0, skyViewLutRef, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
-            .read(1,atmosBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
+            .read(1, atmosBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
             .execute(
                 [this, ownedRender](RDG::PassNode* passNode, RDG::RenderContext& context)
                 {
                     VkCommandBuffer  cmd              = context._currCmdBuffer;
-                    PerFrameConstant perFrameConstant = this->_skyBoxProgram->createPushConstant<PerFrameConstant>();
+                    PerFrameConstant perFrameConstant{};
                     perFrameConstant.cameraBufferDeviceAddress = ownedRender->getCurrentCameraBuffer()->address;
-                    context.bindProgram(this->_skyBoxProgram.get(), passNode);
-                    context.bindPushConstant(this->_skyBoxProgram.get(), perFrameConstant);
+                    context.bindPipeline(this->_skyBoxPipeline);
+                    context.bindPushConstant(perFrameConstant);
                     VkViewport viewport = {0, 0, (float) vkDriver->getViewportSize().width, (float) vkDriver->getViewportSize().height, 0.0f, 1.0f};
                     VkRect2D   scissor  = {{0, 0}, {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height}};
                     vkCmdSetViewportWithCount(cmd, 1, &viewport);

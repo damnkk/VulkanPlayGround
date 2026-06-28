@@ -7,7 +7,7 @@
 namespace Play
 {
 class DeferRenderer;
-class RenderProgram;
+
 class LightPass : public BasePass
 {
 public:
@@ -20,8 +20,8 @@ public:
     RTTR_ENABLE(BasePass)
 
 private:
-    DeferRenderer*        _ownedRender = nullptr;
-    RefPtr<RenderProgram> _lightPassProgram;
+    DeferRenderer*                  _ownedRender = nullptr;
+    GraphicsPipelineStateInitializer _lightPassPipeline;
 };
 
 } // namespace Play

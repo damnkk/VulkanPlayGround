@@ -4,7 +4,6 @@
 #include "RDG/RDG.h"
 #include "ShaderManager.hpp"
 #include "core/runtime/VulkanRuntime.h"
-#include "PlayProgram.h"
 #include "PlayAllocator.h"
 #include "utils.hpp"
 #include "editor/EditorRegistry.h"
@@ -213,16 +212,11 @@ void VolumeRenderPass::init()
     const uint32_t postProcessId = ShaderManager::Instance().loadShaderFromFile("volumePostProcess", "volumeRender/volumePostProcess.comp",
                                                                                  ShaderStage::eCompute, ShaderType::eGLSL, "main");
 
-    _gradientProgram = RefPtr<ComputeProgram>(new ComputeProgram());
-    _gradientProgram->setComputeModuleID(gradientId);
-    _generateRaysProgram = RefPtr<ComputeProgram>(new ComputeProgram());
-    _generateRaysProgram->setComputeModuleID(genRayId);
-    _radianceProgram = RefPtr<ComputeProgram>(new ComputeProgram());
-    _radianceProgram->setComputeModuleID(radianceId);
-    _accumulateProgram = RefPtr<ComputeProgram>(new ComputeProgram());
-    _accumulateProgram->setComputeModuleID(accumulateId);
-    _postProcessProgram = RefPtr<ComputeProgram>(new ComputeProgram());
-    _postProcessProgram->setComputeModuleID(postProcessId);
+    _gradientPipeline.setShader(gradientId);
+    _generateRaysPipeline.setShader(genRayId);
+    _radiancePipeline.setShader(radianceId);
+    _accumulatePipeline.setShader(accumulateId);
+    _postProcessPipeline.setShader(postProcessId);
 
     _lastParameters = _parameters;
     vkDriver->getEditorRegistry().registerWritable<VolumeRenderParameters>("Volume", _parameters, editor::EditorRenderMode::Volume);
@@ -298,7 +292,7 @@ void VolumeRenderPass::build(RDG::RDGBuilder* rdgBuilder)
                                     {
                                         return;
                                     }
-                                    context.bindProgram(_gradientProgram.get(), passNode);
+                                    context.bindPipeline(_gradientPipeline);
                                     vkCmdDispatch(context._currCmdBuffer, divRoundUp(_volumeExtent.width, kVolumeGroupSize),
                                                   divRoundUp(_volumeExtent.height, kVolumeGroupSize), divRoundUp(_volumeExtent.depth, kVolumeGroupSize));
                                     _gradientGenerated = true;
@@ -320,7 +314,7 @@ void VolumeRenderPass::build(RDG::RDGBuilder* rdgBuilder)
         .execute(
             [this](RDG::PassNode* passNode, RDG::RenderContext& context)
             {
-                context.bindProgram(_generateRaysProgram.get(), passNode);
+                context.bindPipeline(_generateRaysPipeline);
                 vkCmdDispatch(context._currCmdBuffer, divRoundUp(vkDriver->getViewportSize().width, kVolumeGroupSize),
                               divRoundUp(vkDriver->getViewportSize().height, kVolumeGroupSize), 1);
             })
@@ -339,7 +333,7 @@ void VolumeRenderPass::build(RDG::RDGBuilder* rdgBuilder)
         .execute(
             [this](RDG::PassNode* passNode, RDG::RenderContext& context)
             {
-                context.bindProgram(_radianceProgram.get(), passNode);
+                context.bindPipeline(_radiancePipeline);
                 vkCmdDispatch(context._currCmdBuffer, divRoundUp(vkDriver->getViewportSize().width, kVolumeGroupSize),
                               divRoundUp(vkDriver->getViewportSize().height, kVolumeGroupSize), 1);
             })
@@ -352,7 +346,7 @@ void VolumeRenderPass::build(RDG::RDGBuilder* rdgBuilder)
         .execute(
             [this](RDG::PassNode* passNode, RDG::RenderContext& context)
             {
-                context.bindProgram(_accumulateProgram.get(), passNode);
+                context.bindPipeline(_accumulatePipeline);
                 vkCmdDispatch(context._currCmdBuffer, divRoundUp(vkDriver->getViewportSize().width, kVolumeGroupSize),
                               divRoundUp(vkDriver->getViewportSize().height, kVolumeGroupSize), 1);
             })
@@ -365,7 +359,7 @@ void VolumeRenderPass::build(RDG::RDGBuilder* rdgBuilder)
         .execute(
             [this](RDG::PassNode* passNode, RDG::RenderContext& context)
             {
-                context.bindProgram(_postProcessProgram.get(), passNode);
+                context.bindPipeline(_postProcessPipeline);
                 vkCmdDispatch(context._currCmdBuffer, divRoundUp(vkDriver->getViewportSize().width, kVolumeGroupSize),
                               divRoundUp(vkDriver->getViewportSize().height, kVolumeGroupSize), 1);
             })

@@ -1,11 +1,9 @@
 #include "PostProcessPass.h"
 #include "DeferRendering.h"
 #include "RDG/RDG.h"
-#include "PlayProgram.h"
 #include "ShaderManager.hpp"
 #include "core/runtime/VulkanRuntime.h"
 #include "editor/EditorRegistry.h"
-#include "resourceManagement/PconstantType.h.slang"
 #include "PlayAllocator.h"
 
 #include "GBufferConfig.h"
@@ -16,10 +14,6 @@ void PostProcessPass::init()
     uint32_t PostProcesscId =
         ShaderManager::Instance().loadShaderFromFile("postProcessComp", "tonemapper.slang", ShaderStage::eCompute, ShaderType::eSLANG, "Tonemap");
     auto shadermodule = ShaderManager::Instance().getShaderById(PostProcesscId);
-
-    _postProgram = RefPtr<ComputeProgram>(new ComputeProgram());
-    _postProgram->setComputeModuleID(PostProcesscId);
-    _postProgram->initPushConstant<PerFrameConstant>();
     _tonemapper.init(&PlayResourceManager::Instance(), {shadermodule->_spvCode});
     _tonemapperControlComponent.flushToGPU();
     vkDriver->updateGlobalTonemapperBuffer(_tonemapperControlComponent.getGPUBuffer());
@@ -38,8 +32,7 @@ void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
                             .MipmapLevel(1)
                             .finish();
 
-    DeferRenderer* ownedRender = static_cast<DeferRenderer*>(_ownedRender);
-    auto           pass        = rdgBuilder->createComputePass("postProcessPass")
+    auto pass = rdgBuilder->createComputePass("postProcessPass")
                     .read(0, inputTextureRef, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
                     .storageWrite(1, outputTexRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
                     .execute(

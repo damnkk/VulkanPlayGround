@@ -6,6 +6,7 @@
 #include "nvutils/alignment.hpp"
 #include "RDG/RDG.h"
 #include "newShaders/gaussian/gaussianLib.h.slang"
+#include "PConstantType.h.slang"
 
 namespace Play
 {
@@ -25,9 +26,8 @@ void GaussianSortPass::init()
     vrdxGetSorterKeyValueStorageRequirements(_sorter, _ownedRenderer->getSceneManager()->getGaussianScene().getVertexCount(), &_sortRequirements);
 
     auto distanceComp = ShaderManager::Instance().loadShaderFromFile("DistanceComp", "./gaussian/gaussianCulling.comp.slang", ShaderStage::eCompute);
-    _distanceProgram  = RefPtr<ComputeProgram>(new ComputeProgram());
-    _distanceProgram->setComputeModuleID(distanceComp);
-    _distanceProgram->initPushConstant<PerFrameConstant>();
+    _distancePipeline.setShader(distanceComp);
+    _distancePipeline.setPushConstant<PerFrameConstant>();
 }
 
 void GaussianSortPass::build(RDG::RDGBuilder* rdgBuilder)
@@ -86,13 +86,10 @@ void GaussianSortPass::build(RDG::RDGBuilder* rdgBuilder)
                             VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
                             0, 1, &barrier, 0, NULL, 0, NULL);
                     }
-
-                    GaussianScene&   gaussianScene = _ownedRenderer->getSceneManager()->getGaussianScene();
-                    PerFrameConstant pushConstant = _distanceProgram->createPushConstant<PerFrameConstant>();
-
+                    PerFrameConstant pushConstant{};
                     pushConstant.cameraBufferDeviceAddress = _ownedRenderer->getCurrentCameraBuffer()->address;
-                    context.bindProgram(_distanceProgram.get(), node);
-                    context.bindPushConstant(_distanceProgram.get(), pushConstant);
+                    context.bindPipeline(_distancePipeline);
+                    context.bindPushConstant(pushConstant);
                     size_t splatCount = _ownedRenderer->getSceneManager()->getGaussianScene().getVertexCount();
                     vkCmdDispatch(context._currCmdBuffer, nvvk::getGroupCounts(splatCount, 256), 1, 1);
                     VkMemoryBarrier barrier = {VK_STRUCTURE_TYPE_MEMORY_BARRIER};

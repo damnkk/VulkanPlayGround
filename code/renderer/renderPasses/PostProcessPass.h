@@ -9,7 +9,6 @@
 #include "controlComponent/controlComponent.h"
 namespace Play
 {
-class ComputeProgram;
 class DeferRenderer;
 class PostProcessPass : public BasePass
 {
@@ -24,8 +23,7 @@ public:
 
 private:
     friend class DeferRenderer;
-    RefPtr<ComputeProgram> _postProgram;
-    DeferRenderer*         _ownedRender                 = nullptr;
+    DeferRenderer*              _ownedRender = nullptr;
     ToneMappingControlComponent _tonemapperControlComponent;
     nvshaders::Tonemapper       _tonemapper;
 };

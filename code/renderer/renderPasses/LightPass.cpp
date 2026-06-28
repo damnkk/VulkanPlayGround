@@ -1,16 +1,13 @@
 #include "LightPass.h"
 #include "ShaderManager.hpp"
-#include "PlayProgram.h"
+#include "PConstantType.h.slang"
 #include "GBufferConfig.h"
 #include "core/runtime/VulkanRuntime.h"
 #include "DeferRendering.h"
 namespace Play
 {
 
-LightPass::~LightPass()
-{
-    // RefPtr 自动释放
-}
+LightPass::~LightPass() = default;
 
 void LightPass::init()
 {
@@ -18,10 +15,10 @@ void LightPass::init()
         ShaderManager::Instance().loadShaderFromFile("lightPassFrag", "newShaders/deferRenderer/lighting/DefaultLightPass.frag.slang",
                                                      ShaderStage::eFragment);
     auto fullScreenVertID = ShaderManager::Instance().getShaderIdByName(BuiltinShaders::BUILTIN_FULL_SCREEN_QUAD_VERT_SHADER_NAME);
-    _lightPassProgram     = RefPtr<RenderProgram>(new RenderProgram(fullScreenVertID, lightPassFragID));
-    _lightPassProgram->initPushConstant<PerFrameConstant>();
-    _lightPassProgram->psoState().rasterizationState.frontFace = VK_FRONT_FACE_CLOCKWISE;
-    _lightPassProgram->psoState().rasterizationState.cullMode  = VK_CULL_MODE_NONE;
+    _lightPassPipeline.setShader(fullScreenVertID, lightPassFragID);
+    _lightPassPipeline.setPushConstant<PerFrameConstant>();
+    _lightPassPipeline.psoState.rasterizationState.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    _lightPassPipeline.psoState.rasterizationState.cullMode  = VK_CULL_MODE_NONE;
 }
 
 void LightPass::build(RDG::RDGBuilder* rdgBuilder)
@@ -55,11 +52,11 @@ void LightPass::build(RDG::RDGBuilder* rdgBuilder)
             .execute(
                 [this](RDG::PassNode* node, RDG::RenderContext& context)
                 {
-                    VkCommandBuffer  cmd              = context._currCmdBuffer;
-                    PerFrameConstant perFrameConstant = this->_lightPassProgram->createPushConstant<PerFrameConstant>();
+                    VkCommandBuffer  cmd = context._currCmdBuffer;
+                    PerFrameConstant perFrameConstant{};
                     perFrameConstant.cameraBufferDeviceAddress = _ownedRender->getCurrentCameraBuffer()->address;
-                    context.bindProgram(this->_lightPassProgram.get(), node);
-                    context.bindPushConstant(this->_lightPassProgram.get(), perFrameConstant);
+                    context.bindPipeline(this->_lightPassPipeline);
+                    context.bindPushConstant(perFrameConstant);
                     VkViewport viewport = {0, 0, (float) vkDriver->getViewportSize().width, (float) vkDriver->getViewportSize().height, 0.0f, 1.0f};
                     VkRect2D   scissor  = {{0, 0}, {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height}};
                     vkCmdSetViewportWithCount(cmd, 1, &viewport);

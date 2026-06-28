@@ -3,7 +3,7 @@
 #include "RenderPass.h"
 #include "core/RefCounted.h"
 #include <memory.h>
-#include "PlayProgram.h"
+#include "PipelineCacheManager.h"
 #include "controlComponent/controlComponent.h"
 #include <glm/glm.hpp>
 #include "Hdevice.h"
@@ -60,15 +60,13 @@ private:
     {
         RTTR_ENABLE(ControlComponent<AtmosphereParameters>)
     } _skyAtmosControler;
-    RefPtr<ComputeProgram> _transmittanceLutProgram;
-    RefPtr<ComputeProgram> _multiScatteringLutProgram;
-    RefPtr<ComputeProgram> _skyViewLutProgram;
-    RefPtr<RenderProgram>  _skyBoxProgram;
-    RefPtr<RenderProgram>  _atmosphereProgram;
-    RefPtr<RenderProgram>  _volumetricCloudProgram;
-    DeferRenderer*         _ownedRender = nullptr;
 
-    // 常驻资源
+    ComputePipelineStateInitializer  _transmittanceLutPipeline;
+    ComputePipelineStateInitializer  _multiScatteringLutPipeline;
+    ComputePipelineStateInitializer  _skyViewLutPipeline;
+    GraphicsPipelineStateInitializer _skyBoxPipeline;
+    DeferRenderer*                   _ownedRender = nullptr;
+
     RefPtr<Texture> _transmittanceLut;
     RefPtr<Texture> _multiScatteringLut;
     RefPtr<Texture> _skyViewLut;

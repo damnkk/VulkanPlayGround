@@ -4,6 +4,7 @@
 #include "GBufferConfig.h"
 #include "SceneAssets.h"
 #include "Resource.h"
+#include "PipelineCacheManager.h"
 #include "Hdevice.h"
 #include <rttr/rttr_enable.h>
 namespace Play
@@ -14,12 +15,12 @@ class CpuScene;
 
 struct GBufferVisibleInstance
 {
-    uint32_t  modelIndex       = INVALID_SCENE_ID;
-    uint32_t  firstRenderable  = 0;
-    uint32_t  renderableCount  = 0;
-    glm::mat4 objectToWorld    = glm::mat4(1.0f);
+    uint32_t  modelIndex      = INVALID_SCENE_ID;
+    uint32_t  firstRenderable = 0;
+    uint32_t  renderableCount = 0;
+    glm::mat4 objectToWorld   = glm::mat4(1.0f);
     AABB      worldBounds;
-    float     depthKey         = 0.0f;
+    float     depthKey        = 0.0f;
 };
 
 struct GBufferRenderItem
@@ -65,11 +66,12 @@ private:
     void sortRenderList();
     void uploadGPUInstanceData();
 
-    DeferRenderer* _ownedRender = nullptr;
+    DeferRenderer*                   _ownedRender = nullptr;
     std::vector<GBufferVisibleInstance> _visibleInstances;
     std::vector<GBufferRenderItem>      _renderItems;
     std::vector<GBufferGPUInstanceData> _gpuInstanceData;
     RefPtr<Buffer>                      _gpuInstanceDataBuffer = nullptr;
+    GraphicsPipelineStateInitializer    _gbufferPipeline;
 };
 } // namespace Play
 

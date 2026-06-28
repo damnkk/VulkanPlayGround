@@ -1,7 +1,8 @@
 #include "GBufferPass.h"
 
 #include "DeferRendering.h"
-#include "Material.h"
+#include "ShaderManager.hpp"
+#include "PConstantType.h.slang"
 #include "PlayAllocator.h"
 #include "RDG/RDG.h"
 #include "SceneManager.h"
@@ -16,6 +17,7 @@ namespace
 
 constexpr VkBufferUsageFlags2 kGBufferGPUInstanceDataUsage    = VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT;
 constexpr uint32_t            kGBufferInstanceFlagDoubleSided = 1 << 0;
+constexpr uint32_t            kGBufferColorAttachmentCount    = 6;
 
 bool isBoundsInFrustum(const AABB& bounds, const glm::mat4& viewProj)
 {
@@ -120,7 +122,20 @@ uint64_t textureInfoAddressForModel(const ModelAsset& model, const GpuModelRange
 
 } // namespace
 
-void GBufferPass::init() {}
+void GBufferPass::init()
+{
+    const uint32_t vertexShaderID = ShaderManager::Instance().getShaderIdByName(BuiltinShaders::BUILTIN_DEFAULT_GBUFFER_VERT_SHADER_NAME);
+    const uint32_t fragShaderID   = ShaderManager::Instance().getShaderIdByName(BuiltinShaders::BUILTIN_DEFAULT_GBUFFER_FRAG_SHADER_NAME);
+
+    _gbufferPipeline.setShader(vertexShaderID, fragShaderID);
+    _gbufferPipeline.setPushConstant<GBufferPushConstant>();
+    _gbufferPipeline.psoState.colorBlendEnables.resize(kGBufferColorAttachmentCount, VK_FALSE);
+    _gbufferPipeline.psoState.colorWriteMasks.resize(kGBufferColorAttachmentCount,
+                                                     VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
+                                                         VK_COLOR_COMPONENT_A_BIT);
+    const VkColorBlendEquationEXT defaultBlendEquation = _gbufferPipeline.psoState.colorBlendEquations.front();
+    _gbufferPipeline.psoState.colorBlendEquations.resize(kGBufferColorAttachmentCount, defaultBlendEquation);
+}
 
 void GBufferPass::prepareRenderList()
 {
@@ -443,20 +458,13 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
                     {
                         return;
                     }
-
-                    RenderProgram* gbufferProgram = static_cast<RenderProgram*>(FixedMaterial::Create()->getProgram());
-                    if (!gbufferProgram)
-                    {
-                        return;
-                    }
-
                     VkCommandBuffer cmd = context._currCmdBuffer;
 
-                    GBufferPushConstant pushConstant = gbufferProgram->createPushConstant<GBufferPushConstant>();
+                    GBufferPushConstant pushConstant{};
                     pushConstant.perFrameConstant.cameraBufferDeviceAddress = _ownedRender->getCurrentCameraBuffer()->address;
                     pushConstant.sceneConstant.instanceBufferAddress        = _gpuInstanceDataBuffer ? _gpuInstanceDataBuffer->address : 0;
 
-                    context.bindProgram(gbufferProgram, node);
+                    context.bindPipeline(_gbufferPipeline);
 
                     VkViewport viewport = {
                         0,    0,   static_cast<float>(vkDriver->getViewportSize().width), static_cast<float>(vkDriver->getViewportSize().height),
@@ -473,7 +481,7 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
                         }
 
                         pushConstant.sceneConstant.instanceIndex = item.gpuInstanceIndex;
-                        context.bindPushConstant(gbufferProgram, pushConstant);
+                        context.bindPushConstant(pushConstant);
                         vkCmdDraw(cmd, item.indexCount, 1, 0, 0);
                     }
                 })

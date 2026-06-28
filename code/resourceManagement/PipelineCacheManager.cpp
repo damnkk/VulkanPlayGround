@@ -230,11 +230,6 @@ PipelineLayoutDesc& PipelineLayoutDesc::setDescriptorSet(DescriptorEnum setSlot,
     return setDescriptorSetLayout(setSlot, descriptorSet.finalizeLayout());
 }
 
-PipelineLayoutDesc& PipelineLayoutDesc::setPassDescriptorSet(DescriptorSetBindings& descriptorSet)
-{
-    return setDescriptorSet(DescriptorEnum::ePerPassDescriptorSet, descriptorSet);
-}
-
 PipelineLayoutDesc& PipelineLayoutDesc::setMaterialDescriptorSet(DescriptorSetBindings& descriptorSet)
 {
     return setDescriptorSet(DescriptorEnum::eDrawObjectDescriptorSet, descriptorSet);
@@ -356,13 +351,6 @@ GraphicsPipelineStateInitializer& GraphicsPipelineStateInitializer::setMeshShade
     shaderSet.fragModuleID   = fragModuleID;
     shaderSet.taskModuleID   = taskModuleID;
     shaderSet.meshModuleID   = meshModuleID;
-    return *this;
-}
-
-GraphicsPipelineStateInitializer& GraphicsPipelineStateInitializer::setPassDescriptorSet(DescriptorSetBindings& descriptorSet)
-{
-    passDescriptorSet = &descriptorSet;
-    passDescriptorSet->setDescriptorSetSlot(DescriptorEnum::ePerPassDescriptorSet);
     return *this;
 }
 
@@ -591,13 +579,6 @@ PipelineLayout* PipelineCacheManager::getOrCreatePipelineLayout(const PipelineLa
 ComputePipelineStateInitializer& ComputePipelineStateInitializer::setShader(ShaderID moduleID)
 {
     computeModuleID = moduleID;
-    return *this;
-}
-
-ComputePipelineStateInitializer& ComputePipelineStateInitializer::setPassDescriptorSet(DescriptorSetBindings& descriptorSet)
-{
-    passDescriptorSet = &descriptorSet;
-    passDescriptorSet->setDescriptorSetSlot(DescriptorEnum::ePerPassDescriptorSet);
     return *this;
 }
 

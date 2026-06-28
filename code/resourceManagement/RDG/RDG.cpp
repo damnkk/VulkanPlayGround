@@ -174,11 +174,7 @@ void RenderContext::bindPipeline(GraphicsPipelineStateInitializer& initializer)
     CommonDescriptorSet sceneSet        = descriptorCache->getSceneDescriptorSet();
     CommonDescriptorSet frameSet        = descriptorCache->getFrameDescriptorSet();
 
-    VkDescriptorSet passSet = VK_NULL_HANDLE;
-    if (initializer.passDescriptorSet)
-    {
-        passSet = initializer.passDescriptorSet->getOrAcquireDescriptorSet(DescriptorEnum::ePerPassDescriptorSet);
-    }
+    VkDescriptorSet passSet = _pendingGfxState->_passDescriptorSet;
 
     VkDescriptorSet materialSet = VK_NULL_HANDLE;
     if (initializer.materialDescriptorSet)
@@ -190,9 +186,9 @@ void RenderContext::bindPipeline(GraphicsPipelineStateInitializer& initializer)
     layoutDesc.setDescriptorSetLayout(DescriptorEnum::eGlobalDescriptorSet, globalSet.layout);
     layoutDesc.setDescriptorSetLayout(DescriptorEnum::eSceneDescriptorSet, sceneSet.layout);
     layoutDesc.setDescriptorSetLayout(DescriptorEnum::eFrameDescriptorSet, frameSet.layout);
-    if (initializer.passDescriptorSet)
+    if (_pendingGfxState->_passDescriptorSetLayout != VK_NULL_HANDLE)
     {
-        layoutDesc.setPassDescriptorSet(*initializer.passDescriptorSet);
+        layoutDesc.setDescriptorSetLayout(DescriptorEnum::ePerPassDescriptorSet, _pendingGfxState->_passDescriptorSetLayout);
     }
     if (initializer.materialDescriptorSet)
     {
@@ -247,11 +243,7 @@ void RenderContext::bindPipeline(ComputePipelineStateInitializer& initializer)
     CommonDescriptorSet sceneSet        = descriptorCache->getSceneDescriptorSet();
     CommonDescriptorSet frameSet        = descriptorCache->getFrameDescriptorSet();
 
-    VkDescriptorSet passSet = VK_NULL_HANDLE;
-    if (initializer.passDescriptorSet)
-    {
-        passSet = initializer.passDescriptorSet->getOrAcquireDescriptorSet(DescriptorEnum::ePerPassDescriptorSet);
-    }
+    VkDescriptorSet passSet = _pendingComputeState->_passDescriptorSet;
 
     VkDescriptorSet materialSet = VK_NULL_HANDLE;
     if (initializer.materialDescriptorSet)
@@ -263,9 +255,9 @@ void RenderContext::bindPipeline(ComputePipelineStateInitializer& initializer)
     layoutDesc.setDescriptorSetLayout(DescriptorEnum::eGlobalDescriptorSet, globalSet.layout);
     layoutDesc.setDescriptorSetLayout(DescriptorEnum::eSceneDescriptorSet, sceneSet.layout);
     layoutDesc.setDescriptorSetLayout(DescriptorEnum::eFrameDescriptorSet, frameSet.layout);
-    if (initializer.passDescriptorSet)
+    if (_pendingComputeState->_passDescriptorSetLayout != VK_NULL_HANDLE)
     {
-        layoutDesc.setPassDescriptorSet(*initializer.passDescriptorSet);
+        layoutDesc.setDescriptorSetLayout(DescriptorEnum::ePerPassDescriptorSet, _pendingComputeState->_passDescriptorSetLayout);
     }
     if (initializer.materialDescriptorSet)
     {
@@ -362,23 +354,27 @@ void RDGBuilder::prepareDescriptorSets(RenderContext& context, PassNode* pass)
         programDescManager.setDescInfo(bufferInfo.binding, *state.buffer->_rhi);
     }
 
-    VkDescriptorSet currPassSet = programDescManager.getOrAcquireDescriptorSet(DescriptorEnum::ePerPassDescriptorSet);
+    VkDescriptorSetLayout currPassSetLayout = programDescManager.finalizeLayout();
+    VkDescriptorSet       currPassSet       = programDescManager.getOrAcquireDescriptorSet(DescriptorEnum::ePerPassDescriptorSet);
     switch (pass->type())
     {
         case PassNode::Type::Render:
         {
-            context._pendingGfxState->_passDescriptorSet = currPassSet;
+            context._pendingGfxState->_passDescriptorSet       = currPassSet;
+            context._pendingGfxState->_passDescriptorSetLayout = currPassSetLayout;
             break;
         }
         case PassNode::Type::Compute:
         {
-            context._pendingComputeState->_passDescriptorSet = currPassSet;
+            context._pendingComputeState->_passDescriptorSet       = currPassSet;
+            context._pendingComputeState->_passDescriptorSetLayout = currPassSetLayout;
             break;
         }
 
         case PassNode::Type::RayTracing:
         {
-            context._pendingRTState->_passDescriptorSet = currPassSet;
+            context._pendingRTState->_passDescriptorSet       = currPassSet;
+            context._pendingRTState->_passDescriptorSetLayout = currPassSetLayout;
             break;
         }
         default:

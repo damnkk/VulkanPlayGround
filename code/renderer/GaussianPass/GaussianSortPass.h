@@ -7,7 +7,6 @@
 #include <rttr/rttr_enable.h>
 namespace Play
 {
-class ComputeProgram;
 class GaussianRenderer;
 class GaussianSortPass : public BasePass
 {
@@ -21,10 +20,10 @@ public:
     RTTR_ENABLE(BasePass)
 
 private:
-    VrdxSorter                    _sorter = VK_NULL_HANDLE;
-    VrdxSorterStorageRequirements _sortRequirements;
-    GaussianRenderer*             _ownedRenderer;
-    RefPtr<ComputeProgram>        _distanceProgram;
+    VrdxSorter                     _sorter = VK_NULL_HANDLE;
+    VrdxSorterStorageRequirements  _sortRequirements;
+    GaussianRenderer*              _ownedRenderer = nullptr;
+    ComputePipelineStateInitializer _distancePipeline;
 };
 
 } // namespace Play

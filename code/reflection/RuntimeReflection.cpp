@@ -22,7 +22,6 @@
 #include "renderer/renderPasses/VolumeSkyPass.h"
 #include "renderer/renderPasses/VolumeRenderPass.h"
 #include "resourceManagement/Material.h"
-#include "resourceManagement/PlayProgram.h"
 #include "resourceManagement/PlayScene.h"
 #include "resourceManagement/Resource.h"
 #include "resourceManagement/SceneManager.h"
@@ -129,9 +128,6 @@ RTTR_REGISTRATION
     rttr::registration::class_<Play::GBufferConfig>("Play::GBufferConfig");
 
     rttr::registration::class_<Play::Material>("Play::Material");
-    rttr::registration::class_<Play::FixedMaterial>("Play::FixedMaterial");
-    rttr::registration::class_<Play::CustomMaterial>("Play::CustomMaterial");
-
     rttr::registration::class_<Play::Texture>("Play::Texture");
     rttr::registration::class_<Play::Texture::TexMetaData>("Play::Texture::TexMetaData");
     rttr::registration::class_<Play::Buffer>("Play::Buffer");
@@ -142,10 +138,4 @@ RTTR_REGISTRATION
 
     rttr::registration::class_<Play::ShaderModule>("Play::ShaderModule");
     rttr::registration::class_<Play::ShaderManager>("Play::ShaderManager");
-
-    rttr::registration::class_<Play::PlayProgram>("Play::PlayProgram");
-    rttr::registration::class_<Play::RenderProgram>("Play::RenderProgram");
-    rttr::registration::class_<Play::ComputeProgram>("Play::ComputeProgram");
-    rttr::registration::class_<Play::RTProgram>("Play::RTProgram");
-    rttr::registration::class_<Play::MeshRenderProgram>("Play::MeshRenderProgram");
 }

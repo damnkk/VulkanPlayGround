@@ -6,16 +6,14 @@
 #include "ShaderManager.hpp"
 #include "utils.hpp"
 #include "newShaders/gaussian/gaussianLib.h.slang"
+#include "PConstantType.h.slang"
 
 namespace Play
 {
 
 GaussianDrawMeshPass::GaussianDrawMeshPass(GaussianRenderer* renderer) : _ownedRenderer(renderer) {}
 
-GaussianDrawMeshPass::~GaussianDrawMeshPass()
-{
-    // RefPtr 自动释放
-}
+GaussianDrawMeshPass::~GaussianDrawMeshPass() = default;
 
 void GaussianDrawMeshPass::init()
 {
@@ -24,28 +22,23 @@ void GaussianDrawMeshPass::init()
     const auto fragId = ShaderManager::Instance().loadShaderFromFile("gaussianDrawFrag", "./gaussian/gaussianDraw.frag.slang", ShaderStage::eFragment,
                                                                      ShaderType::eSLANG, "main");
 
-    _meshRenderProgram = RefPtr<MeshRenderProgram>(new MeshRenderProgram());
-    _meshRenderProgram->setMeshModuleID(meshId);
-    _meshRenderProgram->setFragModuleID(fragId);
-    _meshRenderProgram->initPushConstant<PerFrameConstant>();
-    _meshRenderProgram->psoState().colorBlendEnables[0]                       = VK_TRUE;
-    _meshRenderProgram->psoState().colorBlendEquations[0].alphaBlendOp        = VK_BLEND_OP_ADD;
-    _meshRenderProgram->psoState().colorBlendEquations[0].colorBlendOp        = VK_BLEND_OP_ADD;
-    _meshRenderProgram->psoState().colorBlendEquations[0].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-    _meshRenderProgram->psoState().colorBlendEquations[0].dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-    _meshRenderProgram->psoState().colorBlendEquations[0].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-    _meshRenderProgram->psoState().colorBlendEquations[0].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-    _meshRenderProgram->psoState().rasterizationState.cullMode                = VK_CULL_MODE_NONE;
+    _meshRenderPipeline.setMeshShader(meshId, fragId);
+    _meshRenderPipeline.setPushConstant<PerFrameConstant>();
+    _meshRenderPipeline.psoState.colorBlendEnables[0]                       = VK_TRUE;
+    _meshRenderPipeline.psoState.colorBlendEquations[0].alphaBlendOp        = VK_BLEND_OP_ADD;
+    _meshRenderPipeline.psoState.colorBlendEquations[0].colorBlendOp        = VK_BLEND_OP_ADD;
+    _meshRenderPipeline.psoState.colorBlendEquations[0].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    _meshRenderPipeline.psoState.colorBlendEquations[0].dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    _meshRenderPipeline.psoState.colorBlendEquations[0].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    _meshRenderPipeline.psoState.colorBlendEquations[0].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    _meshRenderPipeline.psoState.rasterizationState.cullMode                = VK_CULL_MODE_NONE;
 
-    _presentProgram              = RefPtr<RenderProgram>(new RenderProgram());
     const uint32_t presentVertId = ShaderManager::Instance().getShaderIdByName(BuiltinShaders::BUILTIN_FULL_SCREEN_QUAD_VERT_SHADER_NAME);
     const uint32_t presentFragId =
         ShaderManager::Instance().loadShaderFromFile("gaussianPresentF", "newShaders/deferRenderer/postprocess/present.frag.slang",
                                                      ShaderStage::eFragment, ShaderType::eSLANG, "main");
-    _presentProgram->setVertexModuleID(presentVertId);
-    _presentProgram->setFragModuleID(presentFragId);
-
-    _presentProgram->psoState().rasterizationState.cullMode = VK_CULL_MODE_NONE;
+    _presentPipeline.setShader(presentVertId, presentFragId);
+    _presentPipeline.psoState.rasterizationState.cullMode = VK_CULL_MODE_NONE;
 }
 
 void GaussianDrawMeshPass::build(RDG::RDGBuilder* rdgBuilder)
@@ -86,13 +79,11 @@ void GaussianDrawMeshPass::build(RDG::RDGBuilder* rdgBuilder)
                 [this, indirectBuffer](RDG::PassNode* node, RDG::RenderContext& context)
                 {
                     VkCommandBuffer cmd = context._currCmdBuffer;
-
-                    GaussianScene&   gaussianScene = _ownedRenderer->getSceneManager()->getGaussianScene();
-                    PerFrameConstant pushConstant = _meshRenderProgram->createPushConstant<PerFrameConstant>();
+                    PerFrameConstant pushConstant{};
                     pushConstant.cameraBufferDeviceAddress = _ownedRenderer->getCurrentCameraBuffer()->address;
 
-                    context.bindProgram(_meshRenderProgram.get(), node);
-                    context.bindPushConstant(_meshRenderProgram.get(), pushConstant);
+                    context.bindPipeline(_meshRenderPipeline);
+                    context.bindPushConstant(pushConstant);
                     VkViewport viewport = {
                         0,    0,    static_cast<float>(vkDriver->getViewportSize().width), static_cast<float>(vkDriver->getViewportSize().height),
                         0.0f, 1.0f,
@@ -115,7 +106,7 @@ void GaussianDrawMeshPass::build(RDG::RDGBuilder* rdgBuilder)
                 [this](RDG::PassNode* node, RDG::RenderContext& context)
                 {
                     VkCommandBuffer cmd = context._currCmdBuffer;
-                    context.bindProgram(_presentProgram.get(), node);
+                    context.bindPipeline(_presentPipeline);
 
                     VkViewport viewport = {
                         0,    0,    static_cast<float>(vkDriver->getViewportSize().width), static_cast<float>(vkDriver->getViewportSize().height),

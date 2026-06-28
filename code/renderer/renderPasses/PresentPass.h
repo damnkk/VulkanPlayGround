@@ -2,13 +2,13 @@
 #define PLAY_PRESENTPASS_H
 
 #include "RenderPass.h"
+#include "PipelineCacheManager.h"
 #include "core/RefCounted.h"
 #include <memory>
 #include <rttr/rttr_enable.h>
 namespace Play
 {
 class Renderer;
-class RenderProgram;
 
 class PresentPass : public BasePass
 {
@@ -19,14 +19,13 @@ public:
     ~PresentPass();
 
     void init() override;
-    // build 需要接收一个输入纹理，即上一阶段的输出
     void build(RDG::RDGBuilder* rdgBuilder) override;
 
     RTTR_ENABLE(BasePass)
 
 private:
-    Renderer*             _renderer;
-    RefPtr<RenderProgram> _presentProgram;
+    Renderer*                         _renderer = nullptr;
+    GraphicsPipelineStateInitializer _presentPipeline;
 };
 
 } // namespace Play

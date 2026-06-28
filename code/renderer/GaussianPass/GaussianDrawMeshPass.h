@@ -8,8 +8,6 @@
 namespace Play
 {
 class GaussianRenderer;
-class RenderProgram;
-class MeshRenderProgram;
 
 class GaussianDrawMeshPass : public BasePass
 {
@@ -22,9 +20,9 @@ public:
     RTTR_ENABLE(BasePass)
 
 private:
-    GaussianRenderer*          _ownedRenderer = nullptr;
-    RefPtr<MeshRenderProgram>  _meshRenderProgram;
-    RefPtr<RenderProgram>      _presentProgram;
+    GaussianRenderer*              _ownedRenderer = nullptr;
+    GraphicsPipelineStateInitializer _meshRenderPipeline;
+    GraphicsPipelineStateInitializer _presentPipeline;
 };
 
 } // namespace Play

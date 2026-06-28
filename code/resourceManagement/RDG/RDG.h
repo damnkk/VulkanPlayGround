@@ -89,10 +89,11 @@ private:
     friend struct RenderContext;
 
 public:
-    VkDescriptorSet _globalDescriptorSet = VK_NULL_HANDLE;
-    VkDescriptorSet _frameDescriptorSet  = VK_NULL_HANDLE;
-    VkDescriptorSet _sceneDescriptorSet  = VK_NULL_HANDLE;
-    VkDescriptorSet _passDescriptorSet   = VK_NULL_HANDLE;
+    VkDescriptorSet       _globalDescriptorSet     = VK_NULL_HANDLE;
+    VkDescriptorSet       _frameDescriptorSet      = VK_NULL_HANDLE;
+    VkDescriptorSet       _sceneDescriptorSet      = VK_NULL_HANDLE;
+    VkDescriptorSet       _passDescriptorSet       = VK_NULL_HANDLE;
+    VkDescriptorSetLayout _passDescriptorSetLayout = VK_NULL_HANDLE;
 };
 
 struct PendingGfxState : public PendingState

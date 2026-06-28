@@ -1,5 +1,4 @@
 #include "Material.h"
-#include "PlayProgram.h"
 
 namespace Play
 {

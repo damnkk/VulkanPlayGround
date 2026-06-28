@@ -185,7 +185,6 @@ class PipelineLayoutDesc
 public:
     PipelineLayoutDesc& setDescriptorSetLayout(DescriptorEnum setSlot, VkDescriptorSetLayout layout);
     PipelineLayoutDesc& setDescriptorSet(DescriptorEnum setSlot, DescriptorSetBindings& descriptorSet);
-    PipelineLayoutDesc& setPassDescriptorSet(DescriptorSetBindings& descriptorSet);
     PipelineLayoutDesc& setMaterialDescriptorSet(DescriptorSetBindings& descriptorSet);
     PipelineLayoutDesc& setPushConstantRange(const VkPushConstantRange& range);
 
@@ -242,7 +241,6 @@ public:
     GraphicsShaderSet  shaderSet;
     PSOState           psoState;
     RenderTargetState  renderTargetState;
-    DescriptorSetBindings* passDescriptorSet     = nullptr;
     DescriptorSetBindings* materialDescriptorSet = nullptr;
     PipelineLayout*         pipelineLayout        = nullptr;
     VkPushConstantRange     pushConstantRange     = {};
@@ -250,7 +248,6 @@ public:
 
     GraphicsPipelineStateInitializer& setShader(ShaderID vertexModuleID, ShaderID fragModuleID);
     GraphicsPipelineStateInitializer& setMeshShader(ShaderID meshModuleID, ShaderID fragModuleID, ShaderID taskModuleID = ~0U);
-    GraphicsPipelineStateInitializer& setPassDescriptorSet(DescriptorSetBindings& descriptorSet);
     GraphicsPipelineStateInitializer& setMaterialDescriptorSet(DescriptorSetBindings& descriptorSet);
     GraphicsPipelineStateInitializer& setPushConstantRange(const VkPushConstantRange& range);
 
@@ -271,14 +268,12 @@ class ComputePipelineStateInitializer
 {
 public:
     ShaderID computeModuleID = ~0U;
-    DescriptorSetBindings* passDescriptorSet     = nullptr;
     DescriptorSetBindings* materialDescriptorSet = nullptr;
     PipelineLayout*         pipelineLayout        = nullptr;
     VkPushConstantRange     pushConstantRange     = {};
     bool                    hasPushConstantRange  = false;
 
     ComputePipelineStateInitializer& setShader(ShaderID moduleID);
-    ComputePipelineStateInitializer& setPassDescriptorSet(DescriptorSetBindings& descriptorSet);
     ComputePipelineStateInitializer& setMaterialDescriptorSet(DescriptorSetBindings& descriptorSet);
     ComputePipelineStateInitializer& setPushConstantRange(const VkPushConstantRange& range);
 
