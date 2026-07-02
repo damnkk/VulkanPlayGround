@@ -79,6 +79,11 @@ bool isObjPath(const std::filesystem::path& path)
     return lowerAscii(path.extension().string()) == ".obj";
 }
 
+bool isFbxPath(const std::filesystem::path& path)
+{
+    return lowerAscii(path.extension().string()) == ".fbx";
+}
+
 glm::mat4 toGlm(const aiMatrix4x4& matrix)
 {
     return glm::mat4(matrix.a1, matrix.b1, matrix.c1, matrix.d1, matrix.a2, matrix.b2, matrix.c2, matrix.d2, matrix.a3, matrix.b3, matrix.c3,
@@ -561,6 +566,16 @@ uint32_t appendAssimpNode(const aiNode* assimpNode, uint32_t parentNodeIndex, As
     return nodeIndex;
 }
 
+void configureFbxImport(Assimp::Importer& importer, const ModelLoadingConfig& loadingCfg)
+{
+    importer.SetPropertyInteger(AI_CONFIG_IMPORT_FBX_READ_MATERIALS, loadingCfg.loadMaterials ? 1 : 0);
+    importer.SetPropertyInteger(AI_CONFIG_IMPORT_FBX_READ_TEXTURES, loadingCfg.loadTextures ? 1 : 0);
+    importer.SetPropertyInteger(AI_CONFIG_IMPORT_FBX_READ_CAMERAS, 0);
+    importer.SetPropertyInteger(AI_CONFIG_IMPORT_FBX_READ_LIGHTS, 0);
+    importer.SetPropertyInteger(AI_CONFIG_IMPORT_FBX_READ_ANIMATIONS, 0);
+    importer.SetPropertyInteger(AI_CONFIG_IMPORT_FBX_READ_WEIGHTS, 0);
+}
+
 class ModelFormatImporter
 {
 public:
@@ -590,6 +605,10 @@ public:
         {
             return isObjPath(path);
         }
+        if (_format == ModelFileFormat::eFbx)
+        {
+            return isFbxPath(path);
+        }
         return false;
     }
 
@@ -600,6 +619,10 @@ public:
         Assimp::Importer importer;
         importer.SetPropertyFloat(AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY, loadingCfg.globalScale);
         importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, aiPrimitiveType_POINT | aiPrimitiveType_LINE);
+        if (_format == ModelFileFormat::eFbx)
+        {
+            configureFbxImport(importer, loadingCfg);
+        }
 
         uint32_t assimpFlags = loadingCfg.assimpPostProcessFlags | loadingCfg.extraAssimpProcessFlags;
         if (loadingCfg.globalScale != 1.0f)
@@ -695,8 +718,9 @@ ModelImportResult model_loading::importModelFromFile(const std::filesystem::path
 {
     const AssimpFormatImporter gltfImporter(ModelFileFormat::eGltf);
     const AssimpFormatImporter objImporter(ModelFileFormat::eObj);
+    const AssimpFormatImporter fbxImporter(ModelFileFormat::eFbx);
 
-    const ModelFormatImporter* importers[] = {&gltfImporter, &objImporter};
+    const ModelFormatImporter* importers[] = {&gltfImporter, &objImporter, &fbxImporter};
     for (const ModelFormatImporter* importer : importers)
     {
         if (importer->canImport(path, loadingConfig))

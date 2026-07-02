@@ -6,7 +6,7 @@
 			"label": "CMake: 生成",
 			"command": "build",
 			"targets": [
-				"all"
+				"VulkanPlayGround"
 			],
 			"group": {
 				"kind": "build",

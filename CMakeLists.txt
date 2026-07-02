@@ -15,7 +15,12 @@ find_path(NVPRO_CORE2_DIR
 )
 include(${NVPRO_CORE2_DIR}/cmake/Setup.cmake)
 
-find_package(SDL3 CONFIG REQUIRED PATHS "$ENV{VULKAN_SDK}/cmake")
+if(DEFINED ENV{VULKAN_SDK})
+  file(TO_CMAKE_PATH "$ENV{VULKAN_SDK}" VPG_VULKAN_SDK)
+  find_package(SDL3 CONFIG REQUIRED PATHS "${VPG_VULKAN_SDK}/cmake")
+else()
+  find_package(SDL3 CONFIG REQUIRED)
+endif()
 
 # Add compile definitions for nvutils to enable thread pool priority and deadlock check
 # This ensures both the library and our application see the same class layout
@@ -27,6 +32,7 @@ if(TARGET nvutils)
 endif()
 
 # implement spirv-reflect as static lib
+set(SPIRV_REFLECT_EXECUTABLE OFF CACHE BOOL "Build spv-reflect executable" FORCE)
 set(SPIRV_REFLECT_STATIC_LIB ON CACHE BOOL "Build spv-reflect as static lib" FORCE)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/External/spv_reflect)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
@@ -84,6 +90,10 @@ set_property(TARGET upsweep_slang PROPERTY FOLDER "ThirdParty/vrdx")
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/External/spz)
 
 #####################################################################################
+# OpenImageIO
+find_package(OpenImageIO CONFIG REQUIRED)
+
+#####################################################################################
 # assimp
 function(add_assimp_dependency)
   set(BUILD_SHARED_LIBS OFF)
@@ -139,6 +149,7 @@ set(USE_PCH OFF CACHE BOOL "" FORCE)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/External/rttr EXCLUDE_FROM_ALL)
 
 if(TARGET rttr_core_lib)
+  target_compile_options(rttr_core_lib PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/EHsc>)
   set_property(TARGET rttr_core_lib PROPERTY FOLDER "ThirdParty/rttr")
 endif()
 
@@ -173,6 +184,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   Qt6::Widgets
   vk_radix_sort
   RTTR::Core_Lib
+  OpenImageIO::OpenImageIO
   spirv-reflect-static
   crc32c
   "${CMAKE_CURRENT_SOURCE_DIR}/External/sqlite3/libsqlite3.lib"

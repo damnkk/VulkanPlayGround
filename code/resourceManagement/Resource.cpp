@@ -1,9 +1,9 @@
 #include "Resource.h"
 #include "core/runtime/RenderSession.h"
+#include "ImageLoading.h"
 #include "PlayAllocator.h"
 #include "core/runtime/VulkanRuntime.h"
 #include "utils.hpp"
-#include "stb_image.h"
 #include "nvvk/mipmaps.hpp"
 
 namespace Play
@@ -223,170 +223,51 @@ Texture::Texture(const std::filesystem::path& imagePath, VkImageLayout finalLayo
 {
     debugName = nvutils::utf8FromPath(imagePath);
 
-    // HDR 图片处理
-    if (stbi_is_hdr(nvutils::utf8FromPath(imagePath).c_str()))
+    ImageLoading::LoadedImage loadedImage;
+    if (!ImageLoading::LoadTextureImage(imagePath, isSrgb, loadedImage))
     {
-        int    width, height, channels;
-        float* data = stbi_loadf(nvutils::utf8FromPath(imagePath).c_str(), &width, &height, &channels, 4);
-        if (!data)
-        {
-            LOGW("Failed to load hdr image: %s\n", nvutils::utf8FromPath(imagePath).c_str());
-            return;
-        }
-
-        const VkExtent2D imageExtent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
-        mipLevels                    = resolveTextureMipLevels(mipLevels, imageExtent);
-
-        // 创建 image
-        VkImageCreateInfo imageInfo{
-            .sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-            .imageType     = VK_IMAGE_TYPE_2D,
-            .format        = VK_FORMAT_R32G32B32A32_SFLOAT,
-            .extent        = {imageExtent.width, imageExtent.height, 1},
-            .mipLevels     = mipLevels,
-            .arrayLayers   = 1,
-            .samples       = VK_SAMPLE_COUNT_1_BIT,
-            .tiling        = VK_IMAGE_TILING_OPTIMAL,
-            .usage         = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-            .sharingMode   = VK_SHARING_MODE_EXCLUSIVE,
-            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        };
-
-        VkImageViewCreateInfo viewInfo{
-            .sType            = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-            .viewType         = VK_IMAGE_VIEW_TYPE_2D,
-            .format           = VK_FORMAT_R32G32B32A32_SFLOAT,
-            .components       = {VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A},
-            .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, 1},
-        };
-        PlayResourceManager::Instance().createImage(*this, imageInfo, viewInfo);
-
-        // 上传数据
-        VkDeviceSize dataSize = static_cast<VkDeviceSize>(width) * height * sizeof(float) * 4;
-        auto         cmd      = PlayResourceManager::Instance().getTempCommandBuffer();
-        PlayResourceManager::Instance().appendImage(*this, dataSize, data, finalLayout);
-        PlayResourceManager::Instance().cmdUploadAppended(cmd);
-        nvvk::cmdGenerateMipmaps(cmd, image, {(uint32_t) width, (uint32_t) height}, mipLevels, 1, finalLayout);
-        PlayResourceManager::Instance().submitAndWaitTempCmdBuffer(cmd);
-        PlayResourceManager::Instance().acquireSampler(descriptor.sampler);
-
-        // 设置成员变量
-        descriptor.imageLayout = finalLayout;
-        type                   = VK_IMAGE_TYPE_2D;
-        format                 = VK_FORMAT_R32G32B32A32_SFLOAT;
-        extent                 = {(uint32_t) width, (uint32_t) height, 1};
-        sampleCount            = VK_SAMPLE_COUNT_1_BIT;
-        usageFlags             = imageInfo.usage;
-        aspectFlags            = VK_IMAGE_ASPECT_COLOR_BIT;
-
-        stbi_image_free(data);
         return;
     }
 
-    // 普通图片处理
-    const std::string imageFileContents = nvutils::loadFile(imagePath);
-    if (imageFileContents.empty())
-    {
-        LOGW("File was empty or could not be opened: %s\n", nvutils::utf8FromPath(imagePath).c_str());
-        return;
-    }
+    mipLevels = resolveTextureMipLevels(mipLevels, loadedImage.extent);
 
-    const stbi_uc* imageFileData = reinterpret_cast<const stbi_uc*>(imageFileContents.data());
-    if (imageFileContents.size() > std::numeric_limits<int>::max())
-    {
-        LOGW("File too large for stb_image to read: %s\n", nvutils::utf8FromPath(imagePath).c_str());
-        return;
-    }
-    const int imageFileSize = static_cast<int>(imageFileContents.size());
+    VkImageCreateInfo imageInfo{
+        .sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType     = VK_IMAGE_TYPE_2D,
+        .format        = loadedImage.format,
+        .extent        = {loadedImage.extent.width, loadedImage.extent.height, 1},
+        .mipLevels     = mipLevels,
+        .arrayLayers   = 1,
+        .samples       = VK_SAMPLE_COUNT_1_BIT,
+        .tiling        = VK_IMAGE_TILING_OPTIMAL,
+        .usage         = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .sharingMode   = VK_SHARING_MODE_EXCLUSIVE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    };
 
-    int w = 0, h = 0, comp = 0;
-    if (!stbi_info_from_memory(imageFileData, imageFileSize, &w, &h, &comp))
-    {
-        LOGW("Failed to get info for %s\n", nvutils::utf8FromPath(imagePath).c_str());
-        return;
-    }
+    VkImageViewCreateInfo viewInfo{
+        .sType            = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .viewType         = VK_IMAGE_VIEW_TYPE_2D,
+        .format           = loadedImage.format,
+        .components       = {VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A},
+        .subresourceRange = {inferImageAspectFlags(loadedImage.format, true), 0, mipLevels, 0, 1},
+    };
+    PlayResourceManager::Instance().createImage(*this, imageInfo, viewInfo);
 
-    const bool is16Bit = stbi_is_16_bit_from_memory(imageFileData, imageFileSize);
-    stbi_uc*   data    = nullptr;
-    size_t     bytes_per_pixel;
-    int        requiredComponents = comp == 1 ? 1 : 4;
+    auto cmd = PlayResourceManager::Instance().getTempCommandBuffer();
+    PlayResourceManager::Instance().appendImage(*this, static_cast<VkDeviceSize>(loadedImage.pixels.size()), loadedImage.pixels.data(), finalLayout);
+    PlayResourceManager::Instance().cmdUploadAppended(cmd);
+    nvvk::cmdGenerateMipmaps(cmd, image, loadedImage.extent, mipLevels, 1, finalLayout);
+    PlayResourceManager::Instance().submitAndWaitTempCmdBuffer(cmd);
+    PlayResourceManager::Instance().acquireSampler(descriptor.sampler);
 
-    if (is16Bit)
-    {
-        stbi_us* data16 = stbi_load_16_from_memory(imageFileData, imageFileSize, &w, &h, &comp, requiredComponents);
-        bytes_per_pixel = sizeof(*data16) * requiredComponents;
-        data            = reinterpret_cast<stbi_uc*>(data16);
-    }
-    else
-    {
-        data            = stbi_load_from_memory(imageFileData, imageFileSize, &w, &h, &comp, requiredComponents);
-        bytes_per_pixel = sizeof(*data) * requiredComponents;
-    }
-
-    if (data && w > 0 && h > 0)
-    {
-        VkFormat format = VK_FORMAT_UNDEFINED;
-        switch (requiredComponents)
-        {
-            case 1:
-                format = is16Bit ? VK_FORMAT_R16_UNORM : VK_FORMAT_R8_UNORM;
-                break;
-            case 4:
-                format = is16Bit ? VK_FORMAT_R16G16B16A16_UNORM : isSrgb ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
-                break;
-        }
-
-        const VkExtent2D imageExtent = {static_cast<uint32_t>(w), static_cast<uint32_t>(h)};
-        mipLevels                    = resolveTextureMipLevels(mipLevels, imageExtent);
-
-        // 创建 image
-        VkImageCreateInfo imageInfo{
-            .sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-            .imageType     = VK_IMAGE_TYPE_2D,
-            .format        = format,
-            .extent        = {imageExtent.width, imageExtent.height, 1},
-            .mipLevels     = mipLevels,
-            .arrayLayers   = 1,
-            .samples       = VK_SAMPLE_COUNT_1_BIT,
-            .tiling        = VK_IMAGE_TILING_OPTIMAL,
-            .usage         = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-            .sharingMode   = VK_SHARING_MODE_EXCLUSIVE,
-            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        };
-
-        VkImageViewCreateInfo viewInfo{
-            .sType            = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-            .viewType         = VK_IMAGE_VIEW_TYPE_2D,
-            .format           = format,
-            .components       = {VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A},
-            .subresourceRange = {inferImageAspectFlags(format, true), 0, mipLevels, 0, 1},
-        };
-        PlayResourceManager::Instance().createImage(*this, imageInfo, viewInfo);
-
-        // 上传数据
-        VkDeviceSize dataSize = static_cast<VkDeviceSize>(w) * h * bytes_per_pixel;
-        auto         cmd      = PlayResourceManager::Instance().getTempCommandBuffer();
-        PlayResourceManager::Instance().appendImage(*this, dataSize, data, finalLayout);
-        PlayResourceManager::Instance().cmdUploadAppended(cmd);
-        nvvk::cmdGenerateMipmaps(cmd, image, {(uint32_t) w, (uint32_t) h}, mipLevels, 1, finalLayout);
-        PlayResourceManager::Instance().submitAndWaitTempCmdBuffer(cmd);
-        PlayResourceManager::Instance().acquireSampler(descriptor.sampler);
-
-        // 设置成员变量
-        descriptor.imageLayout = finalLayout;
-        type                   = VK_IMAGE_TYPE_2D;
-        this->format           = format;
-        extent                 = {(uint32_t) w, (uint32_t) h, 1};
-        sampleCount            = VK_SAMPLE_COUNT_1_BIT;
-        usageFlags             = imageInfo.usage;
-        aspectFlags            = VK_IMAGE_ASPECT_COLOR_BIT;
-
-        stbi_image_free(data);
-    }
-    else
-    {
-        stbi_image_free(data);
-    }
+    descriptor.imageLayout = finalLayout;
+    type                   = VK_IMAGE_TYPE_2D;
+    this->format           = loadedImage.format;
+    extent                 = {loadedImage.extent.width, loadedImage.extent.height, 1};
+    sampleCount            = VK_SAMPLE_COUNT_1_BIT;
+    usageFlags             = imageInfo.usage;
+    aspectFlags            = VK_IMAGE_ASPECT_COLOR_BIT;
 }
 
 void Texture::onDestroy()

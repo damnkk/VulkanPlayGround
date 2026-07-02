@@ -3,7 +3,6 @@
 #include "core/runtime/VulkanRuntime.h"
 #include "utils.hpp"
 #include "nvvk/check_error.hpp"
-#include "stb_image.h"
 namespace Play
 {
 

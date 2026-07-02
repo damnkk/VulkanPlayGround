@@ -882,6 +882,9 @@ void VulkanRuntime::updateGlobalDescriptorSet()
     imageInfoList.push_back({samplerList[0]});
     samplerCreateInfo.magFilter = VK_FILTER_LINEAR;
     samplerCreateInfo.minFilter = VK_FILTER_LINEAR;
+    samplerCreateInfo.addressModeU  = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+    samplerCreateInfo.addressModeV  = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+    samplerCreateInfo.addressModeW  = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
     Play::PlayResourceManager::Instance().acquireSampler(samplerList[1], samplerCreateInfo);
     imageInfoList.push_back({samplerList[1]});
 

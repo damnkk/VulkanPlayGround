@@ -10,7 +10,8 @@ enum class ModelFileFormat : uint32_t
 {
     eAuto,
     eGltf,
-    eObj
+    eObj,
+    eFbx
 };
 
 struct ModelLoadingConfig

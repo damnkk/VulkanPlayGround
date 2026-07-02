@@ -105,5 +105,6 @@
         "-ID:\\repo\\VulkanPlayGround\\External\\nvpro_core\\nvvkhl\\shaders",
         "-ID:\\repo\\VulkanPlayGround\\shaders"
     ],
-    "glsllint.linkShader": true
+    "glsllint.linkShader": true,
+    "cmake.useCMakePresets": "never"
 }
