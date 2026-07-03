@@ -302,7 +302,9 @@ void GBufferPass::buildRenderList(const GpuScene& gpuScene)
             gpuInstanceData.textureInfoAddress = textureInfoAddressForModel(model, range);
             gpuInstanceData.meshInfoIndex      = meshInfoIndex;
             gpuInstanceData.materialIndex      = meshInfo.materialIdx;
-            gpuInstanceData.textureInfoOffset  = range.firstTextureInfo;
+            gpuInstanceData.textureOffset      = range.firstTexture;
+            gpuInstanceData.textureInfoCount   = range.textureInfoCount;
+            gpuInstanceData.textureCount       = range.textureCount;
 
             if (meshInfo.materialIdx < common.materials.size() && common.materials[meshInfo.materialIdx].doubleSided != 0)
             {

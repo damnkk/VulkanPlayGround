@@ -44,7 +44,9 @@ struct GBufferGPUInstanceData
     uint64_t  textureInfoAddress = 0;
     uint32_t  meshInfoIndex      = INVALID_SCENE_ID;
     uint32_t  materialIndex      = INVALID_SCENE_ID;
-    uint32_t  textureInfoOffset  = 0;
+    uint32_t  textureOffset      = 0;
+    uint32_t  textureInfoCount   = 0;
+    uint32_t  textureCount       = 0;
     uint32_t  flags              = 0;
 };
 

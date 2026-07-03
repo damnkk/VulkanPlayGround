@@ -28,7 +28,9 @@ struct GBufferGPUInstanceData
     uint64_t textureInfoAddress;
     uint meshInfoIndex;
     uint materialIndex;
-    uint textureInfoOffset;
+    uint textureOffset;
+    uint textureInfoCount;
+    uint textureCount;
     uint flags;
 };
 

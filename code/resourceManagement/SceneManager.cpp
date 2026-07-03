@@ -21,6 +21,36 @@ std::unique_ptr<GpuScene> createGpuScene(GpuSceneType type)
             return std::make_unique<RasterGpuScene>();
     }
 }
+
+bool isSameModelLoadRequest(ModelLoadRequestID lhs, ModelLoadRequestID rhs)
+{
+    return lhs.index == rhs.index && lhs.generation == rhs.generation;
+}
+
+void applyFailedModelLoad(CpuModelComponent& component, const std::string& message)
+{
+    component.model           = {};
+    component.firstRenderable = 0;
+    component.renderableCount = INVALID_SCENE_ID;
+    component.loadState       = CpuModelComponent::LoadState::eFailed;
+    component.loadMessage     = message;
+}
+
+void applyRegisteredModelLoad(CpuModelComponent& component, ModelAssetID model, uint32_t renderableCount)
+{
+    component.model           = model;
+    component.firstRenderable = 0;
+    component.renderableCount = renderableCount;
+    component.loadState       = CpuModelComponent::LoadState::eLoaded;
+    component.loadMessage.clear();
+}
+
+struct PendingModelRegistration
+{
+    ModelLoadCompletion completion;
+    ModelAssetID        model;
+    uint32_t            renderableCount = INVALID_SCENE_ID;
+};
 } // namespace
 
 SceneManager::SceneManager(GpuSceneType gpuSceneType) : _gpuScene(createGpuScene(gpuSceneType))
@@ -95,10 +125,7 @@ void SceneManager::update()
             loadingServer.processPendingLoads();
         });
 
-    std::lock_guard<std::mutex> lock(_cpuSceneMutex);
-    _cpuScene.updateWorldTransforms();
-
-    const size_t previousSceneTextureCount = _gpuScene ? _gpuScene->getSceneTextures().size() : 0;
+    std::vector<ModelLoadCompletion> completedModels;
 
     editAssetLoadingServer(
         [&](AssetLoadingServer& loadingServer)
@@ -106,38 +133,67 @@ void SceneManager::update()
             ModelLoadCompletion completion;
             while (loadingServer.popCompletedModel(completion))
             {
-                CpuModelComponent* component = _cpuScene.getComponent<CpuModelComponent>(completion.request.requester);
-                if (!component)
-                {
-                    continue;
-                }
-
-                if (completion.result.success && _gpuScene)
-                {
-                    component->model           = _gpuScene->registerModel(std::move(completion.result.model));
-                    component->firstRenderable = 0;
-                    component->renderableCount = component->model.isValid()
-                                                      ? static_cast<uint32_t>(_gpuScene->getModels()[component->model.index].renderables.size())
-                                                      : INVALID_SCENE_ID;
-                    component->loadState       = CpuModelComponent::LoadState::eLoaded;
-                    component->loadMessage.clear();
-                }
-                else
-                {
-                    component->model           = {};
-                    component->firstRenderable = 0;
-                    component->renderableCount = INVALID_SCENE_ID;
-                    component->loadState       = CpuModelComponent::LoadState::eFailed;
-                    component->loadMessage     = completion.result.message;
-                }
-
-                _cpuScene.notifyComponentChanged();
+                completedModels.push_back(std::move(completion));
             }
         });
 
-    if (_gpuScene && _gpuScene->getType() != GpuSceneType::eGaussian && _gpuScene->getSourceSceneRevision() != _cpuScene.getRevision())
+    std::vector<PendingModelRegistration> pendingRegistrations;
+    pendingRegistrations.reserve(completedModels.size());
+
     {
-        _gpuScene->updateTransforms(_cpuScene);
+        std::lock_guard<std::mutex> lock(_cpuSceneMutex);
+        for (ModelLoadCompletion& completion : completedModels)
+        {
+            CpuModelComponent* component = _cpuScene.getComponent<CpuModelComponent>(completion.request.requester);
+            if (!component || !isSameModelLoadRequest(component->request, completion.request.id))
+            {
+                continue;
+            }
+
+            if (completion.result.success && _gpuScene)
+            {
+                PendingModelRegistration pendingRegistration;
+                pendingRegistration.completion = std::move(completion);
+                pendingRegistrations.push_back(std::move(pendingRegistration));
+                continue;
+            }
+
+            applyFailedModelLoad(*component, completion.result.message);
+            _cpuScene.notifyComponentChanged();
+        }
+    }
+
+    const size_t previousSceneTextureCount = _gpuScene ? _gpuScene->getSceneTextures().size() : 0;
+
+    for (PendingModelRegistration& pendingRegistration : pendingRegistrations)
+    {
+        pendingRegistration.model = _gpuScene->registerModel(std::move(pendingRegistration.completion.result.model));
+        pendingRegistration.renderableCount = pendingRegistration.model.isValid()
+                                                  ? static_cast<uint32_t>(_gpuScene->getModels()[pendingRegistration.model.index].renderables.size())
+                                                  : INVALID_SCENE_ID;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(_cpuSceneMutex);
+        for (PendingModelRegistration& pendingRegistration : pendingRegistrations)
+        {
+            const ModelLoadCompletion& completion = pendingRegistration.completion;
+            CpuModelComponent*         component  = _cpuScene.getComponent<CpuModelComponent>(completion.request.requester);
+            if (!component || !isSameModelLoadRequest(component->request, completion.request.id))
+            {
+                continue;
+            }
+
+            applyRegisteredModelLoad(*component, pendingRegistration.model, pendingRegistration.renderableCount);
+            _cpuScene.notifyComponentChanged();
+        }
+
+        _cpuScene.updateWorldTransforms();
+
+        if (_gpuScene && _gpuScene->getType() != GpuSceneType::eGaussian && _gpuScene->getSourceSceneRevision() != _cpuScene.getRevision())
+        {
+            _gpuScene->updateTransforms(_cpuScene);
+        }
     }
 
     if (_gpuScene && _gpuScene->getSceneTextures().size() != previousSceneTextureCount)

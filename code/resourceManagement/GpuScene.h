@@ -23,7 +23,6 @@ struct GpuSceneCommonData
     std::vector<glm::mat4>                  transforms;
     std::vector<MeshInfo>                   meshInfos;
     std::vector<shaderio::GltfShadeMaterial> materials;
-    std::vector<shaderio::GltfTextureInfo>   textureInfos;
 };
 
 struct RasterGPUData
@@ -43,8 +42,9 @@ struct GpuModelRange
     uint32_t meshInfoCount    = 0;
     uint32_t firstMaterial    = 0;
     uint32_t materialCount    = 0;
-    uint32_t firstTextureInfo = 0;
     uint32_t textureInfoCount = 0;
+    uint32_t firstTexture     = 0;
+    uint32_t textureCount     = 0;
 };
 
 class GpuScene
@@ -84,7 +84,7 @@ public:
     }
 
 protected:
-    uint32_t ensureSceneTexture(ModelTextureResource&& texture);
+    uint32_t appendSceneTextures(std::vector<ModelTextureResource>& textures);
     void     registerRasterData(const ModelAsset& model, const GpuModelRange& range);
     void     registerRayTracingData(const ModelAsset& model, const GpuModelRange& range);
 
@@ -96,6 +96,7 @@ protected:
     std::vector<RefPtr<Texture>>   _sceneTextures;
     std::vector<std::filesystem::path> _sceneTextureSources;
     std::vector<RefPtr<Buffer>>    _ownedBuffers;
+    std::mutex                     _registrationMutex;
     uint64_t                       _sourceSceneRevision = 0;
 };
 

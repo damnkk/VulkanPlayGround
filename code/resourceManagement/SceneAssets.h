@@ -186,37 +186,9 @@ struct ModelTextureResource
     }
 };
 
-struct ModelMeshRange
-{
-    uint32_t firstVertex = 0;
-    uint32_t vertexCount = 0;
-    uint32_t firstIndex  = 0;
-    uint32_t indexCount  = 0;
-    uint32_t materialIdx = 0;
-    AABB     bbox;
-};
-
-struct ModelGeometryPayload
-{
-    std::vector<glm::vec3>      positions;
-    std::vector<glm::vec3>      normals;
-    std::vector<glm::vec4>      tangents;
-    std::vector<glm::vec2>      texCoords0;
-    std::vector<glm::vec2>      texCoords1;
-    std::vector<uint32_t>       colors;
-    std::vector<uint32_t>       indices;
-    std::vector<ModelMeshRange> ranges;
-
-    bool empty() const
-    {
-        return positions.empty() || indices.empty() || ranges.empty();
-    }
-};
-
 struct ModelAssetPackage
 {
     ModelAsset                               asset;
-    ModelGeometryPayload                     geometry;
     std::vector<MeshInfo>                    meshInfos;
     std::vector<shaderio::GltfShadeMaterial> materials;
     std::vector<shaderio::GltfTextureInfo>   textureInfos;
