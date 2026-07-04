@@ -1,5 +1,6 @@
 #include "ImageLoading.h"
 
+#include "core/Profiling.h"
 #include "nvutils/file_operations.hpp"
 #include "nvutils/logger.hpp"
 #include <OpenImageIO/imageio.h>
@@ -51,6 +52,8 @@ template <typename PixelT>
 void ExpandChannels(const PixelT* sourcePixels, int sourceComponents, PixelT* targetPixels, int targetComponents, size_t pixelCount,
                     PixelT alphaValue)
 {
+    PLAY_PROFILE_SCOPE("ImageLoading::ExpandChannels");
+
     for (size_t pixelIndex = 0; pixelIndex < pixelCount; ++pixelIndex)
     {
         const PixelT* source = sourcePixels + pixelIndex * sourceComponents;
@@ -89,12 +92,19 @@ void ExpandChannels(const PixelT* sourcePixels, int sourceComponents, PixelT* ta
 bool ReadImageData(OIIO::ImageInput& imageInput, const OIIO::ImageSpec& spec, OIIO::TypeDesc dataType, int requiredComponents,
                    std::vector<uint8_t>& pixels)
 {
+    PLAY_PROFILE_SCOPE("ImageLoading::ReadImageData");
+
     const int    readComponents = spec.nchannels < requiredComponents ? spec.nchannels : requiredComponents;
     const size_t pixelCount     = static_cast<size_t>(spec.width) * static_cast<size_t>(spec.height);
     const size_t componentSize  = dataType.size();
 
     std::vector<uint8_t> sourcePixels(pixelCount * static_cast<size_t>(readComponents) * componentSize);
-    if (!imageInput.read_image(0, 0, 0, readComponents, dataType, sourcePixels.data()))
+    bool                 readSuccess = false;
+    {
+        PLAY_PROFILE_SCOPE("ImageLoading::OIIO read_image");
+        readSuccess = imageInput.read_image(0, 0, 0, readComponents, dataType, sourcePixels.data());
+    }
+    if (!readSuccess)
     {
         return false;
     }
@@ -106,19 +116,22 @@ bool ReadImageData(OIIO::ImageInput& imageInput, const OIIO::ImageSpec& spec, OI
     }
 
     pixels.resize(pixelCount * static_cast<size_t>(requiredComponents) * componentSize);
-    switch (dataType.basetype)
     {
-        case OIIO::TypeDesc::FLOAT:
-            ExpandChannels(reinterpret_cast<const float*>(sourcePixels.data()), readComponents, reinterpret_cast<float*>(pixels.data()),
-                           requiredComponents, pixelCount, 1.0f);
-            break;
-        case OIIO::TypeDesc::UINT16:
-            ExpandChannels(reinterpret_cast<const uint16_t*>(sourcePixels.data()), readComponents, reinterpret_cast<uint16_t*>(pixels.data()),
-                           requiredComponents, pixelCount, static_cast<uint16_t>(65535));
-            break;
-        default:
-            ExpandChannels(sourcePixels.data(), readComponents, pixels.data(), requiredComponents, pixelCount, static_cast<uint8_t>(255));
-            break;
+        PLAY_PROFILE_SCOPE("ImageLoading::expand image channels");
+        switch (dataType.basetype)
+        {
+            case OIIO::TypeDesc::FLOAT:
+                ExpandChannels(reinterpret_cast<const float*>(sourcePixels.data()), readComponents, reinterpret_cast<float*>(pixels.data()),
+                               requiredComponents, pixelCount, 1.0f);
+                break;
+            case OIIO::TypeDesc::UINT16:
+                ExpandChannels(reinterpret_cast<const uint16_t*>(sourcePixels.data()), readComponents, reinterpret_cast<uint16_t*>(pixels.data()),
+                               requiredComponents, pixelCount, static_cast<uint16_t>(65535));
+                break;
+            default:
+                ExpandChannels(sourcePixels.data(), readComponents, pixels.data(), requiredComponents, pixelCount, static_cast<uint8_t>(255));
+                break;
+        }
     }
 
     return true;
@@ -127,10 +140,16 @@ bool ReadImageData(OIIO::ImageInput& imageInput, const OIIO::ImageSpec& spec, OI
 
 bool LoadTextureImage(const std::filesystem::path& imagePath, bool isSrgb, LoadedImage& loadedImage)
 {
+    PLAY_PROFILE_SCOPE("ImageLoading::LoadTextureImage");
+
     loadedImage = {};
 
     const std::string imagePathUtf8 = nvutils::utf8FromPath(imagePath);
-    auto              imageInput    = OIIO::ImageInput::open(imagePathUtf8);
+    auto              imageInput    = [&]()
+    {
+        PLAY_PROFILE_SCOPE("ImageLoading::OIIO open");
+        return OIIO::ImageInput::open(imagePathUtf8);
+    }();
     if (!imageInput)
     {
         const std::string error = OIIO::geterror();
@@ -145,8 +164,13 @@ bool LoadTextureImage(const std::filesystem::path& imagePath, bool isSrgb, Loade
         return false;
     }
 
-    const bool isFloatImage = HasFloatingPointChannel(spec) || HasLargeIntegerChannel(spec);
-    const bool is16BitImage = !isFloatImage && HasSixteenBitChannel(spec);
+    bool isFloatImage = false;
+    bool is16BitImage = false;
+    {
+        PLAY_PROFILE_SCOPE("ImageLoading::classify image format");
+        isFloatImage = HasFloatingPointChannel(spec) || HasLargeIntegerChannel(spec);
+        is16BitImage = !isFloatImage && HasSixteenBitChannel(spec);
+    }
 
     OIIO::TypeDesc dataType;
     int            requiredComponents = spec.nchannels == 1 ? 1 : 4;
@@ -167,7 +191,12 @@ bool LoadTextureImage(const std::filesystem::path& imagePath, bool isSrgb, Loade
         loadedImage.format = requiredComponents == 1 ? VK_FORMAT_R8_UNORM : isSrgb ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
     }
 
-    if (!ReadImageData(*imageInput, spec, dataType, requiredComponents, loadedImage.pixels))
+    bool readSuccess = false;
+    {
+        PLAY_PROFILE_SCOPE("ImageLoading::read pixels");
+        readSuccess = ReadImageData(*imageInput, spec, dataType, requiredComponents, loadedImage.pixels);
+    }
+    if (!readSuccess)
     {
         const std::string error = imageInput->geterror();
         LOGW("Failed to read image with OpenImageIO: %s%s%s\n", imagePathUtf8.c_str(), error.empty() ? "" : ": ", error.c_str());

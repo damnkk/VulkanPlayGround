@@ -1,10 +1,12 @@
 #include "AssetLoadingServer.h"
+#include "core/Profiling.h"
 
 namespace Play
 {
 
 void AssetLoadingServer::clear()
 {
+    PLAY_PROFILE_SCOPE("AssetLoadingServer::clear");
     _requests.clear();
     _pendingRequests.clear();
     _completedModels.clear();
@@ -15,6 +17,8 @@ void AssetLoadingServer::clear()
 ModelLoadRequestID AssetLoadingServer::requestModelLoad(CpuSceneComponentID requester, const std::filesystem::path& path,
                                                         const ModelLoadingConfig& loadingConfig)
 {
+    PLAY_PROFILE_SCOPE("AssetLoadingServer::requestModelLoad");
+
     ModelLoadRequest request;
     request.id            = makeRequestID(static_cast<uint32_t>(_requests.size()));
     request.requester     = requester;
@@ -29,6 +33,8 @@ ModelLoadRequestID AssetLoadingServer::requestModelLoad(CpuSceneComponentID requ
 
 void AssetLoadingServer::processPendingLoads()
 {
+    PLAY_PROFILE_SCOPE("AssetLoadingServer::processPendingLoads");
+
     while (_nextPendingRequest < _pendingRequests.size())
     {
         const uint32_t requestIndex = _pendingRequests[_nextPendingRequest++];
@@ -42,7 +48,12 @@ void AssetLoadingServer::processPendingLoads()
 
         ModelLoadCompletion completion;
         completion.request = request;
-        completion.result  = model_loading::loadModelFromFile(request.path, request.loadingConfig);
+        {
+            PLAY_PROFILE_SCOPE("AssetLoadingServer::load model");
+            PLAY_PROFILE_MARK("Model load begin");
+            completion.result  = model_loading::loadModelFromFile(request.path, request.loadingConfig);
+            PLAY_PROFILE_MARK("Model load end");
+        }
 
         request.state = completion.result.success ? ModelLoadRequestState::eCompleted : ModelLoadRequestState::eFailed;
         completion.request.state = request.state;
@@ -58,6 +69,8 @@ void AssetLoadingServer::processPendingLoads()
 
 bool AssetLoadingServer::popCompletedModel(ModelLoadCompletion& completion)
 {
+    PLAY_PROFILE_SCOPE("AssetLoadingServer::popCompletedModel");
+
     if (_nextCompletedModel >= _completedModels.size())
     {
         _completedModels.clear();

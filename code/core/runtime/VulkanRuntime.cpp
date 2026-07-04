@@ -9,6 +9,7 @@
 #include "DescriptorManager.h"
 #include "FrameBufferCache.h"
 #include "PipelineCacheManager.h"
+#include "core/Profiling.h"
 #include "RenderSession.h"
 #include "PlayAllocator.h"
 #include "RenderPassCache.h"
@@ -739,6 +740,8 @@ void VulkanRuntime::signalPresentSemaphore()
 
 VkCommandBuffer VulkanRuntime::createTempCmdBuffer()
 {
+    PLAY_PROFILE_SCOPE("VulkanRuntime::createTempCmdBuffer");
+
     const VkCommandBufferAllocateInfo allocInfo{
         .sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool        = _transientCmdPool,
@@ -747,19 +750,30 @@ VkCommandBuffer VulkanRuntime::createTempCmdBuffer()
     };
 
     VkCommandBuffer cmd = VK_NULL_HANDLE;
-    NVVK_CHECK(vkAllocateCommandBuffers(getDevice(), &allocInfo, &cmd));
+    {
+        PLAY_PROFILE_SCOPE("VulkanRuntime::allocate temp command buffer");
+        NVVK_CHECK(vkAllocateCommandBuffers(getDevice(), &allocInfo, &cmd));
+    }
 
     const VkCommandBufferBeginInfo beginInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
     };
-    NVVK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
+    {
+        PLAY_PROFILE_SCOPE("VulkanRuntime::begin temp command buffer");
+        NVVK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
+    }
     return cmd;
 }
 
 void VulkanRuntime::submitAndWaitTempCmdBuffer(VkCommandBuffer cmd)
 {
-    NVVK_CHECK(vkEndCommandBuffer(cmd));
+    PLAY_PROFILE_SCOPE("VulkanRuntime::submitAndWaitTempCmdBuffer");
+
+    {
+        PLAY_PROFILE_SCOPE("VulkanRuntime::end temp command buffer");
+        NVVK_CHECK(vkEndCommandBuffer(cmd));
+    }
 
     const VkCommandBufferSubmitInfo cmdInfo{
         .sType         = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
@@ -770,9 +784,18 @@ void VulkanRuntime::submitAndWaitTempCmdBuffer(VkCommandBuffer cmd)
         .commandBufferInfoCount = 1,
         .pCommandBufferInfos    = &cmdInfo,
     };
-    NVVK_CHECK(vkQueueSubmit2(getGfxQueue().queue, 1, &submitInfo, nullptr));
-    NVVK_CHECK(vkQueueWaitIdle(getGfxQueue().queue));
-    vkFreeCommandBuffers(getDevice(), _transientCmdPool, 1, &cmd);
+    {
+        PLAY_PROFILE_SCOPE("VulkanRuntime::vkQueueSubmit2 temp command buffer");
+        NVVK_CHECK(vkQueueSubmit2(getGfxQueue().queue, 1, &submitInfo, nullptr));
+    }
+    {
+        PLAY_PROFILE_SCOPE("VulkanRuntime::vkQueueWaitIdle temp command buffer");
+        NVVK_CHECK(vkQueueWaitIdle(getGfxQueue().queue));
+    }
+    {
+        PLAY_PROFILE_SCOPE("VulkanRuntime::free temp command buffer");
+        vkFreeCommandBuffers(getDevice(), _transientCmdPool, 1, &cmd);
+    }
 }
 
 void VulkanRuntime::addWaitSemaphore(const VkSemaphoreSubmitInfo& signalInfo)

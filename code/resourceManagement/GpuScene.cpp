@@ -1,4 +1,5 @@
 #include "GpuScene.h"
+#include "core/Profiling.h"
 
 namespace Play
 {
@@ -68,6 +69,8 @@ void collectModelNodeRenderables(ModelAsset& asset, uint32_t nodeIndex, const gl
 
 void buildModelRenderables(ModelAsset& asset)
 {
+    PLAY_PROFILE_SCOPE("GpuScene::buildModelRenderables");
+
     asset.renderables.clear();
 
     bool hasBounds = false;
@@ -94,6 +97,8 @@ void buildModelRenderables(ModelAsset& asset)
 
 void GpuScene::clear()
 {
+    PLAY_PROFILE_SCOPE("GpuScene::clear");
+
     std::lock_guard<std::mutex> lock(_registrationMutex);
 
     const bool rasterEnabled = _rasterData.enabled;
@@ -114,40 +119,55 @@ void GpuScene::clear()
 
 ModelAssetID GpuScene::registerModel(ModelAssetPackage&& package)
 {
+    PLAY_PROFILE_SCOPE("GpuScene::registerModel");
+
     std::lock_guard<std::mutex> lock(_registrationMutex);
 
     const uint32_t materialBase    = static_cast<uint32_t>(_common.materials.size());
     const uint32_t meshInfoBase    = static_cast<uint32_t>(_common.meshInfos.size());
     const uint32_t textureBase      = static_cast<uint32_t>(_sceneTextures.size());
-    const uint32_t textureCount     = appendSceneTextures(package.textures);
+    uint32_t       textureCount     = 0;
+    {
+        PLAY_PROFILE_SCOPE("GpuScene::registerModel append textures");
+        textureCount = appendSceneTextures(package.textures);
+    }
     const uint32_t textureInfoCount = package.textureInfos.empty() ? 0 : static_cast<uint32_t>(package.textureInfos.size() - 1);
 
     std::vector<MeshInfo> uploadedMeshInfos;
-    uploadedMeshInfos.reserve(package.meshInfos.size());
-    for (MeshInfo meshInfo : package.meshInfos)
     {
-        if (meshInfo.materialIdx != INVALID_SCENE_ID)
+        PLAY_PROFILE_SCOPE("GpuScene::registerModel remap mesh infos");
+        uploadedMeshInfos.reserve(package.meshInfos.size());
+        for (MeshInfo meshInfo : package.meshInfos)
         {
-            meshInfo.materialIdx += materialBase;
+            if (meshInfo.materialIdx != INVALID_SCENE_ID)
+            {
+                meshInfo.materialIdx += materialBase;
+            }
+            uploadedMeshInfos.push_back(meshInfo);
         }
-        uploadedMeshInfos.push_back(meshInfo);
     }
 
-    for (const shaderio::GltfShadeMaterial& material : package.materials)
     {
-        _common.materials.push_back(material);
-    }
-
-    for (const MeshInfo& meshInfo : uploadedMeshInfos)
-    {
-        _common.meshInfos.push_back(meshInfo);
-    }
-
-    for (ModelSubmeshAsset& submesh : package.asset.submeshes)
-    {
-        if (submesh.meshID != INVALID_SCENE_ID)
+        PLAY_PROFILE_SCOPE("GpuScene::registerModel append materials");
+        for (const shaderio::GltfShadeMaterial& material : package.materials)
         {
-            submesh.meshID += meshInfoBase;
+            _common.materials.push_back(material);
+        }
+
+        for (const MeshInfo& meshInfo : uploadedMeshInfos)
+        {
+            _common.meshInfos.push_back(meshInfo);
+        }
+    }
+
+    {
+        PLAY_PROFILE_SCOPE("GpuScene::registerModel remap submeshes");
+        for (ModelSubmeshAsset& submesh : package.asset.submeshes)
+        {
+            if (submesh.meshID != INVALID_SCENE_ID)
+            {
+                submesh.meshID += meshInfoBase;
+            }
         }
     }
 
@@ -163,15 +183,21 @@ ModelAssetID GpuScene::registerModel(ModelAssetPackage&& package)
     range.textureCount     = textureCount;
 
     const uint32_t modelIndex = static_cast<uint32_t>(_models.size());
-    for (RefPtr<Buffer>& buffer : package.ownedBuffers)
     {
-        _ownedBuffers.push_back(std::move(buffer));
+        PLAY_PROFILE_SCOPE("GpuScene::registerModel move owned buffers");
+        for (RefPtr<Buffer>& buffer : package.ownedBuffers)
+        {
+            _ownedBuffers.push_back(std::move(buffer));
+        }
     }
     _models.push_back(std::move(package.asset));
     _modelRanges.push_back(range);
 
-    registerRasterData(_models.back(), range);
-    registerRayTracingData(_models.back(), range);
+    {
+        PLAY_PROFILE_SCOPE("GpuScene::registerModel backend registration");
+        registerRasterData(_models.back(), range);
+        registerRayTracingData(_models.back(), range);
+    }
 
     ModelAssetID id;
     id.index      = modelIndex;
@@ -186,6 +212,8 @@ void GpuScene::updateTransforms(const CpuScene& scene)
 
 uint32_t GpuScene::appendSceneTextures(std::vector<ModelTextureResource>& textures)
 {
+    PLAY_PROFILE_SCOPE("GpuScene::appendSceneTextures");
+
     const uint32_t textureBase = static_cast<uint32_t>(_sceneTextures.size());
     for (ModelTextureResource& texture : textures)
     {

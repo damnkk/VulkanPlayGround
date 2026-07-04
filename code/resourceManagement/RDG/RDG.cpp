@@ -5,6 +5,7 @@
 #include "RenderPassCache.h"
 #include "RenderPass.h"
 #include "core/runtime/VulkanRuntime.h"
+#include "core/Profiling.h"
 #include "DescriptorManager.h"
 #include "PlayAllocator.h"
 #include <nvutils/logger.hpp>
@@ -484,6 +485,8 @@ RDGBufferRef RDGBuilder::getBuffer(std::string name)
 
 void RDGBuilder::compile()
 {
+    PLAY_PROFILE_SCOPE("RDG Compile");
+
     // dependency update
     for (auto& passNode : _passes)
     {
@@ -665,6 +668,8 @@ void RDGBuilder::compile()
 
 void RDGBuilder::execute()
 {
+    PLAY_PROFILE_SCOPE("RDG Execute");
+
     beforePassExecute();
     for (auto& pass : _passes)
     {
@@ -676,7 +681,10 @@ void RDGBuilder::execute()
 
 void RDGBuilder::executePass(PassNode* pass)
 {
+    PLAY_PROFILE_SCOPE(pass->name().c_str());
+
     auto renderContext = prepareRenderContext(pass);
+    PLAY_PROFILE_COMMAND_LABEL(renderContext->_currCmdBuffer, pass->name().c_str());
     prepareResourceBarrier(*renderContext, pass);
     prepareDescriptorSets(*renderContext, pass);
 

@@ -1,5 +1,6 @@
 #include "CpuScene.h"
 #include "AssetLoadingServer.h"
+#include "core/Profiling.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 
@@ -59,6 +60,8 @@ CpuSceneNodeTransform decomposeLocalTransform(const glm::mat4& matrix)
 ModelLoadRequestID CpuModelComponent::requestLoadFromFile(CpuScene& scene, AssetLoadingServer& loadingServer, const std::string& path,
                                                           const ModelLoadingConfig& loadingCfg)
 {
+    PLAY_PROFILE_SCOPE("CpuModelComponent::requestLoadFromFile");
+
     sourcePath      = path;
     loadingConfig   = loadingCfg;
     request         = loadingServer.requestModelLoad(self, path, loadingCfg);

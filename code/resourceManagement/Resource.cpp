@@ -1,4 +1,5 @@
 #include "Resource.h"
+#include "core/Profiling.h"
 #include "core/runtime/RenderSession.h"
 #include "ImageLoading.h"
 #include "PlayAllocator.h"
@@ -221,15 +222,25 @@ Texture::Texture(uint32_t size, VkFormat format, VkImageUsageFlags usage, VkImag
 
 Texture::Texture(const std::filesystem::path& imagePath, VkImageLayout finalLayout, uint32_t mipLevels, bool isSrgb) : Texture()
 {
+    PLAY_PROFILE_SCOPE("Texture::Texture(file)");
+
     debugName = nvutils::utf8FromPath(imagePath);
 
     ImageLoading::LoadedImage loadedImage;
-    if (!ImageLoading::LoadTextureImage(imagePath, isSrgb, loadedImage))
+    bool                      imageLoaded = false;
+    {
+        PLAY_PROFILE_SCOPE("Texture::load texture image data");
+        imageLoaded = ImageLoading::LoadTextureImage(imagePath, isSrgb, loadedImage);
+    }
+    if (!imageLoaded)
     {
         return;
     }
 
-    mipLevels = resolveTextureMipLevels(mipLevels, loadedImage.extent);
+    {
+        PLAY_PROFILE_SCOPE("Texture::resolve mip levels");
+        mipLevels = resolveTextureMipLevels(mipLevels, loadedImage.extent);
+    }
 
     VkImageCreateInfo imageInfo{
         .sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -252,14 +263,37 @@ Texture::Texture(const std::filesystem::path& imagePath, VkImageLayout finalLayo
         .components       = {VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A},
         .subresourceRange = {inferImageAspectFlags(loadedImage.format, true), 0, mipLevels, 0, 1},
     };
-    PlayResourceManager::Instance().createImage(*this, imageInfo, viewInfo);
+    {
+        PLAY_PROFILE_SCOPE("Texture::create image");
+        PlayResourceManager::Instance().createImage(*this, imageInfo, viewInfo);
+    }
 
     auto cmd = PlayResourceManager::Instance().getTempCommandBuffer();
-    PlayResourceManager::Instance().appendImage(*this, static_cast<VkDeviceSize>(loadedImage.pixels.size()), loadedImage.pixels.data(), finalLayout);
-    PlayResourceManager::Instance().cmdUploadAppended(cmd);
-    nvvk::cmdGenerateMipmaps(cmd, image, loadedImage.extent, mipLevels, 1, finalLayout);
-    PlayResourceManager::Instance().submitAndWaitTempCmdBuffer(cmd);
-    PlayResourceManager::Instance().acquireSampler(descriptor.sampler);
+    {
+        PLAY_PROFILE_SCOPE("Texture::append image upload");
+        PlayResourceManager::Instance().appendImage(*this,
+                                                    static_cast<VkDeviceSize>(loadedImage.pixels.size()),
+                                                    loadedImage.pixels.data(),
+                                                    finalLayout);
+    }
+    {
+        PLAY_PROFILE_SCOPE("Texture::record image upload");
+        PLAY_PROFILE_COMMAND_LABEL(cmd, "Texture Image Upload");
+        PlayResourceManager::Instance().cmdUploadAppended(cmd);
+    }
+    {
+        PLAY_PROFILE_SCOPE("Texture::record mipmaps");
+        PLAY_PROFILE_COMMAND_LABEL(cmd, "Texture Generate Mipmaps");
+        nvvk::cmdGenerateMipmaps(cmd, image, loadedImage.extent, mipLevels, 1, finalLayout);
+    }
+    {
+        PLAY_PROFILE_SCOPE("Texture::submit and wait upload");
+        PlayResourceManager::Instance().submitAndWaitTempCmdBuffer(cmd);
+    }
+    {
+        PLAY_PROFILE_SCOPE("Texture::acquire sampler");
+        PlayResourceManager::Instance().acquireSampler(descriptor.sampler);
+    }
 
     descriptor.imageLayout = finalLayout;
     type                   = VK_IMAGE_TYPE_2D;

@@ -1,5 +1,6 @@
 #include "PlayAllocator.h"
 #include "Resource.h"
+#include "core/Profiling.h"
 #include "core/runtime/VulkanRuntime.h"
 #include "nvvk/check_error.hpp"
 namespace Play
@@ -53,11 +54,13 @@ void PlayResourceManager::deInit()
 
 VkCommandBuffer PlayResourceManager::getTempCommandBuffer()
 {
+    PLAY_PROFILE_SCOPE("PlayResourceManager::getTempCommandBuffer");
     return vkDriver->createTempCmdBuffer();
 }
 
 void PlayResourceManager::submitAndWaitTempCmdBuffer(VkCommandBuffer cmd)
 {
+    PLAY_PROFILE_SCOPE("PlayResourceManager::submitAndWaitTempCmdBuffer");
     vkDriver->submitAndWaitTempCmdBuffer(cmd);
 }
 } // namespace Play

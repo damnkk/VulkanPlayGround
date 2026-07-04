@@ -1,6 +1,8 @@
 #include "ModelLoading.h"
 
 #include "PlayAllocator.h"
+#include "core/Profiling.h"
+#include "core/Utils.h"
 #include "nvutils/file_operations.hpp"
 #include <assimp/GltfMaterial.h>
 #include <assimp/Importer.hpp>
@@ -116,6 +118,8 @@ struct ModelOptimizeResult
 
 void uploadModelTextures(ModelAssetPackage& package)
 {
+    PLAY_PROFILE_SCOPE("ModelLoading::uploadModelTextures");
+
     for (ModelTextureResource& texture : package.textures)
     {
         if (!texture.texture && !texture.sourcePath.empty())
@@ -128,6 +132,8 @@ void uploadModelTextures(ModelAssetPackage& package)
 
 void compactResidentTextures(ModelAssetPackage& package)
 {
+    PLAY_PROFILE_SCOPE("ModelLoading::compactResidentTextures");
+
     std::vector<uint32_t> residentTextureIndexByOriginalIndex(package.textures.size(), INVALID_SCENE_ID);
     std::vector<ModelTextureResource> residentTextures;
     residentTextures.reserve(package.textures.size());
@@ -163,6 +169,8 @@ void compactResidentTextures(ModelAssetPackage& package)
 
 void uploadModelGeometry(ModelAssetPackage& package, ModelGeometryPayload& geometry, bool& hasPendingUpload)
 {
+    PLAY_PROFILE_SCOPE("ModelLoading::uploadModelGeometry");
+
     if (geometry.empty() || package.meshInfos.empty())
     {
         return;
@@ -185,51 +193,65 @@ void uploadModelGeometry(ModelAssetPackage& package, ModelGeometryPayload& geome
     VkDeviceSize indicesSize    = 0;
 
     VkDeviceSize cursor = 0;
-    placeGeometrySection(geometry.positions, cursor, positionsOffset, positionsSize);
-    placeGeometrySection(geometry.normals, cursor, normalsOffset, normalsSize);
-    placeGeometrySection(geometry.tangents, cursor, tangentsOffset, tangentsSize);
-    placeGeometrySection(geometry.texCoords0, cursor, texCoords0Offset, texCoords0Size);
-    placeGeometrySection(geometry.texCoords1, cursor, texCoords1Offset, texCoords1Size);
-    placeGeometrySection(geometry.colors, cursor, colorsOffset, colorsSize);
-    placeGeometrySection(geometry.indices, cursor, indicesOffset, indicesSize);
+    {
+        PLAY_PROFILE_SCOPE("ModelLoading::layout geometry sections");
+        placeGeometrySection(geometry.positions, cursor, positionsOffset, positionsSize);
+        placeGeometrySection(geometry.normals, cursor, normalsOffset, normalsSize);
+        placeGeometrySection(geometry.tangents, cursor, tangentsOffset, tangentsSize);
+        placeGeometrySection(geometry.texCoords0, cursor, texCoords0Offset, texCoords0Size);
+        placeGeometrySection(geometry.texCoords1, cursor, texCoords1Offset, texCoords1Size);
+        placeGeometrySection(geometry.colors, cursor, colorsOffset, colorsSize);
+        placeGeometrySection(geometry.indices, cursor, indicesOffset, indicesSize);
+    }
 
     if (cursor == 0)
     {
         return;
     }
 
-    RefPtr<Buffer> geometryBuffer =
-        RefPtr<Buffer>(new Buffer(package.asset.name + "_GeometryBuffer", kUploadedModelBufferUsage, cursor, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
+    RefPtr<Buffer> geometryBuffer;
+    {
+        PLAY_PROFILE_SCOPE("ModelLoading::create geometry buffer");
+        geometryBuffer = RefPtr<Buffer>(
+            new Buffer(package.asset.name + "_GeometryBuffer", kUploadedModelBufferUsage, cursor, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
+    }
 
     PlayResourceManager& uploadManager = PlayResourceManager::Instance();
-    if (positionsSize > 0)
-        uploadManager.appendBuffer(*geometryBuffer, positionsOffset, std::span(geometry.positions.data(), geometry.positions.size()));
-    if (normalsSize > 0) uploadManager.appendBuffer(*geometryBuffer, normalsOffset, std::span(geometry.normals.data(), geometry.normals.size()));
-    if (tangentsSize > 0) uploadManager.appendBuffer(*geometryBuffer, tangentsOffset, std::span(geometry.tangents.data(), geometry.tangents.size()));
-    if (texCoords0Size > 0)
-        uploadManager.appendBuffer(*geometryBuffer, texCoords0Offset, std::span(geometry.texCoords0.data(), geometry.texCoords0.size()));
-    if (texCoords1Size > 0)
-        uploadManager.appendBuffer(*geometryBuffer, texCoords1Offset, std::span(geometry.texCoords1.data(), geometry.texCoords1.size()));
-    if (colorsSize > 0) uploadManager.appendBuffer(*geometryBuffer, colorsOffset, std::span(geometry.colors.data(), geometry.colors.size()));
-    if (indicesSize > 0) uploadManager.appendBuffer(*geometryBuffer, indicesOffset, std::span(geometry.indices.data(), geometry.indices.size()));
+    {
+        PLAY_PROFILE_SCOPE("ModelLoading::append geometry buffer sections");
+        if (positionsSize > 0)
+            uploadManager.appendBuffer(*geometryBuffer, positionsOffset, std::span(geometry.positions.data(), geometry.positions.size()));
+        if (normalsSize > 0) uploadManager.appendBuffer(*geometryBuffer, normalsOffset, std::span(geometry.normals.data(), geometry.normals.size()));
+        if (tangentsSize > 0)
+            uploadManager.appendBuffer(*geometryBuffer, tangentsOffset, std::span(geometry.tangents.data(), geometry.tangents.size()));
+        if (texCoords0Size > 0)
+            uploadManager.appendBuffer(*geometryBuffer, texCoords0Offset, std::span(geometry.texCoords0.data(), geometry.texCoords0.size()));
+        if (texCoords1Size > 0)
+            uploadManager.appendBuffer(*geometryBuffer, texCoords1Offset, std::span(geometry.texCoords1.data(), geometry.texCoords1.size()));
+        if (colorsSize > 0) uploadManager.appendBuffer(*geometryBuffer, colorsOffset, std::span(geometry.colors.data(), geometry.colors.size()));
+        if (indicesSize > 0) uploadManager.appendBuffer(*geometryBuffer, indicesOffset, std::span(geometry.indices.data(), geometry.indices.size()));
+    }
 
     std::vector<VertexStreamInfo> vertexStreams;
     vertexStreams.resize(geometry.ranges.size());
-    for (uint32_t meshIndex = 0; meshIndex < geometry.ranges.size() && meshIndex < package.meshInfos.size(); ++meshIndex)
     {
-        const ModelMeshRange& range = geometry.ranges[meshIndex];
+        PLAY_PROFILE_SCOPE("ModelLoading::build vertex stream infos");
+        for (uint32_t meshIndex = 0; meshIndex < geometry.ranges.size() && meshIndex < package.meshInfos.size(); ++meshIndex)
+        {
+            const ModelMeshRange& range = geometry.ranges[meshIndex];
 
-        VertexStreamInfo stream;
-        stream.positionBufferAddress  = geometryBuffer->address + positionsOffset + range.firstVertex * sizeof(glm::vec3);
-        stream.normalBufferAddress    = geometryBuffer->address + normalsOffset + range.firstVertex * sizeof(glm::vec3);
-        stream.tangentBufferAddress   = geometryBuffer->address + tangentsOffset + range.firstVertex * sizeof(glm::vec4);
-        stream.texCoord0BufferAddress = geometryBuffer->address + texCoords0Offset + range.firstVertex * sizeof(glm::vec2);
-        stream.texCoord1BufferAddress = geometryBuffer->address + texCoords1Offset + range.firstVertex * sizeof(glm::vec2);
-        stream.colorBufferAddress     = geometryBuffer->address + colorsOffset + range.firstVertex * sizeof(uint32_t);
-        vertexStreams[meshIndex]      = stream;
+            VertexStreamInfo stream;
+            stream.positionBufferAddress  = geometryBuffer->address + positionsOffset + range.firstVertex * sizeof(glm::vec3);
+            stream.normalBufferAddress    = geometryBuffer->address + normalsOffset + range.firstVertex * sizeof(glm::vec3);
+            stream.tangentBufferAddress   = geometryBuffer->address + tangentsOffset + range.firstVertex * sizeof(glm::vec4);
+            stream.texCoord0BufferAddress = geometryBuffer->address + texCoords0Offset + range.firstVertex * sizeof(glm::vec2);
+            stream.texCoord1BufferAddress = geometryBuffer->address + texCoords1Offset + range.firstVertex * sizeof(glm::vec2);
+            stream.colorBufferAddress     = geometryBuffer->address + colorsOffset + range.firstVertex * sizeof(uint32_t);
+            vertexStreams[meshIndex]      = stream;
 
-        package.meshInfos[meshIndex].IndexBufferAddress = geometryBuffer->address + indicesOffset + range.firstIndex * sizeof(uint32_t);
-        package.meshInfos[meshIndex].indexCount         = range.indexCount;
+            package.meshInfos[meshIndex].IndexBufferAddress = geometryBuffer->address + indicesOffset + range.firstIndex * sizeof(uint32_t);
+            package.meshInfos[meshIndex].indexCount         = range.indexCount;
+        }
     }
 
     RefPtr<Buffer> vertexStreamBuffer =
@@ -252,19 +274,34 @@ void uploadModelGeometry(ModelAssetPackage& package, ModelGeometryPayload& geome
 
 void submitPendingUploads(bool hasPendingUpload)
 {
+    PLAY_PROFILE_SCOPE("ModelLoading::submitPendingUploads");
+
     if (!hasPendingUpload)
     {
         return;
     }
 
     PlayResourceManager& uploadManager = PlayResourceManager::Instance();
-    VkCommandBuffer      cmd           = uploadManager.getTempCommandBuffer();
-    uploadManager.cmdUploadAppended(cmd);
-    uploadManager.submitAndWaitTempCmdBuffer(cmd);
+    VkCommandBuffer      cmd           = VK_NULL_HANDLE;
+    {
+        PLAY_PROFILE_SCOPE("ModelLoading::get temp upload command buffer");
+        cmd = uploadManager.getTempCommandBuffer();
+    }
+    {
+        PLAY_PROFILE_SCOPE("ModelLoading::record pending uploads");
+        PLAY_PROFILE_COMMAND_LABEL(cmd, "Model Pending Uploads");
+        uploadManager.cmdUploadAppended(cmd);
+    }
+    {
+        PLAY_PROFILE_SCOPE("ModelLoading::submit and wait pending uploads");
+        uploadManager.submitAndWaitTempCmdBuffer(cmd);
+    }
 }
 
 ModelAssetPackage uploadModelPackage(OptimizedModel&& model)
 {
+    PLAY_PROFILE_SCOPE("ModelLoading::uploadModelPackage");
+
     ModelAssetPackage package = std::move(model.package);
 
     uploadModelTextures(package);
@@ -272,10 +309,13 @@ ModelAssetPackage uploadModelPackage(OptimizedModel&& model)
 
     bool hasPendingUpload = false;
     uploadModelGeometry(package, model.geometry, hasPendingUpload);
-    package.asset.transformBuffer   = createAndAppendBuffer(package.asset.name + "_TransformBuffer", package.asset.transforms, hasPendingUpload);
-    package.asset.materialBuffer    = createAndAppendBuffer(package.asset.name + "_MaterialBuffer", package.materials, hasPendingUpload);
-    package.asset.textureInfoBuffer = createAndAppendBuffer(package.asset.name + "_TextureInfoBuffer", package.textureInfos, hasPendingUpload);
-    package.asset.meshInfoBuffer    = createAndAppendBuffer(package.asset.name + "_MeshInfoBuffer", package.meshInfos, hasPendingUpload);
+    {
+        PLAY_PROFILE_SCOPE("ModelLoading::append model metadata buffers");
+        package.asset.transformBuffer   = createAndAppendBuffer(package.asset.name + "_TransformBuffer", package.asset.transforms, hasPendingUpload);
+        package.asset.materialBuffer    = createAndAppendBuffer(package.asset.name + "_MaterialBuffer", package.materials, hasPendingUpload);
+        package.asset.textureInfoBuffer = createAndAppendBuffer(package.asset.name + "_TextureInfoBuffer", package.textureInfos, hasPendingUpload);
+        package.asset.meshInfoBuffer    = createAndAppendBuffer(package.asset.name + "_MeshInfoBuffer", package.meshInfos, hasPendingUpload);
+    }
     submitPendingUploads(hasPendingUpload);
 
     return package;
@@ -303,36 +343,6 @@ std::string lowerAscii(std::string value)
         }
     }
     return value;
-}
-
-bool sameText(const char* lhs, const char* rhs)
-{
-    if (!lhs || !rhs)
-    {
-        return false;
-    }
-
-    while (*lhs && *rhs)
-    {
-        char l = *lhs;
-        char r = *rhs;
-        if (l >= 'A' && l <= 'Z')
-        {
-            l = static_cast<char>(l - 'A' + 'a');
-        }
-        if (r >= 'A' && r <= 'Z')
-        {
-            r = static_cast<char>(r - 'A' + 'a');
-        }
-        if (l != r)
-        {
-            return false;
-        }
-        ++lhs;
-        ++rhs;
-    }
-
-    return *lhs == *rhs;
 }
 
 bool isGltfPath(const std::filesystem::path& path)
@@ -697,11 +707,11 @@ shaderio::GltfShadeMaterial importMaterial(const aiMaterial* material, ModelAsse
     aiString alphaMode;
     if (aiGetMaterialString(material, AI_MATKEY_GLTF_ALPHAMODE, &alphaMode) == AI_SUCCESS)
     {
-        if (sameText(alphaMode.C_Str(), "MASK"))
+        if (asciiEqualsIgnoreCase(alphaMode.C_Str(), "MASK"))
         {
             importedMaterial.alphaMode = shaderio::eAlphaModeMask;
         }
-        else if (sameText(alphaMode.C_Str(), "BLEND"))
+        else if (asciiEqualsIgnoreCase(alphaMode.C_Str(), "BLEND"))
         {
             importedMaterial.alphaMode = shaderio::eAlphaModeBlend;
         }
@@ -833,6 +843,8 @@ uint32_t appendAssimpNode(const aiNode* assimpNode, uint32_t parentNodeIndex, As
 
 void configureFbxImport(Assimp::Importer& importer, const ModelLoadingConfig& loadingCfg)
 {
+    PLAY_PROFILE_SCOPE("ModelLoading::configureFbxImport");
+
     importer.SetPropertyInteger(AI_CONFIG_IMPORT_FBX_READ_MATERIALS, loadingCfg.loadMaterials ? 1 : 0);
     importer.SetPropertyInteger(AI_CONFIG_IMPORT_FBX_READ_TEXTURES, loadingCfg.loadTextures ? 1 : 0);
     importer.SetPropertyInteger(AI_CONFIG_IMPORT_FBX_READ_CAMERAS, 0);
@@ -879,14 +891,19 @@ public:
 
     ModelImportResult import(const std::filesystem::path& path, const ModelLoadingConfig& loadingCfg) const override
     {
+        PLAY_PROFILE_SCOPE("ModelLoading::Assimp import");
+
         ModelImportResult result;
 
         Assimp::Importer importer;
-        importer.SetPropertyFloat(AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY, loadingCfg.globalScale);
-        importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, aiPrimitiveType_POINT | aiPrimitiveType_LINE);
-        if (_format == ModelFileFormat::eFbx)
         {
-            configureFbxImport(importer, loadingCfg);
+            PLAY_PROFILE_SCOPE("ModelLoading::configure Assimp importer");
+            importer.SetPropertyFloat(AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY, loadingCfg.globalScale);
+            importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, aiPrimitiveType_POINT | aiPrimitiveType_LINE);
+            if (_format == ModelFileFormat::eFbx)
+            {
+                configureFbxImport(importer, loadingCfg);
+            }
         }
 
         uint32_t assimpFlags = loadingCfg.assimpPostProcessFlags | loadingCfg.extraAssimpProcessFlags;
@@ -895,8 +912,14 @@ public:
             assimpFlags |= aiProcess_GlobalScale;
         }
 
-        const std::string pathUtf8    = nvutils::utf8FromPath(path);
-        const aiScene*    assimpScene = importer.ReadFile(pathUtf8, assimpFlags);
+        const std::string pathUtf8 = nvutils::utf8FromPath(path);
+        const aiScene*    assimpScene = nullptr;
+        {
+            PLAY_PROFILE_SCOPE("ModelLoading::Assimp ReadFile");
+            PLAY_PROFILE_MARK("Assimp ReadFile begin");
+            assimpScene = importer.ReadFile(pathUtf8, assimpFlags);
+            PLAY_PROFILE_MARK("Assimp ReadFile end");
+        }
         if (!assimpScene || !assimpScene->mRootNode)
         {
             result.message = importer.GetErrorString();
@@ -905,16 +928,22 @@ public:
 
         ModelAssetPackage&   package  = result.model.package;
         ModelGeometryPayload& geometry = result.model.geometry;
-        package.asset.name             = path.stem().string();
-        package.asset.sourcePath       = path;
-        package.textureInfos.push_back(shaderio::defaultGltfTextureInfo());
-
-        if (loadingCfg.loadMaterials && assimpScene->mNumMaterials > 0)
         {
-            package.materials.reserve(assimpScene->mNumMaterials);
-            for (uint32_t materialIndex = 0; materialIndex < assimpScene->mNumMaterials; ++materialIndex)
+            PLAY_PROFILE_SCOPE("ModelLoading::initialize model package");
+            package.asset.name       = path.stem().string();
+            package.asset.sourcePath = path;
+            package.textureInfos.push_back(shaderio::defaultGltfTextureInfo());
+        }
+
+        {
+            PLAY_PROFILE_SCOPE("ModelLoading::import materials");
+            if (loadingCfg.loadMaterials && assimpScene->mNumMaterials > 0)
             {
-                package.materials.push_back(importMaterial(assimpScene->mMaterials[materialIndex], package, path, assimpScene, loadingCfg));
+                package.materials.reserve(assimpScene->mNumMaterials);
+                for (uint32_t materialIndex = 0; materialIndex < assimpScene->mNumMaterials; ++materialIndex)
+                {
+                    package.materials.push_back(importMaterial(assimpScene->mMaterials[materialIndex], package, path, assimpScene, loadingCfg));
+                }
             }
         }
 
@@ -927,41 +956,47 @@ public:
         context.package = &package;
         context.meshSubmeshIndices.reserve(assimpScene->mNumMeshes);
 
-        for (uint32_t meshIndex = 0; meshIndex < assimpScene->mNumMeshes; ++meshIndex)
         {
-            const aiMesh* mesh = assimpScene->mMeshes[meshIndex];
-            if (!mesh)
+            PLAY_PROFILE_SCOPE("ModelLoading::import meshes");
+            for (uint32_t meshIndex = 0; meshIndex < assimpScene->mNumMeshes; ++meshIndex)
             {
-                context.meshSubmeshIndices.push_back(INVALID_SCENE_ID);
-                continue;
+                const aiMesh* mesh = assimpScene->mMeshes[meshIndex];
+                if (!mesh)
+                {
+                    context.meshSubmeshIndices.push_back(INVALID_SCENE_ID);
+                    continue;
+                }
+
+                uint32_t materialIndex = mesh->mMaterialIndex;
+                if (materialIndex >= package.materials.size())
+                {
+                    materialIndex = 0;
+                }
+
+                const uint32_t meshID = appendMeshGeometry(mesh, package, geometry, materialIndex);
+                if (meshID == INVALID_SCENE_ID || meshID >= geometry.ranges.size())
+                {
+                    context.meshSubmeshIndices.push_back(INVALID_SCENE_ID);
+                    continue;
+                }
+
+                ModelSubmeshAsset submesh;
+                submesh.meshID = meshID;
+                submesh.bbox   = geometry.ranges[meshID].bbox;
+
+                const uint32_t submeshIndex = static_cast<uint32_t>(package.asset.submeshes.size());
+                package.asset.submeshes.push_back(submesh);
+                context.meshSubmeshIndices.push_back(submeshIndex);
             }
-
-            uint32_t materialIndex = mesh->mMaterialIndex;
-            if (materialIndex >= package.materials.size())
-            {
-                materialIndex = 0;
-            }
-
-            const uint32_t meshID = appendMeshGeometry(mesh, package, geometry, materialIndex);
-            if (meshID == INVALID_SCENE_ID || meshID >= geometry.ranges.size())
-            {
-                context.meshSubmeshIndices.push_back(INVALID_SCENE_ID);
-                continue;
-            }
-
-            ModelSubmeshAsset submesh;
-            submesh.meshID = meshID;
-            submesh.bbox   = geometry.ranges[meshID].bbox;
-
-            const uint32_t submeshIndex = static_cast<uint32_t>(package.asset.submeshes.size());
-            package.asset.submeshes.push_back(submesh);
-            context.meshSubmeshIndices.push_back(submeshIndex);
         }
 
-        if (appendAssimpNode(assimpScene->mRootNode, INVALID_SCENE_ID, context) == INVALID_SCENE_ID)
         {
-            result.message = "Model node hierarchy import failed.";
-            return result;
+            PLAY_PROFILE_SCOPE("ModelLoading::import node hierarchy");
+            if (appendAssimpNode(assimpScene->mRootNode, INVALID_SCENE_ID, context) == INVALID_SCENE_ID)
+            {
+                result.message = "Model node hierarchy import failed.";
+                return result;
+            }
         }
 
         result.success = true;
@@ -985,6 +1020,8 @@ namespace
 
 ModelImportResult importModelFromFile(const std::filesystem::path& path, const ModelLoadingConfig& loadingConfig)
 {
+    PLAY_PROFILE_SCOPE("ModelLoading::importModelFromFile");
+
     const AssimpFormatImporter gltfImporter(ModelFileFormat::eGltf);
     const AssimpFormatImporter objImporter(ModelFileFormat::eObj);
     const AssimpFormatImporter fbxImporter(ModelFileFormat::eFbx);
@@ -992,6 +1029,7 @@ ModelImportResult importModelFromFile(const std::filesystem::path& path, const M
     const ModelFormatImporter* importers[] = {&gltfImporter, &objImporter, &fbxImporter};
     for (const ModelFormatImporter* importer : importers)
     {
+        PLAY_PROFILE_SCOPE("ModelLoading::try importer");
         if (importer->canImport(path, loadingConfig))
         {
             return importer->import(path, loadingConfig);
@@ -1005,6 +1043,8 @@ ModelImportResult importModelFromFile(const std::filesystem::path& path, const M
 
 ModelOptimizeResult optimizeModel(ImportedModel&& importedModel, const ModelLoadingConfig& loadingConfig)
 {
+    PLAY_PROFILE_SCOPE("ModelLoading::optimizeModel");
+
     (void) loadingConfig;
 
     ModelOptimizeResult result;
@@ -1018,7 +1058,13 @@ ModelOptimizeResult optimizeModel(ImportedModel&& importedModel, const ModelLoad
 
 ModelLoadResult model_loading::loadModelFromFile(const std::filesystem::path& path, const ModelLoadingConfig& loadingConfig)
 {
-    ModelImportResult importResult = importModelFromFile(path, loadingConfig);
+    PLAY_PROFILE_SCOPE("model_loading::loadModelFromFile");
+
+    ModelImportResult importResult = [&]()
+    {
+        PLAY_PROFILE_SCOPE("model_loading::import");
+        return importModelFromFile(path, loadingConfig);
+    }();
     if (!importResult.success)
     {
         ModelLoadResult result;
@@ -1026,7 +1072,11 @@ ModelLoadResult model_loading::loadModelFromFile(const std::filesystem::path& pa
         return result;
     }
 
-    ModelOptimizeResult optimizeResult = optimizeModel(std::move(importResult.model), loadingConfig);
+    ModelOptimizeResult optimizeResult = [&]()
+    {
+        PLAY_PROFILE_SCOPE("model_loading::optimize");
+        return optimizeModel(std::move(importResult.model), loadingConfig);
+    }();
     if (!optimizeResult.success)
     {
         ModelLoadResult result;
@@ -1036,7 +1086,10 @@ ModelLoadResult model_loading::loadModelFromFile(const std::filesystem::path& pa
 
     ModelLoadResult result;
     result.success = true;
-    result.model   = uploadModelPackage(std::move(optimizeResult.model));
+    {
+        PLAY_PROFILE_SCOPE("model_loading::upload");
+        result.model = uploadModelPackage(std::move(optimizeResult.model));
+    }
     return result;
 }
 

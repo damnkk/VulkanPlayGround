@@ -1,5 +1,6 @@
 #include "SceneManager.h"
 #include "Resource.h"
+#include "core/Profiling.h"
 #include "core/runtime/VulkanRuntime.h"
 #include "DescriptorManager.h"
 
@@ -76,6 +77,8 @@ void SceneManager::addSkyBoxTexture(const RefPtr<Texture>& texture)
 
 void SceneManager::updateDescriptorSet()
 {
+    PLAY_PROFILE_SCOPE("SceneManager::updateDescriptorSet");
+
     std::vector<VkWriteDescriptorSet> writes;
 
     VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
@@ -119,28 +122,37 @@ void SceneManager::updateDescriptorSet()
 
 void SceneManager::update()
 {
-    editAssetLoadingServer(
-        [](AssetLoadingServer& loadingServer)
-        {
-            loadingServer.processPendingLoads();
-        });
+    PLAY_PROFILE_SCOPE("SceneManager::update");
+
+    {
+        PLAY_PROFILE_SCOPE("SceneManager::process pending model loads");
+        editAssetLoadingServer(
+            [](AssetLoadingServer& loadingServer)
+            {
+                loadingServer.processPendingLoads();
+            });
+    }
 
     std::vector<ModelLoadCompletion> completedModels;
 
-    editAssetLoadingServer(
-        [&](AssetLoadingServer& loadingServer)
-        {
-            ModelLoadCompletion completion;
-            while (loadingServer.popCompletedModel(completion))
+    {
+        PLAY_PROFILE_SCOPE("SceneManager::collect completed model loads");
+        editAssetLoadingServer(
+            [&](AssetLoadingServer& loadingServer)
             {
-                completedModels.push_back(std::move(completion));
-            }
-        });
+                ModelLoadCompletion completion;
+                while (loadingServer.popCompletedModel(completion))
+                {
+                    completedModels.push_back(std::move(completion));
+                }
+            });
+    }
 
     std::vector<PendingModelRegistration> pendingRegistrations;
     pendingRegistrations.reserve(completedModels.size());
 
     {
+        PLAY_PROFILE_SCOPE("SceneManager::prepare completed model registrations");
         std::lock_guard<std::mutex> lock(_cpuSceneMutex);
         for (ModelLoadCompletion& completion : completedModels)
         {
@@ -165,15 +177,20 @@ void SceneManager::update()
 
     const size_t previousSceneTextureCount = _gpuScene ? _gpuScene->getSceneTextures().size() : 0;
 
-    for (PendingModelRegistration& pendingRegistration : pendingRegistrations)
     {
-        pendingRegistration.model = _gpuScene->registerModel(std::move(pendingRegistration.completion.result.model));
-        pendingRegistration.renderableCount = pendingRegistration.model.isValid()
-                                                  ? static_cast<uint32_t>(_gpuScene->getModels()[pendingRegistration.model.index].renderables.size())
-                                                  : INVALID_SCENE_ID;
+        PLAY_PROFILE_SCOPE("SceneManager::register completed models");
+        for (PendingModelRegistration& pendingRegistration : pendingRegistrations)
+        {
+            pendingRegistration.model = _gpuScene->registerModel(std::move(pendingRegistration.completion.result.model));
+            pendingRegistration.renderableCount = pendingRegistration.model.isValid()
+                                                      ? static_cast<uint32_t>(
+                                                            _gpuScene->getModels()[pendingRegistration.model.index].renderables.size())
+                                                      : INVALID_SCENE_ID;
+        }
     }
 
     {
+        PLAY_PROFILE_SCOPE("SceneManager::apply completed model registrations");
         std::lock_guard<std::mutex> lock(_cpuSceneMutex);
         for (PendingModelRegistration& pendingRegistration : pendingRegistrations)
         {
