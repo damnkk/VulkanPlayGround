@@ -1,5 +1,6 @@
 #include "RDGPasses.hpp"
 #include "RDG.h"
+#include "RDGBarrierUtils.h"
 #include "RenderPass.h"
 #include "core/runtime/VulkanRuntime.h"
 

@@ -1,7 +1,7 @@
 #include "RDG.h"
 #include <stdexcept>
 #include "queue"
-#include "utils.hpp"
+#include "RDGBarrierUtils.h"
 #include "RenderPassCache.h"
 #include "RenderPass.h"
 #include "core/runtime/VulkanRuntime.h"

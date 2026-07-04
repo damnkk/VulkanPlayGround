@@ -1,4 +1,5 @@
 #include "DescriptorManager.h"
+#include "core/Hash.h"
 #include "nvvk/check_error.hpp"
 #include "core/runtime/VulkanRuntime.h"
 

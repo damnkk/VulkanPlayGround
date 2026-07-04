@@ -1,5 +1,4 @@
 #include "debugger.h"
-#include "pch.h"
 #include <windows.h>
 #include <debugapi.h>
 #include "nvnsight/nsightevents.hpp"

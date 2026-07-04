@@ -43,10 +43,10 @@ function(build_shader)
      -o "${OUTPUT_FILE}.h" ${SHADER}
   )
   add_custom_command(
-     OUTPUT ${OUTPUT_FILE}.h ${OUTPUT_FILE}.spv
-     COMMAND echo ${_COMMAND_H}
+     OUTPUT ${OUTPUT_FILE}.h
      COMMAND ${_COMMAND_H}
      MAIN_DEPENDENCY ${SHADER}
+     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/shader/constants.slang
      DEPFILE "${OUTPUT_FILE}.dep"
      COMMENT "Compiling Slang shader ${SHADER_NAME}"
   )

@@ -4,7 +4,7 @@
 #include "Resource.h"
 #include "SceneManager.h"
 #include "ShaderManager.hpp"
-#include "utils.hpp"
+#include "VulkanResourceUtils.h"
 #include "newShaders/gaussian/gaussianLib.h.slang"
 #include "PConstantType.h.slang"
 

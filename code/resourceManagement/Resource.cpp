@@ -3,7 +3,7 @@
 #include "ImageLoading.h"
 #include "PlayAllocator.h"
 #include "core/runtime/VulkanRuntime.h"
-#include "utils.hpp"
+#include "VulkanResourceUtils.h"
 #include "nvvk/mipmaps.hpp"
 
 namespace Play

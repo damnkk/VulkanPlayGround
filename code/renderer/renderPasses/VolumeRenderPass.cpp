@@ -5,7 +5,8 @@
 #include "ShaderManager.hpp"
 #include "core/runtime/VulkanRuntime.h"
 #include "PlayAllocator.h"
-#include "utils.hpp"
+#include "core/ProjectPaths.h"
+#include "VulkanResourceUtils.h"
 #include "editor/EditorRegistry.h"
 #include "tinygltf/json.hpp"
 #include <nvutils/file_operations.hpp>

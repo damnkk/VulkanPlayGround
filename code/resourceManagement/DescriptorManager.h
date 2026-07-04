@@ -1,7 +1,6 @@
 #ifndef DESCRIPTOR_MANAGER_H
 #define DESCRIPTOR_MANAGER_H
 #include "Resource.h"
-#include "utils.hpp"
 #include "core/RefCounted.h"
 #include <nvvk/descriptors.hpp>
 namespace Play

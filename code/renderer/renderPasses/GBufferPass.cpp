@@ -7,7 +7,7 @@
 #include "RDG/RDG.h"
 #include "SceneManager.h"
 #include "core/runtime/VulkanRuntime.h"
-#include "utils.hpp"
+#include "VulkanResourceUtils.h"
 
 namespace Play
 {

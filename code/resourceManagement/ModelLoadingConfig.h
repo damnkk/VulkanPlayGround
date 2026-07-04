@@ -1,8 +1,6 @@
 #ifndef MODEL_LOADING_CONFIG_H
 #define MODEL_LOADING_CONFIG_H
-
-#include "pch.h"
-
+#include <cinttypes>
 namespace Play
 {
 

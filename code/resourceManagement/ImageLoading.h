@@ -1,7 +1,10 @@
 #ifndef IMAGE_LOADING_H
 #define IMAGE_LOADING_H
 
-#include "utils.hpp"
+#include <cstdint>
+#include <filesystem>
+#include <vector>
+#include <vulkan/vulkan.h>
 
 namespace Play::ImageLoading
 {

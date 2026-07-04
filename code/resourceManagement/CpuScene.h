@@ -2,7 +2,6 @@
 #define CPU_SCENE_H
 
 #include "ModelLoadingConfig.h"
-#include "pch.h"
 #include <glm/glm.hpp>
 #include <rttr/rttr_enable.h>
 #include <string>

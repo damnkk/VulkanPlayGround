@@ -39,7 +39,7 @@ struct CommandPool
     uint32_t                    currCmdBufferIdx = 0;
 };
 
-template <int N = MAX_SUB_RENDER_THREAD>
+template <int N = 4>
 class WorkerCommandContext
 {
 public:

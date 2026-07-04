@@ -1,7 +1,6 @@
 #include "PlayAllocator.h"
 #include "Resource.h"
 #include "core/runtime/VulkanRuntime.h"
-#include "utils.hpp"
 #include "nvvk/check_error.hpp"
 namespace Play
 {

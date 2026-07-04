@@ -1,6 +1,5 @@
 #ifndef RENDERER_H
 #define RENDERER_H
-#include "pch.h"
 #include <glm/glm.hpp>
 #include "Hdevice.h"
 #include <memory>
