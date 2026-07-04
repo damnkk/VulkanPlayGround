@@ -6,6 +6,8 @@ project(${PROJECT_NAME} LANGUAGES C CXX)
 # e.g.
 option(NVPRO2_ENABLE_nvgl OFF)
 option(NVPRO2_ENABLE_nvgpu_monitor OFF)
+# Keep NVTX calls active in nvpro. The project profiling switch lives in code/core/Profiling.h.
+set(NSIGHT_ENABLE_NVTX ON CACHE BOOL "Enable NVTX markers for Nsight Systems and Nsight Graphics" FORCE)
 
 find_path(NVPRO_CORE2_DIR
   NAMES cmake/Setup.cmake
