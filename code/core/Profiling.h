@@ -45,7 +45,7 @@
 #endif
 
 #ifndef PLAY_ENABLE_PROFILE_LOG
-#define PLAY_ENABLE_PROFILE_LOG PLAY_ENABLE_PROFILING
+#define PLAY_ENABLE_PROFILE_LOG 0
 #endif
 
 namespace Play

@@ -50,12 +50,6 @@ public:
         return _assetLoadingServer;
     }
     template <typename Fn>
-    decltype(auto) editAssetLoadingServer(Fn fn)
-    {
-        std::lock_guard<std::mutex> lock(_assetLoadingServerMutex);
-        return fn(_assetLoadingServer);
-    }
-    template <typename Fn>
     decltype(auto) readSceneGraph(Fn fn) const
     {
         std::lock_guard<std::mutex> lock(_cpuSceneMutex);
@@ -89,7 +83,6 @@ private:
     CpuScene           _cpuScene;
     mutable std::mutex _cpuSceneMutex;
     AssetLoadingServer _assetLoadingServer;
-    std::mutex         _assetLoadingServerMutex;
     std::unique_ptr<GpuScene> _gpuScene;
 };
 

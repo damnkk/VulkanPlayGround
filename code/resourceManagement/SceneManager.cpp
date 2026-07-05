@@ -126,26 +126,18 @@ void SceneManager::update()
 
     {
         PLAY_PROFILE_SCOPE("SceneManager::process pending model loads");
-        editAssetLoadingServer(
-            [](AssetLoadingServer& loadingServer)
-            {
-                loadingServer.processPendingLoads();
-            });
+        _assetLoadingServer.processPendingLoads();
     }
 
     std::vector<ModelLoadCompletion> completedModels;
 
     {
         PLAY_PROFILE_SCOPE("SceneManager::collect completed model loads");
-        editAssetLoadingServer(
-            [&](AssetLoadingServer& loadingServer)
-            {
-                ModelLoadCompletion completion;
-                while (loadingServer.popCompletedModel(completion))
-                {
-                    completedModels.push_back(std::move(completion));
-                }
-            });
+        ModelLoadCompletion completion;
+        while (_assetLoadingServer.popCompletedModel(completion))
+        {
+            completedModels.push_back(std::move(completion));
+        }
     }
 
     std::vector<PendingModelRegistration> pendingRegistrations;

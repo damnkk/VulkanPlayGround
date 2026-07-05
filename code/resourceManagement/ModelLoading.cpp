@@ -1,9 +1,12 @@
 #include "ModelLoading.h"
 
+#include "ImageLoading.h"
 #include "PlayAllocator.h"
+#include "VulkanResourceUtils.h"
 #include "core/Profiling.h"
 #include "core/Utils.h"
 #include "nvutils/file_operations.hpp"
+#include "nvvk/mipmaps.hpp"
 #include <assimp/GltfMaterial.h>
 #include <assimp/Importer.hpp>
 #include <assimp/config.h>
@@ -92,14 +95,16 @@ struct ModelGeometryPayload
 
 struct ImportedModel
 {
-    ModelAssetPackage   package;
-    ModelGeometryPayload geometry;
+    ModelAssetPackage                      package;
+    ModelGeometryPayload                    geometry;
+    std::vector<ImageLoading::LoadedImage> textureImages;
 };
 
 struct OptimizedModel
 {
-    ModelAssetPackage   package;
-    ModelGeometryPayload geometry;
+    ModelAssetPackage                      package;
+    ModelGeometryPayload                    geometry;
+    std::vector<ImageLoading::LoadedImage> textureImages;
 };
 
 struct ModelImportResult
@@ -116,16 +121,142 @@ struct ModelOptimizeResult
     std::string    message;
 };
 
-void uploadModelTextures(ModelAssetPackage& package)
+bool isValidLoadedImage(const ImageLoading::LoadedImage& loadedImage)
+{
+    return loadedImage.format != VK_FORMAT_UNDEFINED && loadedImage.extent.width > 0 && loadedImage.extent.height > 0 &&
+           !loadedImage.pixels.empty();
+}
+
+uint32_t resolveTextureMipLevels(uint32_t requestedMipLevels, VkExtent2D extent)
+{
+    const uint32_t maxMipLevels = nvvk::mipLevels(extent);
+    if (requestedMipLevels == 0 || requestedMipLevels > maxMipLevels)
+    {
+        return maxMipLevels;
+    }
+    return requestedMipLevels;
+}
+
+struct PendingTextureMipGeneration
+{
+    Texture*      texture     = nullptr;
+    VkExtent2D    extent      = {};
+    uint32_t      mipLevels   = 1;
+    VkImageLayout finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+};
+
+class ModelUploadSession
+{
+public:
+    explicit ModelUploadSession(OptimizedModel&& sourceModel) : _model(std::move(sourceModel)), _package(std::move(_model.package)) {}
+
+    ModelAssetPackage upload();
+
+private:
+    RefPtr<Texture> createTextureFromLoadedImage(const ModelTextureResource& textureResource, const ImageLoading::LoadedImage& loadedImage);
+    void            uploadTextures();
+    void            uploadGeometry();
+    void            submitPendingUploads();
+
+    OptimizedModel                            _model;
+    ModelAssetPackage                        _package;
+    bool                                     _hasPendingUpload = false;
+    std::vector<PendingTextureMipGeneration> _pendingMipGenerations;
+};
+
+RefPtr<Texture> ModelUploadSession::createTextureFromLoadedImage(const ModelTextureResource& textureResource,
+                                                                 const ImageLoading::LoadedImage& loadedImage)
+{
+    if (!isValidLoadedImage(loadedImage))
+    {
+        return nullptr;
+    }
+
+    const uint32_t      mipLevels   = resolveTextureMipLevels(textureResource.mipLevels, loadedImage.extent);
+    const VkImageLayout finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    VkImageCreateInfo imageInfo{
+        .sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType     = VK_IMAGE_TYPE_2D,
+        .format        = loadedImage.format,
+        .extent        = {loadedImage.extent.width, loadedImage.extent.height, 1},
+        .mipLevels     = mipLevels,
+        .arrayLayers   = 1,
+        .samples       = VK_SAMPLE_COUNT_1_BIT,
+        .tiling        = VK_IMAGE_TILING_OPTIMAL,
+        .usage         = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .sharingMode   = VK_SHARING_MODE_EXCLUSIVE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    };
+
+    VkImageViewCreateInfo viewInfo{
+        .sType            = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .viewType         = VK_IMAGE_VIEW_TYPE_2D,
+        .format           = loadedImage.format,
+        .components       = {VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A},
+        .subresourceRange = {inferImageAspectFlags(loadedImage.format, true), 0, mipLevels, 0, 1},
+    };
+
+    nvvk::Image uploadedImage;
+    PlayResourceManager& uploadManager = PlayResourceManager::Instance();
+    if (uploadManager.createImage(uploadedImage, imageInfo, viewInfo) != VK_SUCCESS)
+    {
+        if (uploadedImage.image != VK_NULL_HANDLE)
+        {
+            uploadManager.destroyImage(uploadedImage);
+        }
+        return nullptr;
+    }
+
+    if (uploadManager.appendImage(uploadedImage, loadedImage.pixels.size(), loadedImage.pixels.data(), finalLayout) != VK_SUCCESS)
+    {
+        uploadManager.destroyImage(uploadedImage);
+        return nullptr;
+    }
+
+    RefPtr<Texture> texture = RefPtr<Texture>(new Texture(textureResource.name,
+                                                          uploadedImage.image,
+                                                          uploadedImage.descriptor.imageView,
+                                                          loadedImage.format,
+                                                          uploadedImage.extent,
+                                                          imageInfo.usage,
+                                                          finalLayout,
+                                                          VK_IMAGE_ASPECT_COLOR_BIT,
+                                                          mipLevels,
+                                                          1,
+                                                          VK_SAMPLE_COUNT_1_BIT,
+                                                          true));
+    texture->allocation = uploadedImage.allocation;
+    _hasPendingUpload   = true;
+
+    if (mipLevels > 1)
+    {
+        PendingTextureMipGeneration pendingMipGeneration;
+        pendingMipGeneration.texture     = texture.get();
+        pendingMipGeneration.extent      = loadedImage.extent;
+        pendingMipGeneration.mipLevels   = mipLevels;
+        pendingMipGeneration.finalLayout = finalLayout;
+        _pendingMipGenerations.push_back(pendingMipGeneration);
+    }
+
+    uploadManager.acquireSampler(texture->descriptor.sampler);
+    return texture;
+}
+
+void ModelUploadSession::uploadTextures()
 {
     PLAY_PROFILE_SCOPE("ModelLoading::uploadModelTextures");
 
-    for (ModelTextureResource& texture : package.textures)
+    for (uint32_t textureIndex = 0; textureIndex < _package.textures.size(); ++textureIndex)
     {
-        if (!texture.texture && !texture.sourcePath.empty())
+        ModelTextureResource& texture = _package.textures[textureIndex];
+        if (texture.texture)
         {
-            texture.texture =
-                RefPtr<Texture>(new Texture(texture.sourcePath, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, texture.mipLevels, texture.isSrgb));
+            continue;
+        }
+
+        if (textureIndex < _model.textureImages.size())
+        {
+            texture.texture = createTextureFromLoadedImage(texture, _model.textureImages[textureIndex]);
         }
     }
 }
@@ -167,10 +298,12 @@ void compactResidentTextures(ModelAssetPackage& package)
     package.textures = std::move(residentTextures);
 }
 
-void uploadModelGeometry(ModelAssetPackage& package, ModelGeometryPayload& geometry, bool& hasPendingUpload)
+void ModelUploadSession::uploadGeometry()
 {
     PLAY_PROFILE_SCOPE("ModelLoading::uploadModelGeometry");
 
+    ModelAssetPackage&    package  = _package;
+    ModelGeometryPayload& geometry = _model.geometry;
     if (geometry.empty() || package.meshInfos.empty())
     {
         return;
@@ -255,7 +388,7 @@ void uploadModelGeometry(ModelAssetPackage& package, ModelGeometryPayload& geome
     }
 
     RefPtr<Buffer> vertexStreamBuffer =
-        createAndAppendBuffer(package.asset.name + "_VertexStreamBuffer", vertexStreams, hasPendingUpload);
+        createAndAppendBuffer(package.asset.name + "_VertexStreamBuffer", vertexStreams, _hasPendingUpload);
     if (vertexStreamBuffer)
     {
         for (uint32_t meshIndex = 0; meshIndex < vertexStreams.size() && meshIndex < package.meshInfos.size(); ++meshIndex)
@@ -269,14 +402,14 @@ void uploadModelGeometry(ModelAssetPackage& package, ModelGeometryPayload& geome
     {
         package.ownedBuffers.push_back(vertexStreamBuffer);
     }
-    hasPendingUpload = true;
+    _hasPendingUpload = true;
 }
 
-void submitPendingUploads(bool hasPendingUpload)
+void ModelUploadSession::submitPendingUploads()
 {
     PLAY_PROFILE_SCOPE("ModelLoading::submitPendingUploads");
 
-    if (!hasPendingUpload)
+    if (!_hasPendingUpload && _pendingMipGenerations.empty())
     {
         return;
     }
@@ -290,7 +423,28 @@ void submitPendingUploads(bool hasPendingUpload)
     {
         PLAY_PROFILE_SCOPE("ModelLoading::record pending uploads");
         PLAY_PROFILE_COMMAND_LABEL(cmd, "Model Pending Uploads");
-        uploadManager.cmdUploadAppended(cmd);
+        if (_hasPendingUpload)
+        {
+            uploadManager.cmdUploadAppended(cmd);
+        }
+    }
+    {
+        PLAY_PROFILE_SCOPE("ModelLoading::record texture mipmaps");
+        PLAY_PROFILE_COMMAND_LABEL(cmd, "Model Texture Generate Mipmaps");
+        for (const PendingTextureMipGeneration& pendingMipGeneration : _pendingMipGenerations)
+        {
+            if (!pendingMipGeneration.texture)
+            {
+                continue;
+            }
+
+            nvvk::cmdGenerateMipmaps(cmd,
+                                     pendingMipGeneration.texture->image,
+                                     pendingMipGeneration.extent,
+                                     pendingMipGeneration.mipLevels,
+                                     1,
+                                     pendingMipGeneration.finalLayout);
+        }
     }
     {
         PLAY_PROFILE_SCOPE("ModelLoading::submit and wait pending uploads");
@@ -298,28 +452,34 @@ void submitPendingUploads(bool hasPendingUpload)
     }
 }
 
-ModelAssetPackage uploadModelPackage(OptimizedModel&& model)
+ModelAssetPackage ModelUploadSession::upload()
 {
     PLAY_PROFILE_SCOPE("ModelLoading::uploadModelPackage");
 
-    ModelAssetPackage package = std::move(model.package);
+    uploadTextures();
+    compactResidentTextures(_package);
 
-    uploadModelTextures(package);
-    compactResidentTextures(package);
-
-    bool hasPendingUpload = false;
-    uploadModelGeometry(package, model.geometry, hasPendingUpload);
+    uploadGeometry();
     {
         PLAY_PROFILE_SCOPE("ModelLoading::append model metadata buffers");
-        package.asset.transformBuffer   = createAndAppendBuffer(package.asset.name + "_TransformBuffer", package.asset.transforms, hasPendingUpload);
-        package.asset.materialBuffer    = createAndAppendBuffer(package.asset.name + "_MaterialBuffer", package.materials, hasPendingUpload);
-        package.asset.textureInfoBuffer = createAndAppendBuffer(package.asset.name + "_TextureInfoBuffer", package.textureInfos, hasPendingUpload);
-        package.asset.meshInfoBuffer    = createAndAppendBuffer(package.asset.name + "_MeshInfoBuffer", package.meshInfos, hasPendingUpload);
+        _package.asset.transformBuffer =
+            createAndAppendBuffer(_package.asset.name + "_TransformBuffer", _package.asset.transforms, _hasPendingUpload);
+        _package.asset.materialBuffer = createAndAppendBuffer(_package.asset.name + "_MaterialBuffer", _package.materials, _hasPendingUpload);
+        _package.asset.textureInfoBuffer =
+            createAndAppendBuffer(_package.asset.name + "_TextureInfoBuffer", _package.textureInfos, _hasPendingUpload);
+        _package.asset.meshInfoBuffer = createAndAppendBuffer(_package.asset.name + "_MeshInfoBuffer", _package.meshInfos, _hasPendingUpload);
     }
-    submitPendingUploads(hasPendingUpload);
+    submitPendingUploads();
 
-    return package;
+    return std::move(_package);
 }
+
+ModelAssetPackage uploadModelPackage(OptimizedModel&& model)
+{
+    ModelUploadSession uploadSession(std::move(model));
+    return uploadSession.upload();
+}
+
 
 struct ImportedTextureSlot
 {
@@ -545,34 +705,56 @@ int findLocalTextureIndex(const ModelAssetPackage& package, const std::filesyste
     return -1;
 }
 
-int ensureLocalTextureIndex(ModelAssetPackage& package, const std::filesystem::path& modelPath, const aiScene* assimpScene,
-                            const aiString& texturePath, const ModelLoadingConfig& loadingCfg, bool isSrgb)
+class MaterialImportSession
 {
-    if (!loadingCfg.loadTextures)
+public:
+    MaterialImportSession(ImportedModel& model, const std::filesystem::path& modelPath, const aiScene* assimpScene,
+                          const ModelLoadingConfig& loadingCfg)
+        : _model(model), _modelPath(modelPath), _assimpScene(assimpScene), _loadingCfg(loadingCfg)
+    {
+    }
+
+    shaderio::GltfShadeMaterial importMaterial(const aiMaterial* material);
+    void                        loadTextureImages();
+
+private:
+    int  ensureLocalTextureIndex(const aiString& texturePath, bool isSrgb);
+    void readTextureSlot(const aiMaterial* material, aiTextureType textureType, ImportedTextureSlot& slot, bool isSrgb);
+
+    ImportedModel&                 _model;
+    const std::filesystem::path&   _modelPath;
+    const aiScene*                 _assimpScene = nullptr;
+    const ModelLoadingConfig&      _loadingCfg;
+};
+
+int MaterialImportSession::ensureLocalTextureIndex(const aiString& texturePath, bool isSrgb)
+{
+    if (!_loadingCfg.loadTextures)
     {
         return -1;
     }
 
     const bool embedded = isEmbeddedTextureName(texturePath);
-    if (embedded && !loadingCfg.registerEmbeddedTexturePlaceholders)
+    if (embedded && !_loadingCfg.registerEmbeddedTexturePlaceholders)
     {
         return -1;
     }
 
-    const std::filesystem::path sourcePath = embedded ? std::filesystem::path() : resolveTexturePath(modelPath, texturePath);
+    const std::filesystem::path sourcePath = embedded ? std::filesystem::path() : resolveTexturePath(_modelPath, texturePath);
     std::string                 name       = embedded ? texturePath.C_Str() : sourcePath.filename().string();
     if (name.empty())
     {
         name = texturePath.C_Str();
     }
 
+    ModelAssetPackage& package = _model.package;
     const int existingLocalIndex = findLocalTextureIndex(package, sourcePath, name, embedded);
     if (existingLocalIndex >= 0)
     {
         return existingLocalIndex;
     }
 
-    if (embedded && assimpScene)
+    if (embedded && _assimpScene)
     {
         const char* embeddedName  = texturePath.C_Str() + 1;
         int         embeddedIndex = 0;
@@ -585,7 +767,7 @@ int ensureLocalTextureIndex(ModelAssetPackage& package, const std::filesystem::p
             embeddedIndex = embeddedIndex * 10 + (*embeddedName - '0');
             ++embeddedName;
         }
-        if (embeddedIndex >= static_cast<int>(assimpScene->mNumTextures))
+        if (embeddedIndex >= static_cast<int>(_assimpScene->mNumTextures))
         {
             return -1;
         }
@@ -594,16 +776,15 @@ int ensureLocalTextureIndex(ModelAssetPackage& package, const std::filesystem::p
     ModelTextureResource texture;
     texture.name       = name;
     texture.sourcePath = sourcePath;
-    texture.mipLevels  = loadingCfg.textureMipLevels;
+    texture.mipLevels  = _loadingCfg.textureMipLevels;
     texture.isSrgb     = isSrgb;
 
     const int localIndex = static_cast<int>(package.textures.size());
-    package.textures.push_back(texture);
+    package.textures.push_back(std::move(texture));
     return localIndex;
 }
 
-void readTextureSlot(const aiMaterial* material, aiTextureType textureType, ImportedTextureSlot& slot, ModelAssetPackage& package,
-                     const std::filesystem::path& modelPath, const aiScene* assimpScene, const ModelLoadingConfig& loadingCfg, bool isSrgb)
+void MaterialImportSession::readTextureSlot(const aiMaterial* material, aiTextureType textureType, ImportedTextureSlot& slot, bool isSrgb)
 {
     if (!material || material->GetTextureCount(textureType) == 0)
     {
@@ -617,7 +798,7 @@ void readTextureSlot(const aiMaterial* material, aiTextureType textureType, Impo
         return;
     }
 
-    slot.localTextureIndex = ensureLocalTextureIndex(package, modelPath, assimpScene, texturePath, loadingCfg, isSrgb);
+    slot.localTextureIndex = ensureLocalTextureIndex(texturePath, isSrgb);
     slot.texCoord          = static_cast<int>(uvIndex);
 
     aiUVTransform transform;
@@ -652,9 +833,9 @@ uint16_t appendTextureInfo(ModelAssetPackage& package, const ImportedTextureSlot
     return textureInfoIndex;
 }
 
-shaderio::GltfShadeMaterial importMaterial(const aiMaterial* material, ModelAssetPackage& package, const std::filesystem::path& modelPath,
-                                           const aiScene* assimpScene, const ModelLoadingConfig& loadingCfg)
+shaderio::GltfShadeMaterial MaterialImportSession::importMaterial(const aiMaterial* material)
 {
+    ModelAssetPackage& package = _model.package;
     shaderio::GltfShadeMaterial importedMaterial = shaderio::defaultGltfMaterial();
     if (!material)
     {
@@ -725,49 +906,68 @@ shaderio::GltfShadeMaterial importMaterial(const aiMaterial* material, ModelAsse
         importedMaterial.alphaMode = shaderio::eAlphaModeBlend;
     }
 
-    if (!loadingCfg.loadTextures)
+    if (!_loadingCfg.loadTextures)
     {
         return importedMaterial;
     }
 
     ImportedTextureSlot baseColorSlot;
-    readTextureSlot(material, aiTextureType_BASE_COLOR, baseColorSlot, package, modelPath, assimpScene, loadingCfg, loadingCfg.srgbBaseColorTextures);
+    readTextureSlot(material, aiTextureType_BASE_COLOR, baseColorSlot, _loadingCfg.srgbBaseColorTextures);
     if (!baseColorSlot.hasTexture())
     {
-        readTextureSlot(material, aiTextureType_DIFFUSE, baseColorSlot, package, modelPath, assimpScene, loadingCfg,
-                        loadingCfg.srgbBaseColorTextures);
+        readTextureSlot(material, aiTextureType_DIFFUSE, baseColorSlot, _loadingCfg.srgbBaseColorTextures);
     }
     importedMaterial.pbrBaseColorTexture = appendTextureInfo(package, baseColorSlot);
 
     ImportedTextureSlot normalSlot;
-    readTextureSlot(material, aiTextureType_NORMALS, normalSlot, package, modelPath, assimpScene, loadingCfg, false);
+    readTextureSlot(material, aiTextureType_NORMALS, normalSlot, false);
     if (!normalSlot.hasTexture())
     {
-        readTextureSlot(material, aiTextureType_NORMAL_CAMERA, normalSlot, package, modelPath, assimpScene, loadingCfg, false);
+        readTextureSlot(material, aiTextureType_NORMAL_CAMERA, normalSlot, false);
     }
     importedMaterial.normalTexture = appendTextureInfo(package, normalSlot);
 
     ImportedTextureSlot metallicRoughnessSlot;
-    readTextureSlot(material, aiTextureType_GLTF_METALLIC_ROUGHNESS, metallicRoughnessSlot, package, modelPath, assimpScene, loadingCfg, false);
+    readTextureSlot(material, aiTextureType_GLTF_METALLIC_ROUGHNESS, metallicRoughnessSlot, false);
     if (!metallicRoughnessSlot.hasTexture())
     {
-        readTextureSlot(material, aiTextureType_DIFFUSE_ROUGHNESS, metallicRoughnessSlot, package, modelPath, assimpScene, loadingCfg, false);
+        readTextureSlot(material, aiTextureType_DIFFUSE_ROUGHNESS, metallicRoughnessSlot, false);
     }
     importedMaterial.pbrMetallicRoughnessTexture = appendTextureInfo(package, metallicRoughnessSlot);
 
     ImportedTextureSlot emissiveSlot;
-    readTextureSlot(material, aiTextureType_EMISSIVE, emissiveSlot, package, modelPath, assimpScene, loadingCfg, loadingCfg.srgbEmissiveTextures);
+    readTextureSlot(material, aiTextureType_EMISSIVE, emissiveSlot, _loadingCfg.srgbEmissiveTextures);
     importedMaterial.emissiveTexture = appendTextureInfo(package, emissiveSlot);
 
     ImportedTextureSlot occlusionSlot;
-    readTextureSlot(material, aiTextureType_AMBIENT_OCCLUSION, occlusionSlot, package, modelPath, assimpScene, loadingCfg, false);
+    readTextureSlot(material, aiTextureType_AMBIENT_OCCLUSION, occlusionSlot, false);
     importedMaterial.occlusionTexture = appendTextureInfo(package, occlusionSlot);
 
     ImportedTextureSlot specularSlot;
-    readTextureSlot(material, aiTextureType_SPECULAR, specularSlot, package, modelPath, assimpScene, loadingCfg, false);
+    readTextureSlot(material, aiTextureType_SPECULAR, specularSlot, false);
     importedMaterial.specularTexture = appendTextureInfo(package, specularSlot);
 
     return importedMaterial;
+}
+
+void MaterialImportSession::loadTextureImages()
+{
+    PLAY_PROFILE_SCOPE("ModelLoading::loadImportedTextureImages");
+
+    ModelAssetPackage& package = _model.package;
+    _model.textureImages.clear();
+    _model.textureImages.resize(package.textures.size());
+
+    for (uint32_t textureIndex = 0; textureIndex < package.textures.size(); ++textureIndex)
+    {
+        const ModelTextureResource& texture = package.textures[textureIndex];
+        if (texture.sourcePath.empty())
+        {
+            continue;
+        }
+
+        ImageLoading::LoadTextureImage(texture.sourcePath, texture.isSrgb, _model.textureImages[textureIndex]);
+    }
 }
 
 struct AssimpImportContext
@@ -935,6 +1135,7 @@ public:
             package.textureInfos.push_back(shaderio::defaultGltfTextureInfo());
         }
 
+        MaterialImportSession materialImporter(result.model, path, assimpScene, loadingCfg);
         {
             PLAY_PROFILE_SCOPE("ModelLoading::import materials");
             if (loadingCfg.loadMaterials && assimpScene->mNumMaterials > 0)
@@ -942,7 +1143,7 @@ public:
                 package.materials.reserve(assimpScene->mNumMaterials);
                 for (uint32_t materialIndex = 0; materialIndex < assimpScene->mNumMaterials; ++materialIndex)
                 {
-                    package.materials.push_back(importMaterial(assimpScene->mMaterials[materialIndex], package, path, assimpScene, loadingCfg));
+                    package.materials.push_back(materialImporter.importMaterial(assimpScene->mMaterials[materialIndex]));
                 }
             }
         }
@@ -951,6 +1152,8 @@ public:
         {
             package.materials.push_back(shaderio::defaultGltfMaterial());
         }
+
+        materialImporter.loadTextureImages();
 
         AssimpImportContext context;
         context.package = &package;
@@ -1048,9 +1251,10 @@ ModelOptimizeResult optimizeModel(ImportedModel&& importedModel, const ModelLoad
     (void) loadingConfig;
 
     ModelOptimizeResult result;
-    result.success        = true;
-    result.model.package  = std::move(importedModel.package);
-    result.model.geometry = std::move(importedModel.geometry);
+    result.success             = true;
+    result.model.package       = std::move(importedModel.package);
+    result.model.geometry      = std::move(importedModel.geometry);
+    result.model.textureImages = std::move(importedModel.textureImages);
     return result;
 }
 

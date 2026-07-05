@@ -32,6 +32,8 @@ struct ModelLoadCompletion
 class AssetLoadingServer
 {
 public:
+    AssetLoadingServer();
+
     void clear();
 
     ModelLoadRequestID requestModelLoad(CpuSceneComponentID requester, const std::filesystem::path& path,
@@ -41,13 +43,11 @@ public:
     bool popCompletedModel(ModelLoadCompletion& completion);
 
 private:
-    ModelLoadRequestID makeRequestID(uint32_t index) const;
+    struct State;
 
-    std::vector<ModelLoadRequest>    _requests;
-    std::vector<uint32_t>            _pendingRequests;
-    std::vector<ModelLoadCompletion> _completedModels;
-    uint32_t                         _nextPendingRequest = 0;
-    uint32_t                         _nextCompletedModel = 0;
+    static ModelLoadRequestID makeRequestID(const State& state, uint32_t index);
+
+    std::shared_ptr<State> _state;
 };
 
 } // namespace Play

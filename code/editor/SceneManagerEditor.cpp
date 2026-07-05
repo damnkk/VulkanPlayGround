@@ -379,11 +379,7 @@ bool SceneManagerEditor::loadSceneNodeModel(const char* nodeKey, const char* pat
             }
 
             const ModelLoadingConfig loadingConfig = component->loadingConfig;
-            return _sceneManager->editAssetLoadingServer(
-                [&](AssetLoadingServer& loadingServer)
-                {
-                    return component->requestLoadFromFile(scene, loadingServer, sourcePath, loadingConfig).isValid();
-                });
+            return component->requestLoadFromFile(scene, _sceneManager->getAssetLoadingServer(), sourcePath, loadingConfig).isValid();
         });
 }
 
