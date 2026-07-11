@@ -1,10 +1,10 @@
 #include "GaussianSortPass.h"
 #include "core/PlayCamera.h"
-#include "ShaderManager.hpp"
+#include "resourceManagement/vulkan/pipeline/ShaderManager.hpp"
 #include "GaussianRenderer.h"
-#include "SceneManager.h"
+#include "resourceManagement/scene/SceneManager.h"
 #include "nvutils/alignment.hpp"
-#include "RDG/RDG.h"
+#include "resourceManagement/renderGraph/RDG.h"
 #include "newShaders/gaussian/gaussianLib.h.slang"
 #include "PConstantType.h.slang"
 

@@ -5,7 +5,7 @@
 #include <vulkan/vulkan_core.h>
 #include "RenderPass.h"
 #include "core/RefCounted.h"
-#include "PipelineCacheManager.h"
+#include "resourceManagement/vulkan/pipeline/PipelineCacheManager.h"
 
 namespace Play
 {

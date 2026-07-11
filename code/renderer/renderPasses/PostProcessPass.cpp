@@ -1,10 +1,10 @@
 #include "PostProcessPass.h"
 #include "DeferRendering.h"
-#include "RDG/RDG.h"
-#include "ShaderManager.hpp"
+#include "resourceManagement/renderGraph/RDG.h"
+#include "resourceManagement/vulkan/pipeline/ShaderManager.hpp"
 #include "core/runtime/VulkanRuntime.h"
 #include "editor/EditorRegistry.h"
-#include "PlayAllocator.h"
+#include "resourceManagement/vulkan/resources/PlayAllocator.h"
 
 #include "GBufferConfig.h"
 namespace Play

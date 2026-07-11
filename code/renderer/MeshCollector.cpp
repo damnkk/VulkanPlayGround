@@ -1,6 +1,6 @@
 #include "MeshCollector.h"
 
-#include "SceneManager.h"
+#include "resourceManagement/scene/SceneManager.h"
 #include "renderer/Renderer.h"
 
 #include <assert.h>

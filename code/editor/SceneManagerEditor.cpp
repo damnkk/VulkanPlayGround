@@ -1,6 +1,6 @@
 #include "editor/SceneManagerEditor.h"
 
-#include "resourceManagement/SceneManager.h"
+#include "resourceManagement/scene/SceneManager.h"
 
 namespace Play::editor
 {

@@ -1,13 +1,13 @@
 #include "GBufferPass.h"
 
 #include "DeferRendering.h"
-#include "ShaderManager.hpp"
+#include "resourceManagement/vulkan/pipeline/ShaderManager.hpp"
 #include "PConstantType.h.slang"
-#include "PlayAllocator.h"
-#include "RDG/RDG.h"
-#include "SceneManager.h"
+#include "resourceManagement/vulkan/resources/PlayAllocator.h"
+#include "resourceManagement/renderGraph/RDG.h"
+#include "resourceManagement/scene/SceneManager.h"
 #include "core/runtime/VulkanRuntime.h"
-#include "VulkanResourceUtils.h"
+#include "resourceManagement/vulkan/resources/VulkanResourceUtils.h"
 
 namespace Play
 {

@@ -21,11 +21,11 @@
 #include "renderer/renderPasses/RenderPass.h"
 #include "renderer/renderPasses/VolumeSkyPass.h"
 #include "renderer/renderPasses/VolumeRenderPass.h"
-#include "resourceManagement/Material.h"
-#include "resourceManagement/PlayScene.h"
-#include "resourceManagement/Resource.h"
-#include "resourceManagement/SceneManager.h"
-#include "resourceManagement/ShaderManager.hpp"
+#include "resourceManagement/vulkan/pipeline/Material.h"
+#include "resourceManagement/scene/gpu/GaussianScene.h"
+#include "resourceManagement/vulkan/resources/Resource.h"
+#include "resourceManagement/scene/SceneManager.h"
+#include "resourceManagement/vulkan/pipeline/ShaderManager.hpp"
 
 RTTR_REGISTRATION
 {

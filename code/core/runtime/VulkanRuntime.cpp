@@ -6,15 +6,15 @@
 #include <nvvk/check_error.hpp>
 #include <nvvk/debug_util.hpp>
 
-#include "DescriptorManager.h"
-#include "FrameBufferCache.h"
-#include "PipelineCacheManager.h"
+#include "resourceManagement/vulkan/descriptors/DescriptorManager.h"
+#include "resourceManagement/vulkan/cache/FrameBufferCache.h"
+#include "resourceManagement/vulkan/pipeline/PipelineCacheManager.h"
 #include "core/Profiling.h"
 #include "RenderSession.h"
-#include "PlayAllocator.h"
-#include "RenderPassCache.h"
-#include "Resource.h"
-#include "ShaderManager.hpp"
+#include "resourceManagement/vulkan/resources/PlayAllocator.h"
+#include "resourceManagement/vulkan/cache/RenderPassCache.h"
+#include "resourceManagement/vulkan/resources/Resource.h"
+#include "resourceManagement/vulkan/pipeline/ShaderManager.hpp"
 #include "core/RefCounted.h"
 
 namespace Play

@@ -1,6 +1,6 @@
 #ifndef LIGHTPASS_H
 #define LIGHTPASS_H
-#include "RDG/RDG.h"
+#include "resourceManagement/renderGraph/RDG.h"
 #include "RenderPass.h"
 #include "core/RefCounted.h"
 #include <rttr/rttr_enable.h>

@@ -1,6 +1,6 @@
 #ifndef CONTROL_COMPONENT_H
 #define CONTROL_COMPONENT_H
-#include "Resource.h"
+#include "resourceManagement/vulkan/resources/Resource.h"
 #include "nvshaders/tonemap_io.h.slang"
 #include "core/RefCounted.h"
 #include <rttr/rttr_enable.h>

@@ -1,7 +1,7 @@
 #ifndef GAUSSIAN_DRAW_MESH_PASS_H
 #define GAUSSIAN_DRAW_MESH_PASS_H
 #include "renderpasses/RenderPass.h"
-#include "RDG/RDG.h"
+#include "resourceManagement/renderGraph/RDG.h"
 #include "core/RefCounted.h"
 #include <rttr/rttr_enable.h>
 

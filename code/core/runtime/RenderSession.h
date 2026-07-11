@@ -1,6 +1,6 @@
 #ifndef RENDERSESSION_H
 #define RENDERSESSION_H
-#include "resourceManagement/Resource.h"
+#include "resourceManagement/vulkan/resources/Resource.h"
 
 namespace Play
 {

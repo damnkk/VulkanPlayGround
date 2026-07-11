@@ -2,9 +2,9 @@
 #define GBUFFERPASS_H
 #include "RenderPass.h"
 #include "GBufferConfig.h"
-#include "SceneAssets.h"
-#include "Resource.h"
-#include "PipelineCacheManager.h"
+#include "resourceManagement/assets/model/ModelAssets.h"
+#include "resourceManagement/vulkan/resources/Resource.h"
+#include "resourceManagement/vulkan/pipeline/PipelineCacheManager.h"
 #include "Hdevice.h"
 #include <rttr/rttr_enable.h>
 namespace Play

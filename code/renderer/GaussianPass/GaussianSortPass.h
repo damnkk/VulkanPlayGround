@@ -1,7 +1,7 @@
 #ifndef GAUSSIAN_SORT_PASS_H
 #define GAUSSIAN_SORT_PASS_H
 #include "renderpasses/RenderPass.h"
-#include "RDG/RDG.h"
+#include "resourceManagement/renderGraph/RDG.h"
 #include "vk_radix_sort.h"
 #include "core/RefCounted.h"
 #include <rttr/rttr_enable.h>

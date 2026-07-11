@@ -1,9 +1,9 @@
 #include "Renderer.h"
-#include "Resource.h"
+#include "resourceManagement/vulkan/resources/Resource.h"
 #include "core/PlayCamera.h"
-#include "SceneManager.h"
+#include "resourceManagement/scene/SceneManager.h"
 #include "core/runtime/VulkanRuntime.h"
-#include "RDG/RDG.h"
+#include "resourceManagement/renderGraph/RDG.h"
 #include "renderPasses/RenderPass.h"
 #include "renderPasses/PresentPass.h"
 #include <algorithm>

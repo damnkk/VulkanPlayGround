@@ -1,12 +1,12 @@
 #include "VolumeRenderPass.h"
 
 #include "VolumeRenderer.h"
-#include "RDG/RDG.h"
-#include "ShaderManager.hpp"
+#include "resourceManagement/renderGraph/RDG.h"
+#include "resourceManagement/vulkan/pipeline/ShaderManager.hpp"
 #include "core/runtime/VulkanRuntime.h"
-#include "PlayAllocator.h"
+#include "resourceManagement/vulkan/resources/PlayAllocator.h"
 #include "core/ProjectPaths.h"
-#include "VulkanResourceUtils.h"
+#include "resourceManagement/vulkan/resources/VulkanResourceUtils.h"
 #include "editor/EditorRegistry.h"
 #include "tinygltf/json.hpp"
 #include <nvutils/file_operations.hpp>

@@ -59,11 +59,12 @@ find_package(Qt6 CONFIG REQUIRED COMPONENTS Widgets)
 FILE(GLOB_RECURSE SOURCE_FILES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_LIST_DIR}/code/*.cpp
 )
+source_group(TREE "${CMAKE_CURRENT_LIST_DIR}/code" PREFIX "Source Files" FILES ${SOURCE_FILES})
 list(APPEND SOURCE_FILES
   ${CMAKE_CURRENT_LIST_DIR}/External/miniply/miniply.cpp
 )
 
-source_group("Source Files" FILES ${SOURCE_FILES})
+source_group("ThirdParty" FILES ${CMAKE_CURRENT_LIST_DIR}/External/miniply/miniply.cpp)
 #####################################################################################
 # Crc32c
 option (CRC32C_BUILD_TESTS OFF)
@@ -161,7 +162,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   ${NVPRO_CORE2_DIR}/code/debugger
   ${CMAKE_CURRENT_LIST_DIR}/code/renderer
   ${CMAKE_CURRENT_LIST_DIR}/code
-  ${CMAKE_CURRENT_LIST_DIR}/code/resourceManagement
   ${CMAKE_CURRENT_LIST_DIR}/External/spv_reflect/include
   ${CMAKE_CURRENT_LIST_DIR}/External/Crc32/include
   ${CMAKE_CURRENT_LIST_DIR}/External/miniply

@@ -5,7 +5,7 @@
 #include "renderPasses/VolumeSkyPass.h"
 #include "renderPasses/GBufferPass.h"
 #include "renderPasses/LightPass.h"
-#include "SceneManager.h"
+#include "resourceManagement/scene/SceneManager.h"
 #include "core/runtime/VulkanRuntime.h"
 namespace Play
 {

@@ -1,5 +1,5 @@
 #include "LightPass.h"
-#include "ShaderManager.hpp"
+#include "resourceManagement/vulkan/pipeline/ShaderManager.hpp"
 #include "PConstantType.h.slang"
 #include "GBufferConfig.h"
 #include "core/runtime/VulkanRuntime.h"

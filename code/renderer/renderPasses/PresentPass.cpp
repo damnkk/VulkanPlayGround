@@ -1,6 +1,6 @@
 #include "PresentPass.h"
-#include "RDG/RDG.h"
-#include "ShaderManager.hpp"
+#include "resourceManagement/renderGraph/RDG.h"
+#include "resourceManagement/vulkan/pipeline/ShaderManager.hpp"
 #include "core/runtime/VulkanRuntime.h"
 namespace Play
 {
