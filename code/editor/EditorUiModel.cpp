@@ -101,6 +101,11 @@ bool metadataToDouble(const rttr::property& property, const char* name, double& 
 std::string inferFloatingStep(double value)
 {
     const double magnitude = value < 0.0 ? -value : value;
+    if (magnitude == 0.0)
+    {
+        return "0.01";
+    }
+
     if (magnitude >= 1000.0)
     {
         return "10";
@@ -123,20 +128,20 @@ std::string inferFloatingStep(double value)
 
     if (magnitude >= 0.1)
     {
-        return "0.001";
+        return "0.01";
     }
 
     if (magnitude >= 0.01)
     {
-        return "0.0001";
+        return "0.001";
     }
 
     if (magnitude >= 0.001)
     {
-        return "0.00001";
+        return "0.0001";
     }
 
-    return "0.000001";
+    return "0.00001";
 }
 
 std::string inferRangeStep(double minValue, double maxValue)

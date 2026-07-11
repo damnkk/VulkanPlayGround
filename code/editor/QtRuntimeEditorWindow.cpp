@@ -3,7 +3,6 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QDoubleSpinBox>
-#include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -40,9 +39,14 @@ std::string toStdString(const QString& text)
     return text.toStdString();
 }
 
+QString makeDoubleText(double value, int decimals)
+{
+    return QString::number(value, 'f', decimals);
+}
+
 QString makeDoubleText(double value)
 {
-    return QString::number(value, 'f', 3);
+    return makeDoubleText(value, 3);
 }
 
 double textToDouble(const std::string& text, double fallback = 0.0)
@@ -50,6 +54,74 @@ double textToDouble(const std::string& text, double fallback = 0.0)
     bool         ok    = false;
     const double value = QString::fromStdString(text).toDouble(&ok);
     return ok ? value : fallback;
+}
+
+int decimalPlacesFromText(const std::string& text)
+{
+    const size_t exponent = text.find_first_of("eE");
+    size_t       end      = exponent == std::string::npos ? text.size() : exponent;
+    const size_t dot      = text.find('.');
+    if (dot == std::string::npos || dot >= end)
+    {
+        return 0;
+    }
+
+    while (end > dot + 1 && text[end - 1] == '0')
+    {
+        --end;
+    }
+
+    return static_cast<int>(end - dot - 1);
+}
+
+int decimalsForMagnitude(double value)
+{
+    const double magnitude = value < 0.0 ? -value : value;
+    if (magnitude > 0.0 && magnitude < 0.01)
+    {
+        return 6;
+    }
+
+    if (magnitude > 0.0 && magnitude < 0.1)
+    {
+        return 4;
+    }
+
+    return 3;
+}
+
+int clampSpinBoxDecimals(int decimals)
+{
+    if (decimals < 3)
+    {
+        return 3;
+    }
+
+    if (decimals > 6)
+    {
+        return 6;
+    }
+
+    return decimals;
+}
+
+int spinBoxDecimalsForProperty(const EditorUiProperty& property)
+{
+    int decimals = decimalPlacesFromText(property.step);
+
+    const int valueTextDecimals = decimalPlacesFromText(property.value);
+    if (valueTextDecimals > decimals)
+    {
+        decimals = valueTextDecimals;
+    }
+
+    const int valueMagnitudeDecimals = decimalsForMagnitude(textToDouble(property.value));
+    if (valueMagnitudeDecimals > decimals)
+    {
+        decimals = valueMagnitudeDecimals;
+    }
+
+    return clampSpinBoxDecimals(decimals);
 }
 
 const EditorUiSceneNode* findSceneNode(const EditorUiSceneNode& node, const std::string& key)
@@ -88,6 +160,7 @@ bool widgetContainsFocus(const QWidget* widget)
 void applySpinBoxRange(QDoubleSpinBox* spinBox, const EditorUiProperty& property)
 {
     spinBox->setRange(-1000000000.0, 1000000000.0);
+    spinBox->setDecimals(spinBoxDecimalsForProperty(property));
     if (property.hasMinimum)
     {
         spinBox->setMinimum(textToDouble(property.minimum, spinBox->minimum()));
@@ -108,6 +181,14 @@ int controlPanelColumnCount(const QScrollArea* scrollArea)
 {
     const int viewportWidth = scrollArea && scrollArea->viewport() ? scrollArea->viewport()->width() : 0;
     return viewportWidth >= 760 ? 2 : 1;
+}
+
+int controlObjectPropertyColumnCount(const QScrollArea* scrollArea)
+{
+    const int viewportWidth = scrollArea && scrollArea->viewport() ? scrollArea->viewport()->width() : 0;
+    const int objectColumns = controlPanelColumnCount(scrollArea);
+    const int objectWidth   = objectColumns > 0 ? viewportWidth / objectColumns : viewportWidth;
+    return objectWidth >= 360 ? 2 : 1;
 }
 
 struct VectorComponentInfo
@@ -214,7 +295,7 @@ struct QtRuntimeEditorWindow::RenderModePage
         QGroupBox*                           group           = nullptr;
         QLabel*                              typeLabel       = nullptr;
         QPushButton*                         resetButton     = nullptr;
-        QFormLayout*                         form            = nullptr;
+        QGridLayout*                         propertyGrid    = nullptr;
         QLabel*                              emptyLabel      = nullptr;
         bool                                 seen            = false;
         std::map<std::string, PropertyWidgets> propertyWidgets;
@@ -244,6 +325,60 @@ struct QtRuntimeEditorWindow::RenderModePage
     std::map<unsigned int, ControlObjectWidgets> controlObjects;
     std::map<std::string, QTreeWidgetItem*>      sceneItemsByKey;
 };
+
+void destroyPropertyWidgets(QGridLayout* grid, QLabel* label, QWidget* editor)
+{
+    if (grid)
+    {
+        if (label)
+        {
+            grid->removeWidget(label);
+        }
+        if (editor)
+        {
+            grid->removeWidget(editor);
+        }
+    }
+
+    delete label;
+    delete editor;
+}
+
+void layoutPropertyWidget(QGridLayout* grid, QLabel* label, QWidget* editor, bool fullWidth, int columnCount, int& layoutIndex)
+{
+    if (!grid || !label || !editor)
+    {
+        return;
+    }
+
+    if (columnCount < 1)
+    {
+        columnCount = 1;
+    }
+
+    grid->removeWidget(label);
+    grid->removeWidget(editor);
+
+    if (fullWidth && columnCount > 1 && layoutIndex % columnCount != 0)
+    {
+        layoutIndex += columnCount - layoutIndex % columnCount;
+    }
+
+    const int row  = layoutIndex / columnCount;
+    const int slot = layoutIndex % columnCount;
+    if (fullWidth || columnCount == 1)
+    {
+        grid->addWidget(label, row, 0);
+        grid->addWidget(editor, row, 1, 1, columnCount * 2 - 1);
+        layoutIndex += columnCount;
+        return;
+    }
+
+    const int labelColumn = slot * 2;
+    grid->addWidget(label, row, labelColumn);
+    grid->addWidget(editor, row, labelColumn + 1);
+    ++layoutIndex;
+}
 
 QtRuntimeEditorWindow::QtRuntimeEditorWindow(RuntimeEditor& editor, QWidget* parent) : QMainWindow(parent), _editor(editor)
 {
@@ -807,10 +942,11 @@ void QtRuntimeEditorWindow::updateControlObject(RenderModePage& page, const Edit
         objectHeader->addWidget(widgets.resetButton);
         groupLayout->addLayout(objectHeader);
 
-        widgets.form = new QFormLayout();
-        widgets.form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
-        widgets.form->setRowWrapPolicy(QFormLayout::WrapLongRows);
-        groupLayout->addLayout(widgets.form);
+        widgets.propertyGrid = new QGridLayout();
+        widgets.propertyGrid->setContentsMargins(0, 0, 0, 0);
+        widgets.propertyGrid->setColumnStretch(1, 1);
+        widgets.propertyGrid->setColumnStretch(3, 1);
+        groupLayout->addLayout(widgets.propertyGrid);
         widgets.emptyLabel = makeMutedLabel("No reflected properties.");
         groupLayout->addWidget(widgets.emptyLabel);
         QObject::connect(widgets.resetButton, &QPushButton::clicked, this, [this, id = object.id]() { requestResetObject(id); });
@@ -827,6 +963,8 @@ void QtRuntimeEditorWindow::updateControlObject(RenderModePage& page, const Edit
     }
 
     widgets.emptyLabel->setVisible(object.properties.empty());
+    const int propertyColumnCount = controlObjectPropertyColumnCount(page.controlsScroll);
+    int       propertyLayoutIndex = 0;
     for (size_t propertyIndex = 0; propertyIndex < object.properties.size();)
     {
         const EditorUiProperty& property = object.properties[propertyIndex];
@@ -850,12 +988,19 @@ void QtRuntimeEditorWindow::updateControlObject(RenderModePage& page, const Edit
             {
                 updateVectorPropertyWidget(page, object.id, object, propertyIndex, propertyCount, vectorInfo.rootPath,
                                            makeVectorLabel(property, vectorInfo.rootPath));
+                RenderModePage::PropertyWidgets& propertyWidgets = widgets.propertyWidgets[vectorInfo.rootPath];
+                layoutPropertyWidget(widgets.propertyGrid, propertyWidgets.label, propertyWidgets.editor, true, propertyColumnCount,
+                                     propertyLayoutIndex);
                 propertyIndex += propertyCount;
                 continue;
             }
         }
 
         updatePropertyWidget(page, object.id, property);
+        RenderModePage::PropertyWidgets& propertyWidgets = widgets.propertyWidgets[property.path];
+        const bool                        fullWidth       = property.kind == EditorUiPropertyKind::Text;
+        layoutPropertyWidget(widgets.propertyGrid, propertyWidgets.label, propertyWidgets.editor, fullWidth, propertyColumnCount,
+                             propertyLayoutIndex);
         ++propertyIndex;
     }
 
@@ -870,7 +1015,7 @@ void QtRuntimeEditorWindow::updatePropertyWidget(RenderModePage& page, unsigned 
 
     if (propertyWidgets.editor && propertyWidgets.kind != kind)
     {
-        objectWidgets.form->removeRow(propertyWidgets.label);
+        destroyPropertyWidgets(objectWidgets.propertyGrid, propertyWidgets.label, propertyWidgets.editor);
         propertyWidgets = RenderModePage::PropertyWidgets();
     }
 
@@ -890,12 +1035,13 @@ void QtRuntimeEditorWindow::updatePropertyWidget(RenderModePage& page, unsigned 
         else if (property.kind == EditorUiPropertyKind::Number)
         {
             QDoubleSpinBox* spin = new QDoubleSpinBox();
-            spin->setDecimals(3);
+            spin->setDecimals(spinBoxDecimalsForProperty(property));
+            spin->setAccelerated(true);
             spin->setKeyboardTracking(false);
             spin->setMinimumWidth(64);
             propertyWidgets.editor = spin;
-            QObject::connect(spin, &QDoubleSpinBox::valueChanged, this, [this, objectId, path = property.path](double value)
-                             { requestSetObjectProperty(objectId, path, toStdString(makeDoubleText(value))); });
+            QObject::connect(spin, &QDoubleSpinBox::valueChanged, this, [this, objectId, path = property.path, spin](double value)
+                             { requestSetObjectProperty(objectId, path, toStdString(makeDoubleText(value, spin->decimals()))); });
         }
         else
         {
@@ -904,8 +1050,6 @@ void QtRuntimeEditorWindow::updatePropertyWidget(RenderModePage& page, unsigned 
             QObject::connect(edit, &QLineEdit::editingFinished, this, [this, edit, objectId, path = property.path]()
                              { requestSetObjectProperty(objectId, path, toStdString(edit->text())); });
         }
-
-        objectWidgets.form->addRow(propertyWidgets.label, propertyWidgets.editor);
     }
 
     propertyWidgets.seen = true;
@@ -964,7 +1108,7 @@ void QtRuntimeEditorWindow::updateVectorPropertyWidget(RenderModePage& page, uns
 
     if (needsRebuild && propertyWidgets.editor)
     {
-        objectWidgets.form->removeRow(propertyWidgets.label);
+        destroyPropertyWidgets(objectWidgets.propertyGrid, propertyWidgets.label, propertyWidgets.editor);
         propertyWidgets = RenderModePage::PropertyWidgets();
     }
 
@@ -984,7 +1128,8 @@ void QtRuntimeEditorWindow::updateVectorPropertyWidget(RenderModePage& page, uns
         {
             const EditorUiProperty& property = object.properties[firstPropertyIndex + componentOffset];
             QDoubleSpinBox*         spin     = new QDoubleSpinBox(row);
-            spin->setDecimals(3);
+            spin->setDecimals(spinBoxDecimalsForProperty(property));
+            spin->setAccelerated(true);
             spin->setKeyboardTracking(false);
             spin->setMinimumWidth(56);
             spin->setToolTip(toQString(property.label));
@@ -992,12 +1137,11 @@ void QtRuntimeEditorWindow::updateVectorPropertyWidget(RenderModePage& page, uns
 
             propertyWidgets.componentEditors[componentOffset] = spin;
             propertyWidgets.componentPaths[componentOffset]   = property.path;
-            QObject::connect(spin, &QDoubleSpinBox::valueChanged, this, [this, objectId, path = property.path](double value)
-                             { requestSetObjectProperty(objectId, path, toStdString(makeDoubleText(value))); });
+            QObject::connect(spin, &QDoubleSpinBox::valueChanged, this, [this, objectId, path = property.path, spin](double value)
+                             { requestSetObjectProperty(objectId, path, toStdString(makeDoubleText(value, spin->decimals()))); });
         }
 
         propertyWidgets.editor = row;
-        objectWidgets.form->addRow(propertyWidgets.label, propertyWidgets.editor);
     }
 
     propertyWidgets.seen = true;
@@ -1051,7 +1195,7 @@ void QtRuntimeEditorWindow::removeUnseenPropertyWidgets(RenderModePage& page, un
             continue;
         }
 
-        objectWidgets.form->removeRow(widgets.label);
+        destroyPropertyWidgets(objectWidgets.propertyGrid, widgets.label, widgets.editor);
         propertyIt = objectWidgets.propertyWidgets.erase(propertyIt);
     }
 }
