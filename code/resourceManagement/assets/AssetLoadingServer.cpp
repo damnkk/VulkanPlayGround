@@ -17,7 +17,15 @@ struct AssetLoadingServer::State
     std::mutex                       mutex;
 };
 
-AssetLoadingServer::AssetLoadingServer() : _state(std::make_shared<State>()) {}
+AssetLoadingServer::AssetLoadingServer() : _state(std::make_shared<State>())
+{
+    _gpuUploader.initialize();
+}
+
+AssetLoadingServer::~AssetLoadingServer()
+{
+    _gpuUploader.deinitialize();
+}
 
 void AssetLoadingServer::clear()
 {

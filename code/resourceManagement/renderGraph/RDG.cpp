@@ -781,7 +781,14 @@ void RDGBuilder::afterPassExecute()
     _submitInfos.push_back({submitInfo, isAsyncCompute(_renderContext->_prevPassNode) ? 1 : 0});
     for (auto& [submit, queueIndex] : _submitInfos)
     {
-        vkQueueSubmit2(vkDriver->getQueue(queueIndex).queue, 1, &submit, nullptr);
+        if (queueIndex == 0)
+        {
+            NVVK_CHECK(vkDriver->submitGraphics(submit));
+        }
+        else
+        {
+            vkQueueSubmit2(vkDriver->getQueue(queueIndex).queue, 1, &submit, nullptr);
+        }
     }
     // we add the last signaled semaphore into here, so that the next frame would wait on it.
     vkDriver->addWaitSemaphore(signalInfo);
