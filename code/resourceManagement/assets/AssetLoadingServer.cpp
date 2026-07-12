@@ -1,6 +1,7 @@
 #include "AssetLoadingServer.h"
 #include "core/JobSystem.h"
 #include "core/Profiling.h"
+#include "resourceManagement/assets/model/ModelUpload.h"
 
 namespace Play
 {
@@ -9,10 +10,14 @@ struct AssetLoadingServer::State
 {
     std::vector<ModelLoadRequest>    requests;
     std::vector<uint32_t>            pendingRequests;
+    std::vector<uint32_t>            pendingUploadRequests;
     std::vector<ModelLoadCompletion> completedModels;
+    std::vector<ModelGpuUploadCompletion> completedModelUploads;
     std::vector<std::shared_ptr<LoadedModel>> loadedModels;
     uint32_t                         nextPendingRequest = 0;
+    uint32_t                         nextPendingUploadRequest = 0;
     uint32_t                         nextCompletedModel = 0;
+    uint32_t                         nextCompletedModelUpload = 0;
     uint32_t                         generation          = 1;
     std::mutex                       mutex;
 };
@@ -34,10 +39,14 @@ void AssetLoadingServer::clear()
     std::lock_guard<std::mutex> lock(_state->mutex);
     _state->requests.clear();
     _state->pendingRequests.clear();
+    _state->pendingUploadRequests.clear();
     _state->completedModels.clear();
+    _state->completedModelUploads.clear();
     _state->loadedModels.clear();
     _state->nextPendingRequest = 0;
+    _state->nextPendingUploadRequest = 0;
     _state->nextCompletedModel = 0;
+    _state->nextCompletedModelUpload = 0;
     ++_state->generation;
     if (_state->generation == 0)
     {
@@ -46,7 +55,7 @@ void AssetLoadingServer::clear()
 }
 
 ModelLoadRequestID AssetLoadingServer::requestModelLoad(CpuSceneComponentID requester, const std::filesystem::path& path,
-                                                        const ModelLoadingConfig& loadingConfig)
+                                                        const ModelLoadingConfig& loadingConfig, AssetUploadPolicy uploadPolicy)
 {
     PLAY_PROFILE_SCOPE("AssetLoadingServer::requestModelLoad");
 
@@ -57,6 +66,7 @@ ModelLoadRequestID AssetLoadingServer::requestModelLoad(CpuSceneComponentID requ
     request.requester     = requester;
     request.path          = path;
     request.loadingConfig = loadingConfig;
+    request.uploadPolicy  = uploadPolicy;
     request.state         = ModelLoadRequestState::eQueued;
 
     _state->requests.push_back(request);
@@ -99,44 +109,165 @@ void AssetLoadingServer::processPendingLoads()
     for (ModelLoadRequest request : requestsToStart)
     {
         std::shared_ptr<State> state = _state;
-        [state, request]()
+        JobSystem::detach([state, request]()
         {
-                ModelLoadCompletion completion;
+            ModelLoadCompletion completion;
+            completion.request = request;
+            {
+                PLAY_PROFILE_SCOPE("AssetLoadingServer::load model job");
+                PLAY_PROFILE_MARK("Model load begin");
+                completion.result = model_loading::loadModelFromFile(request.path, request.loadingConfig);
+                PLAY_PROFILE_MARK("Model load end");
+            }
+
+            const ModelLoadRequestState completedState =
+                completion.result.success ? ModelLoadRequestState::eCpuLoaded : ModelLoadRequestState::eFailed;
+            completion.request.state = completedState;
+
+            std::lock_guard<std::mutex> lock(state->mutex);
+            if (request.id.generation != state->generation || request.id.index >= state->requests.size())
+            {
+                return;
+            }
+
+            ModelLoadRequest& storedRequest = state->requests[request.id.index];
+            if (storedRequest.id.generation != request.id.generation || storedRequest.state != ModelLoadRequestState::eLoading)
+            {
+                return;
+            }
+
+            storedRequest.state = completedState;
+            if (completion.result.success)
+            {
+                if (state->loadedModels.size() <= request.id.index)
+                {
+                    state->loadedModels.resize(request.id.index + 1);
+                }
+                state->loadedModels[request.id.index] = completion.result.model;
+                if (storedRequest.uploadPolicy == AssetUploadPolicy::eUploadToGpu)
+                {
+                    state->pendingUploadRequests.push_back(request.id.index);
+                }
+            }
+            state->completedModels.push_back(std::move(completion));
+        });
+    }
+}
+
+void AssetLoadingServer::processPendingUploads()
+{
+    PLAY_PROFILE_SCOPE("AssetLoadingServer::processPendingUploads");
+
+    struct PendingUpload
+    {
+        ModelLoadRequest                 request;
+        std::shared_ptr<const LoadedModel> source;
+    };
+
+    std::vector<PendingUpload> uploadsToStart;
+    {
+        std::lock_guard<std::mutex> lock(_state->mutex);
+        while (_state->nextPendingUploadRequest < _state->pendingUploadRequests.size())
+        {
+            const uint32_t requestIndex = _state->pendingUploadRequests[_state->nextPendingUploadRequest++];
+            if (requestIndex >= _state->requests.size() || requestIndex >= _state->loadedModels.size())
+            {
+                continue;
+            }
+
+            ModelLoadRequest& request = _state->requests[requestIndex];
+            if (request.state != ModelLoadRequestState::eCpuLoaded || request.uploadPolicy != AssetUploadPolicy::eUploadToGpu)
+            {
+                continue;
+            }
+
+            const std::shared_ptr<const LoadedModel> source = _state->loadedModels[requestIndex];
+            if (!source)
+            {
+                request.state = ModelLoadRequestState::eFailed;
+
+                ModelGpuUploadCompletion completion;
                 completion.request = request;
-                {
-                    PLAY_PROFILE_SCOPE("AssetLoadingServer::load model job");
-                    PLAY_PROFILE_MARK("Model load begin");
-                    completion.result = model_loading::loadModelFromFile(request.path, request.loadingConfig);
-                    PLAY_PROFILE_MARK("Model load end");
-                }
+                completion.message = "Model GPU upload has no CPU source data.";
+                _state->completedModelUploads.push_back(std::move(completion));
+                continue;
+            }
 
-                const ModelLoadRequestState completedState =
-                    completion.result.success ? ModelLoadRequestState::eCpuLoaded : ModelLoadRequestState::eFailed;
-                completion.request.state = completedState;
+            request.state = ModelLoadRequestState::eUploading;
+            uploadsToStart.push_back({request, source});
+        }
 
-                std::lock_guard<std::mutex> lock(state->mutex);
-                if (request.id.generation != state->generation || request.id.index >= state->requests.size())
-                {
-                    return;
-                }
+        if (_state->nextPendingUploadRequest >= _state->pendingUploadRequests.size())
+        {
+            _state->pendingUploadRequests.clear();
+            _state->nextPendingUploadRequest = 0;
+        }
+    }
 
-                ModelLoadRequest& storedRequest = state->requests[request.id.index];
-                if (storedRequest.id.generation != request.id.generation || storedRequest.state != ModelLoadRequestState::eLoading)
-                {
-                    return;
-                }
+    for (const PendingUpload& pendingUpload : uploadsToStart)
+    {
+        const std::shared_ptr<ModelUploadJob> job = std::make_shared<ModelUploadJob>(pendingUpload.request.id, pendingUpload.source);
+        if (_gpuUploader.enqueue(job).isValid())
+        {
+            continue;
+        }
 
-                storedRequest.state = completedState;
-                if (completion.result.success)
-                {
-                    if (state->loadedModels.size() <= request.id.index)
-                    {
-                        state->loadedModels.resize(request.id.index + 1);
-                    }
-                    state->loadedModels[request.id.index] = completion.result.model;
-                }
-                state->completedModels.push_back(std::move(completion));
-        }();
+        std::lock_guard<std::mutex> lock(_state->mutex);
+        if (pendingUpload.request.id.generation != _state->generation || pendingUpload.request.id.index >= _state->requests.size())
+        {
+            continue;
+        }
+
+        ModelLoadRequest& request = _state->requests[pendingUpload.request.id.index];
+        if (request.id.generation != pendingUpload.request.id.generation || request.state != ModelLoadRequestState::eUploading)
+        {
+            continue;
+        }
+
+        request.state = ModelLoadRequestState::eFailed;
+        ModelGpuUploadCompletion completion;
+        completion.request = request;
+        completion.message = "Asset GPU uploader is not available.";
+        _state->completedModelUploads.push_back(std::move(completion));
+    }
+
+    AssetUploadCompletion uploadCompletion;
+    while (_gpuUploader.popCompleted(uploadCompletion))
+    {
+        const std::shared_ptr<ModelUploadJob> job = std::dynamic_pointer_cast<ModelUploadJob>(uploadCompletion.job);
+        if (!job)
+        {
+            continue;
+        }
+
+        ModelGpuUploadCompletion completion;
+        completion.success = uploadCompletion.success;
+        completion.message = uploadCompletion.message;
+        if (completion.success)
+        {
+            completion.model = job->takeUploadedModel();
+        }
+
+        const ModelLoadRequestID requestID = job->getRequestID();
+        std::lock_guard<std::mutex> lock(_state->mutex);
+        if (requestID.generation != _state->generation || requestID.index >= _state->requests.size())
+        {
+            continue;
+        }
+
+        ModelLoadRequest& request = _state->requests[requestID.index];
+        if (request.id.generation != requestID.generation || request.state != ModelLoadRequestState::eUploading)
+        {
+            continue;
+        }
+
+        request.state       = completion.success ? ModelLoadRequestState::eGpuUploaded : ModelLoadRequestState::eFailed;
+        completion.request  = request;
+        if (!completion.success && completion.message.empty())
+        {
+            completion.message = "Model GPU upload failed.";
+        }
+        _state->completedModelUploads.push_back(std::move(completion));
     }
 }
 
@@ -153,6 +284,22 @@ bool AssetLoadingServer::popCompletedModel(ModelLoadCompletion& completion)
     }
 
     completion = std::move(_state->completedModels[_state->nextCompletedModel++]);
+    return true;
+}
+
+bool AssetLoadingServer::popCompletedModelUpload(ModelGpuUploadCompletion& completion)
+{
+    PLAY_PROFILE_SCOPE("AssetLoadingServer::popCompletedModelUpload");
+
+    std::lock_guard<std::mutex> lock(_state->mutex);
+    if (_state->nextCompletedModelUpload >= _state->completedModelUploads.size())
+    {
+        _state->completedModelUploads.clear();
+        _state->nextCompletedModelUpload = 0;
+        return false;
+    }
+
+    completion = std::move(_state->completedModelUploads[_state->nextCompletedModelUpload++]);
     return true;
 }
 
