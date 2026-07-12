@@ -1,7 +1,7 @@
 #ifndef GPU_SCENE_H
 #define GPU_SCENE_H
 
-#include "resourceManagement/assets/model/ModelAssets.h"
+#include "resourceManagement/assets/model/ModelGpuAssets.h"
 
 namespace Play
 {
@@ -55,7 +55,7 @@ public:
     virtual GpuSceneType getType() const = 0;
     virtual void         clear();
 
-    ModelAssetID registerModel(ModelAssetPackage&& package);
+    ModelAssetID registerModel(UploadedModel&& model);
     void         updateTransforms(const CpuScene& scene);
 
     uint64_t getSourceSceneRevision() const
@@ -73,6 +73,11 @@ public:
         return _models;
     }
 
+    const std::vector<ModelGpuResources>& getModelGpuResources() const
+    {
+        return _modelGpuResources;
+    }
+
     const std::vector<GpuModelRange>& getModelRanges() const
     {
         return _modelRanges;
@@ -84,18 +89,18 @@ public:
     }
 
 protected:
-    uint32_t appendSceneTextures(std::vector<ModelTextureResource>& textures);
+    uint32_t appendSceneTextures(std::vector<UploadedModelTexture>& textures);
     void     registerRasterData(const ModelAsset& model, const GpuModelRange& range);
-    void     registerRayTracingData(const ModelAsset& model, const GpuModelRange& range);
+    void     registerRayTracingData(const ModelGpuResources& resources, const GpuModelRange& range);
 
     GpuSceneCommonData             _common;
     RasterGPUData                  _rasterData;
     RayTracingGPUData              _rtData;
     std::vector<ModelAsset>        _models;
+    std::vector<ModelGpuResources> _modelGpuResources;
     std::vector<GpuModelRange>     _modelRanges;
     std::vector<RefPtr<Texture>>   _sceneTextures;
     std::vector<std::filesystem::path> _sceneTextureSources;
-    std::vector<RefPtr<Buffer>>    _ownedBuffers;
     std::mutex                     _registrationMutex;
     uint64_t                       _sourceSceneRevision = 0;
 };

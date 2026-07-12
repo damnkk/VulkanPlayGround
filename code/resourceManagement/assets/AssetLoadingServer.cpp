@@ -10,6 +10,7 @@ struct AssetLoadingServer::State
     std::vector<ModelLoadRequest>    requests;
     std::vector<uint32_t>            pendingRequests;
     std::vector<ModelLoadCompletion> completedModels;
+    std::vector<std::shared_ptr<LoadedModel>> loadedModels;
     uint32_t                         nextPendingRequest = 0;
     uint32_t                         nextCompletedModel = 0;
     uint32_t                         generation          = 1;
@@ -26,6 +27,7 @@ void AssetLoadingServer::clear()
     _state->requests.clear();
     _state->pendingRequests.clear();
     _state->completedModels.clear();
+    _state->loadedModels.clear();
     _state->nextPendingRequest = 0;
     _state->nextCompletedModel = 0;
     ++_state->generation;
@@ -101,7 +103,7 @@ void AssetLoadingServer::processPendingLoads()
                 }
 
                 const ModelLoadRequestState completedState =
-                    completion.result.success ? ModelLoadRequestState::eCompleted : ModelLoadRequestState::eFailed;
+                    completion.result.success ? ModelLoadRequestState::eCpuLoaded : ModelLoadRequestState::eFailed;
                 completion.request.state = completedState;
 
                 std::lock_guard<std::mutex> lock(state->mutex);
@@ -117,6 +119,14 @@ void AssetLoadingServer::processPendingLoads()
                 }
 
                 storedRequest.state = completedState;
+                if (completion.result.success)
+                {
+                    if (state->loadedModels.size() <= request.id.index)
+                    {
+                        state->loadedModels.resize(request.id.index + 1);
+                    }
+                    state->loadedModels[request.id.index] = completion.result.model;
+                }
                 state->completedModels.push_back(std::move(completion));
         }();
     }
@@ -136,6 +146,19 @@ bool AssetLoadingServer::popCompletedModel(ModelLoadCompletion& completion)
 
     completion = std::move(_state->completedModels[_state->nextCompletedModel++]);
     return true;
+}
+
+std::shared_ptr<const LoadedModel> AssetLoadingServer::getLoadedModel(ModelLoadRequestID id) const
+{
+    PLAY_PROFILE_SCOPE("AssetLoadingServer::getLoadedModel");
+
+    std::lock_guard<std::mutex> lock(_state->mutex);
+    if (!id.isValid() || id.generation != _state->generation || id.index >= _state->loadedModels.size())
+    {
+        return nullptr;
+    }
+
+    return _state->loadedModels[id.index];
 }
 
 ModelLoadRequestID AssetLoadingServer::makeRequestID(const State& state, uint32_t index)

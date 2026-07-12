@@ -112,6 +112,10 @@ const char* loadStateLabel(CpuModelComponent::LoadState state)
             return "Queued";
         case CpuModelComponent::LoadState::eLoading:
             return "Loading";
+        case CpuModelComponent::LoadState::eCpuLoaded:
+            return "CPU Loaded";
+        case CpuModelComponent::LoadState::eUploading:
+            return "Uploading";
         case CpuModelComponent::LoadState::eLoaded:
             return "Loaded";
         case CpuModelComponent::LoadState::eFailed:

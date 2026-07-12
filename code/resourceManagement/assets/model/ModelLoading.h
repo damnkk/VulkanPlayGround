@@ -9,9 +9,9 @@ namespace Play
 
 struct ModelLoadResult
 {
-    bool              success = false;
-    ModelAssetPackage model;
-    std::string       message;
+    bool                         success = false;
+    std::shared_ptr<LoadedModel> model;
+    std::string                  message;
 };
 
 namespace model_loading

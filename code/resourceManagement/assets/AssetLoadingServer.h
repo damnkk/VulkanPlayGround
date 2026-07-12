@@ -10,7 +10,7 @@ enum class ModelLoadRequestState : uint32_t
 {
     eQueued,
     eLoading,
-    eCompleted,
+    eCpuLoaded,
     eFailed
 };
 
@@ -41,6 +41,7 @@ public:
 
     void processPendingLoads();
     bool popCompletedModel(ModelLoadCompletion& completion);
+    std::shared_ptr<const LoadedModel> getLoadedModel(ModelLoadRequestID id) const;
 
 private:
     struct State;
