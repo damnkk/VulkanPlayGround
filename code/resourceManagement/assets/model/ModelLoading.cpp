@@ -1,12 +1,9 @@
 #include "ModelLoading.h"
 
 #include "resourceManagement/assets/image/ImageLoading.h"
-#include "resourceManagement/vulkan/resources/PlayAllocator.h"
-#include "resourceManagement/vulkan/resources/VulkanResourceUtils.h"
 #include "core/Profiling.h"
 #include "core/Utils.h"
 #include "nvutils/file_operations.hpp"
-#include "nvvk/mipmaps.hpp"
 #include <assimp/GltfMaterial.h>
 #include <assimp/Importer.hpp>
 #include <assimp/config.h>
@@ -20,466 +17,12 @@ namespace Play
 namespace
 {
 
-constexpr VkBufferUsageFlags2 kUploadedModelBufferUsage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                                                          VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-constexpr VkDeviceSize kGeometrySectionAlignment = 16;
-
-VkDeviceSize alignUp(VkDeviceSize value, VkDeviceSize alignment)
-{
-    return (value + alignment - 1) & ~(alignment - 1);
-}
-
-template <typename T>
-VkDeviceSize vectorByteSize(const std::vector<T>& values)
-{
-    return values.size() * sizeof(T);
-}
-
-template <typename T>
-RefPtr<Buffer> createAndAppendBuffer(const std::string& name, const std::vector<T>& values, bool& hasPendingUpload)
-{
-    if (values.empty())
-    {
-        return nullptr;
-    }
-
-    RefPtr<Buffer> buffer =
-        RefPtr<Buffer>(new Buffer(name, kUploadedModelBufferUsage, vectorByteSize(values), VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
-    PlayResourceManager::Instance().appendBuffer(*buffer, 0, std::span(values.data(), values.size()));
-    hasPendingUpload = true;
-    return buffer;
-}
-
-template <typename T>
-void placeGeometrySection(const std::vector<T>& values, VkDeviceSize& cursor, VkDeviceSize& offset, VkDeviceSize& size)
-{
-    if (values.empty())
-    {
-        offset = 0;
-        size   = 0;
-        return;
-    }
-
-    cursor = alignUp(cursor, kGeometrySectionAlignment);
-    offset = cursor;
-    size   = vectorByteSize(values);
-    cursor += size;
-}
-
-struct ModelMeshRange
-{
-    uint32_t firstVertex = 0;
-    uint32_t vertexCount = 0;
-    uint32_t firstIndex  = 0;
-    uint32_t indexCount  = 0;
-    uint32_t materialIdx = 0;
-    AABB     bbox;
-};
-
-struct ModelGeometryPayload
-{
-    std::vector<glm::vec3>      positions;
-    std::vector<glm::vec3>      normals;
-    std::vector<glm::vec4>      tangents;
-    std::vector<glm::vec2>      texCoords0;
-    std::vector<glm::vec2>      texCoords1;
-    std::vector<uint32_t>       colors;
-    std::vector<uint32_t>       indices;
-    std::vector<ModelMeshRange> ranges;
-
-    bool empty() const
-    {
-        return positions.empty() || indices.empty() || ranges.empty();
-    }
-};
-
-struct ImportedModel
-{
-    ModelAssetPackage                      package;
-    ModelGeometryPayload                    geometry;
-    std::vector<ImageLoading::LoadedImage> textureImages;
-};
-
-struct OptimizedModel
-{
-    ModelAssetPackage                      package;
-    ModelGeometryPayload                    geometry;
-    std::vector<ImageLoading::LoadedImage> textureImages;
-};
-
 struct ModelImportResult
 {
-    bool          success = false;
-    ImportedModel model;
-    std::string   message;
+    bool        success = false;
+    LoadedModel model;
+    std::string message;
 };
-
-struct ModelOptimizeResult
-{
-    bool           success = false;
-    OptimizedModel model;
-    std::string    message;
-};
-
-bool isValidLoadedImage(const ImageLoading::LoadedImage& loadedImage)
-{
-    return loadedImage.format != VK_FORMAT_UNDEFINED && loadedImage.extent.width > 0 && loadedImage.extent.height > 0 &&
-           !loadedImage.pixels.empty();
-}
-
-uint32_t resolveTextureMipLevels(uint32_t requestedMipLevels, VkExtent2D extent)
-{
-    const uint32_t maxMipLevels = nvvk::mipLevels(extent);
-    if (requestedMipLevels == 0 || requestedMipLevels > maxMipLevels)
-    {
-        return maxMipLevels;
-    }
-    return requestedMipLevels;
-}
-
-struct PendingTextureMipGeneration
-{
-    Texture*      texture     = nullptr;
-    VkExtent2D    extent      = {};
-    uint32_t      mipLevels   = 1;
-    VkImageLayout finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-};
-
-class ModelUploadSession
-{
-public:
-    explicit ModelUploadSession(OptimizedModel&& sourceModel) : _model(std::move(sourceModel)), _package(std::move(_model.package)) {}
-
-    ModelAssetPackage upload();
-
-private:
-    RefPtr<Texture> createTextureFromLoadedImage(const ModelTextureResource& textureResource, const ImageLoading::LoadedImage& loadedImage);
-    void            uploadTextures();
-    void            uploadGeometry();
-    void            submitPendingUploads();
-
-    OptimizedModel                            _model;
-    ModelAssetPackage                        _package;
-    bool                                     _hasPendingUpload = false;
-    std::vector<PendingTextureMipGeneration> _pendingMipGenerations;
-};
-
-RefPtr<Texture> ModelUploadSession::createTextureFromLoadedImage(const ModelTextureResource& textureResource,
-                                                                 const ImageLoading::LoadedImage& loadedImage)
-{
-    if (!isValidLoadedImage(loadedImage))
-    {
-        return nullptr;
-    }
-
-    const uint32_t      mipLevels   = resolveTextureMipLevels(textureResource.mipLevels, loadedImage.extent);
-    const VkImageLayout finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    VkImageCreateInfo imageInfo{
-        .sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .imageType     = VK_IMAGE_TYPE_2D,
-        .format        = loadedImage.format,
-        .extent        = {loadedImage.extent.width, loadedImage.extent.height, 1},
-        .mipLevels     = mipLevels,
-        .arrayLayers   = 1,
-        .samples       = VK_SAMPLE_COUNT_1_BIT,
-        .tiling        = VK_IMAGE_TILING_OPTIMAL,
-        .usage         = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-        .sharingMode   = VK_SHARING_MODE_EXCLUSIVE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-    };
-
-    VkImageViewCreateInfo viewInfo{
-        .sType            = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .viewType         = VK_IMAGE_VIEW_TYPE_2D,
-        .format           = loadedImage.format,
-        .components       = {VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A},
-        .subresourceRange = {inferImageAspectFlags(loadedImage.format, true), 0, mipLevels, 0, 1},
-    };
-
-    nvvk::Image uploadedImage;
-    PlayResourceManager& uploadManager = PlayResourceManager::Instance();
-    if (uploadManager.createImage(uploadedImage, imageInfo, viewInfo) != VK_SUCCESS)
-    {
-        if (uploadedImage.image != VK_NULL_HANDLE)
-        {
-            uploadManager.destroyImage(uploadedImage);
-        }
-        return nullptr;
-    }
-
-    if (uploadManager.appendImage(uploadedImage, loadedImage.pixels.size(), loadedImage.pixels.data(), finalLayout) != VK_SUCCESS)
-    {
-        uploadManager.destroyImage(uploadedImage);
-        return nullptr;
-    }
-
-    RefPtr<Texture> texture = RefPtr<Texture>(new Texture(textureResource.name,
-                                                          uploadedImage.image,
-                                                          uploadedImage.descriptor.imageView,
-                                                          loadedImage.format,
-                                                          uploadedImage.extent,
-                                                          imageInfo.usage,
-                                                          finalLayout,
-                                                          VK_IMAGE_ASPECT_COLOR_BIT,
-                                                          mipLevels,
-                                                          1,
-                                                          VK_SAMPLE_COUNT_1_BIT,
-                                                          true));
-    texture->allocation = uploadedImage.allocation;
-    _hasPendingUpload   = true;
-
-    if (mipLevels > 1)
-    {
-        PendingTextureMipGeneration pendingMipGeneration;
-        pendingMipGeneration.texture     = texture.get();
-        pendingMipGeneration.extent      = loadedImage.extent;
-        pendingMipGeneration.mipLevels   = mipLevels;
-        pendingMipGeneration.finalLayout = finalLayout;
-        _pendingMipGenerations.push_back(pendingMipGeneration);
-    }
-
-    uploadManager.acquireSampler(texture->descriptor.sampler);
-    return texture;
-}
-
-void ModelUploadSession::uploadTextures()
-{
-    PLAY_PROFILE_SCOPE("ModelLoading::uploadModelTextures");
-
-    for (uint32_t textureIndex = 0; textureIndex < _package.textures.size(); ++textureIndex)
-    {
-        ModelTextureResource& texture = _package.textures[textureIndex];
-        if (texture.texture)
-        {
-            continue;
-        }
-
-        if (textureIndex < _model.textureImages.size())
-        {
-            texture.texture = createTextureFromLoadedImage(texture, _model.textureImages[textureIndex]);
-        }
-    }
-}
-
-void compactResidentTextures(ModelAssetPackage& package)
-{
-    PLAY_PROFILE_SCOPE("ModelLoading::compactResidentTextures");
-
-    std::vector<uint32_t> residentTextureIndexByOriginalIndex(package.textures.size(), INVALID_SCENE_ID);
-    std::vector<ModelTextureResource> residentTextures;
-    residentTextures.reserve(package.textures.size());
-
-    for (uint32_t textureIndex = 0; textureIndex < package.textures.size(); ++textureIndex)
-    {
-        ModelTextureResource& texture = package.textures[textureIndex];
-        if (!texture.isResident())
-        {
-            continue;
-        }
-
-        residentTextureIndexByOriginalIndex[textureIndex] = static_cast<uint32_t>(residentTextures.size());
-        residentTextures.push_back(std::move(texture));
-    }
-
-    for (uint32_t textureInfoIndex = 1; textureInfoIndex < package.textureInfos.size(); ++textureInfoIndex)
-    {
-        shaderio::GltfTextureInfo& textureInfo = package.textureInfos[textureInfoIndex];
-        if (textureInfo.index < 0 || static_cast<uint32_t>(textureInfo.index) >= residentTextureIndexByOriginalIndex.size())
-        {
-            textureInfo.index = -1;
-            continue;
-        }
-
-        // Keep texture indices local to this package. GBuffer adds GpuModelRange::firstTexture when sampling the scene texture array.
-        const uint32_t compactLocalTextureIndex = residentTextureIndexByOriginalIndex[textureInfo.index];
-        textureInfo.index = compactLocalTextureIndex == INVALID_SCENE_ID ? -1 : static_cast<int>(compactLocalTextureIndex);
-    }
-
-    package.textures = std::move(residentTextures);
-}
-
-void ModelUploadSession::uploadGeometry()
-{
-    PLAY_PROFILE_SCOPE("ModelLoading::uploadModelGeometry");
-
-    ModelAssetPackage&    package  = _package;
-    ModelGeometryPayload& geometry = _model.geometry;
-    if (geometry.empty() || package.meshInfos.empty())
-    {
-        return;
-    }
-
-    VkDeviceSize positionsOffset  = 0;
-    VkDeviceSize normalsOffset    = 0;
-    VkDeviceSize tangentsOffset   = 0;
-    VkDeviceSize texCoords0Offset = 0;
-    VkDeviceSize texCoords1Offset = 0;
-    VkDeviceSize colorsOffset     = 0;
-    VkDeviceSize indicesOffset    = 0;
-
-    VkDeviceSize positionsSize  = 0;
-    VkDeviceSize normalsSize    = 0;
-    VkDeviceSize tangentsSize   = 0;
-    VkDeviceSize texCoords0Size = 0;
-    VkDeviceSize texCoords1Size = 0;
-    VkDeviceSize colorsSize     = 0;
-    VkDeviceSize indicesSize    = 0;
-
-    VkDeviceSize cursor = 0;
-    {
-        PLAY_PROFILE_SCOPE("ModelLoading::layout geometry sections");
-        placeGeometrySection(geometry.positions, cursor, positionsOffset, positionsSize);
-        placeGeometrySection(geometry.normals, cursor, normalsOffset, normalsSize);
-        placeGeometrySection(geometry.tangents, cursor, tangentsOffset, tangentsSize);
-        placeGeometrySection(geometry.texCoords0, cursor, texCoords0Offset, texCoords0Size);
-        placeGeometrySection(geometry.texCoords1, cursor, texCoords1Offset, texCoords1Size);
-        placeGeometrySection(geometry.colors, cursor, colorsOffset, colorsSize);
-        placeGeometrySection(geometry.indices, cursor, indicesOffset, indicesSize);
-    }
-
-    if (cursor == 0)
-    {
-        return;
-    }
-
-    RefPtr<Buffer> geometryBuffer;
-    {
-        PLAY_PROFILE_SCOPE("ModelLoading::create geometry buffer");
-        geometryBuffer = RefPtr<Buffer>(
-            new Buffer(package.asset.name + "_GeometryBuffer", kUploadedModelBufferUsage, cursor, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
-    }
-
-    PlayResourceManager& uploadManager = PlayResourceManager::Instance();
-    {
-        PLAY_PROFILE_SCOPE("ModelLoading::append geometry buffer sections");
-        if (positionsSize > 0)
-            uploadManager.appendBuffer(*geometryBuffer, positionsOffset, std::span(geometry.positions.data(), geometry.positions.size()));
-        if (normalsSize > 0) uploadManager.appendBuffer(*geometryBuffer, normalsOffset, std::span(geometry.normals.data(), geometry.normals.size()));
-        if (tangentsSize > 0)
-            uploadManager.appendBuffer(*geometryBuffer, tangentsOffset, std::span(geometry.tangents.data(), geometry.tangents.size()));
-        if (texCoords0Size > 0)
-            uploadManager.appendBuffer(*geometryBuffer, texCoords0Offset, std::span(geometry.texCoords0.data(), geometry.texCoords0.size()));
-        if (texCoords1Size > 0)
-            uploadManager.appendBuffer(*geometryBuffer, texCoords1Offset, std::span(geometry.texCoords1.data(), geometry.texCoords1.size()));
-        if (colorsSize > 0) uploadManager.appendBuffer(*geometryBuffer, colorsOffset, std::span(geometry.colors.data(), geometry.colors.size()));
-        if (indicesSize > 0) uploadManager.appendBuffer(*geometryBuffer, indicesOffset, std::span(geometry.indices.data(), geometry.indices.size()));
-    }
-
-    std::vector<VertexStreamInfo> vertexStreams;
-    vertexStreams.resize(geometry.ranges.size());
-    {
-        PLAY_PROFILE_SCOPE("ModelLoading::build vertex stream infos");
-        for (uint32_t meshIndex = 0; meshIndex < geometry.ranges.size() && meshIndex < package.meshInfos.size(); ++meshIndex)
-        {
-            const ModelMeshRange& range = geometry.ranges[meshIndex];
-
-            VertexStreamInfo stream;
-            stream.positionBufferAddress  = geometryBuffer->address + positionsOffset + range.firstVertex * sizeof(glm::vec3);
-            stream.normalBufferAddress    = geometryBuffer->address + normalsOffset + range.firstVertex * sizeof(glm::vec3);
-            stream.tangentBufferAddress   = geometryBuffer->address + tangentsOffset + range.firstVertex * sizeof(glm::vec4);
-            stream.texCoord0BufferAddress = geometryBuffer->address + texCoords0Offset + range.firstVertex * sizeof(glm::vec2);
-            stream.texCoord1BufferAddress = geometryBuffer->address + texCoords1Offset + range.firstVertex * sizeof(glm::vec2);
-            stream.colorBufferAddress     = geometryBuffer->address + colorsOffset + range.firstVertex * sizeof(uint32_t);
-            vertexStreams[meshIndex]      = stream;
-
-            package.meshInfos[meshIndex].IndexBufferAddress = geometryBuffer->address + indicesOffset + range.firstIndex * sizeof(uint32_t);
-            package.meshInfos[meshIndex].indexCount         = range.indexCount;
-        }
-    }
-
-    RefPtr<Buffer> vertexStreamBuffer =
-        createAndAppendBuffer(package.asset.name + "_VertexStreamBuffer", vertexStreams, _hasPendingUpload);
-    if (vertexStreamBuffer)
-    {
-        for (uint32_t meshIndex = 0; meshIndex < vertexStreams.size() && meshIndex < package.meshInfos.size(); ++meshIndex)
-        {
-            package.meshInfos[meshIndex].vertexBufferAddress = vertexStreamBuffer->address + meshIndex * sizeof(VertexStreamInfo);
-        }
-    }
-
-    package.ownedBuffers.push_back(geometryBuffer);
-    if (vertexStreamBuffer)
-    {
-        package.ownedBuffers.push_back(vertexStreamBuffer);
-    }
-    _hasPendingUpload = true;
-}
-
-void ModelUploadSession::submitPendingUploads()
-{
-    PLAY_PROFILE_SCOPE("ModelLoading::submitPendingUploads");
-
-    if (!_hasPendingUpload && _pendingMipGenerations.empty())
-    {
-        return;
-    }
-
-    PlayResourceManager& uploadManager = PlayResourceManager::Instance();
-    VkCommandBuffer      cmd           = VK_NULL_HANDLE;
-    {
-        PLAY_PROFILE_SCOPE("ModelLoading::get temp upload command buffer");
-        cmd = uploadManager.getTempCommandBuffer();
-    }
-    {
-        PLAY_PROFILE_SCOPE("ModelLoading::record pending uploads");
-        PLAY_PROFILE_COMMAND_LABEL(cmd, "Model Pending Uploads");
-        if (_hasPendingUpload)
-        {
-            uploadManager.cmdUploadAppended(cmd);
-        }
-    }
-    {
-        PLAY_PROFILE_SCOPE("ModelLoading::record texture mipmaps");
-        PLAY_PROFILE_COMMAND_LABEL(cmd, "Model Texture Generate Mipmaps");
-        for (const PendingTextureMipGeneration& pendingMipGeneration : _pendingMipGenerations)
-        {
-            if (!pendingMipGeneration.texture)
-            {
-                continue;
-            }
-
-            nvvk::cmdGenerateMipmaps(cmd,
-                                     pendingMipGeneration.texture->image,
-                                     pendingMipGeneration.extent,
-                                     pendingMipGeneration.mipLevels,
-                                     1,
-                                     pendingMipGeneration.finalLayout);
-        }
-    }
-    {
-        PLAY_PROFILE_SCOPE("ModelLoading::submit and wait pending uploads");
-        uploadManager.submitAndWaitTempCmdBuffer(cmd);
-    }
-}
-
-ModelAssetPackage ModelUploadSession::upload()
-{
-    PLAY_PROFILE_SCOPE("ModelLoading::uploadModelPackage");
-
-    uploadTextures();
-    compactResidentTextures(_package);
-
-    uploadGeometry();
-    {
-        PLAY_PROFILE_SCOPE("ModelLoading::append model metadata buffers");
-        _package.asset.transformBuffer =
-            createAndAppendBuffer(_package.asset.name + "_TransformBuffer", _package.asset.transforms, _hasPendingUpload);
-        _package.asset.materialBuffer = createAndAppendBuffer(_package.asset.name + "_MaterialBuffer", _package.materials, _hasPendingUpload);
-        _package.asset.textureInfoBuffer =
-            createAndAppendBuffer(_package.asset.name + "_TextureInfoBuffer", _package.textureInfos, _hasPendingUpload);
-        _package.asset.meshInfoBuffer = createAndAppendBuffer(_package.asset.name + "_MeshInfoBuffer", _package.meshInfos, _hasPendingUpload);
-    }
-    submitPendingUploads();
-
-    return std::move(_package);
-}
-
-ModelAssetPackage uploadModelPackage(OptimizedModel&& model)
-{
-    ModelUploadSession uploadSession(std::move(model));
-    return uploadSession.upload();
-}
-
 
 struct ImportedTextureSlot
 {
@@ -578,14 +121,15 @@ bool isEmbeddedTextureName(const aiString& texturePath)
     return texturePath.length > 0 && texturePath.C_Str()[0] == '*';
 }
 
-uint32_t appendMeshGeometry(const aiMesh* mesh, ModelAssetPackage& package, ModelGeometryPayload& geometry, uint32_t materialIndex)
+uint32_t appendMeshGeometry(const aiMesh* mesh, LoadedModel& model, uint32_t materialIndex)
 {
     if (!mesh)
     {
         return INVALID_SCENE_ID;
     }
 
-    ModelMeshRange range;
+    ModelGeometryData& geometry = model.geometry;
+    ModelMeshAsset     range;
     range.firstVertex = static_cast<uint32_t>(geometry.positions.size());
     range.firstIndex  = static_cast<uint32_t>(geometry.indices.size());
     range.materialIdx = materialIndex;
@@ -672,23 +216,16 @@ uint32_t appendMeshGeometry(const aiMesh* mesh, ModelAssetPackage& package, Mode
     range.vertexCount = mesh->mNumVertices;
     range.indexCount  = static_cast<uint32_t>(geometry.indices.size()) - range.firstIndex;
 
-    MeshInfo meshInfo;
-    meshInfo.vertexBufferAddress = 0;
-    meshInfo.IndexBufferAddress  = 0;
-    meshInfo.indexCount          = range.indexCount;
-    meshInfo.materialIdx         = range.materialIdx;
-
-    const uint32_t meshID = static_cast<uint32_t>(package.meshInfos.size());
-    geometry.ranges.push_back(range);
-    package.meshInfos.push_back(meshInfo);
+    const uint32_t meshID = static_cast<uint32_t>(model.meshes.size());
+    model.meshes.push_back(range);
     return meshID;
 }
 
-int findLocalTextureIndex(const ModelAssetPackage& package, const std::filesystem::path& sourcePath, const std::string& name, bool embedded)
+int findLocalTextureIndex(const LoadedModel& model, const std::filesystem::path& sourcePath, const std::string& name, bool embedded)
 {
-    for (uint32_t localIndex = 0; localIndex < package.textures.size(); ++localIndex)
+    for (uint32_t localIndex = 0; localIndex < model.textures.size(); ++localIndex)
     {
-        const ModelTextureResource& texture = package.textures[localIndex];
+        const ModelTextureAsset& texture = model.textures[localIndex];
         if (embedded)
         {
             if (texture.sourcePath.empty() && texture.name == name)
@@ -708,7 +245,7 @@ int findLocalTextureIndex(const ModelAssetPackage& package, const std::filesyste
 class MaterialImportSession
 {
 public:
-    MaterialImportSession(ImportedModel& model, const std::filesystem::path& modelPath, const aiScene* assimpScene,
+    MaterialImportSession(LoadedModel& model, const std::filesystem::path& modelPath, const aiScene* assimpScene,
                           const ModelLoadingConfig& loadingCfg)
         : _model(model), _modelPath(modelPath), _assimpScene(assimpScene), _loadingCfg(loadingCfg)
     {
@@ -721,7 +258,7 @@ private:
     int  ensureLocalTextureIndex(const aiString& texturePath, bool isSrgb);
     void readTextureSlot(const aiMaterial* material, aiTextureType textureType, ImportedTextureSlot& slot, bool isSrgb);
 
-    ImportedModel&                 _model;
+    LoadedModel&                   _model;
     const std::filesystem::path&   _modelPath;
     const aiScene*                 _assimpScene = nullptr;
     const ModelLoadingConfig&      _loadingCfg;
@@ -747,8 +284,7 @@ int MaterialImportSession::ensureLocalTextureIndex(const aiString& texturePath, 
         name = texturePath.C_Str();
     }
 
-    ModelAssetPackage& package = _model.package;
-    const int existingLocalIndex = findLocalTextureIndex(package, sourcePath, name, embedded);
+    const int existingLocalIndex = findLocalTextureIndex(_model, sourcePath, name, embedded);
     if (existingLocalIndex >= 0)
     {
         return existingLocalIndex;
@@ -773,14 +309,14 @@ int MaterialImportSession::ensureLocalTextureIndex(const aiString& texturePath, 
         }
     }
 
-    ModelTextureResource texture;
+    ModelTextureAsset texture;
     texture.name       = name;
     texture.sourcePath = sourcePath;
     texture.mipLevels  = _loadingCfg.textureMipLevels;
     texture.isSrgb     = isSrgb;
 
-    const int localIndex = static_cast<int>(package.textures.size());
-    package.textures.push_back(std::move(texture));
+    const int localIndex = static_cast<int>(_model.textures.size());
+    _model.textures.push_back(std::move(texture));
     return localIndex;
 }
 
@@ -815,9 +351,9 @@ void MaterialImportSession::readTextureSlot(const aiMaterial* material, aiTextur
     }
 }
 
-uint16_t appendTextureInfo(ModelAssetPackage& package, const ImportedTextureSlot& slot)
+uint16_t appendTextureInfo(LoadedModel& model, const ImportedTextureSlot& slot)
 {
-    if (!slot.hasTexture() || package.textureInfos.size() >= 0xFFFF)
+    if (!slot.hasTexture() || model.textureInfos.size() >= 0xFFFF)
     {
         return 0;
     }
@@ -828,14 +364,13 @@ uint16_t appendTextureInfo(ModelAssetPackage& package, const ImportedTextureSlot
     textureInfo.uvTransform = shaderio::float3x2(slot.uvTransform[0][0], slot.uvTransform[1][0], slot.uvTransform[0][1], slot.uvTransform[1][1],
                                                  slot.uvTransform[0][2], slot.uvTransform[1][2]);
 
-    const uint16_t textureInfoIndex = static_cast<uint16_t>(package.textureInfos.size());
-    package.textureInfos.push_back(textureInfo);
+    const uint16_t textureInfoIndex = static_cast<uint16_t>(model.textureInfos.size());
+    model.textureInfos.push_back(textureInfo);
     return textureInfoIndex;
 }
 
 shaderio::GltfShadeMaterial MaterialImportSession::importMaterial(const aiMaterial* material)
 {
-    ModelAssetPackage& package = _model.package;
     shaderio::GltfShadeMaterial importedMaterial = shaderio::defaultGltfMaterial();
     if (!material)
     {
@@ -917,7 +452,7 @@ shaderio::GltfShadeMaterial MaterialImportSession::importMaterial(const aiMateri
     {
         readTextureSlot(material, aiTextureType_DIFFUSE, baseColorSlot, _loadingCfg.srgbBaseColorTextures);
     }
-    importedMaterial.pbrBaseColorTexture = appendTextureInfo(package, baseColorSlot);
+    importedMaterial.pbrBaseColorTexture = appendTextureInfo(_model, baseColorSlot);
 
     ImportedTextureSlot normalSlot;
     readTextureSlot(material, aiTextureType_NORMALS, normalSlot, false);
@@ -925,7 +460,7 @@ shaderio::GltfShadeMaterial MaterialImportSession::importMaterial(const aiMateri
     {
         readTextureSlot(material, aiTextureType_NORMAL_CAMERA, normalSlot, false);
     }
-    importedMaterial.normalTexture = appendTextureInfo(package, normalSlot);
+    importedMaterial.normalTexture = appendTextureInfo(_model, normalSlot);
 
     ImportedTextureSlot metallicRoughnessSlot;
     readTextureSlot(material, aiTextureType_GLTF_METALLIC_ROUGHNESS, metallicRoughnessSlot, false);
@@ -933,19 +468,19 @@ shaderio::GltfShadeMaterial MaterialImportSession::importMaterial(const aiMateri
     {
         readTextureSlot(material, aiTextureType_DIFFUSE_ROUGHNESS, metallicRoughnessSlot, false);
     }
-    importedMaterial.pbrMetallicRoughnessTexture = appendTextureInfo(package, metallicRoughnessSlot);
+    importedMaterial.pbrMetallicRoughnessTexture = appendTextureInfo(_model, metallicRoughnessSlot);
 
     ImportedTextureSlot emissiveSlot;
     readTextureSlot(material, aiTextureType_EMISSIVE, emissiveSlot, _loadingCfg.srgbEmissiveTextures);
-    importedMaterial.emissiveTexture = appendTextureInfo(package, emissiveSlot);
+    importedMaterial.emissiveTexture = appendTextureInfo(_model, emissiveSlot);
 
     ImportedTextureSlot occlusionSlot;
     readTextureSlot(material, aiTextureType_AMBIENT_OCCLUSION, occlusionSlot, false);
-    importedMaterial.occlusionTexture = appendTextureInfo(package, occlusionSlot);
+    importedMaterial.occlusionTexture = appendTextureInfo(_model, occlusionSlot);
 
     ImportedTextureSlot specularSlot;
     readTextureSlot(material, aiTextureType_SPECULAR, specularSlot, false);
-    importedMaterial.specularTexture = appendTextureInfo(package, specularSlot);
+    importedMaterial.specularTexture = appendTextureInfo(_model, specularSlot);
 
     return importedMaterial;
 }
@@ -954,36 +489,31 @@ void MaterialImportSession::loadTextureImages()
 {
     PLAY_PROFILE_SCOPE("ModelLoading::loadImportedTextureImages");
 
-    ModelAssetPackage& package = _model.package;
-    _model.textureImages.clear();
-    _model.textureImages.resize(package.textures.size());
-
-    for (uint32_t textureIndex = 0; textureIndex < package.textures.size(); ++textureIndex)
+    for (ModelTextureAsset& texture : _model.textures)
     {
-        const ModelTextureResource& texture = package.textures[textureIndex];
         if (texture.sourcePath.empty())
         {
             continue;
         }
 
-        ImageLoading::LoadTextureImage(texture.sourcePath, texture.isSrgb, _model.textureImages[textureIndex]);
+        ImageLoading::LoadTextureImage(texture.sourcePath, texture.isSrgb, texture.image);
     }
 }
 
 struct AssimpImportContext
 {
-    ModelAssetPackage*    package = nullptr;
+    LoadedModel*          model = nullptr;
     std::vector<uint32_t> meshSubmeshIndices;
 };
 
 uint32_t appendAssimpNode(const aiNode* assimpNode, uint32_t parentNodeIndex, AssimpImportContext& context)
 {
-    if (!assimpNode || !context.package)
+    if (!assimpNode || !context.model)
     {
         return INVALID_SCENE_ID;
     }
 
-    ModelAsset& asset = context.package->asset;
+    ModelAsset& asset = context.model->asset;
 
     const glm::mat4 localTransform = toGlm(assimpNode->mTransformation);
     aiVector3D      scaling;
@@ -1126,37 +656,36 @@ public:
             return result;
         }
 
-        ModelAssetPackage&   package  = result.model.package;
-        ModelGeometryPayload& geometry = result.model.geometry;
+        LoadedModel& model = result.model;
         {
-            PLAY_PROFILE_SCOPE("ModelLoading::initialize model package");
-            package.asset.name       = path.stem().string();
-            package.asset.sourcePath = path;
-            package.textureInfos.push_back(shaderio::defaultGltfTextureInfo());
+            PLAY_PROFILE_SCOPE("ModelLoading::initialize loaded model");
+            model.asset.name       = path.stem().string();
+            model.asset.sourcePath = path;
+            model.textureInfos.push_back(shaderio::defaultGltfTextureInfo());
         }
 
-        MaterialImportSession materialImporter(result.model, path, assimpScene, loadingCfg);
+        MaterialImportSession materialImporter(model, path, assimpScene, loadingCfg);
         {
             PLAY_PROFILE_SCOPE("ModelLoading::import materials");
             if (loadingCfg.loadMaterials && assimpScene->mNumMaterials > 0)
             {
-                package.materials.reserve(assimpScene->mNumMaterials);
+                model.materials.reserve(assimpScene->mNumMaterials);
                 for (uint32_t materialIndex = 0; materialIndex < assimpScene->mNumMaterials; ++materialIndex)
                 {
-                    package.materials.push_back(materialImporter.importMaterial(assimpScene->mMaterials[materialIndex]));
+                    model.materials.push_back(materialImporter.importMaterial(assimpScene->mMaterials[materialIndex]));
                 }
             }
         }
 
-        if (package.materials.empty())
+        if (model.materials.empty())
         {
-            package.materials.push_back(shaderio::defaultGltfMaterial());
+            model.materials.push_back(shaderio::defaultGltfMaterial());
         }
 
         materialImporter.loadTextureImages();
 
         AssimpImportContext context;
-        context.package = &package;
+        context.model = &model;
         context.meshSubmeshIndices.reserve(assimpScene->mNumMeshes);
 
         {
@@ -1171,13 +700,13 @@ public:
                 }
 
                 uint32_t materialIndex = mesh->mMaterialIndex;
-                if (materialIndex >= package.materials.size())
+                if (materialIndex >= model.materials.size())
                 {
                     materialIndex = 0;
                 }
 
-                const uint32_t meshID = appendMeshGeometry(mesh, package, geometry, materialIndex);
-                if (meshID == INVALID_SCENE_ID || meshID >= geometry.ranges.size())
+                const uint32_t meshID = appendMeshGeometry(mesh, model, materialIndex);
+                if (meshID == INVALID_SCENE_ID || meshID >= model.meshes.size())
                 {
                     context.meshSubmeshIndices.push_back(INVALID_SCENE_ID);
                     continue;
@@ -1185,10 +714,10 @@ public:
 
                 ModelSubmeshAsset submesh;
                 submesh.meshID = meshID;
-                submesh.bbox   = geometry.ranges[meshID].bbox;
+                submesh.bbox   = model.meshes[meshID].bbox;
 
-                const uint32_t submeshIndex = static_cast<uint32_t>(package.asset.submeshes.size());
-                package.asset.submeshes.push_back(submesh);
+                const uint32_t submeshIndex = static_cast<uint32_t>(model.asset.submeshes.size());
+                model.asset.submeshes.push_back(submesh);
                 context.meshSubmeshIndices.push_back(submeshIndex);
             }
         }
@@ -1244,20 +773,6 @@ ModelImportResult importModelFromFile(const std::filesystem::path& path, const M
     return result;
 }
 
-ModelOptimizeResult optimizeModel(ImportedModel&& importedModel, const ModelLoadingConfig& loadingConfig)
-{
-    PLAY_PROFILE_SCOPE("ModelLoading::optimizeModel");
-
-    (void) loadingConfig;
-
-    ModelOptimizeResult result;
-    result.success             = true;
-    result.model.package       = std::move(importedModel.package);
-    result.model.geometry      = std::move(importedModel.geometry);
-    result.model.textureImages = std::move(importedModel.textureImages);
-    return result;
-}
-
 } // namespace
 
 ModelLoadResult model_loading::loadModelFromFile(const std::filesystem::path& path, const ModelLoadingConfig& loadingConfig)
@@ -1276,24 +791,9 @@ ModelLoadResult model_loading::loadModelFromFile(const std::filesystem::path& pa
         return result;
     }
 
-    ModelOptimizeResult optimizeResult = [&]()
-    {
-        PLAY_PROFILE_SCOPE("model_loading::optimize");
-        return optimizeModel(std::move(importResult.model), loadingConfig);
-    }();
-    if (!optimizeResult.success)
-    {
-        ModelLoadResult result;
-        result.message = optimizeResult.message;
-        return result;
-    }
-
     ModelLoadResult result;
     result.success = true;
-    {
-        PLAY_PROFILE_SCOPE("model_loading::upload");
-        result.model = uploadModelPackage(std::move(optimizeResult.model));
-    }
+    result.model   = std::make_shared<LoadedModel>(std::move(importResult.model));
     return result;
 }
 

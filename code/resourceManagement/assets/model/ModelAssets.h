@@ -1,10 +1,10 @@
 #ifndef MODEL_ASSETS_H
 #define MODEL_ASSETS_H
 
+#include "resourceManagement/assets/image/ImageLoading.h"
 #include "resourceManagement/scene/cpu/CpuScene.h"
 #include <filesystem>
 #include "nvshaders/gltf_scene_io.h.slang"
-#include "resourceManagement/vulkan/resources/Resource.h"
 
 namespace Play
 {
@@ -46,32 +46,38 @@ struct ModelRenderableTemplate
     AABB      modelBounds;
 };
 
-struct RayTracingASInfo
+// Describes one mesh inside the model-wide vertex and index streams. Every index in this
+// structure is local to LoadedModel and remains valid until a GPU uploader remaps it.
+struct ModelMeshAsset
 {
-    VkAccelerationStructureCreateInfoKHR createInfo;
+    uint32_t firstVertex = 0;
+    uint32_t vertexCount = 0;
+    uint32_t firstIndex  = 0;
+    uint32_t indexCount  = 0;
+    uint32_t materialIdx = 0;
+    AABB     bbox;
 };
 
-struct MeshInfo
+// CPU geometry stays in structure-of-arrays form so an uploader can pack only the streams
+// required by its destination layout without asking the importer to do Vulkan-specific work.
+struct ModelGeometryData
 {
-    uint64_t vertexBufferAddress;
-    uint64_t IndexBufferAddress;
-    uint32_t indexCount;
-    uint32_t materialIdx;
+    std::vector<glm::vec3> positions;
+    std::vector<glm::vec3> normals;
+    std::vector<glm::vec4> tangents;
+    std::vector<glm::vec2> texCoords0;
+    std::vector<glm::vec2> texCoords1;
+    std::vector<uint32_t>  colors;
+    std::vector<uint32_t>  indices;
 };
 
-struct VertexStreamInfo
+struct ModelTextureAsset
 {
-    uint64_t positionBufferAddress  = 0;
-    uint64_t normalBufferAddress    = 0;
-    uint64_t tangentBufferAddress   = 0;
-    uint64_t texCoord0BufferAddress = 0;
-    uint64_t texCoord1BufferAddress = 0;
-    uint64_t colorBufferAddress     = 0;
-};
-
-struct LightInfo
-{
-    glm::vec3 lightPosition;
+    std::string                name;
+    std::filesystem::path      sourcePath;
+    ImageLoading::LoadedImage  image;
+    uint32_t                   mipLevels = 0;
+    bool                       isSrgb    = true;
 };
 
 struct GltfShadeMaterial
@@ -161,39 +167,19 @@ struct ModelAsset
     std::vector<glm::mat4>               transforms;
     AABB                                 bbox;
     uint32_t                             rootNode = INVALID_SCENE_ID;
-
-    RefPtr<Buffer>                transformBuffer    = nullptr;
-    RefPtr<Buffer>                materialBuffer     = nullptr;
-    RefPtr<Buffer>                textureInfoBuffer  = nullptr;
-    RefPtr<Buffer>                meshInfoBuffer     = nullptr;
-    RefPtr<Buffer>                lightInfoBuffer    = nullptr;
-    std::vector<RayTracingASInfo> accelerationStructures;
-
     uint32_t generation = 1;
 };
 
-struct ModelTextureResource
-{
-    std::string           name;
-    std::filesystem::path sourcePath;
-    RefPtr<Texture>       texture;
-    uint32_t              mipLevels = 0;
-    bool                  isSrgb    = true;
-
-    bool isResident() const
-    {
-        return texture && texture->isValid();
-    }
-};
-
-struct ModelAssetPackage
+// The complete CPU-side product of a model load. It intentionally has no Vulkan resource,
+// device address, command buffer, or upload-state field.
+struct LoadedModel
 {
     ModelAsset                               asset;
-    std::vector<MeshInfo>                    meshInfos;
+    ModelGeometryData                        geometry;
+    std::vector<ModelMeshAsset>              meshes;
     std::vector<shaderio::GltfShadeMaterial> materials;
     std::vector<shaderio::GltfTextureInfo>   textureInfos;
-    std::vector<ModelTextureResource>        textures;
-    std::vector<RefPtr<Buffer>>              ownedBuffers;
+    std::vector<ModelTextureAsset>           textures;
 };
 
 } // namespace Play

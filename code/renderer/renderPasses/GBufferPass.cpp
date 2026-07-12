@@ -78,9 +78,9 @@ uint64_t makeSortKey(float depthKey, uint32_t materialIndex, uint32_t meshInfoIn
     return (depthBits << 40) | (materialBits << 20) | meshBits;
 }
 
-uint64_t meshInfoAddressForModel(const ModelAsset& model, const GpuModelRange& range, uint32_t meshInfoIndex)
+uint64_t meshInfoAddressForModel(const ModelGpuResources& resources, const GpuModelRange& range, uint32_t meshInfoIndex)
 {
-    if (!model.meshInfoBuffer || meshInfoIndex < range.firstMeshInfo)
+    if (!resources.meshInfoBuffer || meshInfoIndex < range.firstMeshInfo)
     {
         return 0;
     }
@@ -91,12 +91,12 @@ uint64_t meshInfoAddressForModel(const ModelAsset& model, const GpuModelRange& r
         return 0;
     }
 
-    return model.meshInfoBuffer->address + localMeshInfoIndex * sizeof(MeshInfo);
+    return resources.meshInfoBuffer->address + localMeshInfoIndex * sizeof(MeshInfo);
 }
 
-uint64_t materialAddressForModel(const ModelAsset& model, const GpuModelRange& range, uint32_t materialIndex)
+uint64_t materialAddressForModel(const ModelGpuResources& resources, const GpuModelRange& range, uint32_t materialIndex)
 {
-    if (!model.materialBuffer || materialIndex < range.firstMaterial)
+    if (!resources.materialBuffer || materialIndex < range.firstMaterial)
     {
         return 0;
     }
@@ -107,17 +107,17 @@ uint64_t materialAddressForModel(const ModelAsset& model, const GpuModelRange& r
         return 0;
     }
 
-    return model.materialBuffer->address + localMaterialIndex * sizeof(shaderio::GltfShadeMaterial);
+    return resources.materialBuffer->address + localMaterialIndex * sizeof(shaderio::GltfShadeMaterial);
 }
 
-uint64_t textureInfoAddressForModel(const ModelAsset& model, const GpuModelRange& range)
+uint64_t textureInfoAddressForModel(const ModelGpuResources& resources, const GpuModelRange& range)
 {
-    if (!model.textureInfoBuffer || range.textureInfoCount == 0)
+    if (!resources.textureInfoBuffer || range.textureInfoCount == 0)
     {
         return 0;
     }
 
-    return model.textureInfoBuffer->address;
+    return resources.textureInfoBuffer->address;
 }
 
 } // namespace
@@ -254,18 +254,21 @@ void GBufferPass::buildRenderList(const GpuScene& gpuScene)
 {
     const GpuSceneCommonData&         common      = gpuScene.getCommonData();
     const std::vector<ModelAsset>&    models      = gpuScene.getModels();
+    const std::vector<ModelGpuResources>& modelGpuResources = gpuScene.getModelGpuResources();
     const std::vector<GpuModelRange>& modelRanges = gpuScene.getModelRanges();
 
     for (uint32_t visibleIndex = 0; visibleIndex < _visibleInstances.size(); ++visibleIndex)
     {
         const GBufferVisibleInstance& visibleInstance = _visibleInstances[visibleIndex];
-        if (visibleInstance.modelIndex >= models.size() || visibleInstance.modelIndex >= modelRanges.size())
+        if (visibleInstance.modelIndex >= models.size() || visibleInstance.modelIndex >= modelGpuResources.size() ||
+            visibleInstance.modelIndex >= modelRanges.size())
         {
             continue;
         }
 
-        const ModelAsset&    model = models[visibleInstance.modelIndex];
-        const GpuModelRange& range = modelRanges[visibleInstance.modelIndex];
+        const ModelAsset&        model     = models[visibleInstance.modelIndex];
+        const ModelGpuResources& resources = modelGpuResources[visibleInstance.modelIndex];
+        const GpuModelRange&     range     = modelRanges[visibleInstance.modelIndex];
 
         for (uint32_t renderableOffset = 0; renderableOffset < visibleInstance.renderableCount; ++renderableOffset)
         {
@@ -297,9 +300,9 @@ void GBufferPass::buildRenderList(const GpuScene& gpuScene)
             GBufferGPUInstanceData gpuInstanceData;
             gpuInstanceData.objectToWorld      = visibleInstance.objectToWorld * renderable.localToModel;
             gpuInstanceData.worldToObject      = glm::inverse(gpuInstanceData.objectToWorld);
-            gpuInstanceData.meshInfoAddress    = meshInfoAddressForModel(model, range, meshInfoIndex);
-            gpuInstanceData.materialAddress    = materialAddressForModel(model, range, meshInfo.materialIdx);
-            gpuInstanceData.textureInfoAddress = textureInfoAddressForModel(model, range);
+            gpuInstanceData.meshInfoAddress    = meshInfoAddressForModel(resources, range, meshInfoIndex);
+            gpuInstanceData.materialAddress    = materialAddressForModel(resources, range, meshInfo.materialIdx);
+            gpuInstanceData.textureInfoAddress = textureInfoAddressForModel(resources, range);
             gpuInstanceData.meshInfoIndex      = meshInfoIndex;
             gpuInstanceData.materialIndex      = meshInfo.materialIdx;
             gpuInstanceData.textureOffset      = range.firstTexture;

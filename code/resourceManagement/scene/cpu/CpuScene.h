@@ -84,6 +84,8 @@ public:
         eEmpty,
         eQueued,
         eLoading,
+        eCpuLoaded,
+        eUploading,
         eLoaded,
         eFailed
     };
