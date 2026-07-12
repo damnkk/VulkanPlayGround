@@ -385,8 +385,12 @@ void VulkanRuntime::deinitRenderServices()
         return;
     }
 
-    std::vector<Play::RefCounted*> leakedObjects = _registeredObjects;
-    _registeredObjects.clear();
+    std::vector<Play::RefCounted*> leakedObjects;
+    {
+        std::lock_guard<std::mutex> lock(_registeredObjectMutex);
+        leakedObjects = _registeredObjects;
+        _registeredObjects.clear();
+    }
     for (Play::RefCounted* obj : leakedObjects)
     {
         if (obj && obj->isAlive())
@@ -494,13 +498,53 @@ void VulkanRuntime::destroyFrameSubmission()
 
 void VulkanRuntime::destroyDeferredTasks()
 {
+    std::vector<std::function<void()>> tasks;
+    {
+        std::lock_guard<std::mutex> lock(_pendingDestroyMutex);
+        tasks.swap(_pendingDeferredDestroyTasks);
+    }
     for (DeferredDestroyQueue& queue : _deferredDestroyQueues)
     {
         for (auto& task : queue.tasks)
         {
-            task();
+            tasks.push_back(std::move(task));
         }
         queue.tasks.clear();
+    }
+
+    for (auto& task : tasks)
+    {
+        task();
+    }
+}
+
+void VulkanRuntime::flushPendingDeferredDestroyTasks()
+{
+    std::vector<std::function<void()>> pendingTasks;
+    {
+        std::lock_guard<std::mutex> lock(_pendingDestroyMutex);
+        pendingTasks.swap(_pendingDeferredDestroyTasks);
+    }
+
+    if (pendingTasks.empty())
+    {
+        return;
+    }
+
+    if (_deferredDestroyQueues.empty())
+    {
+        for (auto& task : pendingTasks)
+        {
+            task();
+        }
+        return;
+    }
+
+    DeferredDestroyQueue& targetQueue =
+        _deferredDestroyQueues[(_frameIndex + 1) % static_cast<uint32_t>(_deferredDestroyQueues.size())];
+    for (auto& task : pendingTasks)
+    {
+        targetQueue.tasks.push_back(std::move(task));
     }
 }
 
@@ -712,7 +756,7 @@ void VulkanRuntime::endFrame(VkCommandBuffer cmd)
         .pSignalSemaphoreInfos    = signalInfos,
     };
 
-    NVVK_CHECK(vkQueueSubmit2(_context.getQueueInfo(0).queue, 1, &submitInfo, nullptr));
+    NVVK_CHECK(submitGraphics(submitInfo));
 }
 
 void VulkanRuntime::signalPresentSemaphore()
@@ -735,7 +779,13 @@ void VulkanRuntime::signalPresentSemaphore()
         .pSignalSemaphoreInfos    = &signalInfo,
     };
 
-    NVVK_CHECK(vkQueueSubmit2(_context.getQueueInfo(0).queue, 1, &submitInfo, nullptr));
+    NVVK_CHECK(submitGraphics(submitInfo));
+}
+
+VkResult VulkanRuntime::submitGraphics(const VkSubmitInfo2& submitInfo, VkFence fence)
+{
+    std::lock_guard<std::mutex> lock(_graphicsQueueMutex);
+    return vkQueueSubmit2(getGfxQueue().queue, 1, &submitInfo, fence);
 }
 
 VkCommandBuffer VulkanRuntime::createTempCmdBuffer()
@@ -785,12 +835,15 @@ void VulkanRuntime::submitAndWaitTempCmdBuffer(VkCommandBuffer cmd)
         .pCommandBufferInfos    = &cmdInfo,
     };
     {
-        PLAY_PROFILE_SCOPE("VulkanRuntime::vkQueueSubmit2 temp command buffer");
-        NVVK_CHECK(vkQueueSubmit2(getGfxQueue().queue, 1, &submitInfo, nullptr));
-    }
-    {
-        PLAY_PROFILE_SCOPE("VulkanRuntime::vkQueueWaitIdle temp command buffer");
-        NVVK_CHECK(vkQueueWaitIdle(getGfxQueue().queue));
+        std::lock_guard<std::mutex> lock(_graphicsQueueMutex);
+        {
+            PLAY_PROFILE_SCOPE("VulkanRuntime::vkQueueSubmit2 temp command buffer");
+            NVVK_CHECK(vkQueueSubmit2(getGfxQueue().queue, 1, &submitInfo, nullptr));
+        }
+        {
+            PLAY_PROFILE_SCOPE("VulkanRuntime::vkQueueWaitIdle temp command buffer");
+            NVVK_CHECK(vkQueueWaitIdle(getGfxQueue().queue));
+        }
     }
     {
         PLAY_PROFILE_SCOPE("VulkanRuntime::free temp command buffer");
@@ -812,14 +865,8 @@ std::vector<VkSemaphoreSubmitInfo> VulkanRuntime::consumePendingFrameWaitSemapho
 
 void VulkanRuntime::deferDestroy(std::function<void()> task)
 {
-    if (_deferredDestroyQueues.empty())
-    {
-        task();
-        return;
-    }
-
-    const uint32_t targetFrame = (_frameIndex + 1) % static_cast<uint32_t>(_deferredDestroyQueues.size());
-    _deferredDestroyQueues[targetFrame].tasks.push_back(std::move(task));
+    std::lock_guard<std::mutex> lock(_pendingDestroyMutex);
+    _pendingDeferredDestroyTasks.push_back(std::move(task));
 }
 
 void VulkanRuntime::registerObject(Play::RefCounted* obj)
@@ -829,6 +876,7 @@ void VulkanRuntime::registerObject(Play::RefCounted* obj)
         return;
     }
 
+    std::lock_guard<std::mutex> lock(_registeredObjectMutex);
     for (Play::RefCounted* registeredObject : _registeredObjects)
     {
         if (registeredObject == obj)
@@ -841,6 +889,7 @@ void VulkanRuntime::registerObject(Play::RefCounted* obj)
 
 void VulkanRuntime::unregisterObject(Play::RefCounted* obj)
 {
+    std::lock_guard<std::mutex> lock(_registeredObjectMutex);
     for (size_t i = 0; i < _registeredObjects.size(); ++i)
     {
         if (_registeredObjects[i] == obj)
@@ -854,17 +903,19 @@ void VulkanRuntime::unregisterObject(Play::RefCounted* obj)
 
 void VulkanRuntime::tryCleanupDeferredTasks()
 {
+    flushPendingDeferredDestroyTasks();
+
     if (_deferredDestroyQueues.empty())
     {
         return;
     }
 
-    DeferredDestroyQueue& queue = _deferredDestroyQueues[_frameIndex];
-    for (auto& task : queue.tasks)
+    std::vector<std::function<void()>> tasks;
+    tasks.swap(_deferredDestroyQueues[_frameIndex].tasks);
+    for (auto& task : tasks)
     {
         task();
     }
-    queue.tasks.clear();
 }
 
 void VulkanRuntime::tick()
@@ -987,7 +1038,10 @@ void VulkanRuntime::updateFrameStatsTitle()
 
 void VulkanRuntime::presentFrame()
 {
-    _swapchain.presentFrame(_context.getQueueInfo(0).queue);
+    {
+        std::lock_guard<std::mutex> lock(_graphicsQueueMutex);
+        _swapchain.presentFrame(_context.getQueueInfo(0).queue);
+    }
     updateFrameStatsTitle();
 
     _frameIndex = (_frameIndex + 1) % static_cast<uint32_t>(_frames.size());

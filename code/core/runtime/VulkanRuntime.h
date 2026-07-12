@@ -234,6 +234,7 @@ public:
 
     VkCommandBuffer createTempCmdBuffer();
     void            submitAndWaitTempCmdBuffer(VkCommandBuffer cmd);
+    VkResult        submitGraphics(const VkSubmitInfo2& submitInfo, VkFence fence = VK_NULL_HANDLE);
     void            addWaitSemaphore(const VkSemaphoreSubmitInfo& signalInfo);
     std::vector<VkSemaphoreSubmitInfo> consumePendingFrameWaitSemaphores();
 
@@ -270,6 +271,7 @@ private:
     bool createFrameSubmission(uint32_t frameCount);
     void destroyFrameSubmission();
     void destroyDeferredTasks();
+    void flushPendingDeferredDestroyTasks();
 
     void waitForCurrentFrame() const;
     bool rebuildSwapchain();
@@ -298,9 +300,13 @@ private:
     nvvk::Swapchain                       _swapchain{};
     VkSurfaceKHR                          _surface          = VK_NULL_HANDLE;
     VkCommandPool                         _transientCmdPool = VK_NULL_HANDLE;
+    std::mutex                            _graphicsQueueMutex;
+    std::mutex                            _registeredObjectMutex;
+    std::mutex                            _pendingDestroyMutex;
     std::vector<FrameData>                _frames{};
     std::vector<RefPtr<Play::Texture>>    _swapchainTextures{};
     std::vector<DeferredDestroyQueue>     _deferredDestroyQueues{};
+    std::vector<std::function<void()>>    _pendingDeferredDestroyTasks{};
     std::vector<Play::RefCounted*>        _registeredObjects{};
     std::vector<VkSemaphoreSubmitInfo>    _pendingFrameWaitSemaphores{};
     std::unique_ptr<Play::RenderSession>  _renderSession{};
