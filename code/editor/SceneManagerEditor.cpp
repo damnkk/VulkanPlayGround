@@ -362,29 +362,7 @@ bool SceneManagerEditor::loadSceneNodeModel(const char* nodeKey, const char* pat
         return false;
     }
 
-    const std::string sourcePath = path;
-    return _sceneManager->editSceneGraph(
-        [&](CpuScene& scene)
-        {
-            CpuSceneNode* node = scene.getNode(nodeID);
-            if (!node || node->type != CpuSceneNodeType::eNode3D)
-            {
-                return false;
-            }
-
-            CpuModelComponent* component = scene.getComponent<CpuModelComponent>(nodeID);
-            if (!component)
-            {
-                component = scene.addComponent<CpuModelComponent>(nodeID);
-            }
-            if (!component)
-            {
-                return false;
-            }
-
-            const ModelLoadingConfig loadingConfig = component->loadingConfig;
-            return component->requestLoadFromFile(scene, _sceneManager->getAssetLoadingServer(), sourcePath, loadingConfig).isValid();
-        });
+    return _sceneManager->loadModelIntoNode(nodeID, path);
 }
 
 } // namespace Play::editor

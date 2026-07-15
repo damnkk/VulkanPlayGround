@@ -4,6 +4,7 @@
 #include <QByteArray>
 #include <QFile>
 #include <QString>
+#include <QUuid>
 #include <nvutils/file_operations.hpp>
 
 namespace Play
@@ -11,7 +12,8 @@ namespace Play
 
 namespace
 {
-constexpr uint32_t    kSceneArchiveVersion    = 1;
+constexpr uint32_t    kSceneArchiveVersion    = 3;
+constexpr uint32_t    kFirstSceneArchiveVersion = 1;
 constexpr uint32_t    kMaxSceneHierarchyDepth = 1024;
 constexpr const char* kProjectExtension       = ".project";
 constexpr const char* kSceneDocumentName      = "scene.json";
@@ -34,6 +36,33 @@ struct SerializedSceneNode
     std::string                      modelAssetGuid;
     std::vector<SerializedSceneNode> children;
 };
+
+std::string makePersistedAssetPath(const ProjectAssetRecord& asset, const ProjectArchivePaths& paths)
+{
+    const std::filesystem::path assetPath = nvutils::pathFromUtf8(asset.sourcePath);
+    if (assetPath.empty() || assetPath.is_relative())
+    {
+        return asset.sourcePath;
+    }
+
+    std::error_code       errorCode;
+    std::filesystem::path relativePath = std::filesystem::relative(assetPath, paths.root, errorCode);
+    if (errorCode || relativePath.empty())
+    {
+        return asset.sourcePath;
+    }
+
+    for (const std::filesystem::path& part : relativePath)
+    {
+        if (part == "..")
+        {
+            return asset.sourcePath;
+        }
+    }
+
+    const std::string persistedPath = nvutils::utf8FromPath(relativePath);
+    return persistedPath.empty() ? asset.sourcePath : persistedPath;
+}
 
 bool fail(std::string* errorMessage, const std::string& message)
 {
@@ -112,9 +141,9 @@ bool readVersion(const nlohmann::json& document, const std::string& documentName
 {
     if (!document.is_object() || !document.contains("schemaVersion") ||
         (!document["schemaVersion"].is_number_integer() && !document["schemaVersion"].is_number_unsigned()) ||
-        document["schemaVersion"] != kSceneArchiveVersion)
+        document["schemaVersion"] < kFirstSceneArchiveVersion || document["schemaVersion"] > kSceneArchiveVersion)
     {
-        return fail(errorMessage, documentName + " must contain schemaVersion " + std::to_string(kSceneArchiveVersion) + ".");
+        return fail(errorMessage, documentName + " must contain a supported schemaVersion.");
     }
 
     return true;
@@ -231,16 +260,17 @@ bool parseAssetTable(const nlohmann::json& document, ProjectAssetTable& output, 
         }
 
         std::string typeName;
-        std::string binaryPath;
+        std::string sourcePath;
+        const char* assetPathField = entry.contains("sourcePath") ? "sourcePath" : "binaryPath";
         if (!readRequiredString(entry, "type", typeName, context, errorMessage) ||
-            !readRequiredString(entry, "binaryPath", binaryPath, context, errorMessage))
+            !readRequiredString(entry, assetPathField, sourcePath, context, errorMessage))
         {
             return false;
         }
 
         ProjectAssetRecord record;
         record.guid       = guid;
-        record.binaryPath = binaryPath;
+        record.sourcePath = sourcePath;
         if (!parseAssetType(typeName, record.type) || !parsedAssets.set(record))
         {
             return fail(errorMessage, context + " has an unsupported type or invalid record.");
@@ -357,11 +387,29 @@ bool parseSceneNode(const nlohmann::json& input, const ProjectAssetTable& assets
     return true;
 }
 
-bool parseScene(const nlohmann::json& document, const ProjectAssetTable& assets, std::vector<SerializedSceneNode>& output, std::string* errorMessage)
+bool parseScene(const nlohmann::json& document, const ProjectAssetTable& assets, SerializedSceneNode& root, bool& hasSerializedRoot,
+                std::vector<SerializedSceneNode>& output, std::string* errorMessage)
 {
     if (!readVersion(document, "Scene", errorMessage))
     {
         return false;
+    }
+
+    hasSerializedRoot = document.contains("root");
+    if (hasSerializedRoot)
+    {
+        if (!parseSceneNode(document["root"], assets, root, 0, "Scene/root", errorMessage))
+        {
+            return false;
+        }
+
+        if (root.type != CpuSceneNodeType::eNode3D)
+        {
+            return fail(errorMessage, "Scene root must be a 3D node.");
+        }
+
+        output.clear();
+        return true;
     }
 
     if (!document.contains("nodes") || !document["nodes"].is_array())
@@ -403,13 +451,8 @@ bool writeSceneNode(const CpuScene& scene, CpuSceneNodeID nodeID, const ProjectA
     output["components"] = nlohmann::json::array();
 
     const CpuModelComponent* modelComponent = scene.getComponent<CpuModelComponent>(nodeID);
-    if (modelComponent)
+    if (modelComponent && !modelComponent->assetGuid.empty())
     {
-        if (modelComponent->assetGuid.empty())
-        {
-            return fail(errorMessage, "Model component on node '" + node->name + "' has no asset GUID.");
-        }
-
         const ProjectAssetRecord* asset = assets.find(modelComponent->assetGuid);
         if (!asset || asset->type != ProjectAssetType::eModel)
         {
@@ -439,10 +482,17 @@ bool writeSceneNode(const CpuScene& scene, CpuSceneNodeID nodeID, const ProjectA
     return true;
 }
 
-void appendSceneNode(CpuScene& scene, CpuSceneNodeID parentNodeID, const SerializedSceneNode& input)
+void appendSceneNode(CpuScene& scene, CpuSceneNodeID parentNodeID, const SerializedSceneNode& input);
+
+void applySceneNode(CpuScene& scene, CpuSceneNodeID nodeID, const SerializedSceneNode& input)
 {
-    const CpuSceneNodeID nodeID =
-        input.type == CpuSceneNodeType::eNode2D ? scene.create2DNode(input.name, parentNodeID) : scene.create3DNode(input.name, parentNodeID);
+    CpuSceneNode* node = scene.getNode(nodeID);
+    if (!node)
+    {
+        return;
+    }
+
+    node->name = input.name;
     scene.setVisible(nodeID, input.visible);
     scene.setLocalTransform(nodeID, input.local);
 
@@ -461,11 +511,18 @@ void appendSceneNode(CpuScene& scene, CpuSceneNodeID parentNodeID, const Seriali
         appendSceneNode(scene, nodeID, *it);
     }
 }
+
+void appendSceneNode(CpuScene& scene, CpuSceneNodeID parentNodeID, const SerializedSceneNode& input)
+{
+    const CpuSceneNodeID nodeID =
+        input.type == CpuSceneNodeType::eNode2D ? scene.create2DNode(input.name, parentNodeID) : scene.create3DNode(input.name, parentNodeID);
+    applySceneNode(scene, nodeID, input);
+}
 } // namespace
 
 bool ProjectAssetTable::set(const ProjectAssetRecord& record)
 {
-    if (record.guid.empty() || record.binaryPath.empty())
+    if (record.guid.empty() || record.sourcePath.empty())
     {
         return false;
     }
@@ -499,6 +556,11 @@ const ProjectAssetRecord* ProjectAssetTable::find(const std::string& guid) const
     }
 
     return nullptr;
+}
+
+std::string generateProjectAssetGuid()
+{
+    return QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
 }
 
 bool createProjectArchive(const std::string& projectPath, std::string* errorMessage)
@@ -554,20 +616,20 @@ bool saveProjectArchive(const CpuScene& scene, const ProjectAssetTable& assets, 
     assetDocument["assets"]        = nlohmann::json::object();
     for (const ProjectAssetRecord& asset : assets.getRecords())
     {
-        if (asset.guid.empty() || asset.binaryPath.empty())
+        if (asset.guid.empty() || asset.sourcePath.empty())
         {
             return fail(errorMessage, "Asset table contains an invalid record.");
         }
 
+        const std::string persistedAssetPath = makePersistedAssetPath(asset, paths);
         assetDocument["assets"][asset.guid] = {
             {"type", toAssetTypeName(asset.type)},
-            {"binaryPath", asset.binaryPath},
+            {"sourcePath", persistedAssetPath},
         };
     }
 
     nlohmann::json sceneDocument;
     sceneDocument["schemaVersion"] = kSceneArchiveVersion;
-    sceneDocument["nodes"]         = nlohmann::json::array();
 
     const CpuSceneNode* root = scene.getNode(scene.rootNode());
     if (!root)
@@ -575,19 +637,9 @@ bool saveProjectArchive(const CpuScene& scene, const ProjectAssetTable& assets, 
         return fail(errorMessage, "CPU scene has no valid root node.");
     }
 
-    CpuSceneNodeID childID = root->firstChild;
-    while (scene.isValid(childID))
+    if (!writeSceneNode(scene, scene.rootNode(), assets, sceneDocument["root"], errorMessage))
     {
-        const CpuSceneNode*  child       = scene.getNode(childID);
-        const CpuSceneNodeID nextChildID = child ? child->nextSibling : CpuSceneNodeID{};
-
-        nlohmann::json nodeDocument;
-        if (!writeSceneNode(scene, childID, assets, nodeDocument, errorMessage))
-        {
-            return false;
-        }
-        sceneDocument["nodes"].push_back(nodeDocument);
-        childID = nextChildID;
+        return false;
     }
 
     const std::string assetDocumentPath = nvutils::utf8FromPath(paths.assetDocument);
@@ -644,17 +696,26 @@ bool loadProjectArchive(CpuScene& scene, ProjectAssetTable& assets, const std::s
         return false;
     }
 
+    SerializedSceneNode              parsedRoot;
+    bool                             hasSerializedRoot = false;
     std::vector<SerializedSceneNode> parsedNodes;
-    if (!parseScene(sceneDocument, parsedAssets, parsedNodes, errorMessage))
+    if (!parseScene(sceneDocument, parsedAssets, parsedRoot, hasSerializedRoot, parsedNodes, errorMessage))
     {
         return false;
     }
 
     scene.clear();
     assets = parsedAssets;
-    for (auto it = parsedNodes.rbegin(); it != parsedNodes.rend(); ++it)
+    if (hasSerializedRoot)
     {
-        appendSceneNode(scene, scene.rootNode(), *it);
+        applySceneNode(scene, scene.rootNode(), parsedRoot);
+    }
+    else
+    {
+        for (auto it = parsedNodes.rbegin(); it != parsedNodes.rend(); ++it)
+        {
+            appendSceneNode(scene, scene.rootNode(), *it);
+        }
     }
     scene.updateWorldTransforms();
     return true;

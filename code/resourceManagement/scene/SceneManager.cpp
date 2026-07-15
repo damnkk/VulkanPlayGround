@@ -28,6 +28,24 @@ bool isSameModelLoadRequest(ModelLoadRequestID lhs, ModelLoadRequestID rhs)
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
 }
 
+std::string normalizeAssetPath(const std::filesystem::path& path)
+{
+    if (path.empty())
+    {
+        return {};
+    }
+
+    std::error_code       errorCode;
+    std::filesystem::path absolutePath = std::filesystem::absolute(path, errorCode);
+    if (errorCode)
+    {
+        return path.lexically_normal().generic_string();
+    }
+
+    std::filesystem::path normalizedPath = std::filesystem::weakly_canonical(absolutePath, errorCode);
+    return errorCode ? absolutePath.lexically_normal().generic_string() : normalizedPath.generic_string();
+}
+
 void applyFailedModelLoad(CpuModelComponent& component, const std::string& message)
 {
     component.model           = {};
@@ -159,7 +177,7 @@ bool SceneManager::createProject(const std::string& projectPath, std::string* er
     return true;
 }
 
-bool SceneManager::saveProject(std::string* errorMessage) const
+bool SceneManager::saveProject(std::string* errorMessage)
 {
     std::lock_guard<std::mutex> lock(_cpuSceneMutex);
     if (_projectPath.empty())
@@ -168,6 +186,11 @@ bool SceneManager::saveProject(std::string* errorMessage) const
         {
             *errorMessage = "No project is currently open.";
         }
+        return false;
+    }
+
+    if (!registerUntrackedModelAssetsLocked(errorMessage))
+    {
         return false;
     }
 
@@ -186,7 +209,170 @@ bool SceneManager::loadProject(const std::string& projectPath, std::string* erro
     // load completions so they cannot be matched to the new CPU scene by stale IDs.
     _projectPath = projectPath;
     _assetLoadingServer.clear();
+    queueProjectModelLoadsLocked();
     return true;
+}
+
+bool SceneManager::loadModelIntoNode(CpuSceneNodeID nodeID, const std::string& sourcePath)
+{
+    if (sourcePath.empty())
+    {
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(_cpuSceneMutex);
+    CpuSceneNode* node = _cpuScene.getNode(nodeID);
+    if (!node || node->type != CpuSceneNodeType::eNode3D)
+    {
+        return false;
+    }
+
+    CpuModelComponent* component = _cpuScene.getComponent<CpuModelComponent>(nodeID);
+    if (!component)
+    {
+        component = _cpuScene.addComponent<CpuModelComponent>(nodeID);
+    }
+    if (!component)
+    {
+        return false;
+    }
+
+    std::string assetGuid;
+    if (!ensureProjectAssetLocked(ProjectAssetType::eModel, sourcePath, assetGuid))
+    {
+        return false;
+    }
+
+    component->assetGuid = assetGuid;
+    const ModelLoadingConfig loadingConfig = component->loadingConfig;
+    return component->requestLoadFromFile(_cpuScene, _assetLoadingServer, sourcePath, loadingConfig).isValid();
+}
+
+bool SceneManager::ensureProjectAssetLocked(ProjectAssetType type, const std::string& sourcePath, std::string& assetGuid)
+{
+    const std::string normalizedPath = normalizeAssetPath(std::filesystem::path(sourcePath));
+    if (normalizedPath.empty())
+    {
+        return false;
+    }
+
+    for (const ProjectAssetRecord& asset : _projectAssets.getRecords())
+    {
+        if (asset.type == type && normalizeAssetPath(std::filesystem::path(resolveProjectAssetPathLocked(asset))) == normalizedPath)
+        {
+            assetGuid = asset.guid;
+            return true;
+        }
+    }
+
+    ProjectAssetRecord asset;
+    do
+    {
+        asset.guid = generateProjectAssetGuid();
+    } while (_projectAssets.find(asset.guid));
+    asset.sourcePath = normalizedPath;
+    asset.type       = type;
+
+    if (!_projectAssets.set(asset))
+    {
+        return false;
+    }
+
+    assetGuid = asset.guid;
+    return true;
+}
+
+bool SceneManager::registerUntrackedModelAssetsLocked(std::string* errorMessage)
+{
+    const std::vector<CpuSceneNode>& nodes = _cpuScene.getNodes();
+    for (uint32_t nodeIndex = 0; nodeIndex < nodes.size(); ++nodeIndex)
+    {
+        const CpuSceneNode& node = nodes[nodeIndex];
+        if (!node.alive)
+        {
+            continue;
+        }
+
+        CpuSceneNodeID nodeID;
+        nodeID.index      = nodeIndex;
+        nodeID.generation = node.generation;
+        CpuModelComponent* component = _cpuScene.getComponent<CpuModelComponent>(nodeID);
+        if (!component)
+        {
+            continue;
+        }
+
+        const ProjectAssetRecord* asset = component->assetGuid.empty() ? nullptr : _projectAssets.find(component->assetGuid);
+        if (asset && asset->type == ProjectAssetType::eModel)
+        {
+            continue;
+        }
+
+        if (component->sourcePath.empty())
+        {
+            // An empty model component has no persistent model reference and is not
+            // emitted by the scene serializer.
+            continue;
+        }
+
+        if (!ensureProjectAssetLocked(ProjectAssetType::eModel, component->sourcePath, component->assetGuid))
+        {
+            if (errorMessage)
+            {
+                *errorMessage = "Could not register model asset for scene node '" + node.name + "'.";
+            }
+            return false;
+        }
+    }
+
+    return true;
+}
+
+std::string SceneManager::resolveProjectAssetPathLocked(const ProjectAssetRecord& asset) const
+{
+    std::filesystem::path path(asset.sourcePath);
+    if (path.is_relative() && !_projectPath.empty())
+    {
+        path = std::filesystem::path(_projectPath) / path;
+    }
+
+    return normalizeAssetPath(path);
+}
+
+void SceneManager::queueProjectModelLoadsLocked()
+{
+    const std::vector<CpuSceneNode>& nodes = _cpuScene.getNodes();
+    for (uint32_t nodeIndex = 0; nodeIndex < nodes.size(); ++nodeIndex)
+    {
+        const CpuSceneNode& node = nodes[nodeIndex];
+        if (!node.alive)
+        {
+            continue;
+        }
+
+        CpuSceneNodeID nodeID;
+        nodeID.index      = nodeIndex;
+        nodeID.generation = node.generation;
+        CpuModelComponent* component = _cpuScene.getComponent<CpuModelComponent>(nodeID);
+        if (!component || component->assetGuid.empty())
+        {
+            continue;
+        }
+
+        const ProjectAssetRecord* asset = _projectAssets.find(component->assetGuid);
+        if (!asset || asset->type != ProjectAssetType::eModel)
+        {
+            applyFailedModelLoad(*component, "Model component references an unknown project asset.");
+            _cpuScene.notifyComponentChanged();
+            continue;
+        }
+
+        const std::string sourcePath = resolveProjectAssetPathLocked(*asset);
+        if (!component->requestLoadFromFile(_cpuScene, _assetLoadingServer, sourcePath, component->loadingConfig).isValid())
+        {
+            applyFailedModelLoad(*component, "Could not queue model asset load.");
+        }
+    }
 }
 
 void SceneManager::update()

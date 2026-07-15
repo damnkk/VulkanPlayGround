@@ -42,14 +42,6 @@ public:
     {
         return _cpuScene;
     }
-    AssetLoadingServer& getAssetLoadingServer()
-    {
-        return _assetLoadingServer;
-    }
-    const AssetLoadingServer& getAssetLoadingServer() const
-    {
-        return _assetLoadingServer;
-    }
     template <typename Fn>
     decltype(auto) readSceneGraph(Fn fn) const
     {
@@ -85,14 +77,22 @@ public:
     void addSkyBoxTexture(const RefPtr<Texture>& texture);
     void updateDescriptorSet();
     void update();
+    bool loadModelIntoNode(CpuSceneNodeID nodeID, const std::string& sourcePath);
     bool createProject(const std::string& projectPath, std::string* errorMessage = nullptr);
-    bool saveProject(std::string* errorMessage = nullptr) const;
+    bool saveProject(std::string* errorMessage = nullptr);
     bool loadProject(const std::string& projectPath, std::string* errorMessage = nullptr);
 
     ~SceneManager();
 
 protected:
 private:
+    // All project asset table access happens while _cpuSceneMutex is held. Background
+    // loading jobs never access this registry or CPU scene state directly.
+    bool        ensureProjectAssetLocked(ProjectAssetType type, const std::string& sourcePath, std::string& assetGuid);
+    bool        registerUntrackedModelAssetsLocked(std::string* errorMessage);
+    std::string resolveProjectAssetPathLocked(const ProjectAssetRecord& asset) const;
+    void        queueProjectModelLoadsLocked();
+
     nvvk::DescriptorBindings     _sceneDescriptorBindings;
     std::vector<RefPtr<Texture>> _sceneSkyTexture;
 

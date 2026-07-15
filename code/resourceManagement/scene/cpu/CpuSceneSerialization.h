@@ -6,8 +6,9 @@
 namespace Play
 {
 
-// The project asset table deliberately describes only persisted binary payloads.
-// Import settings belong to the import step that creates the .bin file, not to a project.
+// The project asset table is the persistent registry for resources referenced by a
+// scene. Asset paths identify loader inputs today and can later point at imported
+// binary payloads without changing component references.
 enum class ProjectAssetType : uint32_t
 {
     eModel
@@ -16,8 +17,7 @@ enum class ProjectAssetType : uint32_t
 struct ProjectAssetRecord
 {
     std::string guid;
-    // Persist relative paths here so moving the project directory does not invalidate assets.
-    std::string      binaryPath;
+    std::string      sourcePath;
     ProjectAssetType type = ProjectAssetType::eModel;
 };
 
@@ -37,6 +37,10 @@ public:
 private:
     std::vector<ProjectAssetRecord> _records;
 };
+
+// Creates a persistent, globally unique asset identity. Registration is owned by
+// SceneManager, which writes the project asset table while holding its scene lock.
+std::string generateProjectAssetGuid();
 
 // A .project path identifies a directory package containing the scene and asset JSON documents.
 bool createProjectArchive(const std::string& projectPath, std::string* errorMessage = nullptr);
