@@ -1,5 +1,8 @@
 #include "editor/RuntimeEditor.h"
 
+#include "core/runtime/RenderSession.h"
+#include "resourceManagement/scene/SceneManager.h"
+
 namespace Play::editor
 {
 
@@ -22,6 +25,54 @@ EditorUiSnapshot RuntimeEditor::buildSnapshot() const
     EditorUiSnapshot snapshot;
     _renderModeTabs.buildSnapshot(snapshot);
     return snapshot;
+}
+
+bool RuntimeEditor::createProject(const std::string& projectPath, std::string* errorMessage)
+{
+    Play::RenderSession* renderSession = _runtimeContext.getRenderSession();
+    Play::SceneManager*  sceneManager  = renderSession ? renderSession->getSceneManager() : nullptr;
+    if (!sceneManager)
+    {
+        if (errorMessage)
+        {
+            *errorMessage = "The render scene is not ready.";
+        }
+        return false;
+    }
+
+    return sceneManager->createProject(projectPath, errorMessage);
+}
+
+bool RuntimeEditor::saveProject(std::string* errorMessage)
+{
+    Play::RenderSession* renderSession = _runtimeContext.getRenderSession();
+    Play::SceneManager*  sceneManager  = renderSession ? renderSession->getSceneManager() : nullptr;
+    if (!sceneManager)
+    {
+        if (errorMessage)
+        {
+            *errorMessage = "The render scene is not ready.";
+        }
+        return false;
+    }
+
+    return sceneManager->saveProject(errorMessage);
+}
+
+bool RuntimeEditor::loadProject(const std::string& projectPath, std::string* errorMessage)
+{
+    Play::RenderSession* renderSession = _runtimeContext.getRenderSession();
+    Play::SceneManager*  sceneManager  = renderSession ? renderSession->getSceneManager() : nullptr;
+    if (!sceneManager)
+    {
+        if (errorMessage)
+        {
+            *errorMessage = "The render scene is not ready.";
+        }
+        return false;
+    }
+
+    return sceneManager->loadProject(projectPath, errorMessage);
 }
 
 } // namespace Play::editor

@@ -5,6 +5,7 @@
 #include "nvvk/descriptors.hpp"
 #include "resourceManagement/scene/gpu/GaussianScene.h"
 #include "resourceManagement/scene/cpu/CpuScene.h"
+#include "resourceManagement/scene/cpu/CpuSceneSerialization.h"
 #include "core/RefCounted.h"
 namespace Play
 {
@@ -61,6 +62,18 @@ public:
         std::lock_guard<std::mutex> lock(_cpuSceneMutex);
         return fn(_cpuScene);
     }
+    template <typename Fn>
+    decltype(auto) readProjectAssets(Fn fn) const
+    {
+        std::lock_guard<std::mutex> lock(_cpuSceneMutex);
+        return fn(_projectAssets);
+    }
+    template <typename Fn>
+    decltype(auto) editProjectAssets(Fn fn)
+    {
+        std::lock_guard<std::mutex> lock(_cpuSceneMutex);
+        return fn(_projectAssets);
+    }
     RasterGpuScene& getRasterGpuScene()
     {
         return *static_cast<RasterGpuScene*>(_gpuScene.get());
@@ -72,6 +85,9 @@ public:
     void addSkyBoxTexture(const RefPtr<Texture>& texture);
     void updateDescriptorSet();
     void update();
+    bool createProject(const std::string& projectPath, std::string* errorMessage = nullptr);
+    bool saveProject(std::string* errorMessage = nullptr) const;
+    bool loadProject(const std::string& projectPath, std::string* errorMessage = nullptr);
 
     ~SceneManager();
 
@@ -80,9 +96,11 @@ private:
     nvvk::DescriptorBindings     _sceneDescriptorBindings;
     std::vector<RefPtr<Texture>> _sceneSkyTexture;
 
-    CpuScene           _cpuScene;
-    mutable std::mutex _cpuSceneMutex;
-    AssetLoadingServer _assetLoadingServer;
+    CpuScene                  _cpuScene;
+    ProjectAssetTable         _projectAssets;
+    std::string               _projectPath;
+    mutable std::mutex        _cpuSceneMutex;
+    AssetLoadingServer        _assetLoadingServer;
     std::unique_ptr<GpuScene> _gpuScene;
 };
 

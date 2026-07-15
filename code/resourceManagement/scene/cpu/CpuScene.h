@@ -90,6 +90,9 @@ public:
         eFailed
     };
 
+    // Persistent identity of the imported binary asset. The asset table resolves this
+    // GUID to a .bin path; sourcePath remains an import-time/runtime detail only.
+    std::string  assetGuid;
     std::string  sourcePath;
     ModelLoadingConfig loadingConfig;
     ModelLoadRequestID request;

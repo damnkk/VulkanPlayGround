@@ -45,6 +45,31 @@ void applyCpuLoadedModel(CpuModelComponent& component)
     component.loadState       = CpuModelComponent::LoadState::eCpuLoaded;
     component.loadMessage.clear();
 }
+
+void applyUploadingModelLoad(CpuModelComponent& component)
+{
+    component.model           = {};
+    component.firstRenderable = 0;
+    component.renderableCount = INVALID_SCENE_ID;
+    component.loadState       = CpuModelComponent::LoadState::eUploading;
+    component.loadMessage.clear();
+}
+
+void applyRegisteredModelLoad(CpuModelComponent& component, ModelAssetID model, uint32_t renderableCount)
+{
+    component.model           = model;
+    component.firstRenderable = 0;
+    component.renderableCount = renderableCount;
+    component.loadState       = CpuModelComponent::LoadState::eLoaded;
+    component.loadMessage.clear();
+}
+
+struct PendingModelRegistration
+{
+    ModelGpuUploadCompletion completion;
+    ModelAssetID             model;
+    uint32_t                 renderableCount = INVALID_SCENE_ID;
+};
 } // namespace
 
 SceneManager::SceneManager(GpuSceneType gpuSceneType) : _gpuScene(createGpuScene(gpuSceneType))
@@ -113,6 +138,57 @@ void SceneManager::updateDescriptorSet()
     vkUpdateDescriptorSets(vkDriver->getDevice(), writes.size(), writes.data(), 0, nullptr);
 }
 
+bool SceneManager::createProject(const std::string& projectPath, std::string* errorMessage)
+{
+    std::string archivePath = projectPath;
+    if (std::filesystem::path(archivePath).extension().empty())
+    {
+        archivePath += ".project";
+    }
+
+    if (!createProjectArchive(archivePath, errorMessage))
+    {
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(_cpuSceneMutex);
+    _cpuScene.clear();
+    _projectAssets.clear();
+    _projectPath = archivePath;
+    _assetLoadingServer.clear();
+    return true;
+}
+
+bool SceneManager::saveProject(std::string* errorMessage) const
+{
+    std::lock_guard<std::mutex> lock(_cpuSceneMutex);
+    if (_projectPath.empty())
+    {
+        if (errorMessage)
+        {
+            *errorMessage = "No project is currently open.";
+        }
+        return false;
+    }
+
+    return saveProjectArchive(_cpuScene, _projectAssets, _projectPath, errorMessage);
+}
+
+bool SceneManager::loadProject(const std::string& projectPath, std::string* errorMessage)
+{
+    std::lock_guard<std::mutex> lock(_cpuSceneMutex);
+    if (!loadProjectArchive(_cpuScene, _projectAssets, projectPath, errorMessage))
+    {
+        return false;
+    }
+
+    // A loaded JSON scene creates new component IDs. Invalidate outstanding source-file
+    // load completions so they cannot be matched to the new CPU scene by stale IDs.
+    _projectPath = projectPath;
+    _assetLoadingServer.clear();
+    return true;
+}
+
 void SceneManager::update()
 {
     PLAY_PROFILE_SCOPE("SceneManager::update");
@@ -122,7 +198,13 @@ void SceneManager::update()
         _assetLoadingServer.processPendingLoads();
     }
 
+    {
+        PLAY_PROFILE_SCOPE("SceneManager::process pending model uploads");
+        _assetLoadingServer.processPendingUploads();
+    }
+
     std::vector<ModelLoadCompletion> completedModels;
+    std::vector<ModelGpuUploadCompletion> completedModelUploads;
 
     {
         PLAY_PROFILE_SCOPE("SceneManager::collect completed model loads");
@@ -130,6 +212,15 @@ void SceneManager::update()
         while (_assetLoadingServer.popCompletedModel(completion))
         {
             completedModels.push_back(std::move(completion));
+        }
+    }
+
+    {
+        PLAY_PROFILE_SCOPE("SceneManager::collect completed model uploads");
+        ModelGpuUploadCompletion completion;
+        while (_assetLoadingServer.popCompletedModelUpload(completion))
+        {
+            completedModelUploads.push_back(std::move(completion));
         }
     }
 
@@ -146,12 +237,84 @@ void SceneManager::update()
 
             if (completion.result.success && completion.result.model)
             {
-                applyCpuLoadedModel(*component);
+                if (completion.request.uploadPolicy == AssetUploadPolicy::eUploadToGpu)
+                {
+                    applyUploadingModelLoad(*component);
+                }
+                else
+                {
+                    applyCpuLoadedModel(*component);
+                }
                 _cpuScene.notifyComponentChanged();
                 continue;
             }
 
             applyFailedModelLoad(*component, completion.result.message);
+            _cpuScene.notifyComponentChanged();
+        }
+    }
+
+    std::vector<PendingModelRegistration> pendingRegistrations;
+    pendingRegistrations.reserve(completedModelUploads.size());
+
+    {
+        PLAY_PROFILE_SCOPE("SceneManager::prepare completed model registrations");
+        std::lock_guard<std::mutex> lock(_cpuSceneMutex);
+        for (ModelGpuUploadCompletion& completion : completedModelUploads)
+        {
+            CpuModelComponent* component = _cpuScene.getComponent<CpuModelComponent>(completion.request.requester);
+            if (!component || !isSameModelLoadRequest(component->request, completion.request.id))
+            {
+                continue;
+            }
+
+            if (completion.success && _gpuScene)
+            {
+                PendingModelRegistration pendingRegistration;
+                pendingRegistration.completion = std::move(completion);
+                pendingRegistrations.push_back(std::move(pendingRegistration));
+                continue;
+            }
+
+            applyFailedModelLoad(*component, completion.message.empty() ? "Model GPU upload failed." : completion.message);
+            _cpuScene.notifyComponentChanged();
+        }
+    }
+
+    const size_t previousSceneTextureCount = _gpuScene ? _gpuScene->getSceneTextures().size() : 0;
+
+    {
+        PLAY_PROFILE_SCOPE("SceneManager::register completed model uploads");
+        for (PendingModelRegistration& pendingRegistration : pendingRegistrations)
+        {
+            pendingRegistration.model = _gpuScene->registerModel(std::move(pendingRegistration.completion.model));
+            pendingRegistration.renderableCount = pendingRegistration.model.isValid()
+                                                      ? static_cast<uint32_t>(
+                                                            _gpuScene->getModels()[pendingRegistration.model.index].renderables.size())
+                                                      : INVALID_SCENE_ID;
+        }
+    }
+
+    {
+        PLAY_PROFILE_SCOPE("SceneManager::apply completed model registrations");
+        std::lock_guard<std::mutex> lock(_cpuSceneMutex);
+        for (const PendingModelRegistration& pendingRegistration : pendingRegistrations)
+        {
+            const ModelGpuUploadCompletion& completion = pendingRegistration.completion;
+            CpuModelComponent* component = _cpuScene.getComponent<CpuModelComponent>(completion.request.requester);
+            if (!component || !isSameModelLoadRequest(component->request, completion.request.id))
+            {
+                continue;
+            }
+
+            if (!pendingRegistration.model.isValid())
+            {
+                applyFailedModelLoad(*component, "Could not register uploaded model in the GPU scene.");
+            }
+            else
+            {
+                applyRegisteredModelLoad(*component, pendingRegistration.model, pendingRegistration.renderableCount);
+            }
             _cpuScene.notifyComponentChanged();
         }
     }
@@ -167,6 +330,10 @@ void SceneManager::update()
         }
     }
 
+    if (_gpuScene && _gpuScene->getSceneTextures().size() != previousSceneTextureCount)
+    {
+        updateDescriptorSet();
+    }
 }
 
 SceneManager::~SceneManager() = default;

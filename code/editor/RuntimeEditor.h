@@ -42,6 +42,10 @@ public:
 
     EditorUiSnapshot buildSnapshot() const;
 
+    bool createProject(const std::string& projectPath, std::string* errorMessage = nullptr);
+    bool saveProject(std::string* errorMessage = nullptr);
+    bool loadProject(const std::string& projectPath, std::string* errorMessage = nullptr);
+
 private:
     EditorRuntimeContext _runtimeContext;
     EditorRegistry       _editorRegistry;

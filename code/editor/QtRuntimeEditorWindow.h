@@ -8,6 +8,7 @@
 #include <string>
 
 class QTabWidget;
+class QStackedWidget;
 class QTimer;
 class QTreeWidgetItem;
 
@@ -53,14 +54,19 @@ private:
     void requestSetSceneNodeTransform(const std::string& renderModeId, const std::string& nodeKey, const char* path, double value);
     void requestAddSceneNodeComponent(const std::string& renderModeId, const std::string& nodeKey, const std::string& componentType);
     void requestLoadSceneNodeModel(const std::string& renderModeId, const std::string& nodeKey, const std::string& path);
+    void requestCreateProject();
+    void requestSaveProject();
+    void requestLoadProject();
     void requestSetObjectProperty(unsigned int objectId, const std::string& propertyPath, const std::string& value);
     void requestResetObject(unsigned int objectId);
     void scheduleRefresh();
 
     RuntimeEditor&                               _editor;
-    QTabWidget*                                  _tabs         = nullptr;
-    QTimer*                                      _refreshTimer = nullptr;
-    bool                                         _refreshing   = false;
+    QStackedWidget*                              _contentStack     = nullptr;
+    QWidget*                                     _projectPage      = nullptr;
+    QTabWidget*                                  _tabs             = nullptr;
+    QTimer*                                      _refreshTimer     = nullptr;
+    bool                                         _refreshing       = false;
     bool                                         _refreshScheduled = false;
     std::string                                  _currentRenderMode;
     std::map<std::string, std::string>           _selectedNodeByMode;

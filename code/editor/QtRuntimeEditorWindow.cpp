@@ -1,20 +1,27 @@
 #include "editor/QtRuntimeEditorWindow.h"
 
+#include <QAction>
 #include <QApplication>
 #include <QCheckBox>
 #include <QDoubleSpinBox>
+#include <QFileDialog>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMessageBox>
+#include <QMenu>
+#include <QMenuBar>
 #include <QMouseEvent>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSignalBlocker>
 #include <QSplitter>
+#include <QStackedWidget>
 #include <QTabWidget>
 #include <QTimer>
 #include <QTreeWidget>
@@ -385,9 +392,56 @@ QtRuntimeEditorWindow::QtRuntimeEditorWindow(RuntimeEditor& editor, QWidget* par
     setWindowTitle("VulkanPlayGround Control Panel");
     resize(1120, 760);
 
-    _tabs = new QTabWidget(this);
+    _contentStack = new QStackedWidget(this);
+    setCentralWidget(_contentStack);
+
+    QMenu* projectMenu = menuBar()->addMenu("Project");
+    QAction* saveProjectAction = projectMenu->addAction("Save Project");
+    saveProjectAction->setShortcut(QKeySequence::Save);
+    QObject::connect(saveProjectAction, &QAction::triggered, this, [this]() { requestSaveProject(); });
+
+    _projectPage               = new QWidget(_contentStack);
+    QVBoxLayout* projectLayout = new QVBoxLayout(_projectPage);
+    projectLayout->setContentsMargins(80, 80, 80, 80);
+    projectLayout->addStretch();
+
+    QLabel* projectTitle = new QLabel("VulkanPlayGround", _projectPage);
+    projectTitle->setAlignment(Qt::AlignHCenter);
+    projectTitle->setStyleSheet("font-size: 28px; font-weight: 600;");
+    projectLayout->addWidget(projectTitle);
+
+    QLabel* projectPrompt = new QLabel("Create a new .project package or load an existing project.", _projectPage);
+    projectPrompt->setAlignment(Qt::AlignHCenter);
+    projectLayout->addWidget(projectPrompt);
+    projectLayout->addSpacing(24);
+
+    QPushButton* createProjectButton = new QPushButton("Create Project", _projectPage);
+    QPushButton* loadProjectButton   = new QPushButton("Load Project", _projectPage);
+    createProjectButton->setMinimumWidth(260);
+    loadProjectButton->setMinimumWidth(260);
+
+    QHBoxLayout* createProjectLayout = new QHBoxLayout();
+    createProjectLayout->addStretch();
+    createProjectLayout->addWidget(createProjectButton);
+    createProjectLayout->addStretch();
+    projectLayout->addLayout(createProjectLayout);
+
+    QHBoxLayout* loadProjectLayout = new QHBoxLayout();
+    loadProjectLayout->addStretch();
+    loadProjectLayout->addWidget(loadProjectButton);
+    loadProjectLayout->addStretch();
+    projectLayout->addLayout(loadProjectLayout);
+    projectLayout->addStretch();
+
+    QObject::connect(createProjectButton, &QPushButton::clicked, this, [this]() { requestCreateProject(); });
+    QObject::connect(loadProjectButton, &QPushButton::clicked, this, [this]() { requestLoadProject(); });
+
+    _contentStack->addWidget(_projectPage);
+
+    _tabs = new QTabWidget(_contentStack);
     _tabs->setDocumentMode(true);
-    setCentralWidget(_tabs);
+    _contentStack->addWidget(_tabs);
+    _contentStack->setCurrentWidget(_projectPage);
 
     QObject::connect(_tabs, &QTabWidget::currentChanged, this,
                      [this](int index)
@@ -1232,6 +1286,53 @@ void QtRuntimeEditorWindow::requestAddSceneNodeComponent(const std::string& rend
 void QtRuntimeEditorWindow::requestLoadSceneNodeModel(const std::string& renderModeId, const std::string& nodeKey, const std::string& path)
 {
     _editor.getRenderModeTabs().loadSceneNodeModel(renderModeId.c_str(), nodeKey.c_str(), path.c_str());
+    scheduleRefresh();
+}
+
+void QtRuntimeEditorWindow::requestCreateProject()
+{
+    const QString projectPath = QFileDialog::getSaveFileName(this, "Create Project", QString(), "VulkanPlayGround Project (*.project)");
+    if (projectPath.isEmpty())
+    {
+        return;
+    }
+
+    std::string errorMessage;
+    if (!_editor.createProject(toStdString(projectPath), &errorMessage))
+    {
+        QMessageBox::critical(this, "Create Project Failed", toQString(errorMessage.empty() ? "Could not create the project." : errorMessage));
+        return;
+    }
+
+    _contentStack->setCurrentWidget(_tabs);
+    scheduleRefresh();
+}
+
+void QtRuntimeEditorWindow::requestSaveProject()
+{
+    std::string errorMessage;
+    if (!_editor.saveProject(&errorMessage))
+    {
+        QMessageBox::critical(this, "Save Project Failed", toQString(errorMessage.empty() ? "Could not save the project." : errorMessage));
+    }
+}
+
+void QtRuntimeEditorWindow::requestLoadProject()
+{
+    const QString projectPath = QFileDialog::getExistingDirectory(this, "Load Project", QString(), QFileDialog::ShowDirsOnly);
+    if (projectPath.isEmpty())
+    {
+        return;
+    }
+
+    std::string errorMessage;
+    if (!_editor.loadProject(toStdString(projectPath), &errorMessage))
+    {
+        QMessageBox::critical(this, "Load Project Failed", toQString(errorMessage.empty() ? "Could not load the project." : errorMessage));
+        return;
+    }
+
+    _contentStack->setCurrentWidget(_tabs);
     scheduleRefresh();
 }
 

@@ -62,6 +62,7 @@ ModelLoadRequestID CpuModelComponent::requestLoadFromFile(CpuScene& scene, Asset
 {
     PLAY_PROFILE_SCOPE("CpuModelComponent::requestLoadFromFile");
 
+    assetGuid.clear();
     sourcePath      = path;
     loadingConfig   = loadingCfg;
     request         = loadingServer.requestModelLoad(self, path, loadingCfg);
