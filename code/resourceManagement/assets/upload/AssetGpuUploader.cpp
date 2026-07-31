@@ -13,11 +13,6 @@ namespace Play
 namespace
 {
 
-bool isValidLoadedImage(const ImageLoading::LoadedImage& image)
-{
-    return image.format != VK_FORMAT_UNDEFINED && image.extent.width > 0 && image.extent.height > 0 && !image.pixels.empty();
-}
-
 uint32_t resolveMipLevels(uint32_t requestedMipLevels, VkExtent2D extent)
 {
     const uint32_t maxMipLevels = nvvk::mipLevels(extent);
@@ -67,20 +62,29 @@ RefPtr<Buffer> AssetGpuUploadContext::createDeviceBuffer(const std::string& name
     return buffer && buffer->isValid() ? buffer : nullptr;
 }
 
-RefPtr<Texture> AssetGpuUploadContext::createTexture2D(const std::string& name, const ImageLoading::LoadedImage& image, uint32_t mipLevels)
+RefPtr<Texture> AssetGpuUploadContext::createTexture2D(const std::string& name, const vpgloader::Texture& source, bool isSrgb, uint32_t mipLevels)
 {
-    if (!isValidLoadedImage(image))
+    if (source.info().depth != 1)
     {
         return nullptr;
     }
 
-    mipLevels = resolveMipLevels(mipLevels, image.extent);
+    const vpgloader::TextureInfo&     sourceInfo = source.info();
+    const vpgloader::TextureMipLevel& baseMip    = sourceInfo.mipLevels.front();
+    const VkFormat                    format     = toVkFormat(sourceInfo.format, isSrgb);
+    const VkExtent2D                  extent     = {baseMip.width, baseMip.height};
+    if (format == VK_FORMAT_UNDEFINED)
+    {
+        return nullptr;
+    }
+
+    mipLevels = resolveMipLevels(mipLevels, extent);
 
     const VkImageCreateInfo imageInfo{
         .sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType     = VK_IMAGE_TYPE_2D,
-        .format        = image.format,
-        .extent        = {image.extent.width, image.extent.height, 1},
+        .format        = format,
+        .extent        = {extent.width, extent.height, 1},
         .mipLevels     = mipLevels,
         .arrayLayers   = 1,
         .samples       = VK_SAMPLE_COUNT_1_BIT,
@@ -93,9 +97,9 @@ RefPtr<Texture> AssetGpuUploadContext::createTexture2D(const std::string& name, 
     const VkImageViewCreateInfo viewInfo{
         .sType            = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .viewType         = VK_IMAGE_VIEW_TYPE_2D,
-        .format           = image.format,
+        .format           = format,
         .components       = {VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A},
-        .subresourceRange = {inferImageAspectFlags(image.format, true), 0, mipLevels, 0, 1},
+        .subresourceRange = {inferImageAspectFlags(format, true), 0, mipLevels, 0, 1},
     };
 
     RefPtr<Texture> texture = RefPtr<Texture>(new Texture(name));
@@ -110,11 +114,11 @@ RefPtr<Texture> AssetGpuUploadContext::createTexture2D(const std::string& name, 
     }
 
     texture->Type()        = imageInfo.imageType;
-    texture->Format()      = image.format;
+    texture->Format()      = format;
     texture->Extent()      = imageInfo.extent;
     texture->SampleCount() = imageInfo.samples;
     texture->UsageFlags()  = imageInfo.usage;
-    texture->AspectFlags() = inferImageAspectFlags(image.format, false);
+    texture->AspectFlags() = inferImageAspectFlags(format, false);
     texture->MipLevel()    = mipLevels;
     texture->LayerCount()  = imageInfo.arrayLayers;
     texture->Layout()      = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -135,14 +139,15 @@ VkResult AssetGpuUploadContext::uploadBuffer(Buffer& buffer, VkDeviceSize offset
     return _staging.appendBuffer(buffer, offset, size, data, _completionState);
 }
 
-VkResult AssetGpuUploadContext::uploadImage(Texture& texture, const ImageLoading::LoadedImage& image, VkImageLayout finalLayout)
+VkResult AssetGpuUploadContext::uploadImage(Texture& texture, const vpgloader::Texture& source, VkImageLayout finalLayout)
 {
-    if (!texture.isValid() || !isValidLoadedImage(image))
+    if (!texture.isValid() || source.info().depth != 1)
     {
         return VK_ERROR_INITIALIZATION_FAILED;
     }
 
-    return _staging.appendImage(texture, image.pixels.size(), image.pixels.data(), finalLayout, _completionState);
+    const vpgloader::TextureMipLevel& baseMip = source.info().mipLevels.front();
+    return _staging.appendImage(texture, baseMip.byteSize, source.data() + baseMip.byteOffset, finalLayout, _completionState);
 }
 
 void AssetGpuUploadContext::generateMipmaps(const RefPtr<Texture>& texture, VkImageLayout finalLayout)

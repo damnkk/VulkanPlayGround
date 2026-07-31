@@ -3,17 +3,19 @@
 
 #include "ModelGpuAssets.h"
 #include "resourceManagement/assets/upload/AssetGpuUploader.h"
+#include "resourceManagement/scene/cpu/CpuScene.h"
+#include <VPGLoader/Model.hpp>
 
 namespace Play
 {
 
-// Converts the CPU-only LoadedModel product into the GPU-only UploadedModel product.
+// Uploads renderer resources directly from an immutable VPGLoader model.
 // It owns the source while the asynchronous upload is in flight and is consumed only
 // after AssetGpuUploader has waited for its submission to complete.
 class ModelUploadJob final : public AssetGpuUploadJob
 {
 public:
-    ModelUploadJob(ModelLoadRequestID requestID, std::shared_ptr<const LoadedModel> source);
+    ModelUploadJob(ModelLoadRequestID requestID, vpgloader::ModelHandle source);
 
     bool build(AssetGpuUploadContext& context, std::string& message) override;
 
@@ -30,7 +32,7 @@ private:
     bool uploadMetadata(AssetGpuUploadContext& context, std::string& message);
 
     ModelLoadRequestID                  _requestID;
-    std::shared_ptr<const LoadedModel>   _source;
+    vpgloader::ModelHandle _source;
     UploadedModel                        _uploadedModel;
 };
 

@@ -171,7 +171,7 @@ ModelComponentEditorWidget::ModelComponentEditorWidget(QWidget* parent) : SceneC
                      {
                          const QString path = QFileDialog::getOpenFileName(
                              this, "Load Model", QString(),
-                             "Model Files (*.obj *.gltf *.glb *.fbx *.ply *.spz);;All Files (*.*)");
+                             "Model Files (*.obj *.gltf *.glb *.fbx *.ply *.spz *.vpgmodel);;All Files (*.*)");
                          if (!path.isEmpty())
                          {
                              emit loadModelRequested(path);

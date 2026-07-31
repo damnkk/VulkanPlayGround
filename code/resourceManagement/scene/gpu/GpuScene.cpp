@@ -7,90 +7,77 @@ namespace Play
 namespace
 {
 
-void appendModelRenderable(ModelAsset& asset, uint32_t submeshIndex, uint32_t nodeIndex, const glm::mat4& localToModel, bool& hasBounds)
+void appendModelRenderable(const vpgloader::LoadedModel& model, std::vector<GpuModelRenderable>& renderables, uint32_t submeshIndex,
+                           const glm::mat4& localToModel)
 {
+    const vpgloader::ModelAsset& asset = model.asset;
     if (submeshIndex >= asset.submeshes.size())
     {
         return;
     }
 
-    const ModelSubmeshAsset& submesh = asset.submeshes[submeshIndex];
-    if (submesh.meshID == INVALID_SCENE_ID)
+    const vpgloader::ModelSubmeshAsset& submesh = asset.submeshes[submeshIndex];
+    if (submesh.meshIndex == vpgloader::InvalidModelIndex || submesh.meshIndex >= model.meshes.size())
     {
         return;
     }
 
-    ModelRenderableTemplate renderable;
-    renderable.submeshIndex = submeshIndex;
-    renderable.nodeIndex    = nodeIndex;
+    GpuModelRenderable renderable;
+    renderable.meshIndex = submesh.meshIndex;
     renderable.localToModel = localToModel;
-    renderable.modelBounds  = transformAABB(submesh.bbox, localToModel);
-
-    if (hasBounds)
-    {
-        expandAABB(asset.bbox, renderable.modelBounds);
-    }
-    else
-    {
-        asset.bbox = renderable.modelBounds;
-        hasBounds  = true;
-    }
-
-    asset.renderables.push_back(renderable);
+    renderable.modelBounds  = vpgloader::TransformAABB(submesh.bounds, localToModel);
+    renderables.push_back(renderable);
 }
 
-void collectModelNodeRenderables(ModelAsset& asset, uint32_t nodeIndex, const glm::mat4& parentTransform, bool& hasBounds)
+void collectModelNodeRenderables(const vpgloader::LoadedModel& model, std::vector<GpuModelRenderable>& renderables, uint32_t nodeIndex,
+                                 const glm::mat4& parentTransform)
 {
+    const vpgloader::ModelAsset& asset = model.asset;
     if (nodeIndex >= asset.nodes.size())
     {
         return;
     }
 
-    const ModelNodeAsset& node = asset.nodes[nodeIndex];
-    glm::mat4            nodeToModel = parentTransform;
-    if (node.transformIdx != INVALID_SCENE_ID && node.transformIdx < asset.transforms.size())
+    const vpgloader::ModelNodeAsset& node        = asset.nodes[nodeIndex];
+    glm::mat4                        nodeToModel = parentTransform;
+    if (node.transformIndex != vpgloader::InvalidModelIndex && node.transformIndex < asset.transforms.size())
     {
-        nodeToModel = parentTransform * asset.transforms[node.transformIdx];
+        nodeToModel = parentTransform * asset.transforms[node.transformIndex];
     }
 
-    for (uint32_t submeshIndex : node.submeshIdx)
+    for (uint32_t submeshIndex : node.submeshIndices)
     {
-        appendModelRenderable(asset, submeshIndex, nodeIndex, nodeToModel, hasBounds);
+        appendModelRenderable(model, renderables, submeshIndex, nodeToModel);
     }
 
     uint32_t childIndex = node.firstChild;
-    while (childIndex != INVALID_SCENE_ID && childIndex < asset.nodes.size())
+    while (childIndex != vpgloader::InvalidModelIndex && childIndex < asset.nodes.size())
     {
         const uint32_t nextSibling = asset.nodes[childIndex].nextSibling;
-        collectModelNodeRenderables(asset, childIndex, nodeToModel, hasBounds);
+        collectModelNodeRenderables(model, renderables, childIndex, nodeToModel);
         childIndex = nextSibling;
     }
 }
 
-void buildModelRenderables(ModelAsset& asset)
+std::vector<GpuModelRenderable> buildModelRenderables(const vpgloader::LoadedModel& model)
 {
     PLAY_PROFILE_SCOPE("GpuScene::buildModelRenderables");
 
-    asset.renderables.clear();
-
-    bool hasBounds = false;
-    if (asset.rootNode != INVALID_SCENE_ID)
+    std::vector<GpuModelRenderable> renderables;
+    const vpgloader::ModelAsset&    asset = model.asset;
+    if (asset.rootNode != vpgloader::InvalidModelIndex)
     {
-        collectModelNodeRenderables(asset, asset.rootNode, glm::mat4(1.0f), hasBounds);
+        collectModelNodeRenderables(model, renderables, asset.rootNode, glm::mat4(1.0f));
     }
 
-    if (asset.renderables.empty())
+    if (renderables.empty())
     {
         for (uint32_t submeshIndex = 0; submeshIndex < asset.submeshes.size(); ++submeshIndex)
         {
-            appendModelRenderable(asset, submeshIndex, INVALID_SCENE_ID, glm::mat4(1.0f), hasBounds);
+            appendModelRenderable(model, renderables, submeshIndex, glm::mat4(1.0f));
         }
     }
-
-    if (!hasBounds)
-    {
-        asset.bbox = {};
-    }
+    return renderables;
 }
 
 } // namespace
@@ -110,11 +97,16 @@ void GpuScene::clear()
     _rasterData.enabled     = rasterEnabled;
     _rtData.enabled         = rtEnabled;
     _models.clear();
+    _modelRenderables.clear();
     _modelGpuResources.clear();
     _modelRanges.clear();
     _sceneTextures.clear();
     _sceneTextureSources.clear();
     _sourceSceneRevision = 0;
+    if (++_modelGeneration == 0)
+    {
+        _modelGeneration = 1;
+    }
 }
 
 ModelAssetID GpuScene::registerModel(UploadedModel&& uploadedModel)
@@ -122,6 +114,10 @@ ModelAssetID GpuScene::registerModel(UploadedModel&& uploadedModel)
     PLAY_PROFILE_SCOPE("GpuScene::registerModel");
 
     std::lock_guard<std::mutex> lock(_registrationMutex);
+    if (!uploadedModel.model)
+    {
+        return {};
+    }
 
     const uint32_t materialBase    = static_cast<uint32_t>(_common.materials.size());
     const uint32_t meshInfoBase    = static_cast<uint32_t>(_common.meshInfos.size());
@@ -161,18 +157,7 @@ ModelAssetID GpuScene::registerModel(UploadedModel&& uploadedModel)
         }
     }
 
-    {
-        PLAY_PROFILE_SCOPE("GpuScene::registerModel remap submeshes");
-        for (ModelSubmeshAsset& submesh : uploadedModel.asset.submeshes)
-        {
-            if (submesh.meshID != INVALID_SCENE_ID)
-            {
-                submesh.meshID += meshInfoBase;
-            }
-        }
-    }
-
-    buildModelRenderables(uploadedModel.asset);
+    std::vector<GpuModelRenderable> renderables = buildModelRenderables(*uploadedModel.model);
 
     GpuModelRange range;
     range.firstMeshInfo    = meshInfoBase;
@@ -184,19 +169,20 @@ ModelAssetID GpuScene::registerModel(UploadedModel&& uploadedModel)
     range.textureCount     = textureCount;
 
     const uint32_t modelIndex = static_cast<uint32_t>(_models.size());
-    _models.push_back(std::move(uploadedModel.asset));
+    _models.push_back(std::move(uploadedModel.model));
+    _modelRenderables.push_back(std::move(renderables));
     _modelGpuResources.push_back(std::move(uploadedModel.resources));
     _modelRanges.push_back(range);
 
     {
         PLAY_PROFILE_SCOPE("GpuScene::registerModel backend registration");
-        registerRasterData(_models.back(), range);
+        registerRasterData(range);
         registerRayTracingData(_modelGpuResources.back(), range);
     }
 
     ModelAssetID id;
     id.index      = modelIndex;
-    id.generation = _models[modelIndex].generation;
+    id.generation = _modelGeneration;
     return id;
 }
 
@@ -223,9 +209,8 @@ uint32_t GpuScene::appendSceneTextures(std::vector<UploadedModelTexture>& textur
     return static_cast<uint32_t>(_sceneTextures.size()) - textureBase;
 }
 
-void GpuScene::registerRasterData(const ModelAsset& model, const GpuModelRange& range)
+void GpuScene::registerRasterData(const GpuModelRange& range)
 {
-    (void) model;
     (void) range;
 }
 

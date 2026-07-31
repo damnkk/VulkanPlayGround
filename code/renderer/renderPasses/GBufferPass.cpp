@@ -19,8 +19,13 @@ constexpr VkBufferUsageFlags2 kGBufferGPUInstanceDataUsage    = VK_BUFFER_USAGE_
 constexpr uint32_t            kGBufferInstanceFlagDoubleSided = 1 << 0;
 constexpr uint32_t            kGBufferColorAttachmentCount    = 6;
 
-bool isBoundsInFrustum(const AABB& bounds, const glm::mat4& viewProj)
+bool isBoundsInFrustum(const vpgloader::AABB& bounds, const glm::mat4& viewProj)
 {
+    if (!bounds.valid)
+    {
+        return false;
+    }
+
     const glm::vec3 corners[] = {
         {bounds.min.x, bounds.min.y, bounds.min.z}, {bounds.max.x, bounds.min.y, bounds.min.z}, {bounds.min.x, bounds.max.y, bounds.min.z},
         {bounds.max.x, bounds.max.y, bounds.min.z}, {bounds.min.x, bounds.min.y, bounds.max.z}, {bounds.max.x, bounds.min.y, bounds.max.z},
@@ -48,7 +53,7 @@ bool isBoundsInFrustum(const AABB& bounds, const glm::mat4& viewProj)
     return outsideLeft < 8 && outsideRight < 8 && outsideBottom < 8 && outsideTop < 8 && outsideNear < 8 && outsideFar < 8;
 }
 
-float computeDepthKey(const AABB& bounds, const CameraData& cameraData)
+float computeDepthKey(const vpgloader::AABB& bounds, const CameraData& cameraData)
 {
     const glm::vec3 center = (bounds.min + bounds.max) * 0.5f;
     return glm::length(center - cameraData.cameraPosition);
@@ -165,7 +170,8 @@ void GBufferPass::prepareRenderList()
 
 void GBufferPass::collectVisibleInstances(const CpuScene& scene, const GpuScene& gpuScene, const CameraData& cameraData)
 {
-    const std::vector<ModelAsset>& models = gpuScene.getModels();
+    const std::vector<vpgloader::ModelHandle>& models = gpuScene.getModels();
+    const std::vector<std::vector<GpuModelRenderable>>& modelRenderables = gpuScene.getModelRenderables();
 
     const std::vector<CpuSceneNode>& nodes = scene.getNodes();
     for (uint32_t nodeIndex = 0; nodeIndex < nodes.size(); ++nodeIndex)
@@ -184,24 +190,25 @@ void GBufferPass::collectVisibleInstances(const CpuScene& scene, const GpuScene&
                 continue;
             }
 
-            if (modelComponent->model.index >= models.size())
+            if (modelComponent->model.index >= models.size() || modelComponent->model.index >= modelRenderables.size())
             {
                 continue;
             }
 
-            const ModelAsset& model = models[modelComponent->model.index];
-            if (model.generation != modelComponent->model.generation || model.renderables.empty())
+            const vpgloader::ModelHandle& model = models[modelComponent->model.index];
+            const std::vector<GpuModelRenderable>& renderables = modelRenderables[modelComponent->model.index];
+            if (!model || gpuScene.getModelGeneration() != modelComponent->model.generation || renderables.empty())
             {
                 continue;
             }
 
             const uint32_t firstRenderable = modelComponent->firstRenderable;
-            if (firstRenderable >= model.renderables.size())
+            if (firstRenderable >= renderables.size())
             {
                 continue;
             }
 
-            const uint32_t availableRenderables = static_cast<uint32_t>(model.renderables.size()) - firstRenderable;
+            const uint32_t availableRenderables = static_cast<uint32_t>(renderables.size()) - firstRenderable;
             uint32_t       renderableCount      = modelComponent->usesAllRenderables() ? availableRenderables : modelComponent->renderableCount;
             if (renderableCount > availableRenderables)
             {
@@ -212,22 +219,13 @@ void GBufferPass::collectVisibleInstances(const CpuScene& scene, const GpuScene&
                 continue;
             }
 
-            AABB localBounds;
-            bool hasBounds = false;
+            vpgloader::AABB localBounds;
             for (uint32_t renderableOffset = 0; renderableOffset < renderableCount; ++renderableOffset)
             {
-                const ModelRenderableTemplate& renderable = model.renderables[firstRenderable + renderableOffset];
-                if (hasBounds)
-                {
-                    expandAABB(localBounds, renderable.modelBounds);
-                }
-                else
-                {
-                    localBounds = renderable.modelBounds;
-                    hasBounds   = true;
-                }
+                const GpuModelRenderable& renderable = renderables[firstRenderable + renderableOffset];
+                vpgloader::ExpandAABB(localBounds, renderable.modelBounds);
             }
-            if (!hasBounds)
+            if (!localBounds.valid)
             {
                 continue;
             }
@@ -237,7 +235,7 @@ void GBufferPass::collectVisibleInstances(const CpuScene& scene, const GpuScene&
             visibleInstance.firstRenderable = firstRenderable;
             visibleInstance.renderableCount = renderableCount;
             visibleInstance.objectToWorld   = node.worldTransform;
-            visibleInstance.worldBounds     = transformAABB(localBounds, node.worldTransform);
+            visibleInstance.worldBounds     = vpgloader::TransformAABB(localBounds, node.worldTransform);
             visibleInstance.depthKey        = computeDepthKey(visibleInstance.worldBounds, cameraData);
 
             if (!isBoundsInFrustum(visibleInstance.worldBounds, cameraData.viewProjMatrix))
@@ -253,40 +251,42 @@ void GBufferPass::collectVisibleInstances(const CpuScene& scene, const GpuScene&
 void GBufferPass::buildRenderList(const GpuScene& gpuScene)
 {
     const GpuSceneCommonData&         common      = gpuScene.getCommonData();
-    const std::vector<ModelAsset>&    models      = gpuScene.getModels();
+    const std::vector<vpgloader::ModelHandle>&    models      = gpuScene.getModels();
+    const std::vector<std::vector<GpuModelRenderable>>& modelRenderables  = gpuScene.getModelRenderables();
     const std::vector<ModelGpuResources>& modelGpuResources = gpuScene.getModelGpuResources();
     const std::vector<GpuModelRange>& modelRanges = gpuScene.getModelRanges();
 
     for (uint32_t visibleIndex = 0; visibleIndex < _visibleInstances.size(); ++visibleIndex)
     {
         const GBufferVisibleInstance& visibleInstance = _visibleInstances[visibleIndex];
-        if (visibleInstance.modelIndex >= models.size() || visibleInstance.modelIndex >= modelGpuResources.size() ||
-            visibleInstance.modelIndex >= modelRanges.size())
+        if (visibleInstance.modelIndex >= models.size() || visibleInstance.modelIndex >= modelRenderables.size() ||
+            visibleInstance.modelIndex >= modelGpuResources.size() ||
+            visibleInstance.modelIndex >= modelRanges.size() ||
+            !models[visibleInstance.modelIndex])
         {
             continue;
         }
 
-        const ModelAsset&        model     = models[visibleInstance.modelIndex];
+        const std::vector<GpuModelRenderable>&        renderables     = modelRenderables[visibleInstance.modelIndex];
         const ModelGpuResources& resources = modelGpuResources[visibleInstance.modelIndex];
         const GpuModelRange&     range     = modelRanges[visibleInstance.modelIndex];
 
         for (uint32_t renderableOffset = 0; renderableOffset < visibleInstance.renderableCount; ++renderableOffset)
         {
             const uint32_t renderableIndex = visibleInstance.firstRenderable + renderableOffset;
-            if (renderableIndex >= model.renderables.size())
+            if (renderableIndex >= renderables.size())
             {
                 continue;
             }
 
-            const ModelRenderableTemplate& renderable = model.renderables[renderableIndex];
-            if (renderable.submeshIndex >= model.submeshes.size())
+            const GpuModelRenderable& renderable = renderables[renderableIndex];
+            if (renderable.meshIndex == vpgloader::InvalidModelIndex || renderable.meshIndex >= range.meshInfoCount)
             {
                 continue;
             }
 
-            const ModelSubmeshAsset& submesh       = model.submeshes[renderable.submeshIndex];
-            const uint32_t           meshInfoIndex = submesh.meshID;
-            if (meshInfoIndex == INVALID_SCENE_ID || meshInfoIndex >= common.meshInfos.size())
+            const uint32_t           meshInfoIndex = range.firstMeshInfo + renderable.meshIndex;
+            if (meshInfoIndex >= common.meshInfos.size())
             {
                 continue;
             }

@@ -58,13 +58,13 @@ CpuSceneNodeTransform decomposeLocalTransform(const glm::mat4& matrix)
 } // namespace
 
 ModelLoadRequestID CpuModelComponent::requestLoadFromFile(CpuScene& scene, AssetLoadingServer& loadingServer, const std::string& path,
-                                                          const ModelLoadingConfig& loadingCfg)
+                                                          const vpgloader::ModelLoadOptions& options)
 {
     PLAY_PROFILE_SCOPE("CpuModelComponent::requestLoadFromFile");
 
     sourcePath      = path;
-    loadingConfig   = loadingCfg;
-    request         = loadingServer.requestModelLoad(self, path, loadingCfg);
+    loadingOptions   = options;
+    request         = loadingServer.requestModelLoad(self, path, options);
     model           = {};
     firstRenderable = 0;
     renderableCount = INVALID_SCENE_ID;

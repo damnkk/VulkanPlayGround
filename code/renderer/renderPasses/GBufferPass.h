@@ -2,7 +2,8 @@
 #define GBUFFERPASS_H
 #include "RenderPass.h"
 #include "GBufferConfig.h"
-#include "resourceManagement/assets/model/ModelAssets.h"
+#include "resourceManagement/assets/model/ModelGpuAssets.h"
+#include "resourceManagement/scene/cpu/CpuScene.h"
 #include "resourceManagement/vulkan/resources/Resource.h"
 #include "resourceManagement/vulkan/pipeline/PipelineCacheManager.h"
 #include "Hdevice.h"
@@ -19,7 +20,7 @@ struct GBufferVisibleInstance
     uint32_t  firstRenderable = 0;
     uint32_t  renderableCount = 0;
     glm::mat4 objectToWorld   = glm::mat4(1.0f);
-    AABB      worldBounds;
+    vpgloader::AABB      worldBounds;
     float     depthKey        = 0.0f;
 };
 

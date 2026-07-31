@@ -13,7 +13,7 @@ struct AssetLoadingServer::State
     std::vector<uint32_t>            pendingUploadRequests;
     std::vector<ModelLoadCompletion> completedModels;
     std::vector<ModelGpuUploadCompletion> completedModelUploads;
-    std::vector<std::shared_ptr<LoadedModel>> loadedModels;
+    std::vector<vpgloader::ModelHandle> loadedModels;
     uint32_t                         nextPendingRequest = 0;
     uint32_t                         nextPendingUploadRequest = 0;
     uint32_t                         nextCompletedModel = 0;
@@ -55,7 +55,7 @@ void AssetLoadingServer::clear()
 }
 
 ModelLoadRequestID AssetLoadingServer::requestModelLoad(CpuSceneComponentID requester, const std::filesystem::path& path,
-                                                        const ModelLoadingConfig& loadingConfig, AssetUploadPolicy uploadPolicy)
+                                                        const vpgloader::ModelLoadOptions& options, AssetUploadPolicy uploadPolicy)
 {
     PLAY_PROFILE_SCOPE("AssetLoadingServer::requestModelLoad");
 
@@ -65,7 +65,7 @@ ModelLoadRequestID AssetLoadingServer::requestModelLoad(CpuSceneComponentID requ
     request.id            = makeRequestID(*_state, static_cast<uint32_t>(_state->requests.size()));
     request.requester     = requester;
     request.path          = path;
-    request.loadingConfig = loadingConfig;
+    request.options = options;
     request.uploadPolicy  = uploadPolicy;
     request.state         = ModelLoadRequestState::eQueued;
 
@@ -113,15 +113,20 @@ void AssetLoadingServer::processPendingLoads()
         {
             ModelLoadCompletion completion;
             completion.request = request;
+            try
             {
                 PLAY_PROFILE_SCOPE("AssetLoadingServer::load model job");
                 PLAY_PROFILE_MARK("Model load begin");
-                completion.result = model_loading::loadModelFromFile(request.path, request.loadingConfig);
+                completion.model = vpgloader::ModelLoader::Load(request.path, request.options);
                 PLAY_PROFILE_MARK("Model load end");
+            }
+            catch (const std::exception& error)
+            {
+                completion.message = error.what();
             }
 
             const ModelLoadRequestState completedState =
-                completion.result.success ? ModelLoadRequestState::eCpuLoaded : ModelLoadRequestState::eFailed;
+                completion.model ? ModelLoadRequestState::eCpuLoaded : ModelLoadRequestState::eFailed;
             completion.request.state = completedState;
 
             std::lock_guard<std::mutex> lock(state->mutex);
@@ -137,13 +142,13 @@ void AssetLoadingServer::processPendingLoads()
             }
 
             storedRequest.state = completedState;
-            if (completion.result.success)
+            if (completion.model)
             {
                 if (state->loadedModels.size() <= request.id.index)
                 {
                     state->loadedModels.resize(request.id.index + 1);
                 }
-                state->loadedModels[request.id.index] = completion.result.model;
+                state->loadedModels[request.id.index] = completion.model;
                 if (storedRequest.uploadPolicy == AssetUploadPolicy::eUploadToGpu)
                 {
                     state->pendingUploadRequests.push_back(request.id.index);
@@ -161,7 +166,7 @@ void AssetLoadingServer::processPendingUploads()
     struct PendingUpload
     {
         ModelLoadRequest                 request;
-        std::shared_ptr<const LoadedModel> source;
+        vpgloader::ModelHandle source;
     };
 
     std::vector<PendingUpload> uploadsToStart;
@@ -181,7 +186,7 @@ void AssetLoadingServer::processPendingUploads()
                 continue;
             }
 
-            const std::shared_ptr<const LoadedModel> source = _state->loadedModels[requestIndex];
+            const vpgloader::ModelHandle source = _state->loadedModels[requestIndex];
             if (!source)
             {
                 request.state = ModelLoadRequestState::eFailed;
@@ -303,7 +308,7 @@ bool AssetLoadingServer::popCompletedModelUpload(ModelGpuUploadCompletion& compl
     return true;
 }
 
-std::shared_ptr<const LoadedModel> AssetLoadingServer::getLoadedModel(ModelLoadRequestID id) const
+vpgloader::ModelHandle AssetLoadingServer::getLoadedModel(ModelLoadRequestID id) const
 {
     PLAY_PROFILE_SCOPE("AssetLoadingServer::getLoadedModel");
 

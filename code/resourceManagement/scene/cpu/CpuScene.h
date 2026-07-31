@@ -1,7 +1,7 @@
 #ifndef CPU_SCENE_H
 #define CPU_SCENE_H
 
-#include "resourceManagement/assets/model/ModelLoadingConfig.h"
+#include <VPGLoader/ModelLoader.hpp>
 #include <glm/glm.hpp>
 #include <rttr/rttr_enable.h>
 #include <string>
@@ -12,9 +12,19 @@ namespace Play
 
 class AssetLoadingServer;
 class CpuScene;
-struct ModelLoadResult;
 
 constexpr uint32_t INVALID_SCENE_ID = ~0u;
+
+struct ModelLoadRequestID
+{
+    uint32_t index      = INVALID_SCENE_ID;
+    uint32_t generation = 0;
+
+    bool isValid() const
+    {
+        return index != INVALID_SCENE_ID;
+    }
+};
 
 struct ModelAssetID
 {
@@ -94,7 +104,7 @@ public:
     // project asset table resolves this GUID to the loader input path.
     std::string  assetGuid;
     std::string  sourcePath;
-    ModelLoadingConfig loadingConfig;
+    vpgloader::ModelLoadOptions loadingOptions;
     ModelLoadRequestID request;
     ModelAssetID model;
     uint32_t     firstRenderable = 0;
@@ -103,7 +113,7 @@ public:
     std::string  loadMessage;
 
     ModelLoadRequestID requestLoadFromFile(CpuScene& scene, AssetLoadingServer& loadingServer, const std::string& path,
-                                           const ModelLoadingConfig& loadingCfg);
+                                           const vpgloader::ModelLoadOptions& options);
 
     bool hasModel() const
     {

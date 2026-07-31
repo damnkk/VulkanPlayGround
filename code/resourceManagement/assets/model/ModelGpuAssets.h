@@ -1,14 +1,15 @@
 #ifndef MODEL_GPU_ASSETS_H
 #define MODEL_GPU_ASSETS_H
 
-#include "ModelAssets.h"
 #include "resourceManagement/vulkan/resources/Resource.h"
+#include "nvshaders/gltf_scene_io.h.slang"
+#include <VPGLoader/Model.hpp>
+#include <glm/glm.hpp>
 
 namespace Play
 {
 
-// GPU-facing model data is deliberately separate from LoadedModel. Only an uploader may
-// construct this type after every required buffer and texture has completed its upload.
+// GPU-facing data derived from vpgloader::LoadedModel at the upload boundary.
 struct RayTracingASInfo
 {
     VkAccelerationStructureCreateInfoKHR createInfo;
@@ -62,9 +63,16 @@ struct ModelGpuResources
     std::vector<RefPtr<Buffer>>   ownedBuffers;
 };
 
+struct GpuModelRenderable
+{
+    uint32_t           meshIndex = vpgloader::InvalidModelIndex;
+    glm::mat4          localToModel = glm::mat4(1.0f);
+    vpgloader::AABB    modelBounds;
+};
+
 struct UploadedModel
 {
-    ModelAsset                               asset;
+    vpgloader::ModelHandle                   model;
     ModelGpuResources                        resources;
     std::vector<MeshInfo>                    meshInfos;
     std::vector<shaderio::GltfShadeMaterial> materials;

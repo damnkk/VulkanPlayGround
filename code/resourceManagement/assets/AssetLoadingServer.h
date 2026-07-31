@@ -1,9 +1,10 @@
 #ifndef ASSET_LOADING_SERVER_H
 #define ASSET_LOADING_SERVER_H
 
-#include "resourceManagement/assets/model/ModelLoading.h"
 #include "resourceManagement/assets/model/ModelGpuAssets.h"
 #include "resourceManagement/assets/upload/AssetGpuUploader.h"
+#include "resourceManagement/scene/cpu/CpuScene.h"
+#include <VPGLoader/ModelLoader.hpp>
 
 namespace Play
 {
@@ -19,7 +20,7 @@ enum class ModelLoadRequestState : uint32_t
 };
 
 // Loading CPU data and creating GPU resources are intentionally independent. A caller
-// can retain a LoadedModel for tooling or preprocessing without creating Vulkan objects.
+// can retain the VPGLoader model for tooling or preprocessing without creating Vulkan objects.
 enum class AssetUploadPolicy : uint32_t
 {
     eCpuOnly,
@@ -31,7 +32,7 @@ struct ModelLoadRequest
     ModelLoadRequestID     id;
     CpuSceneComponentID    requester;
     std::filesystem::path  path;
-    ModelLoadingConfig     loadingConfig;
+    vpgloader::ModelLoadOptions options;
     AssetUploadPolicy      uploadPolicy = AssetUploadPolicy::eUploadToGpu;
     ModelLoadRequestState  state = ModelLoadRequestState::eQueued;
 };
@@ -39,7 +40,8 @@ struct ModelLoadRequest
 struct ModelLoadCompletion
 {
     ModelLoadRequest request;
-    ModelLoadResult  result;
+    vpgloader::ModelHandle model;
+    std::string            message;
 };
 
 struct ModelGpuUploadCompletion
@@ -59,14 +61,14 @@ public:
     void clear();
 
     ModelLoadRequestID requestModelLoad(CpuSceneComponentID requester, const std::filesystem::path& path,
-                                        const ModelLoadingConfig& loadingConfig,
+                                        const vpgloader::ModelLoadOptions& options,
                                         AssetUploadPolicy uploadPolicy = AssetUploadPolicy::eUploadToGpu);
 
     void processPendingLoads();
     void processPendingUploads();
     bool popCompletedModel(ModelLoadCompletion& completion);
     bool popCompletedModelUpload(ModelGpuUploadCompletion& completion);
-    std::shared_ptr<const LoadedModel> getLoadedModel(ModelLoadRequestID id) const;
+    vpgloader::ModelHandle getLoadedModel(ModelLoadRequestID id) const;
 
     AssetGpuUploader& getGpuUploader()
     {

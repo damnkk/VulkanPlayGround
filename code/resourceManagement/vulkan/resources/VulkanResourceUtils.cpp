@@ -105,4 +105,64 @@ VkAccessFlags2 inferAccessFlags(VkImageLayout layout)
             return VK_ACCESS_2_NONE;
     }
 }
+
+VkFormat toVkFormat(const vpgloader::TextureFormat& format, bool isSrgb)
+{
+    switch (format.componentType)
+    {
+        case vpgloader::TextureComponentType::UInt8:
+            switch (format.channels)
+            {
+                case 1:
+                    return isSrgb ? VK_FORMAT_R8_SRGB : VK_FORMAT_R8_UNORM;
+                case 2:
+                    return isSrgb ? VK_FORMAT_R8G8_SRGB : VK_FORMAT_R8G8_UNORM;
+                case 3:
+                    return isSrgb ? VK_FORMAT_R8G8B8_SRGB : VK_FORMAT_R8G8B8_UNORM;
+                case 4:
+                    return isSrgb ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
+            }
+            break;
+        case vpgloader::TextureComponentType::UInt16:
+            switch (format.channels)
+            {
+                case 1:
+                    return VK_FORMAT_R16_UNORM;
+                case 2:
+                    return VK_FORMAT_R16G16_UNORM;
+                case 3:
+                    return VK_FORMAT_R16G16B16_UNORM;
+                case 4:
+                    return VK_FORMAT_R16G16B16A16_UNORM;
+            }
+            break;
+        case vpgloader::TextureComponentType::Float16:
+            switch (format.channels)
+            {
+                case 1:
+                    return VK_FORMAT_R16_SFLOAT;
+                case 2:
+                    return VK_FORMAT_R16G16_SFLOAT;
+                case 3:
+                    return VK_FORMAT_R16G16B16_SFLOAT;
+                case 4:
+                    return VK_FORMAT_R16G16B16A16_SFLOAT;
+            }
+            break;
+        case vpgloader::TextureComponentType::Float32:
+            switch (format.channels)
+            {
+                case 1:
+                    return VK_FORMAT_R32_SFLOAT;
+                case 2:
+                    return VK_FORMAT_R32G32_SFLOAT;
+                case 3:
+                    return VK_FORMAT_R32G32B32_SFLOAT;
+                case 4:
+                    return VK_FORMAT_R32G32B32A32_SFLOAT;
+            }
+            break;
+    }
+    return VK_FORMAT_UNDEFINED;
+}
 } // namespace Play

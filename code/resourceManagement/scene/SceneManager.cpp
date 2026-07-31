@@ -244,8 +244,8 @@ bool SceneManager::loadModelIntoNode(CpuSceneNodeID nodeID, const std::string& s
     }
 
     component->assetGuid = assetGuid;
-    const ModelLoadingConfig loadingConfig = component->loadingConfig;
-    return component->requestLoadFromFile(_cpuScene, _assetLoadingServer, sourcePath, loadingConfig).isValid();
+    const vpgloader::ModelLoadOptions loadingOptions = component->loadingOptions;
+    return component->requestLoadFromFile(_cpuScene, _assetLoadingServer, sourcePath, loadingOptions).isValid();
 }
 
 bool SceneManager::ensureProjectAssetLocked(ProjectAssetType type, const std::string& sourcePath, std::string& assetGuid)
@@ -368,7 +368,7 @@ void SceneManager::queueProjectModelLoadsLocked()
         }
 
         const std::string sourcePath = resolveProjectAssetPathLocked(*asset);
-        if (!component->requestLoadFromFile(_cpuScene, _assetLoadingServer, sourcePath, component->loadingConfig).isValid())
+        if (!component->requestLoadFromFile(_cpuScene, _assetLoadingServer, sourcePath, component->loadingOptions).isValid())
         {
             applyFailedModelLoad(*component, "Could not queue model asset load.");
         }
@@ -421,7 +421,7 @@ void SceneManager::update()
                 continue;
             }
 
-            if (completion.result.success && completion.result.model)
+            if (completion.model)
             {
                 if (completion.request.uploadPolicy == AssetUploadPolicy::eUploadToGpu)
                 {
@@ -435,7 +435,7 @@ void SceneManager::update()
                 continue;
             }
 
-            applyFailedModelLoad(*component, completion.result.message);
+            applyFailedModelLoad(*component, completion.message);
             _cpuScene.notifyComponentChanged();
         }
     }
@@ -476,7 +476,7 @@ void SceneManager::update()
             pendingRegistration.model = _gpuScene->registerModel(std::move(pendingRegistration.completion.model));
             pendingRegistration.renderableCount = pendingRegistration.model.isValid()
                                                       ? static_cast<uint32_t>(
-                                                            _gpuScene->getModels()[pendingRegistration.model.index].renderables.size())
+                                                            _gpuScene->getModelRenderables()[pendingRegistration.model.index].size())
                                                       : INVALID_SCENE_ID;
         }
     }

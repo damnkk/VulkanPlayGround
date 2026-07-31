@@ -39,11 +39,6 @@ void placeGeometrySection(const std::vector<T>& values, VkDeviceSize& cursor, Vk
     cursor += size;
 }
 
-bool isValidLoadedImage(const ImageLoading::LoadedImage& image)
-{
-    return image.format != VK_FORMAT_UNDEFINED && image.extent.width > 0 && image.extent.height > 0 && !image.pixels.empty();
-}
-
 template <typename T>
 bool uploadBuffer(AssetGpuUploadContext& context, const std::string& name, const std::vector<T>& values, RefPtr<Buffer>& buffer,
                   std::string& message)
@@ -73,9 +68,61 @@ bool isRangeValid(uint32_t first, uint32_t count, size_t size)
     return first <= size && count <= size - first;
 }
 
+uint16_t convertTextureInfoIndex(uint32_t sourceIndex)
+{
+    return sourceIndex == vpgloader::InvalidModelIndex ? 0 : static_cast<uint16_t>(sourceIndex + 1);
+}
+
+shaderio::GltfShadeMaterial convertMaterial(const vpgloader::ModelMaterial& source)
+{
+    shaderio::GltfShadeMaterial material = shaderio::defaultGltfMaterial();
+    material.pbrBaseColorFactor          = source.baseColorFactor;
+    material.emissiveFactor              = source.emissiveFactor;
+    material.normalTextureScale          = source.normalScale;
+    material.pbrRoughnessFactor          = source.roughnessFactor;
+    material.pbrMetallicFactor           = source.metallicFactor;
+    material.alphaCutoff                 = source.alphaCutoff;
+    material.occlusionStrength           = source.occlusionStrength;
+    material.doubleSided                 = source.doubleSided ? 1 : 0;
+    material.unlit                       = source.unlit ? 1 : 0;
+    material.pbrBaseColorTexture         = convertTextureInfoIndex(source.baseColorTexture);
+    material.normalTexture               = convertTextureInfoIndex(source.normalTexture);
+    material.pbrMetallicRoughnessTexture = convertTextureInfoIndex(source.metallicRoughnessTexture);
+    material.emissiveTexture             = convertTextureInfoIndex(source.emissiveTexture);
+    material.occlusionTexture            = convertTextureInfoIndex(source.occlusionTexture);
+    material.specularTexture             = convertTextureInfoIndex(source.specularTexture);
+
+    switch (source.alphaMode)
+    {
+        case vpgloader::AlphaMode::Mask:
+            material.alphaMode = shaderio::eAlphaModeMask;
+            break;
+        case vpgloader::AlphaMode::Blend:
+            material.alphaMode = shaderio::eAlphaModeBlend;
+            break;
+        case vpgloader::AlphaMode::Opaque:
+        default:
+            material.alphaMode = shaderio::eAlphaModeOpaque;
+            break;
+    }
+    return material;
+}
+
+shaderio::GltfTextureInfo convertTextureInfo(const vpgloader::ModelTextureInfo& source)
+{
+    shaderio::GltfTextureInfo textureInfo = shaderio::defaultGltfTextureInfo();
+    const float               cosine      = glm::cos(source.rotation);
+    const float               sine        = glm::sin(source.rotation);
+    textureInfo.index                     = source.textureIndex == vpgloader::InvalidModelIndex ? -1 : static_cast<int>(source.textureIndex);
+    textureInfo.texCoord                  = static_cast<int>(source.texCoord);
+    textureInfo.uvTransform = shaderio::float3x2(source.scale.x * cosine, -source.scale.y * sine, source.scale.x * sine, source.scale.y * cosine,
+                                                 source.offset.x, source.offset.y);
+    return textureInfo;
+}
+
 } // namespace
 
-ModelUploadJob::ModelUploadJob(ModelLoadRequestID requestID, std::shared_ptr<const LoadedModel> source)
+ModelUploadJob::ModelUploadJob(ModelLoadRequestID requestID, vpgloader::ModelHandle source)
     : _requestID(requestID), _source(std::move(source))
 {
 }
@@ -89,18 +136,28 @@ bool ModelUploadJob::build(AssetGpuUploadContext& context, std::string& message)
         message = "Model GPU upload has no CPU source data.";
         return false;
     }
-
-    _uploadedModel             = {};
-    _uploadedModel.asset       = _source->asset;
-    _uploadedModel.materials   = _source->materials;
-    _uploadedModel.textureInfos = _source->textureInfos;
-
-    if (!uploadTextures(context, message) || !uploadGeometry(context, message) || !uploadMetadata(context, message))
+    if (_source->textureInfos.size() >= 0xFFFF)
     {
+        message = "Model has too many texture-info entries for the renderer.";
         return false;
     }
 
-    return true;
+    _uploadedModel             = {};
+    _uploadedModel.model       = _source;
+    _uploadedModel.materials.reserve(_source->materials.size());
+    for (const vpgloader::ModelMaterial& material : _source->materials)
+    {
+        _uploadedModel.materials.push_back(convertMaterial(material));
+    }
+
+    _uploadedModel.textureInfos.reserve(_source->textureInfos.size() + 1);
+    _uploadedModel.textureInfos.push_back(shaderio::defaultGltfTextureInfo());
+    for (const vpgloader::ModelTextureInfo& textureInfo : _source->textureInfos)
+    {
+        _uploadedModel.textureInfos.push_back(convertTextureInfo(textureInfo));
+    }
+
+    return uploadTextures(context, message) && uploadGeometry(context, message) && uploadMetadata(context, message);
 }
 
 UploadedModel ModelUploadJob::takeUploadedModel()
@@ -117,23 +174,23 @@ bool ModelUploadJob::uploadTextures(AssetGpuUploadContext& context, std::string&
 
     for (uint32_t textureIndex = 0; textureIndex < _source->textures.size(); ++textureIndex)
     {
-        const ModelTextureAsset& sourceTexture = _source->textures[textureIndex];
-        if (!isValidLoadedImage(sourceTexture.image))
+        const vpgloader::ModelTextureAsset& sourceTexture = _source->textures[textureIndex];
+        if (!sourceTexture.texture)
         {
             continue;
         }
 
         const std::string textureName = sourceTexture.name.empty()
-                                            ? _uploadedModel.asset.name + "_Texture_" + std::to_string(textureIndex)
+                                            ? _source->asset.name + "_Texture_" + std::to_string(textureIndex)
                                             : sourceTexture.name;
-        RefPtr<Texture> texture = context.createTexture2D(textureName, sourceTexture.image, sourceTexture.mipLevels);
+        RefPtr<Texture> texture = context.createTexture2D(textureName, *sourceTexture.texture, sourceTexture.isSrgb, 0);
         if (!texture)
         {
             message = "Could not create model texture: " + textureName;
             return false;
         }
 
-        if (context.uploadImage(*texture, sourceTexture.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) != VK_SUCCESS)
+        if (context.uploadImage(*texture, *sourceTexture.texture, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) != VK_SUCCESS)
         {
             message = "Could not stage model texture: " + textureName;
             return false;
@@ -171,7 +228,7 @@ bool ModelUploadJob::uploadGeometry(AssetGpuUploadContext& context, std::string&
 {
     PLAY_PROFILE_SCOPE("ModelUploadJob::uploadGeometry");
 
-    const ModelGeometryData& geometry = _source->geometry;
+    const vpgloader::ModelGeometryData& geometry = _source->geometry;
     if (_source->meshes.empty())
     {
         return true;
@@ -208,7 +265,7 @@ bool ModelUploadJob::uploadGeometry(AssetGpuUploadContext& context, std::string&
     placeGeometrySection(geometry.colors, cursor, colorsOffset, colorsSize);
     placeGeometrySection(geometry.indices, cursor, indicesOffset, indicesSize);
 
-    RefPtr<Buffer> geometryBuffer = context.createDeviceBuffer(_uploadedModel.asset.name + "_GeometryBuffer", kUploadedModelBufferUsage, cursor);
+    RefPtr<Buffer> geometryBuffer = context.createDeviceBuffer(_source->asset.name + "_GeometryBuffer", kUploadedModelBufferUsage, cursor);
     if (!geometryBuffer)
     {
         message = "Could not create model geometry buffer.";
@@ -231,7 +288,7 @@ bool ModelUploadJob::uploadGeometry(AssetGpuUploadContext& context, std::string&
     std::vector<VertexStreamInfo> vertexStreams(_source->meshes.size());
     for (uint32_t meshIndex = 0; meshIndex < _source->meshes.size(); ++meshIndex)
     {
-        const ModelMeshAsset& mesh = _source->meshes[meshIndex];
+        const vpgloader::ModelMeshAsset& mesh = _source->meshes[meshIndex];
         if (!isRangeValid(mesh.firstVertex, mesh.vertexCount, geometry.positions.size()) ||
             !isRangeValid(mesh.firstIndex, mesh.indexCount, geometry.indices.size()))
         {
@@ -250,11 +307,11 @@ bool ModelUploadJob::uploadGeometry(AssetGpuUploadContext& context, std::string&
         MeshInfo& meshInfo             = _uploadedModel.meshInfos[meshIndex];
         meshInfo.IndexBufferAddress    = geometryBuffer->address + indicesOffset + mesh.firstIndex * sizeof(uint32_t);
         meshInfo.indexCount            = mesh.indexCount;
-        meshInfo.materialIdx           = mesh.materialIdx;
+        meshInfo.materialIdx           = mesh.materialIndex;
     }
 
     RefPtr<Buffer> vertexStreamBuffer;
-    if (!uploadBuffer(context, _uploadedModel.asset.name + "_VertexStreamBuffer", vertexStreams, vertexStreamBuffer, message))
+    if (!uploadBuffer(context, _source->asset.name + "_VertexStreamBuffer", vertexStreams, vertexStreamBuffer, message))
     {
         return false;
     }
@@ -273,19 +330,14 @@ bool ModelUploadJob::uploadMetadata(AssetGpuUploadContext& context, std::string&
 {
     PLAY_PROFILE_SCOPE("ModelUploadJob::uploadMetadata");
 
-    if (!uploadBuffer(context, _uploadedModel.asset.name + "_TransformBuffer", _uploadedModel.asset.transforms,
-                      _uploadedModel.resources.transformBuffer, message) ||
-        !uploadBuffer(context, _uploadedModel.asset.name + "_MaterialBuffer", _uploadedModel.materials,
-                      _uploadedModel.resources.materialBuffer, message) ||
-        !uploadBuffer(context, _uploadedModel.asset.name + "_TextureInfoBuffer", _uploadedModel.textureInfos,
-                      _uploadedModel.resources.textureInfoBuffer, message) ||
-        !uploadBuffer(context, _uploadedModel.asset.name + "_MeshInfoBuffer", _uploadedModel.meshInfos,
-                      _uploadedModel.resources.meshInfoBuffer, message))
-    {
-        return false;
-    }
-
-    return true;
+    return uploadBuffer(context, _source->asset.name + "_TransformBuffer", _source->asset.transforms,
+                      _uploadedModel.resources.transformBuffer, message) &&
+           uploadBuffer(context, _source->asset.name + "_MaterialBuffer", _uploadedModel.materials,
+                      _uploadedModel.resources.materialBuffer, message) &&
+           uploadBuffer(context, _source->asset.name + "_TextureInfoBuffer", _uploadedModel.textureInfos,
+                      _uploadedModel.resources.textureInfoBuffer, message) &&
+           uploadBuffer(context, _source->asset.name + "_MeshInfoBuffer", _uploadedModel.meshInfos,
+                      _uploadedModel.resources.meshInfoBuffer, message);
 }
 
 } // namespace Play

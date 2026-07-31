@@ -2,6 +2,7 @@
 #define GPU_SCENE_H
 
 #include "resourceManagement/assets/model/ModelGpuAssets.h"
+#include "resourceManagement/scene/cpu/CpuScene.h"
 
 namespace Play
 {
@@ -68,9 +69,19 @@ public:
         return _common;
     }
 
-    const std::vector<ModelAsset>& getModels() const
+    const std::vector<vpgloader::ModelHandle>& getModels() const
     {
         return _models;
+    }
+
+    const std::vector<std::vector<GpuModelRenderable>>& getModelRenderables() const
+    {
+        return _modelRenderables;
+    }
+
+    uint32_t getModelGeneration() const
+    {
+        return _modelGeneration;
     }
 
     const std::vector<ModelGpuResources>& getModelGpuResources() const
@@ -90,19 +101,21 @@ public:
 
 protected:
     uint32_t appendSceneTextures(std::vector<UploadedModelTexture>& textures);
-    void     registerRasterData(const ModelAsset& model, const GpuModelRange& range);
+    void     registerRasterData(const GpuModelRange& range);
     void     registerRayTracingData(const ModelGpuResources& resources, const GpuModelRange& range);
 
     GpuSceneCommonData             _common;
     RasterGPUData                  _rasterData;
     RayTracingGPUData              _rtData;
-    std::vector<ModelAsset>        _models;
+    std::vector<vpgloader::ModelHandle>        _models;
+    std::vector<std::vector<GpuModelRenderable>> _modelRenderables;
     std::vector<ModelGpuResources> _modelGpuResources;
     std::vector<GpuModelRange>     _modelRanges;
     std::vector<RefPtr<Texture>>   _sceneTextures;
     std::vector<std::filesystem::path> _sceneTextureSources;
     std::mutex                     _registrationMutex;
     uint64_t                       _sourceSceneRevision = 0;
+    uint32_t                                     _modelGeneration     = 1;
 };
 
 class RasterGpuScene : public GpuScene
