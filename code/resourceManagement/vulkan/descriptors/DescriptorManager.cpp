@@ -553,13 +553,15 @@ VkDescriptorSet DescriptorSetCache::requestDescriptorSet(DescriptorSetBindings* 
         }
         else
         { // if same layout but different binding info, create new set from pool
-            LOGD("descriptorSet layout with hash {} got a new descriptor info, new descriptor set allocated", layoutHash);
+            LOGD("descriptor set cache miss: set=%u layoutHash=%llu bindingsHash=%llu, new descriptor info\n", setIdx,
+                 static_cast<unsigned long long>(layoutHash), static_cast<unsigned long long>(BindingsHash));
             return createDescriptorSet(cacheNode, setManager);
         }
     }
     else
     { // damn new layout, create new pool array
-        LOGD("descriptorSet layout with hash {} is not founded, it's a never meeted descriptor layout", layoutHash);
+        LOGD("descriptor set cache miss: set=%u layoutHash=%llu bindingsHash=%llu, new layout\n", setIdx,
+             static_cast<unsigned long long>(layoutHash), static_cast<unsigned long long>(BindingsHash));
         auto cacheNode                 = std::make_shared<DescriptorSetCache::CacheNode>();
         _descriptorPoolMap[layoutHash] = cacheNode;
         return createDescriptorSet(*cacheNode, setManager);
