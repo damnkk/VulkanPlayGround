@@ -2,10 +2,11 @@
 #define PLAY_CODE_CORE_RUNTIME_VULKANRUNTIME_H
 
 #include "RenderSession.h"
+#include <memory>
 #include "RuntimeGuiHost.h"
 #include "SdlWindow.h"
-#include <memory>
 #include "core/RefCounted.h"
+#include "core/assets/AssetLoadingServer.h"
 
 #include <nvvk/context.hpp>
 #include <nvvk/descriptors.hpp>
@@ -27,23 +28,24 @@ namespace Play::runtime
 
 struct CommandPool
 {
-    void init(VkDevice device, uint32_t queueFamilyIndex = 0, VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY);
-    void cleanup();
+    void            init(VkDevice device, uint32_t queueFamilyIndex = 0, VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+    void            cleanup();
     VkCommandBuffer allocCommandBuffer();
-    void reset();
+    void            reset();
 
-    VkDevice                    device           = VK_NULL_HANDLE;
-    VkCommandPool               vkHandle         = VK_NULL_HANDLE;
-    VkCommandBufferLevel        level            = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    VkDevice                     device           = VK_NULL_HANDLE;
+    VkCommandPool                vkHandle         = VK_NULL_HANDLE;
+    VkCommandBufferLevel         level            = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     std::vector<VkCommandBuffer> cmdBuffers       = {};
-    uint32_t                    currCmdBufferIdx = 0;
+    uint32_t                     currCmdBufferIdx = 0;
 };
 
 template <int N = 4>
 class WorkerCommandContext
 {
 public:
-    void init(VkDevice device, uint32_t queueFamilyIndex = 0, VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_SECONDARY, uint32_t threadCount = N)
+    void init(VkDevice device, uint32_t queueFamilyIndex = 0, VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_SECONDARY,
+              uint32_t threadCount = N)
     {
         _pools.resize(threadCount);
         for (auto& pool : _pools)
@@ -105,7 +107,7 @@ public:
         uint64_t               timelineValue = 0;
     };
 
-    VulkanRuntime(const RuntimeConfig& config, const nvvk::ContextInitInfo& contextInfo);
+    VulkanRuntime(const RuntimeConfig& config, const nvvk::ContextInitInfo& contextInfo, RuntimeGuiHost& guiHost);
     ~VulkanRuntime();
 
     VulkanRuntime(const VulkanRuntime&)            = delete;
@@ -232,10 +234,15 @@ public:
         return _guiHost.getEditor().getEditorRegistry();
     }
 
-    VkCommandBuffer createTempCmdBuffer();
-    void            submitAndWaitTempCmdBuffer(VkCommandBuffer cmd);
-    VkResult        submitGraphics(const VkSubmitInfo2& submitInfo, VkFence fence = VK_NULL_HANDLE);
-    void            addWaitSemaphore(const VkSemaphoreSubmitInfo& signalInfo);
+    AssetManager* getAssetManager()
+    {
+        return _assetManager.get();
+    }
+
+    VkCommandBuffer                    createTempCmdBuffer();
+    void                               submitAndWaitTempCmdBuffer(VkCommandBuffer cmd);
+    VkResult                           submitGraphics(const VkSubmitInfo2& submitInfo, VkFence fence = VK_NULL_HANDLE);
+    void                               addWaitSemaphore(const VkSemaphoreSubmitInfo& signalInfo);
     std::vector<VkSemaphoreSubmitInfo> consumePendingFrameWaitSemaphores();
 
     void deferDestroy(std::function<void()> task);
@@ -248,12 +255,11 @@ public:
     void updateGlobalTonemapperBuffer(Play::Buffer* buffer);
 
     VkPhysicalDeviceProperties2 _physicalDeviceProperties2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
-    bool                        _enableRayTracing        = true;
-    bool                        _enableDynamicRendering  = true;
-    Play::PipelineCacheManager* _pipelineCacheManager    = nullptr;
+    bool                        _enableRayTracing       = true;
+    bool                        _enableDynamicRendering = true;
+    Play::PipelineCacheManager* _pipelineCacheManager   = nullptr;
 
 private:
-
     struct FrameStats
     {
         uint64_t lastTitleUpdateTicks        = 0;
@@ -273,56 +279,58 @@ private:
     void destroyDeferredTasks();
     void flushPendingDeferredDestroyTasks();
 
-    void waitForCurrentFrame() const;
-    bool rebuildSwapchain();
-    bool prepareFrame();
-    Play::Texture* refreshCurrentSwapchainTexture();
-    void clearSwapchainTextures();
+    void            waitForCurrentFrame() const;
+    bool            rebuildSwapchain();
+    bool            prepareFrame();
+    Play::Texture*  refreshCurrentSwapchainTexture();
+    void            clearSwapchainTextures();
     VkCommandBuffer beginCommandRecording();
-    void recordBootstrapClear(VkCommandBuffer cmd) const;
-    void endFrame(VkCommandBuffer cmd);
-    void signalPresentSemaphore();
-    void updateFrameStatsTitle();
-    void prepareGlobalDescriptorSet();
-    void updateGlobalDescriptorSet();
-    void prepareFrameDescriptorSet();
-    void presentFrame();
+    void            recordBootstrapClear(VkCommandBuffer cmd) const;
+    void            endFrame(VkCommandBuffer cmd);
+    void            signalPresentSemaphore();
+    void            updateFrameStatsTitle();
+    void            prepareGlobalDescriptorSet();
+    void            updateGlobalDescriptorSet();
+    void            prepareFrameDescriptorSet();
+    void            presentFrame();
 
     struct DeferredDestroyQueue
     {
         std::vector<std::function<void()>> tasks;
     };
 
-    RuntimeConfig                         _config{};
-    RuntimeGuiHost                        _guiHost{};
-    SdlWindow                             _window{};
-    nvvk::Context                         _context{};
-    nvvk::Swapchain                       _swapchain{};
-    VkSurfaceKHR                          _surface          = VK_NULL_HANDLE;
-    VkCommandPool                         _transientCmdPool = VK_NULL_HANDLE;
-    std::mutex                            _graphicsQueueMutex;
-    std::mutex                            _registeredObjectMutex;
-    std::mutex                            _pendingDestroyMutex;
-    std::vector<FrameData>                _frames{};
-    std::vector<RefPtr<Play::Texture>>    _swapchainTextures{};
-    std::vector<DeferredDestroyQueue>     _deferredDestroyQueues{};
-    std::vector<std::function<void()>>    _pendingDeferredDestroyTasks{};
-    std::vector<Play::RefCounted*>        _registeredObjects{};
-    std::vector<VkSemaphoreSubmitInfo>    _pendingFrameWaitSemaphores{};
-    std::unique_ptr<Play::RenderSession>  _renderSession{};
-    nvvk::DescriptorBindings              _globalDescriptorBindings{};
-    nvvk::DescriptorBindings              _frameDescriptorBindings{};
-    Play::DescriptorSetCache*             _descriptorSetCache        = nullptr;
-    Play::RenderPassCache*                _renderPassCache           = nullptr;
-    Play::FrameBufferCache*               _frameBufferCache          = nullptr;
-    FrameStats                            _frameStats{};
-    uint32_t                              _frameIndex   = 0;
-    uint64_t                              _frameCounter = 0;
-    uint64_t                              _lastTick     = 0;
-    double                                _deltaTime    = 0.0;
-    VkExtent2D                            _windowSize   = {};
-    bool                                  _registeredAsGlobal = false;
-    bool                                  _initialized  = false;
+    RuntimeConfig                        _config{};
+    RuntimeGuiHost&                      _guiHost;
+    SdlWindow                            _window{};
+    nvvk::Context                        _context{};
+    nvvk::Swapchain                      _swapchain{};
+    VkSurfaceKHR                         _surface          = VK_NULL_HANDLE;
+    VkCommandPool                        _transientCmdPool = VK_NULL_HANDLE;
+    std::mutex                           _graphicsQueueMutex;
+    std::mutex                           _registeredObjectMutex;
+    std::mutex                           _pendingDestroyMutex;
+    std::vector<FrameData>               _frames{};
+    std::vector<RefPtr<Play::Texture>>   _swapchainTextures{};
+    std::vector<DeferredDestroyQueue>    _deferredDestroyQueues{};
+    std::vector<std::function<void()>>   _pendingDeferredDestroyTasks{};
+    std::vector<Play::RefCounted*>       _registeredObjects{};
+    std::vector<VkSemaphoreSubmitInfo>   _pendingFrameWaitSemaphores{};
+    std::unique_ptr<Play::RenderSession> _renderSession{};
+    nvvk::DescriptorBindings             _globalDescriptorBindings{};
+    nvvk::DescriptorBindings             _frameDescriptorBindings{};
+    Play::DescriptorSetCache*            _descriptorSetCache = nullptr;
+    Play::RenderPassCache*               _renderPassCache    = nullptr;
+    Play::FrameBufferCache*              _frameBufferCache   = nullptr;
+
+    std::unique_ptr<Play::AssetManager> _assetManager = nullptr;
+    FrameStats                          _frameStats{};
+    uint32_t                            _frameIndex         = 0;
+    uint64_t                            _frameCounter       = 0;
+    uint64_t                            _lastTick           = 0;
+    double                              _deltaTime          = 0.0;
+    VkExtent2D                          _windowSize         = {};
+    bool                                _registeredAsGlobal = false;
+    bool                                _initialized        = false;
 };
 
 } // namespace Play::runtime
@@ -333,7 +341,7 @@ using CommandPool   = runtime::CommandPool;
 using PlayFrameData = runtime::VulkanRuntime::FrameData;
 
 extern runtime::VulkanRuntime* vkDriver;
-runtime::VulkanRuntime* GetVulkanRuntime();
+runtime::VulkanRuntime*        GetVulkanRuntime();
 } // namespace Play
 
 #endif // PLAY_CODE_CORE_RUNTIME_VULKANRUNTIME_H

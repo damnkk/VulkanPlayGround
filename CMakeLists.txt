@@ -23,6 +23,8 @@ if(DEFINED ENV{VULKAN_SDK})
 else()
   find_package(SDL3 CONFIG REQUIRED)
 endif()
+find_package(cereal CONFIG REQUIRED)
+find_package(stduuid CONFIG REQUIRED)
 
 # Add compile definitions for nvutils to enable thread pool priority and deadlock check
 # This ensures both the library and our application see the same class layout
@@ -150,6 +152,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   nvpro2::nvvk
   nvpro2::nvvkglsl
   SDL3::SDL3
+  cereal::cereal
+  stduuid
   Qt6::Widgets
   vk_radix_sort
   RTTR::Core_Lib

@@ -30,7 +30,10 @@ bool parseEditorObjectId(const std::string& text, Play::editor::EditorObjectId& 
 }
 } // namespace
 
-RuntimeGuiHost::RuntimeGuiHost() = default;
+RuntimeGuiHost::RuntimeGuiHost()
+{
+    _editor.setStartupProjectReceiver(this);
+}
 
 RuntimeGuiHost::~RuntimeGuiHost()
 {
@@ -56,7 +59,8 @@ bool RuntimeGuiHost::start()
 
     _stopRequested  = false;
     _threadFinished = false;
-    _thread         = SDL_CreateThread(&RuntimeGuiHost::threadMain, "RuntimeGuiHost", this);
+    _startupProjectPath.clear();
+    _thread = SDL_CreateThread(&RuntimeGuiHost::threadMain, "RuntimeGuiHost", this);
     if (!_thread)
     {
         LOGE("RuntimeGuiHost: SDL_CreateThread failed: %s\n", SDL_GetError());
@@ -65,6 +69,61 @@ bool RuntimeGuiHost::start()
         return false;
     }
 
+    return true;
+}
+
+bool RuntimeGuiHost::selectStartupProject(const std::string& projectPath, std::string* errorMessage)
+{
+    if (projectPath.empty())
+    {
+        if (errorMessage)
+        {
+            *errorMessage = "Project path is empty.";
+        }
+        return false;
+    }
+
+    if (!_mutex)
+    {
+        if (errorMessage)
+        {
+            *errorMessage = "Project startup is not available.";
+        }
+        return false;
+    }
+
+    SDL_LockMutex(_mutex);
+    const bool isStopping = _stopRequested;
+    if (!isStopping)
+    {
+        _startupProjectPath = projectPath;
+    }
+    SDL_UnlockMutex(_mutex);
+
+    if (isStopping && errorMessage)
+    {
+        *errorMessage = "Project startup has already stopped.";
+    }
+    return !isStopping;
+}
+
+bool RuntimeGuiHost::takeStartupProject(std::string& projectPath)
+{
+    if (!_mutex)
+    {
+        return false;
+    }
+
+    SDL_LockMutex(_mutex);
+    if (_startupProjectPath.empty())
+    {
+        SDL_UnlockMutex(_mutex);
+        return false;
+    }
+
+    projectPath = _startupProjectPath;
+    _startupProjectPath.clear();
+    SDL_UnlockMutex(_mutex);
     return true;
 }
 

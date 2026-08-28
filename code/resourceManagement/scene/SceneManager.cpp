@@ -1,4 +1,5 @@
 #include "SceneManager.h"
+#include "core/ProjectPaths.h"
 #include "resourceManagement/vulkan/resources/Resource.h"
 #include "core/Profiling.h"
 #include "core/runtime/VulkanRuntime.h"
@@ -169,6 +170,24 @@ bool SceneManager::createProject(const std::string& projectPath, std::string* er
         return false;
     }
 
+    if (!ProjectInfo::setProjectPath(archivePath))
+    {
+        if (errorMessage)
+        {
+            *errorMessage = "Could not initialize the project information.";
+        }
+        return false;
+    }
+
+    if (vkDriver && vkDriver->getAssetManager() && !vkDriver->getAssetManager()->Init())
+    {
+        if (errorMessage)
+        {
+            *errorMessage = "Could not initialize the project asset map.";
+        }
+        return false;
+    }
+
     std::lock_guard<std::mutex> lock(_cpuSceneMutex);
     _cpuScene.clear();
     _projectAssets.clear();
@@ -202,6 +221,24 @@ bool SceneManager::loadProject(const std::string& projectPath, std::string* erro
     std::lock_guard<std::mutex> lock(_cpuSceneMutex);
     if (!loadProjectArchive(_cpuScene, _projectAssets, projectPath, errorMessage))
     {
+        return false;
+    }
+
+    if (!ProjectInfo::setProjectPath(projectPath))
+    {
+        if (errorMessage)
+        {
+            *errorMessage = "Could not initialize the project information.";
+        }
+        return false;
+    }
+
+    if (vkDriver && vkDriver->getAssetManager() && !vkDriver->getAssetManager()->Init())
+    {
+        if (errorMessage)
+        {
+            *errorMessage = "Could not initialize the project asset map.";
+        }
         return false;
     }
 

@@ -20,6 +20,11 @@ void RuntimeEditor::bindRuntime(Play::runtime::VulkanRuntime& runtime, Play::Ren
     _renderModeTabs.bindRenderSession(renderSession, activeMode);
 }
 
+void RuntimeEditor::setStartupProjectReceiver(StartupProjectReceiver* receiver)
+{
+    _startupProjectReceiver = receiver;
+}
+
 EditorUiSnapshot RuntimeEditor::buildSnapshot() const
 {
     EditorUiSnapshot snapshot;
@@ -29,6 +34,20 @@ EditorUiSnapshot RuntimeEditor::buildSnapshot() const
 
 bool RuntimeEditor::createProject(const std::string& projectPath, std::string* errorMessage)
 {
+    if (!isRuntimeBound())
+    {
+        if (!_startupProjectReceiver)
+        {
+            if (errorMessage)
+            {
+                *errorMessage = "Project startup is not available.";
+            }
+            return false;
+        }
+
+        return _startupProjectReceiver->selectStartupProject(projectPath, errorMessage);
+    }
+
     Play::RenderSession* renderSession = _runtimeContext.getRenderSession();
     Play::SceneManager*  sceneManager  = renderSession ? renderSession->getSceneManager() : nullptr;
     if (!sceneManager)
@@ -61,6 +80,20 @@ bool RuntimeEditor::saveProject(std::string* errorMessage)
 
 bool RuntimeEditor::loadProject(const std::string& projectPath, std::string* errorMessage)
 {
+    if (!isRuntimeBound())
+    {
+        if (!_startupProjectReceiver)
+        {
+            if (errorMessage)
+            {
+                *errorMessage = "Project startup is not available.";
+            }
+            return false;
+        }
+
+        return _startupProjectReceiver->selectStartupProject(projectPath, errorMessage);
+    }
+
     Play::RenderSession* renderSession = _runtimeContext.getRenderSession();
     Play::SceneManager*  sceneManager  = renderSession ? renderSession->getSceneManager() : nullptr;
     if (!sceneManager)

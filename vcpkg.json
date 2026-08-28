@@ -5,6 +5,8 @@
     "assimp",
     "ktx",
     "glm",
-    "openimageio"
+    "openimageio",
+    "cereal",
+    "stduuid"
   ]
 }

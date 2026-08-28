@@ -501,6 +501,10 @@ void QtRuntimeEditorWindow::refreshFromEditor()
     _refreshing = true;
     const EditorUiSnapshot snapshot = _editor.buildSnapshot();
     updateRenderModeTabs(snapshot);
+    if (_editor.isRuntimeBound())
+    {
+        _contentStack->setCurrentWidget(_tabs);
+    }
     _refreshing = false;
 }
 
@@ -1304,7 +1308,6 @@ void QtRuntimeEditorWindow::requestCreateProject()
         return;
     }
 
-    _contentStack->setCurrentWidget(_tabs);
     scheduleRefresh();
 }
 
@@ -1319,7 +1322,7 @@ void QtRuntimeEditorWindow::requestSaveProject()
 
 void QtRuntimeEditorWindow::requestLoadProject()
 {
-    const QString projectPath = QFileDialog::getExistingDirectory(this, "Load Project", QString(), QFileDialog::ShowDirsOnly);
+    const QString projectPath = QFileDialog::getOpenFileName(this, "Load Project", QString(), "VulkanPlayGround Project (*.project)");
     if (projectPath.isEmpty())
     {
         return;
@@ -1332,7 +1335,6 @@ void QtRuntimeEditorWindow::requestLoadProject()
         return;
     }
 
-    _contentStack->setCurrentWidget(_tabs);
     scheduleRefresh();
 }
 

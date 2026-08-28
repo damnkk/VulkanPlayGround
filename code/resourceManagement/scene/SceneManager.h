@@ -1,7 +1,7 @@
 #ifndef SCENEMANAGER_H
 #define SCENEMANAGER_H
-#include "resourceManagement/assets/AssetLoadingServer.h"
-#include "filesystem"
+#include "core/assets/AssetLoadingServer.h"
+#include <filesystem>
 #include "nvvk/descriptors.hpp"
 #include "resourceManagement/scene/gpu/GaussianScene.h"
 #include "resourceManagement/scene/cpu/CpuScene.h"
