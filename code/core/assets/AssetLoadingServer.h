@@ -16,8 +16,15 @@ public:
     void Tick();
     void Save();
 
-    GUID        filePathToGUID(const std::string& filePath);
-    std::string guidToFilePath(const GUID& guid);
+    AssetRef importAsset(AssetRef asset, const std::string& filePath, const std::string& assetFilePath = "");
+
+    template <typename Type>
+    std::shared_ptr<Type> importAsset(const std::string& filePath, const std::string& assetFilePath = "")
+    {
+        AssetRef asset = std::make_shared<Type>();
+        asset          = importAsset(asset, filePath, assetFilePath);
+        return std::dynamic_pointer_cast<Type>(asset);
+    }
 
     template <typename Type>
     std::shared_ptr<Type> getOrLoadAsset(const std::string& filePath)
@@ -30,7 +37,7 @@ public:
     std::shared_ptr<Type> getOrLoadAsset(const GUID& guid)
     {
         AssetRef asset = getOrLoadAssetInternal(guid);
-        return std::dynamic_pointer_cast<Type>(guid);
+        return std::dynamic_pointer_cast<Type>(asset);
     }
 
     AssetRef getAsset(const std::string& filePath);
@@ -45,22 +52,22 @@ public:
         return _assets;
     }
 
-protected:
 private:
     std::unordered_map<GUID, AssetRef>    _assets;
     std::unordered_map<GUID, AssetRef>    _uninitializedAssets;
     std::unordered_map<std::string, GUID> _pathToGUID;
     std::unordered_map<GUID, std::string> _GUIDToPath;
 
-    void     updateFilePathAndGUID(const std::string& filePath, const GUID& uid);
-    AssetRef getOrLoadAssetInternal(const std::string& filePath);
-    AssetRef getOrLoadAssetInternal(const GUID& guid);
-    AssetRef loadAsset(const std::string& path, bool init = false);
+    GUID        createAssetGUID();
+    GUID        filePathToGUID(const std::string& filePath);
+    std::string guidToFilePath(const GUID& guid);
+    void        updateFilePathAndGUID(const std::string& filePath, const GUID& uid);
+    AssetRef    getOrLoadAssetInternal(const std::string& filePath);
+    AssetRef    getOrLoadAssetInternal(const GUID& guid);
+    AssetRef    loadAsset(const std::string& path, bool init = false);
 
 private:
-    BeginSerailize()
-    SerailizeEntry(_GUIDToPath)
-    if constexpr (Archive::is_loading::value)
+    BeginSerailize() SerailizeEntry(_GUIDToPath) if constexpr (Archive::is_loading::value)
     {
         _pathToGUID.clear();
         for (auto& [guid, path] : _GUIDToPath)

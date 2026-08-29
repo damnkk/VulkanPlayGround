@@ -7,17 +7,17 @@
 namespace Play
 {
 
-class Scene : public Asset, std::enable_shared_from_this<Scene>
+class Scene : public Asset, public std::enable_shared_from_this<Scene>
 {
 public:
     Scene() = default;
     Scene(std::string name) : _name(name) {}
     ~Scene() {};
-    virtual std::string getTypeName()
+    virtual std::string getAssetTypeName() override
     {
         return "Scene";
     }
-    virtual AssetType getType()
+    virtual AssetType getAssetType() override
     {
         return ASSET_TYPE_SCENE;
     }

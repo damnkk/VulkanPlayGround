@@ -3,6 +3,10 @@
 #include "core/Serializable.h"
 #include "core/Uuid.h"
 #include "core/runtime/VulkanRuntime.h"
+namespace Play
+{
+class AssetManager;
+
 enum AssetType
 {
     ASSET_TYPE_UNKNOWN = 0,
@@ -11,8 +15,6 @@ enum AssetType
     ASSET_TYPE_SCENE,
     ASSET_TYPE_MAX_ENUM
 };
-
-class AssetMananger;
 
 class Asset
 {
@@ -27,18 +29,35 @@ public:
     {
         return ASSET_TYPE_UNKNOWN;
     };
-    virtual void onLoadAsset() {
-
+    virtual const char* getAssetResourceDirectory()
+    {
+        switch (getAssetType())
+        {
+        case ASSET_TYPE_MODEL:
+            return "model";
+        case ASSET_TYPE_TEXTURE:
+            return "texture";
+        case ASSET_TYPE_SCENE:
+            return "scene";
+        default:
+            break;
+        }
+        return "unknown";
     };
+    virtual void      onLoadAsset();
     virtual void      onSaveAsset() {};
     inline const GUID getUID()
     {
         return _uid;
     }
+    inline const std::string& getFilePath() const
+    {
+        return _filePath;
+    }
 
 protected:
     GUID _uid;
-    friend class AssetManager;
+    friend class Play::AssetManager;
 
     std::string _filePath;
 
@@ -73,7 +92,7 @@ private:
         auto iter = assetMap.find(#bind);                                                \
         if (iter != assetMap.end() && !iter->second.IsEmpty())                           \
         {                                                                                \
-            bind = vkDriver->getAssetManager()->getOrLoadAsset<className>(iter->second); \
+            bind = vkDriver->getAssetManager()->getAsset<className>(iter->second);       \
         }                                                                                \
     } while (0);
 #define ResizeAssetArray(bind)                 \
@@ -96,7 +115,7 @@ private:
             {                                                                                          \
                 if (!iter->second[i].IsEmpty())                                                        \
                 {                                                                                      \
-                    bind[i] = vkDriver->getAssetManager()->getOrLoadAsset<className>(iter->second[i]); \
+                    bind[i] = vkDriver->getAssetManager()->getAsset<className>(iter->second[i]);       \
                 }                                                                                      \
             }                                                                                          \
         }                                                                                              \
@@ -135,4 +154,5 @@ private:
     } while (0);
 
 #define EndSaveAssetBind }
+} // namespace Play
 #endif // ASSET_H

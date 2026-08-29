@@ -5,6 +5,18 @@
 #include "nvutils/logger.hpp"
 namespace Play
 {
+namespace
+{
+std::filesystem::path makeDefaultAssetPath(const GUID& uid)
+{
+    if (!ProjectInfo::isOpen() || uid.is_nil())
+    {
+        return {};
+    }
+
+    return ProjectInfo::getProjectPath() / "asset" / (uuids::to_string(uid) + ".json");
+}
+} // namespace
 
 bool AssetManager::Init()
 {
@@ -110,6 +122,48 @@ std::string AssetManager::guidToFilePath(const GUID& uid)
     return iter->second;
 }
 
+AssetRef AssetManager::importAsset(AssetRef asset, const std::string& filePath, const std::string& assetFilePath)
+{
+    if (!asset)
+    {
+        LOGW("Cannot import null asset from {%s}\n", filePath.c_str());
+        return nullptr;
+    }
+
+    if (filePath.empty())
+    {
+        LOGW("Fail to import asset with empty path\n");
+        return nullptr;
+    }
+
+    if (asset->_uid.is_nil())
+    {
+        asset->_uid = createAssetGUID();
+    }
+
+    asset->_filePath = filePath;
+    asset->onLoadAsset();
+    _assets[asset->getUID()] = asset;
+    saveAsset(asset, assetFilePath);
+    return asset;
+}
+
+GUID AssetManager::createAssetGUID()
+{
+    static std::random_device           randomDevice;
+    static std::mt19937                 randomEngine(randomDevice());
+    static uuids::uuid_random_generator uuidGenerator(randomEngine);
+    GUID                                uid;
+
+    do
+    {
+        uid = uuidGenerator();
+    } while (uid.is_nil() || _GUIDToPath.find(uid) != _GUIDToPath.end() || _assets.find(uid) != _assets.end() ||
+             _uninitializedAssets.find(uid) != _uninitializedAssets.end());
+
+    return uid;
+}
+
 AssetRef AssetManager::getAsset(const std::string& path)
 {
     GUID guid = filePathToGUID(path);
@@ -141,11 +195,78 @@ AssetRef AssetManager::getAsset(const GUID& uid)
 
 void AssetManager::saveAsset(AssetRef asset, const std::string& filePath)
 {
-    std::filesystem::path path(filePath);
+    if (!asset)
+    {
+        LOGW("Cannot save null asset\n");
+        return;
+    }
+
+    if (asset->_uid.is_nil())
+    {
+        asset->_uid = createAssetGUID();
+    }
+
+    std::filesystem::path path = filePath.empty() ? std::filesystem::path(guidToFilePath(asset->getUID())) : std::filesystem::path(filePath);
+    if (path.empty())
+    {
+        path = makeDefaultAssetPath(asset->getUID());
+    }
+
+    if (path.empty())
+    {
+        LOGW("Cannot save asset {%s} without an open project or an explicit path\n", uuids::to_string(asset->getUID()).c_str());
+        return;
+    }
+
+    std::error_code errorCode;
+    std::filesystem::create_directories(path.parent_path(), errorCode);
+    if (errorCode)
+    {
+        LOGW("Failed to create asset directory {%s}: %s\n", path.parent_path().string().c_str(), errorCode.message().c_str());
+        return;
+    }
+
+    asset->onSaveAsset();
+
+    std::ofstream assetStream(path, std::ios::trunc);
+    if (!assetStream.is_open())
+    {
+        LOGW("Failed to open asset file for writing {%s}\n", path.string().c_str());
+        return;
+    }
+
+    try
+    {
+        cereal::JSONOutputArchive archive(assetStream);
+        archive(asset);
+    }
+    catch (const std::exception& error)
+    {
+        LOGW("Failed to serialize asset {%s}: %s\n", path.string().c_str(), error.what());
+        return;
+    }
+
+    updateFilePathAndGUID(path.string(), asset->getUID());
+    auto uninitializedAsset = _uninitializedAssets.find(asset->getUID());
+    if (uninitializedAsset != _uninitializedAssets.end())
+    {
+        uninitializedAsset->second = asset;
+    }
+    else
+    {
+        _assets[asset->getUID()] = asset;
+    }
+    Save();
 }
 
 void AssetManager::deleteAsset(AssetRef asset)
 {
+    if (!asset)
+    {
+        LOGW("Cannot delete null asset\n");
+        return;
+    }
+
     std::string oldPath = guidToFilePath(asset->getUID());
     if (oldPath.empty())
     {
@@ -191,6 +312,8 @@ void AssetManager::deleteAsset(const std::string& path)
     if (!id.is_nil())
     {
         updateFilePathAndGUID("", id);
+        _assets.erase(id);
+        _uninitializedAssets.erase(id);
     }
 }
 
@@ -243,9 +366,24 @@ AssetRef AssetManager::loadAsset(const std::string& filePath, bool init)
         LOGW("Fail to load asset from file {%s}\n", filePath.c_str());
         return nullptr;
     }
-    cereal::JSONInputArchive archive(ifs);
-    archive(asset);
+    try
+    {
+        cereal::JSONInputArchive archive(ifs);
+        archive(asset);
+    }
+    catch (const std::exception& error)
+    {
+        LOGW("Fail to deserialize asset from file {%s}: %s\n", filePath.c_str(), error.what());
+        return nullptr;
+    }
 
+    if (!asset)
+    {
+        LOGW("Fail to deserialize null asset from file {%s}\n", filePath.c_str());
+        return nullptr;
+    }
+
+    const std::string oldAssetFilePath = asset->getFilePath();
     if (init)
     {
         asset->onLoadAsset();

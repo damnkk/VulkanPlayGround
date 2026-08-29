@@ -2,12 +2,14 @@
 #include "resourceManagement/scene/component/TransformComponent.h"
 #include "nvutils/logger.hpp"
 CEREAL_REGISTER_TYPE(Play::Scene)
-CEREAL_REGISTER_POLYMORPHIC_RELATION(Asset, Play::Scene)
+CEREAL_REGISTER_POLYMORPHIC_RELATION(Play::Asset, Play::Scene)
 namespace Play
 {
 
 void Scene::onLoadAsset()
 {
+    Asset::onLoadAsset();
+
     for (auto& entity : _entities)
     {
         entity->load();
