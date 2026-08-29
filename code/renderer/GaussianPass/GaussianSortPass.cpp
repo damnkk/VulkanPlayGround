@@ -23,7 +23,7 @@ void GaussianSortPass::init()
 {
     VrdxSorterCreateInfo sorterInfo{vkDriver->getPhysicalDevice(), vkDriver->getDevice()};
     vrdxCreateSorter(&sorterInfo, &_sorter);
-    vrdxGetSorterKeyValueStorageRequirements(_sorter, _ownedRenderer->getSceneManager()->getGaussianScene().getVertexCount(), &_sortRequirements);
+    vrdxGetSorterKeyValueStorageRequirements(_sorter, vkDriver->getSceneManager()->getGaussianScene().getVertexCount(), &_sortRequirements);
 
     auto distanceComp = ShaderManager::Instance().loadShaderFromFile("DistanceComp", "./gaussian/gaussianCulling.comp.slang", ShaderStage::eCompute);
     _distancePipeline.setShader(distanceComp);
@@ -36,7 +36,7 @@ void GaussianSortPass::build(RDG::RDGBuilder* rdgBuilder)
         rdgBuilder->createBuffer("distanceBuffer")
             .Location(true)
             .Range(VK_WHOLE_SIZE)
-            .Size(nvutils::align_up(sizeof(uint32_t) * _ownedRenderer->getSceneManager()->getGaussianScene().getVertexCount(), 16))
+            .Size(nvutils::align_up(sizeof(uint32_t) * vkDriver->getSceneManager()->getGaussianScene().getVertexCount(), 16))
             .UsageFlags(VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT)
             .finish();
 
@@ -51,7 +51,7 @@ void GaussianSortPass::build(RDG::RDGBuilder* rdgBuilder)
         rdgBuilder->createBuffer("indicesBuffer")
             .Location(true)
             .Range(VK_WHOLE_SIZE)
-            .Size(nvutils::align_up(sizeof(uint32_t) * _ownedRenderer->getSceneManager()->getGaussianScene().getVertexCount(), 16))
+            .Size(nvutils::align_up(sizeof(uint32_t) * vkDriver->getSceneManager()->getGaussianScene().getVertexCount(), 16))
             .UsageFlags(VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT)
             .finish();
 
@@ -63,7 +63,7 @@ void GaussianSortPass::build(RDG::RDGBuilder* rdgBuilder)
                                               .finish();
 
     RDG::RDGBufferRef sceneUniformBuffer =
-        rdgBuilder->createBuffer("sceneUniformBuffer").Import(_ownedRenderer->getSceneManager()->getGaussianScene().getSceneUniformBuffer()).finish();
+        rdgBuilder->createBuffer("sceneUniformBuffer").Import(vkDriver->getSceneManager()->getGaussianScene().getSceneUniformBuffer()).finish();
 
     RDG::ComputePassNodeRef distanceCompute =
         rdgBuilder->createComputePass("DistancePass")
@@ -90,7 +90,7 @@ void GaussianSortPass::build(RDG::RDGBuilder* rdgBuilder)
                     pushConstant.cameraBufferDeviceAddress = _ownedRenderer->getCurrentCameraBuffer()->address;
                     context.bindPipeline(_distancePipeline);
                     context.bindPushConstant(pushConstant);
-                    size_t splatCount = _ownedRenderer->getSceneManager()->getGaussianScene().getVertexCount();
+                    size_t splatCount = vkDriver->getSceneManager()->getGaussianScene().getVertexCount();
                     vkCmdDispatch(context._currCmdBuffer, nvvk::getGroupCounts(splatCount, 256), 1, 1);
                     VkMemoryBarrier barrier = {VK_STRUCTURE_TYPE_MEMORY_BARRIER};
                     barrier.srcAccessMask   = VK_ACCESS_SHADER_WRITE_BIT;
@@ -114,7 +114,7 @@ void GaussianSortPass::build(RDG::RDGBuilder* rdgBuilder)
                     barrier.srcAccessMask   = VK_ACCESS_SHADER_WRITE_BIT;
                     barrier.dstAccessMask   = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
                     vrdxCmdSortKeyValueIndirect(
-                        context._currCmdBuffer, _sorter, _ownedRenderer->getSceneManager()->getGaussianScene().getVertexCount(),
+                        context._currCmdBuffer, _sorter, vkDriver->getSceneManager()->getGaussianScene().getVertexCount(),
                         indirectBuffer->getRHI()->buffer, offsetof(IndrectBuffer, instanceCount), distanceBuffer->getRHI()->buffer, 0,
                         indicesBuffer->getRHI()->buffer, 0, sortStorageBuffer->getRHI()->buffer, 0, VK_NULL_HANDLE, 0);
                     vkCmdPipelineBarrier(

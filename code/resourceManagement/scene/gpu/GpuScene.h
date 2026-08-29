@@ -2,7 +2,7 @@
 #define GPU_SCENE_H
 
 #include "resourceManagement/assets/model/ModelGpuAssets.h"
-#include "resourceManagement/scene/cpu/CpuScene.h"
+#include "resourceManagement/scene/cpu/Scene.h"
 
 namespace Play
 {
@@ -21,8 +21,8 @@ struct GpuSceneCommonData
     Buffer* vertexBuffer    = nullptr;
     Buffer* indexBuffer     = nullptr;
 
-    std::vector<glm::mat4>                  transforms;
-    std::vector<MeshInfo>                   meshInfos;
+    std::vector<glm::mat4>                   transforms;
+    std::vector<MeshInfo>                    meshInfos;
     std::vector<shaderio::GltfShadeMaterial> materials;
 };
 
@@ -33,7 +33,7 @@ struct RasterGPUData
 
 struct RayTracingGPUData
 {
-    bool enabled = false;
+    bool                          enabled = false;
     std::vector<RayTracingASInfo> accelerationStructures;
 };
 
@@ -104,17 +104,17 @@ protected:
     void     registerRasterData(const GpuModelRange& range);
     void     registerRayTracingData(const ModelGpuResources& resources, const GpuModelRange& range);
 
-    GpuSceneCommonData             _common;
-    RasterGPUData                  _rasterData;
-    RayTracingGPUData              _rtData;
-    std::vector<vpgloader::ModelHandle>        _models;
+    GpuSceneCommonData                           _common;
+    RasterGPUData                                _rasterData;
+    RayTracingGPUData                            _rtData;
+    std::vector<vpgloader::ModelHandle>          _models;
     std::vector<std::vector<GpuModelRenderable>> _modelRenderables;
-    std::vector<ModelGpuResources> _modelGpuResources;
-    std::vector<GpuModelRange>     _modelRanges;
-    std::vector<RefPtr<Texture>>   _sceneTextures;
-    std::vector<std::filesystem::path> _sceneTextureSources;
-    std::mutex                     _registrationMutex;
-    uint64_t                       _sourceSceneRevision = 0;
+    std::vector<ModelGpuResources>               _modelGpuResources;
+    std::vector<GpuModelRange>                   _modelRanges;
+    std::vector<RefPtr<Texture>>                 _sceneTextures;
+    std::vector<std::filesystem::path>           _sceneTextureSources;
+    std::mutex                                   _registrationMutex;
+    uint64_t                                     _sourceSceneRevision = 0;
     uint32_t                                     _modelGeneration     = 1;
 };
 

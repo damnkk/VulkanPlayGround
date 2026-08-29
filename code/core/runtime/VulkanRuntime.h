@@ -19,6 +19,7 @@ class FrameBufferCache;
 class PipelineCacheManager;
 class RefCounted;
 class RenderPassCache;
+class SceneManager;
 class Texture;
 class Buffer;
 } // namespace Play
@@ -239,6 +240,11 @@ public:
         return _assetManager.get();
     }
 
+    Play::SceneManager* getSceneManager()
+    {
+        return _sceneManager.get();
+    }
+
     VkCommandBuffer                    createTempCmdBuffer();
     void                               submitAndWaitTempCmdBuffer(VkCommandBuffer cmd);
     VkResult                           submitGraphics(const VkSubmitInfo2& submitInfo, VkFence fence = VK_NULL_HANDLE);
@@ -299,23 +305,25 @@ private:
         std::vector<std::function<void()>> tasks;
     };
 
-    RuntimeConfig                        _config{};
-    RuntimeGuiHost&                      _guiHost;
-    SdlWindow                            _window{};
-    nvvk::Context                        _context{};
-    nvvk::Swapchain                      _swapchain{};
-    VkSurfaceKHR                         _surface          = VK_NULL_HANDLE;
-    VkCommandPool                        _transientCmdPool = VK_NULL_HANDLE;
-    std::mutex                           _graphicsQueueMutex;
-    std::mutex                           _registeredObjectMutex;
-    std::mutex                           _pendingDestroyMutex;
+    RuntimeConfig                      _config{};
+    RuntimeGuiHost&                    _guiHost;
+    SdlWindow                          _window{};
+    nvvk::Context                      _context{};
+    nvvk::Swapchain                    _swapchain{};
+    std::vector<RefPtr<Play::Texture>> _swapchainTextures{};
+    VkSurfaceKHR                       _surface          = VK_NULL_HANDLE;
+    VkCommandPool                      _transientCmdPool = VK_NULL_HANDLE;
+    std::mutex                         _graphicsQueueMutex;
+    std::mutex                         _registeredObjectMutex;
+    std::mutex                         _pendingDestroyMutex;
+
     std::vector<FrameData>               _frames{};
-    std::vector<RefPtr<Play::Texture>>   _swapchainTextures{};
     std::vector<DeferredDestroyQueue>    _deferredDestroyQueues{};
     std::vector<std::function<void()>>   _pendingDeferredDestroyTasks{};
     std::vector<Play::RefCounted*>       _registeredObjects{};
     std::vector<VkSemaphoreSubmitInfo>   _pendingFrameWaitSemaphores{};
     std::unique_ptr<Play::RenderSession> _renderSession{};
+    std::unique_ptr<Play::SceneManager>  _sceneManager{};
     nvvk::DescriptorBindings             _globalDescriptorBindings{};
     nvvk::DescriptorBindings             _frameDescriptorBindings{};
     Play::DescriptorSetCache*            _descriptorSetCache = nullptr;

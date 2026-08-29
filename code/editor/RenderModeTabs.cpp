@@ -1,6 +1,7 @@
 #include "editor/RenderModeTabs.h"
 
 #include "core/runtime/RenderSession.h"
+#include "core/runtime/VulkanRuntime.h"
 #include "editor/EditorRuntimeContext.h"
 #include "editor/RenderModeEditor.h"
 
@@ -58,7 +59,7 @@ RenderModeEditor* RenderModeTabs::findRenderMode(const char* id)
 void RenderModeTabs::bindRenderSession(Play::RenderSession& renderSession, const char* activeMode)
 {
     _impl->activeMode                = activeMode ? activeMode : "";
-    Play::SceneManager* sceneManager = renderSession.getSceneManager();
+    Play::SceneManager* sceneManager = Play::vkDriver ? Play::vkDriver->getSceneManager() : nullptr;
     for (const std::unique_ptr<RenderModeEditor>& editor : _impl->editors)
     {
         editor->setSceneManager(isSameText(editor->getId(), activeMode) ? sceneManager : nullptr);

@@ -143,9 +143,4 @@ void RenderSession::renderFrame()
     _renderer->OnPostRender();
 }
 
-SceneManager* RenderSession::getSceneManager()
-{
-    return _renderer ? _renderer->getSceneManager() : nullptr;
-}
-
 } // namespace Play

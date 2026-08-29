@@ -16,8 +16,8 @@ DeferRenderer::DeferRenderer(RenderSession& session)
     // TODO: Load raster models through CpuModelComponent once the component-owned loader is wired.
     std::filesystem::path modelPath     = ".\\resource\\skybox\\graveyard_pathways_2k.hdr";
     RefPtr<Texture>       skyboxTexture = RefPtr<Texture>(new Texture(modelPath, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, true));
-    _scene->addSkyBoxTexture(skyboxTexture);
-    _scene->updateDescriptorSet();
+    vkDriver->getSceneManager()->addSkyBoxTexture(skyboxTexture);
+    vkDriver->getSceneManager()->updateDescriptorSet();
 }
 
 DeferRenderer::~DeferRenderer()

@@ -11,7 +11,6 @@
 namespace Play
 {
 class PlayCamera;
-class SceneManager;
 class RenderSession;
 class Texture;
 class Buffer;
@@ -34,7 +33,6 @@ public:
     virtual void     OnPreRender();
     virtual void     OnPostRender();
     virtual void     RenderFrame();
-    virtual void     SetScene(SceneManager* scene);
     virtual void     OnResize(int width, int height);
     virtual void     addCamera();
 
@@ -46,18 +44,12 @@ public:
 
     Buffer*       getCurrentCameraBuffer() const;
     const CameraData& getCurrentCameraData() const;
-    SceneManager* getSceneManager()
-    {
-        return _scene.get();
-    }
-
     RTTR_ENABLE()
 
 protected:
     virtual void setupPasses() = 0;
 
     void                                     updateCameraBuffer();
-    std::unique_ptr<SceneManager>            _scene;
     std::vector<std::unique_ptr<PlayCamera>> _cameras;
     uint32_t                                 _activeCameraIdx = 0;
     std::array<CameraData, 3>                _cameraDatas;

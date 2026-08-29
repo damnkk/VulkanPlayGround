@@ -16,6 +16,7 @@
 #include "resourceManagement/vulkan/resources/Resource.h"
 #include "resourceManagement/vulkan/pipeline/ShaderManager.hpp"
 #include "core/RefCounted.h"
+#include "resourceManagement/scene/SceneManager.h"
 
 namespace Play
 {
@@ -205,6 +206,19 @@ bool VulkanRuntime::init(const RuntimeConfig& config, const nvvk::ContextInitInf
     }
 
     _renderSession = std::make_unique<Play::RenderSession>(Play::RenderSession::Info{.renderMode = _config.renderMode});
+    GpuSceneType gpuSceneType = GpuSceneType::eRaster;
+    switch (_renderSession->getRenderMode())
+    {
+        case Play::RenderSession::eGaussianRendering:
+            gpuSceneType = GpuSceneType::eGaussian;
+            break;
+        case Play::RenderSession::eRayTracing:
+            gpuSceneType = GpuSceneType::eRayTracing;
+            break;
+        default:
+            break;
+    }
+    _sceneManager = std::make_unique<Play::SceneManager>(gpuSceneType);
     getEditorRegistry().clear();
     if (!_renderSession->init())
     {
@@ -280,6 +294,7 @@ void VulkanRuntime::destroy()
 
     getEditorRegistry().clear();
     _renderSession.reset();
+    _sceneManager.reset();
     _assetManager.reset();
     clearSwapchainTextures();
     deinitRenderServices();

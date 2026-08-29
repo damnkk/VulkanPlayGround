@@ -1,6 +1,7 @@
 #include "editor/RuntimeEditor.h"
 
 #include "core/runtime/RenderSession.h"
+#include "core/runtime/VulkanRuntime.h"
 #include "resourceManagement/scene/SceneManager.h"
 
 namespace Play::editor
@@ -48,8 +49,7 @@ bool RuntimeEditor::createProject(const std::string& projectPath, std::string* e
         return _startupProjectReceiver->selectStartupProject(projectPath, errorMessage);
     }
 
-    Play::RenderSession* renderSession = _runtimeContext.getRenderSession();
-    Play::SceneManager*  sceneManager  = renderSession ? renderSession->getSceneManager() : nullptr;
+    Play::SceneManager* sceneManager = Play::vkDriver ? Play::vkDriver->getSceneManager() : nullptr;
     if (!sceneManager)
     {
         if (errorMessage)
@@ -64,8 +64,7 @@ bool RuntimeEditor::createProject(const std::string& projectPath, std::string* e
 
 bool RuntimeEditor::saveProject(std::string* errorMessage)
 {
-    Play::RenderSession* renderSession = _runtimeContext.getRenderSession();
-    Play::SceneManager*  sceneManager  = renderSession ? renderSession->getSceneManager() : nullptr;
+    Play::SceneManager* sceneManager = Play::vkDriver ? Play::vkDriver->getSceneManager() : nullptr;
     if (!sceneManager)
     {
         if (errorMessage)
@@ -94,8 +93,7 @@ bool RuntimeEditor::loadProject(const std::string& projectPath, std::string* err
         return _startupProjectReceiver->selectStartupProject(projectPath, errorMessage);
     }
 
-    Play::RenderSession* renderSession = _runtimeContext.getRenderSession();
-    Play::SceneManager*  sceneManager  = renderSession ? renderSession->getSceneManager() : nullptr;
+    Play::SceneManager* sceneManager = Play::vkDriver ? Play::vkDriver->getSceneManager() : nullptr;
     if (!sceneManager)
     {
         if (errorMessage)

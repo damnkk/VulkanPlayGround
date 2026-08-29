@@ -148,12 +148,12 @@ void GBufferPass::prepareRenderList()
     _renderItems.clear();
     _gpuInstanceData.clear();
 
-    if (!_ownedRender || !_ownedRender->getSceneManager())
+    if (!_ownedRender || !vkDriver || !vkDriver->getSceneManager())
     {
         return;
     }
 
-    SceneManager*   sceneManager = _ownedRender->getSceneManager();
+    SceneManager*   sceneManager = vkDriver->getSceneManager();
     const GpuScene* gpuScene     = sceneManager->getGpuScene();
     if (!gpuScene)
     {

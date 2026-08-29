@@ -2,6 +2,7 @@
 
 #include "resourceManagement/scene/SceneManager.h"
 #include "renderer/Renderer.h"
+#include "core/runtime/VulkanRuntime.h"
 
 #include <assert.h>
 
@@ -11,7 +12,7 @@ namespace Play
 std::vector<MeshBatch>& MeshCollector::collectMeshBatches()
 {
     assert(_renderer);
-    assert(_renderer->getSceneManager());
+    assert(vkDriver->getSceneManager());
 
     _meshBatches.clear();
     return _meshBatches;
