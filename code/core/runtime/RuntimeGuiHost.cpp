@@ -10,26 +10,6 @@
 namespace Play::runtime
 {
 
-namespace
-{
-bool parseEditorObjectId(const std::string& text, Play::editor::EditorObjectId& id)
-{
-    Play::editor::EditorObjectId parsedId = 0;
-    for (const char ch : text)
-    {
-        if (ch < '0' || ch > '9')
-        {
-            return false;
-        }
-
-        parsedId = parsedId * 10 + static_cast<Play::editor::EditorObjectId>(ch - '0');
-    }
-
-    id = parsedId;
-    return id != 0;
-}
-} // namespace
-
 RuntimeGuiHost::RuntimeGuiHost()
 {
     _editor.setStartupProjectReceiver(this);
@@ -171,7 +151,7 @@ int RuntimeGuiHost::threadMain(void* data)
 
 int RuntimeGuiHost::run()
 {
-    char  applicationName[] = "VulkanPlayGroundControlPanel";
+    char  applicationName[] = "VulkanPlayGroundEditor";
     char* arguments[]       = {applicationName, nullptr};
     int   argumentCount     = 1;
 

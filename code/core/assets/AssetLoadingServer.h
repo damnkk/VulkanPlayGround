@@ -34,36 +34,36 @@ public:
     }
 
     template <typename Type>
-    std::shared_ptr<Type> getOrLoadAsset(const GUID& guid)
+    std::shared_ptr<Type> getOrLoadAsset(const VUID& guid)
     {
         AssetRef asset = getOrLoadAssetInternal(guid);
         return std::dynamic_pointer_cast<Type>(asset);
     }
 
     AssetRef getAsset(const std::string& filePath);
-    AssetRef getAsset(const GUID& guid);
+    AssetRef getAsset(const VUID& guid);
 
     void saveAsset(AssetRef asset, const std::string& filePath = "");
     void deleteAsset(AssetRef asset);
     void deleteAsset(const std::string& filePath);
 
-    const std::unordered_map<GUID, AssetRef>& getAssets() const
+    const std::unordered_map<VUID, AssetRef>& getAssets() const
     {
         return _assets;
     }
 
 private:
-    std::unordered_map<GUID, AssetRef>    _assets;
-    std::unordered_map<GUID, AssetRef>    _uninitializedAssets;
-    std::unordered_map<std::string, GUID> _pathToGUID;
-    std::unordered_map<GUID, std::string> _GUIDToPath;
+    std::unordered_map<VUID, AssetRef>    _assets;
+    std::unordered_map<VUID, AssetRef>    _uninitializedAssets;
+    std::unordered_map<std::string, VUID> _pathToGUID;
+    std::unordered_map<VUID, std::string> _GUIDToPath;
 
-    GUID        createAssetGUID();
-    GUID        filePathToGUID(const std::string& filePath);
-    std::string guidToFilePath(const GUID& guid);
-    void        updateFilePathAndGUID(const std::string& filePath, const GUID& uid);
+    VUID        createAssetGUID();
+    VUID        filePathToGUID(const std::string& filePath);
+    std::string guidToFilePath(const VUID& guid);
+    void        updateFilePathAndGUID(const std::string& filePath, const VUID& uid);
     AssetRef    getOrLoadAssetInternal(const std::string& filePath);
-    AssetRef    getOrLoadAssetInternal(const GUID& guid);
+    AssetRef    getOrLoadAssetInternal(const VUID& guid);
     AssetRef    loadAsset(const std::string& path, bool init = false);
 
 private:

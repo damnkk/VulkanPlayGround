@@ -3,6 +3,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
 
+namespace Play
+{
+
 namespace
 {
 constexpr float kQuaternionEpsilon = 0.000001f;
@@ -111,3 +114,5 @@ void TransformComponent::splitFromMat()
 
     _rotate = normalizeOrIdentity(glm::quat_cast(rotationMatrix));
 }
+
+} // namespace Play

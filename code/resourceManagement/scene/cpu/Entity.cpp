@@ -1,14 +1,17 @@
 #include "Entity.h"
 #include "nvutils/logger.hpp"
 
-void Entity::Load()
+namespace Play
+{
+
+void Entity::load()
 {
     for (auto& component : _components)
     {
         component->onLoad();
     }
 }
-void Entity::Save()
+void Entity::save()
 {
     for (auto& component : _components)
     {
@@ -16,7 +19,7 @@ void Entity::Save()
     }
 }
 
-void Entity::Init()
+void Entity::init()
 {
     for (auto& component : _components)
     {
@@ -24,8 +27,15 @@ void Entity::Init()
     }
 }
 
-void Entity::Tick(float)
+void Entity::tick(float deltaTime)
 {
+    for (auto& component : _components)
+    {
+        if (component)
+        {
+            component->onUpdate(deltaTime);
+        }
+    }
 }
 
 void Entity::addComponent(std::shared_ptr<Component> component)
@@ -55,7 +65,6 @@ void Entity::setFather(std::weak_ptr<Entity> father)
 
 void Entity::addChild(std::shared_ptr<Entity> child)
 {
-    _children.push_back(child);
     child->setFather(shared_from_this());
 }
 
@@ -73,3 +82,5 @@ bool Entity::removeChild(std::shared_ptr<Entity> child)
     }
     return false;
 }
+
+} // namespace Play

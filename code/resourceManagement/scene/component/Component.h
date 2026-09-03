@@ -1,5 +1,6 @@
 #ifndef COMPONENT_H
 #define COMPONENT_H
+
 #include "rttr/rttr_enable.h"
 #include <memory>
 #include "core/Serializable.h"

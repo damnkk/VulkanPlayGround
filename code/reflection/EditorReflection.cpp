@@ -1,12 +1,7 @@
 #include <rttr/registration>
 
-#include "editor/ControlPanel.h"
 #include "editor/EditorRegistry.h"
-#include "editor/EditorRuntimeContext.h"
-#include "editor/RenderModeEditor.h"
-#include "editor/RenderModeTabs.h"
 #include "editor/RuntimeEditor.h"
-#include "editor/SceneManagerEditor.h"
 
 RTTR_REGISTRATION
 {
@@ -30,11 +25,5 @@ RTTR_REGISTRATION
 
     rttr::registration::class_<Play::editor::EditorObjectInfo>("Play::editor::EditorObjectInfo");
     rttr::registration::class_<Play::editor::EditorRegistry>("Play::editor::EditorRegistry");
-
-    rttr::registration::class_<Play::editor::EditorRuntimeContext>("Play::editor::EditorRuntimeContext");
-    rttr::registration::class_<Play::editor::RenderModeTabs>("Play::editor::RenderModeTabs");
-    rttr::registration::class_<Play::editor::RenderModeEditor>("Play::editor::RenderModeEditor");
-    rttr::registration::class_<Play::editor::SceneManagerEditor>("Play::editor::SceneManagerEditor");
-    rttr::registration::class_<Play::editor::ControlPanel>("Play::editor::ControlPanel");
     rttr::registration::class_<Play::editor::RuntimeEditor>("Play::editor::RuntimeEditor");
 }

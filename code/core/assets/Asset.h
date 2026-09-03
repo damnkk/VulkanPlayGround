@@ -2,7 +2,6 @@
 #define ASSET_H
 #include "core/Serializable.h"
 #include "core/Uuid.h"
-#include "core/runtime/VulkanRuntime.h"
 namespace Play
 {
 class AssetManager;
@@ -33,20 +32,20 @@ public:
     {
         switch (getAssetType())
         {
-        case ASSET_TYPE_MODEL:
-            return "model";
-        case ASSET_TYPE_TEXTURE:
-            return "texture";
-        case ASSET_TYPE_SCENE:
-            return "scene";
-        default:
-            break;
+            case ASSET_TYPE_MODEL:
+                return "model";
+            case ASSET_TYPE_TEXTURE:
+                return "texture";
+            case ASSET_TYPE_SCENE:
+                return "scene";
+            default:
+                break;
         }
         return "unknown";
     };
     virtual void      onLoadAsset();
     virtual void      onSaveAsset() {};
-    inline const GUID getUID()
+    inline const VUID getUID()
     {
         return _uid;
     }
@@ -56,7 +55,7 @@ public:
     }
 
 protected:
-    GUID _uid;
+    VUID _uid;
     friend class Play::AssetManager;
 
     std::string _filePath;
@@ -74,8 +73,8 @@ typedef std::shared_ptr<Asset> AssetRef;
 
 class AssetBinder{
 protected:
-    std::unordered_map<std::string, GUID> _assetMap;
-    std::unordered_map<std::string, std::vector<GUID>> _assetArrayMap;
+    std::unordered_map<std::string, VUID> _assetMap;
+    std::unordered_map<std::string, std::vector<VUID>> _assetArrayMap;
 private:
 // clang-format off
     BeginSerailize()
@@ -86,14 +85,14 @@ private:
 };
 
 #define BeginLoadAssetBind() {
-#define LoadAssetBind(className, bind)                                                   \
-    do                                                                                   \
-    {                                                                                    \
-        auto iter = assetMap.find(#bind);                                                \
-        if (iter != assetMap.end() && !iter->second.IsEmpty())                           \
-        {                                                                                \
-            bind = vkDriver->getAssetManager()->getAsset<className>(iter->second);       \
-        }                                                                                \
+#define LoadAssetBind(className, bind)                                             \
+    do                                                                             \
+    {                                                                              \
+        auto iter = assetMap.find(#bind);                                          \
+        if (iter != assetMap.end() && !iter->second.IsEmpty())                     \
+        {                                                                          \
+            bind = vkDriver->getAssetManager()->getAsset<className>(iter->second); \
+        }                                                                          \
     } while (0);
 #define ResizeAssetArray(bind)                 \
     do                                         \
@@ -105,20 +104,20 @@ private:
         }                                      \
     } while (0);
 
-#define LoadAssetArrayBind(className, bind)                                                            \
-    do                                                                                                 \
-    {                                                                                                  \
-        auto iter = assetArrayMap.find(#bind);                                                         \
-        if (iter != assetArrayMap.end())                                                               \
-        {                                                                                              \
-            for (uint32_t i = 0; i < iter->second.size(); i++)                                         \
-            {                                                                                          \
-                if (!iter->second[i].IsEmpty())                                                        \
-                {                                                                                      \
-                    bind[i] = vkDriver->getAssetManager()->getAsset<className>(iter->second[i]);       \
-                }                                                                                      \
-            }                                                                                          \
-        }                                                                                              \
+#define LoadAssetArrayBind(className, bind)                                                      \
+    do                                                                                           \
+    {                                                                                            \
+        auto iter = assetArrayMap.find(#bind);                                                   \
+        if (iter != assetArrayMap.end())                                                         \
+        {                                                                                        \
+            for (uint32_t i = 0; i < iter->second.size(); i++)                                   \
+            {                                                                                    \
+                if (!iter->second[i].IsEmpty())                                                  \
+                {                                                                                \
+                    bind[i] = vkDriver->getAssetManager()->getAsset<className>(iter->second[i]); \
+                }                                                                                \
+            }                                                                                    \
+        }                                                                                        \
     } while (0);
 #define EndLoadAssetBind }
 
@@ -134,12 +133,12 @@ private:
         assetMap.emplace(#bind, bind->getUID());      \
     }                                                 \
     else                                              \
-        assetMap.emplace(#bind, GUID{});
+        assetMap.emplace(#bind, VUID{});
 
 #define SaveAssetArrayBind(bind)                                 \
     do                                                           \
     {                                                            \
-        std::vector<GUID> uids;                                  \
+        std::vector<VUID> uids;                                  \
         for (uint32_t i = 0; i < bind.size(); i++)               \
         {                                                        \
             if (bind[i])                                         \
@@ -148,7 +147,7 @@ private:
                 uids.push_back(bind[i]->getUID());               \
             }                                                    \
             else                                                 \
-                uids.push_back(GUID{});                          \
+                uids.push_back(VUID{});                          \
         }                                                        \
         assetArrayMap.emplace(#bind, uids);                      \
     } while (0);

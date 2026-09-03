@@ -6,6 +6,19 @@
 namespace Play
 {
 
+std::filesystem::path getBaseFilePath()
+{
+#ifdef TARGET_EXE_TO_SOURCE_DIRECTORY
+    const std::filesystem::path exeDirectory = nvutils::getExecutablePath().parent_path();
+    const std::filesystem::path basePath     = exeDirectory / TARGET_EXE_TO_SOURCE_DIRECTORY;
+    std::error_code             errorCode;
+    const std::filesystem::path canonicalPath = std::filesystem::weakly_canonical(basePath, errorCode);
+    return errorCode ? basePath.lexically_normal() : canonicalPath;
+#else
+    return std::filesystem::current_path();
+#endif
+}
+
 std::string           ProjectInfo::_projectName;
 std::filesystem::path ProjectInfo::_projectPath;
 
@@ -37,7 +50,7 @@ bool isPathInsideDirectory(const std::filesystem::path& path, const std::filesys
     return iter == relativePath.end() || *iter != "..";
 }
 
-std::filesystem::path makeImportedResourcePath(const std::filesystem::path& sourcePath, const std::filesystem::path& resourceDirectory, const GUID& uid)
+std::filesystem::path makeImportedResourcePath(const std::filesystem::path& sourcePath, const std::filesystem::path& resourceDirectory, const VUID& uid)
 {
     std::filesystem::path assetDirectory = ProjectInfo::getProjectPath() / "assets";
     if (!resourceDirectory.empty())
@@ -124,7 +137,7 @@ std::filesystem::path ProjectInfo::getAssetMapPath()
     return _projectPath.empty() ? std::filesystem::path{} : _projectPath / "assetmap.json";
 }
 
-bool ProjectInfo::ensureFilePathInProject(std::string& filePath, const std::filesystem::path& resourceDirectory, const GUID& uid)
+bool ProjectInfo::ensureFilePathInProject(std::string& filePath, const std::filesystem::path& resourceDirectory, const VUID& uid)
 {
     if (filePath.empty())
     {

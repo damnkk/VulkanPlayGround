@@ -1,107 +1,62 @@
 #ifndef SCENEMANAGER_H
 #define SCENEMANAGER_H
-#include "core/assets/AssetLoadingServer.h"
-#include <filesystem>
-#include "nvvk/descriptors.hpp"
-#include "resourceManagement/scene/gpu/GaussianScene.h"
-#include "resourceManagement/scene/cpu/CpuScene.h"
-#include "resourceManagement/scene/cpu/CpuSceneSerialization.h"
+#include <mutex>
 #include "core/RefCounted.h"
+#include "nvvk/descriptors.hpp"
+#include "resourceManagement/scene/cpu/Scene.h"
+#include "resourceManagement/scene/gpu/GaussianScene.h"
+
 namespace Play
 {
-class RenderSession;
 class Texture;
+class GPUScene;
+
 class SceneManager
 {
 public:
     static constexpr uint32_t SceneTextureBinding      = 3;
     static constexpr uint32_t SceneTexturePoolCapacity = 1024;
 
-    SceneManager(GpuSceneType gpuSceneType = GpuSceneType::eRaster);
-    GpuScene* getGpuScene()
+    SceneManager();
+    ~SceneManager();
+
+    Scene& getScene()
     {
-        return _gpuScene.get();
+        return *_scene;
     }
-    const GpuScene* getGpuScene() const
+    const Scene& getScene() const
     {
-        return _gpuScene.get();
+        return *_scene;
     }
-    GpuSceneType getGpuSceneType() const
-    {
-        return _gpuScene ? _gpuScene->getType() : GpuSceneType::eRaster;
-    }
-    GaussianScene& getGaussianScene()
-    {
-        return *static_cast<GaussianScene*>(_gpuScene.get());
-    }
-    CpuScene& getSceneGraph()
-    {
-        return _cpuScene;
-    }
-    const CpuScene& getSceneGraph() const
-    {
-        return _cpuScene;
-    }
+
     template <typename Fn>
-    decltype(auto) readSceneGraph(Fn fn) const
+    decltype(auto) readScene(Fn fn) const
     {
-        std::lock_guard<std::mutex> lock(_cpuSceneMutex);
-        return fn(_cpuScene);
+        std::lock_guard<std::mutex> lock(_sceneMutex);
+        return fn(*_scene);
     }
+
     template <typename Fn>
-    decltype(auto) editSceneGraph(Fn fn)
+    decltype(auto) editScene(Fn fn)
     {
-        std::lock_guard<std::mutex> lock(_cpuSceneMutex);
-        return fn(_cpuScene);
+        std::lock_guard<std::mutex> lock(_sceneMutex);
+        return fn(*_scene);
     }
-    template <typename Fn>
-    decltype(auto) readProjectAssets(Fn fn) const
-    {
-        std::lock_guard<std::mutex> lock(_cpuSceneMutex);
-        return fn(_projectAssets);
-    }
-    template <typename Fn>
-    decltype(auto) editProjectAssets(Fn fn)
-    {
-        std::lock_guard<std::mutex> lock(_cpuSceneMutex);
-        return fn(_projectAssets);
-    }
-    RasterGpuScene& getRasterGpuScene()
-    {
-        return *static_cast<RasterGpuScene*>(_gpuScene.get());
-    }
-    const RasterGpuScene& getRasterGpuScene() const
-    {
-        return *static_cast<const RasterGpuScene*>(_gpuScene.get());
-    }
+
     void addSkyBoxTexture(const RefPtr<Texture>& texture);
     void updateDescriptorSet();
     void update();
-    bool loadModelIntoNode(CpuSceneNodeID nodeID, const std::string& sourcePath);
+
     bool createProject(const std::string& projectPath, std::string* errorMessage = nullptr);
     bool saveProject(std::string* errorMessage = nullptr);
     bool loadProject(const std::string& projectPath, std::string* errorMessage = nullptr);
 
-    ~SceneManager();
-
-protected:
 private:
-    // All project asset table access happens while _cpuSceneMutex is held. Background
-    // loading jobs never access this registry or CPU scene state directly.
-    bool        ensureProjectAssetLocked(ProjectAssetType type, const std::string& sourcePath, std::string& assetGuid);
-    bool        registerUntrackedModelAssetsLocked(std::string* errorMessage);
-    std::string resolveProjectAssetPathLocked(const ProjectAssetRecord& asset) const;
-    void        queueProjectModelLoadsLocked();
-
     nvvk::DescriptorBindings     _sceneDescriptorBindings;
     std::vector<RefPtr<Texture>> _sceneSkyTexture;
-
-    CpuScene                  _cpuScene;
-    ProjectAssetTable         _projectAssets;
-    std::string               _projectPath;
-    mutable std::mutex        _cpuSceneMutex;
-    AssetLoadingServer        _assetLoadingServer;
-    std::unique_ptr<GpuScene> _gpuScene;
+    std::shared_ptr<Scene>       _scene;
+    std::shared_ptr<GPUScene>    _gpuScene = nullptr;
+    mutable std::mutex           _sceneMutex;
 };
 
 } // namespace Play

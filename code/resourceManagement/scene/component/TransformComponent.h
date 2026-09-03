@@ -2,6 +2,9 @@
 #define TRANSFORMCOMPONENT_H
 #include "Component.h"
 
+namespace Play
+{
+
 class TransformComponent : public Component
 {
 public:
@@ -66,5 +69,7 @@ private:
     EndSerailize
     // clang-format on
 };
+
+} // namespace Play
 
 #endif // TRANSFORMCOMPONENT_H

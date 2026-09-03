@@ -206,19 +206,8 @@ bool VulkanRuntime::init(const RuntimeConfig& config, const nvvk::ContextInitInf
     }
 
     _renderSession = std::make_unique<Play::RenderSession>(Play::RenderSession::Info{.renderMode = _config.renderMode});
-    GpuSceneType gpuSceneType = GpuSceneType::eRaster;
-    switch (_renderSession->getRenderMode())
-    {
-        case Play::RenderSession::eGaussianRendering:
-            gpuSceneType = GpuSceneType::eGaussian;
-            break;
-        case Play::RenderSession::eRayTracing:
-            gpuSceneType = GpuSceneType::eRayTracing;
-            break;
-        default:
-            break;
-    }
-    _sceneManager = std::make_unique<Play::SceneManager>(gpuSceneType);
+
+    _sceneManager = std::make_unique<Play::SceneManager>();
     getEditorRegistry().clear();
     if (!_renderSession->init())
     {

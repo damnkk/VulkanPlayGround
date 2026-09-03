@@ -1,7 +1,7 @@
 #ifndef RENDERPASS_H
 #define RENDERPASS_H
-#include <string>
 #include <rttr/rttr_enable.h>
+#include <string>
 namespace Play
 {
 namespace RDG

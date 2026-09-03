@@ -22,9 +22,11 @@ void PlayCamera::update(const runtime::SdlInputState& input, float deltaSeconds)
     // The SDL window is the viewport in the runtime path.
     if (!input.mouseInWindow) return;
 
-    inputs.lmb   = input.lmb;
-    inputs.rmb   = input.rmb;
-    inputs.mmb   = input.mmb;
+    // CameraManipulator uses the left-button action for look-around in Fly mode.
+    // Feed the runtime right button into that action so RMB controls the view.
+    inputs.lmb   = input.rmb;
+    inputs.rmb   = false;
+    inputs.mmb   = false;
     inputs.ctrl  = input.ctrl;
     inputs.shift = input.shift;
     inputs.alt   = input.alt;
@@ -80,12 +82,12 @@ void PlayCamera::update(const runtime::SdlInputState& input, float deltaSeconds)
         }
     }
 
-    if (input.lmbPressed || input.mmbPressed || input.rmbPressed)
+    if (input.rmbPressed)
     {
         _cameraManip->setMousePosition({input.mouseX, input.mouseY});
     }
 
-    if (input.lmb || input.mmb || input.rmb)
+    if (input.rmb)
     {
         _cameraManip->mouseMove({input.mouseX, input.mouseY}, inputs);
     }

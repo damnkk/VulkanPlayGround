@@ -1,8 +1,8 @@
 #ifndef ENTITY_H
-#define ENITTY_H
+#define ENTITY_H
 #include "core/Serializable.h"
 #include "resourceManagement/scene/component/Component.h"
-#include "resourceManagement/scene/cpu/Scene.h"
+
 namespace Play
 {
 class Scene;
@@ -86,6 +86,14 @@ public:
     inline std::vector<std::shared_ptr<Entity>> getChildren()
     {
         return _children;
+    }
+    inline const std::vector<std::shared_ptr<Entity>>& getChildren() const
+    {
+        return _children;
+    }
+    inline const std::vector<std::shared_ptr<Component>>& getComponents() const
+    {
+        return _components;
     }
 
     void setFather(std::weak_ptr<Entity> father);

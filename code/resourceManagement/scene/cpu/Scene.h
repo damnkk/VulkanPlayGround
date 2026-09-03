@@ -27,14 +27,15 @@ public:
 
     void tick(float deltaTime);
 
-    std::vector<std::shared_ptr<Entity>> getEntities()
+    const std::vector<std::shared_ptr<Entity>>& getEntities() const
     {
         return _entities;
     }
-    std::shared_ptr<Entity> getEntity(uint32_t id);
-    std::shared_ptr<Entity> getEntity(std::string name);
-    std::shared_ptr<Entity> createEntity(std::string name);
-    bool                    addEntity(std::shared_ptr<Entity> entity);
+    std::shared_ptr<Entity>       getEntity(uint32_t id);
+    std::shared_ptr<const Entity> getEntity(uint32_t id) const;
+    std::shared_ptr<Entity>       getEntity(std::string name);
+    std::shared_ptr<Entity>       createEntity(std::string name);
+    bool                          addEntity(std::shared_ptr<Entity> entity);
 
     std::shared_ptr<Entity> removeEntity(std::string name);
     std::shared_ptr<Entity> removeEntity(uint32_t id);
@@ -75,7 +76,6 @@ private:
         entity->_scene = weak_from_this();
         _idPool.createID(entity->_id);
     } 
-    SerailizeEntry(_idPool)
     EndSerailize
     // clang-format on
 };

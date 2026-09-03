@@ -7,7 +7,7 @@ namespace Play
 {
 namespace
 {
-std::filesystem::path makeDefaultAssetPath(const GUID& uid)
+std::filesystem::path makeDefaultAssetPath(const VUID& uid)
 {
     if (!ProjectInfo::isOpen() || uid.is_nil())
     {
@@ -102,7 +102,7 @@ void AssetManager::Save()
     }
 }
 
-GUID AssetManager::filePathToGUID(const std::string& path)
+VUID AssetManager::filePathToGUID(const std::string& path)
 {
     auto iter = _pathToGUID.find(path);
     if (iter == _pathToGUID.end())
@@ -112,7 +112,7 @@ GUID AssetManager::filePathToGUID(const std::string& path)
     return iter->second;
 }
 
-std::string AssetManager::guidToFilePath(const GUID& uid)
+std::string AssetManager::guidToFilePath(const VUID& uid)
 {
     auto iter = _GUIDToPath.find(uid);
     if (iter == _GUIDToPath.end())
@@ -148,12 +148,12 @@ AssetRef AssetManager::importAsset(AssetRef asset, const std::string& filePath, 
     return asset;
 }
 
-GUID AssetManager::createAssetGUID()
+VUID AssetManager::createAssetGUID()
 {
     static std::random_device           randomDevice;
     static std::mt19937                 randomEngine(randomDevice());
     static uuids::uuid_random_generator uuidGenerator(randomEngine);
-    GUID                                uid;
+    VUID                                uid;
 
     do
     {
@@ -166,7 +166,7 @@ GUID AssetManager::createAssetGUID()
 
 AssetRef AssetManager::getAsset(const std::string& path)
 {
-    GUID guid = filePathToGUID(path);
+    VUID guid = filePathToGUID(path);
     if (guid.is_nil())
     {
         LOGW("Fail to find asset from cache {%s}", path.c_str());
@@ -175,7 +175,7 @@ AssetRef AssetManager::getAsset(const std::string& path)
     return getAsset(guid);
 }
 
-AssetRef AssetManager::getAsset(const GUID& uid)
+AssetRef AssetManager::getAsset(const VUID& uid)
 {
     if (_assets.find(uid) != _assets.end()) return _assets[uid];
 
@@ -276,7 +276,7 @@ void AssetManager::deleteAsset(AssetRef asset)
     deleteAsset(oldPath);
 }
 
-void AssetManager::updateFilePathAndGUID(const std::string& filePath, const GUID& uid)
+void AssetManager::updateFilePathAndGUID(const std::string& filePath, const VUID& uid)
 {
     if (filePath.empty())
     {
@@ -308,7 +308,7 @@ void AssetManager::updateFilePathAndGUID(const std::string& filePath, const GUID
 void AssetManager::deleteAsset(const std::string& path)
 {
     std::filesystem::remove(path);
-    GUID id = filePathToGUID(path);
+    VUID id = filePathToGUID(path);
     if (!id.is_nil())
     {
         updateFilePathAndGUID("", id);
@@ -332,7 +332,7 @@ AssetRef AssetManager::getOrLoadAssetInternal(const std::string& path)
     return asset;
 }
 
-AssetRef AssetManager::getOrLoadAssetInternal(const GUID& uid)
+AssetRef AssetManager::getOrLoadAssetInternal(const VUID& uid)
 {
     AssetRef asset = getAsset(uid);
     if (asset == nullptr)

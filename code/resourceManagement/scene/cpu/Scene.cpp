@@ -42,6 +42,12 @@ std::shared_ptr<Entity> Scene::getEntity(uint32_t id)
     return entity != _entities.end() ? *entity : nullptr;
 }
 
+std::shared_ptr<const Entity> Scene::getEntity(uint32_t id) const
+{
+    auto entity = std::find_if(_entities.begin(), _entities.end(), [id](const auto& entity) { return entity->_id == id; });
+    return entity != _entities.end() ? *entity : nullptr;
+}
+
 std::shared_ptr<Entity> Scene::getEntity(std::string name)
 {
     auto entity = std::find_if(_entities.begin(), _entities.end(), [name](auto& entity) { return entity->_name == name; });

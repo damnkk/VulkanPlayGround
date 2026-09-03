@@ -26,5 +26,5 @@ inline void load_minimal(const Archive&, uuids::uuid& value, const std::string& 
 }
 } // namespace cereal
 
-using GUID = uuids::uuid;
+using VUID = uuids::uuid;
 #endif // UUID_H

@@ -2,8 +2,6 @@
 #define PLAY_CODE_EDITOR_RUNTIMEEDITOR_H
 
 #include "editor/EditorRegistry.h"
-#include "editor/EditorRuntimeContext.h"
-#include "editor/RenderModeTabs.h"
 
 namespace Play
 {
@@ -34,11 +32,6 @@ public:
     void bindRuntime(Play::runtime::VulkanRuntime& runtime, Play::RenderSession& renderSession, const char* activeMode);
     void setStartupProjectReceiver(StartupProjectReceiver* receiver);
 
-    bool isRuntimeBound() const
-    {
-        return _runtimeContext.getRuntime() != nullptr;
-    }
-
     EditorRegistry& getEditorRegistry()
     {
         return _editorRegistry;
@@ -49,21 +42,8 @@ public:
         return _editorRegistry;
     }
 
-    RenderModeTabs& getRenderModeTabs()
-    {
-        return _renderModeTabs;
-    }
-
-    EditorUiSnapshot buildSnapshot() const;
-
-    bool createProject(const std::string& projectPath, std::string* errorMessage = nullptr);
-    bool saveProject(std::string* errorMessage = nullptr);
-    bool loadProject(const std::string& projectPath, std::string* errorMessage = nullptr);
-
 private:
-    EditorRuntimeContext    _runtimeContext;
     EditorRegistry          _editorRegistry;
-    RenderModeTabs          _renderModeTabs;
     StartupProjectReceiver* _startupProjectReceiver = nullptr;
 };
 

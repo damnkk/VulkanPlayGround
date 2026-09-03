@@ -15,20 +15,17 @@ int EngineLoop::run(const RuntimeConfig& config, const nvvk::ContextInitInfo& co
         return 1;
     }
 
-    std::string projectPath;
-    while (!guiHost.takeStartupProject(projectPath))
+    RuntimeConfig runtimeConfig = config;
+    if (runtimeConfig.projectPath.empty())
     {
-        SDL_Delay(10);
+        runtimeConfig.projectPath = getBaseFilePath().string();
     }
 
-    if (!ProjectInfo::setProjectPath(projectPath))
+    if (!ProjectInfo::setProjectPath(runtimeConfig.projectPath))
     {
         guiHost.stop();
         return 1;
     }
-
-    RuntimeConfig runtimeConfig = config;
-    runtimeConfig.projectPath   = projectPath;
 
     int result = 0;
     {
