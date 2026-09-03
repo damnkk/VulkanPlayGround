@@ -11,7 +11,6 @@ class ShaderInfo;
 class DescriptorSetCache;
 class RenderPassCache;
 class FrameBufferCache;
-class SceneManager;
 
 class RenderSession
 {
@@ -28,7 +27,6 @@ public:
     void onResize(const VkExtent2D& size);
     void beginFrame();
     void renderFrame();
-    SceneManager* getSceneManager();
 
     enum RenderMode
     {
@@ -47,7 +45,6 @@ public:
     }
 
 protected:
-    // SceneManager
     // RenderPassCache
     // FrameBufferCache
     // PipelineCache
@@ -59,7 +56,6 @@ private:
     friend class VolumeRenderer;
     friend class ShadingRateRenderer;
     friend class GaussianRenderer;
-    friend class SceneManager;
     bool _initialized = false;
 };
 

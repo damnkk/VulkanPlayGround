@@ -2,6 +2,11 @@
   "name": "vulkan-playground",
   "version-string": "0.1.0",
   "dependencies": [
-    "openimageio"
+    "assimp",
+    "ktx",
+    "glm",
+    "openimageio",
+    "cereal",
+    "stduuid"
   ]
 }

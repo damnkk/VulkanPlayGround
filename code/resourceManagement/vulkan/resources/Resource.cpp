@@ -1,11 +1,12 @@
 #include "Resource.h"
 #include "core/Profiling.h"
 #include "core/runtime/RenderSession.h"
-#include "resourceManagement/assets/image/ImageLoading.h"
 #include "PlayAllocator.h"
 #include "core/runtime/VulkanRuntime.h"
 #include "VulkanResourceUtils.h"
+#include "nvutils/logger.hpp"
 #include "nvvk/mipmaps.hpp"
+#include <VPGLoader/TextureLoader.hpp>
 
 namespace Play
 {
@@ -22,30 +23,33 @@ uint32_t resolveTextureMipLevels(uint32_t requestedMipLevels, VkExtent2D extent)
     return requestedMipLevels;
 }
 
-bool isValidLoadedImage(const ImageLoading::LoadedImage& loadedImage)
-{
-    return loadedImage.format != VK_FORMAT_UNDEFINED && loadedImage.extent.width > 0 && loadedImage.extent.height > 0 &&
-           !loadedImage.pixels.empty();
-}
-
-void uploadLoadedImage(Texture& texture, std::string debugName, const ImageLoading::LoadedImage& loadedImage, VkImageLayout finalLayout,
+void uploadTexture(Texture& texture, std::string debugName, const vpgloader::Texture& source, bool isSrgb, VkImageLayout finalLayout,
                        uint32_t mipLevels)
 {
-    if (!isValidLoadedImage(loadedImage))
+    if (source.info().depth != 1)
+    {
+        return;
+    }
+
+    const vpgloader::TextureInfo&     sourceInfo = source.info();
+    const vpgloader::TextureMipLevel& baseMip    = sourceInfo.mipLevels.front();
+    const VkFormat                    format     = toVkFormat(sourceInfo.format, isSrgb);
+    const VkExtent2D                  extent     = {baseMip.width, baseMip.height};
+    if (format == VK_FORMAT_UNDEFINED)
     {
         return;
     }
 
     {
         PLAY_PROFILE_SCOPE("Texture::resolve mip levels");
-        mipLevels = resolveTextureMipLevels(mipLevels, loadedImage.extent);
+        mipLevels = resolveTextureMipLevels(mipLevels, extent);
     }
 
     VkImageCreateInfo imageInfo{
         .sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType     = VK_IMAGE_TYPE_2D,
-        .format        = loadedImage.format,
-        .extent        = {loadedImage.extent.width, loadedImage.extent.height, 1},
+        .format        = format,
+        .extent        = {extent.width, extent.height, 1},
         .mipLevels     = mipLevels,
         .arrayLayers   = 1,
         .samples       = VK_SAMPLE_COUNT_1_BIT,
@@ -58,9 +62,9 @@ void uploadLoadedImage(Texture& texture, std::string debugName, const ImageLoadi
     VkImageViewCreateInfo viewInfo{
         .sType            = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .viewType         = VK_IMAGE_VIEW_TYPE_2D,
-        .format           = loadedImage.format,
+        .format           = format,
         .components       = {VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A},
-        .subresourceRange = {inferImageAspectFlags(loadedImage.format, true), 0, mipLevels, 0, 1},
+        .subresourceRange = {inferImageAspectFlags(format, true), 0, mipLevels, 0, 1},
     };
     {
         PLAY_PROFILE_SCOPE("Texture::create image");
@@ -71,8 +75,7 @@ void uploadLoadedImage(Texture& texture, std::string debugName, const ImageLoadi
     {
         PLAY_PROFILE_SCOPE("Texture::append image upload");
         PlayResourceManager::Instance().appendImage(texture,
-                                                    static_cast<VkDeviceSize>(loadedImage.pixels.size()),
-                                                    loadedImage.pixels.data(),
+                                                    static_cast<VkDeviceSize>(baseMip.byteSize), source.data() + baseMip.byteOffset,
                                                     finalLayout);
     }
     {
@@ -83,7 +86,7 @@ void uploadLoadedImage(Texture& texture, std::string debugName, const ImageLoadi
     {
         PLAY_PROFILE_SCOPE("Texture::record mipmaps");
         PLAY_PROFILE_COMMAND_LABEL(cmd, "Texture Generate Mipmaps");
-        nvvk::cmdGenerateMipmaps(cmd, texture.image, loadedImage.extent, mipLevels, 1, finalLayout);
+        nvvk::cmdGenerateMipmaps(cmd, texture.image, extent, mipLevels, 1, finalLayout);
     }
     {
         PLAY_PROFILE_SCOPE("Texture::submit and wait upload");
@@ -97,8 +100,8 @@ void uploadLoadedImage(Texture& texture, std::string debugName, const ImageLoadi
     texture.DebugName()   = std::move(debugName);
     texture.Layout()      = finalLayout;
     texture.Type()        = VK_IMAGE_TYPE_2D;
-    texture.Format()      = loadedImage.format;
-    texture.Extent()      = {loadedImage.extent.width, loadedImage.extent.height, 1};
+    texture.Format()      = format;
+    texture.Extent()      = {extent.width, extent.height, 1};
     texture.SampleCount() = VK_SAMPLE_COUNT_1_BIT;
     texture.UsageFlags()  = imageInfo.usage;
     texture.AspectFlags() = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -310,18 +313,24 @@ Texture::Texture(const std::filesystem::path& imagePath, VkImageLayout finalLayo
 
     debugName = nvutils::utf8FromPath(imagePath);
 
-    ImageLoading::LoadedImage loadedImage;
-    bool                      imageLoaded = false;
+    vpgloader::TextureLoadOptions options;
+    const std::string             extension = imagePath.extension().string();
+   
+    options.loadMipmaps = false;
+
+    try
     {
         PLAY_PROFILE_SCOPE("Texture::load texture image data");
-        imageLoaded = ImageLoading::LoadTextureImage(imagePath, isSrgb, loadedImage);
+        const vpgloader::TextureHandle source = vpgloader::TextureLoader::LoadCached(imagePath, options);
+        if (source)
+        {
+            uploadTexture(*this, debugName, *source, isSrgb, finalLayout, mipLevels);
+        }
     }
-    if (!imageLoaded)
+    catch (const std::exception& error)
     {
-        return;
+        LOGW("Failed to load texture with VPGLoader: %s: %s\n", debugName.c_str(), error.what());
     }
-
-    uploadLoadedImage(*this, debugName, loadedImage, finalLayout, mipLevels);
 }
 
 void Texture::onDestroy()

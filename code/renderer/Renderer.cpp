@@ -1,35 +1,14 @@
 #include "Renderer.h"
 #include "resourceManagement/vulkan/resources/Resource.h"
 #include "core/PlayCamera.h"
-#include "resourceManagement/scene/SceneManager.h"
 #include "core/runtime/VulkanRuntime.h"
+#include "resourceManagement/scene/SceneManager.h"
 #include "resourceManagement/renderGraph/RDG.h"
 #include "renderPasses/RenderPass.h"
 #include "renderPasses/PresentPass.h"
 #include <algorithm>
 namespace Play
 {
-
-namespace
-{
-GpuSceneType getRuntimeGpuSceneType()
-{
-    if (!vkDriver)
-    {
-        return GpuSceneType::eRaster;
-    }
-
-    switch (vkDriver->getRenderMode())
-    {
-        case RenderSession::eGaussianRendering:
-            return GpuSceneType::eGaussian;
-        case RenderSession::eRayTracing:
-            return GpuSceneType::eRayTracing;
-        default:
-            return GpuSceneType::eRaster;
-    }
-}
-} // namespace
 
 void Renderer::addCamera()
 {
@@ -56,8 +35,6 @@ const CameraData& Renderer::getCurrentCameraData() const
 Renderer::Renderer()
 {
     addCamera();
-
-    _scene = std::make_unique<SceneManager>(getRuntimeGpuSceneType());
 
     for (int i = 0; i < _cameraUniformData.size(); ++i)
     {
@@ -92,7 +69,7 @@ void Renderer::OnPreRender()
 {
     updatePresentTexture();
     updateCameraBuffer();
-    _scene->update();
+    vkDriver->getSceneManager()->update();
 }
 
 void Renderer::RenderFrame()
@@ -101,8 +78,6 @@ void Renderer::RenderFrame()
 }
 
 void Renderer::OnPostRender() {}
-
-void Renderer::SetScene(SceneManager* scene) {}
 
 void Renderer::OnResize(int width, int height)
 {

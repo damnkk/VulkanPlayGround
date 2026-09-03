@@ -1,92 +1,53 @@
 #include "SceneManager.h"
-#include "resourceManagement/vulkan/resources/Resource.h"
+
 #include "core/Profiling.h"
+#include "core/ProjectPaths.h"
 #include "core/runtime/VulkanRuntime.h"
 #include "resourceManagement/vulkan/descriptors/DescriptorManager.h"
+#include "resourceManagement/vulkan/resources/Resource.h"
 
 namespace Play
 {
 
 namespace
 {
-std::unique_ptr<GpuScene> createGpuScene(GpuSceneType type)
+
+bool initializeProject(const std::string& projectPath, std::string* errorMessage)
 {
-    switch (type)
+    if (!ProjectInfo::setProjectPath(projectPath))
     {
-        case GpuSceneType::eGaussian:
-            return std::make_unique<GaussianScene>();
-        case GpuSceneType::eRayTracing:
-            return std::make_unique<RayTracingGpuScene>();
-        case GpuSceneType::eRaster:
-        default:
-            return std::make_unique<RasterGpuScene>();
+        if (errorMessage)
+        {
+            *errorMessage = "Could not initialize the project information.";
+        }
+        return false;
     }
-}
 
-bool isSameModelLoadRequest(ModelLoadRequestID lhs, ModelLoadRequestID rhs)
-{
-    return lhs.index == rhs.index && lhs.generation == rhs.generation;
-}
+    if (vkDriver && vkDriver->getAssetManager() && !vkDriver->getAssetManager()->Init())
+    {
+        if (errorMessage)
+        {
+            *errorMessage = "Could not initialize the project asset map.";
+        }
+        return false;
+    }
 
-void applyFailedModelLoad(CpuModelComponent& component, const std::string& message)
-{
-    component.model           = {};
-    component.firstRenderable = 0;
-    component.renderableCount = INVALID_SCENE_ID;
-    component.loadState       = CpuModelComponent::LoadState::eFailed;
-    component.loadMessage     = message;
+    return true;
 }
-
-void applyCpuLoadedModel(CpuModelComponent& component)
-{
-    component.model           = {};
-    component.firstRenderable = 0;
-    component.renderableCount = INVALID_SCENE_ID;
-    component.loadState       = CpuModelComponent::LoadState::eCpuLoaded;
-    component.loadMessage.clear();
-}
-
-void applyUploadingModelLoad(CpuModelComponent& component)
-{
-    component.model           = {};
-    component.firstRenderable = 0;
-    component.renderableCount = INVALID_SCENE_ID;
-    component.loadState       = CpuModelComponent::LoadState::eUploading;
-    component.loadMessage.clear();
-}
-
-void applyRegisteredModelLoad(CpuModelComponent& component, ModelAssetID model, uint32_t renderableCount)
-{
-    component.model           = model;
-    component.firstRenderable = 0;
-    component.renderableCount = renderableCount;
-    component.loadState       = CpuModelComponent::LoadState::eLoaded;
-    component.loadMessage.clear();
-}
-
-struct PendingModelRegistration
-{
-    ModelGpuUploadCompletion completion;
-    ModelAssetID             model;
-    uint32_t                 renderableCount = INVALID_SCENE_ID;
-};
 } // namespace
 
-SceneManager::SceneManager(GpuSceneType gpuSceneType) : _gpuScene(createGpuScene(gpuSceneType))
+SceneManager::SceneManager() : _scene(std::make_shared<Scene>("Scene"))
 {
-    if (_gpuScene)
-    {
-        _gpuScene->clear();
-    }
-
-    _sceneDescriptorBindings.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr); // g_SceneSkyTexture
-    _sceneDescriptorBindings.addBinding(1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr); // s_SceneSkyBoxTexture
-    _sceneDescriptorBindings.addBinding(2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr); // s_SceneVolumeFogTexture
+    _sceneDescriptorBindings.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr);
+    _sceneDescriptorBindings.addBinding(1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr);
+    _sceneDescriptorBindings.addBinding(2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr);
     _sceneDescriptorBindings.addBinding(3, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, SceneTexturePoolCapacity, VK_SHADER_STAGE_ALL, nullptr,
-                                        VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT); // s_SceneTextures[]
+                                        VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT);
 
     vkDriver->getDescriptorSetCache()->initSceneDescriptorSets(_sceneDescriptorBindings);
 }
+
+SceneManager::~SceneManager() = default;
 
 void SceneManager::addSkyBoxTexture(const RefPtr<Texture>& texture)
 {
@@ -96,195 +57,73 @@ void SceneManager::addSkyBoxTexture(const RefPtr<Texture>& texture)
 void SceneManager::updateDescriptorSet()
 {
     PLAY_PROFILE_SCOPE("SceneManager::updateDescriptorSet");
-
-    std::vector<VkWriteDescriptorSet> writes;
-
-    VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-    write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-    write.dstBinding     = SceneTextureBinding;
-    write.dstSet         = vkDriver->getDescriptorSetCache()->getSceneDescriptorSet().set;
-
-    std::vector<VkDescriptorImageInfo> imageInfos;
-    if (_gpuScene && !_gpuScene->getSceneTextures().empty())
-    {
-        const std::vector<RefPtr<Texture>>& sceneTextures = _gpuScene->getSceneTextures();
-        write.descriptorCount = static_cast<uint32_t>(sceneTextures.size());
-        imageInfos.resize(sceneTextures.size());
-        for (size_t i = 0; i < sceneTextures.size(); ++i)
-        {
-            imageInfos[i].imageView   = sceneTextures[i]->descriptor.imageView;
-            imageInfos[i].sampler     = VK_NULL_HANDLE;
-            imageInfos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        }
-    }
-    write.pImageInfo = imageInfos.data();
-    if (!imageInfos.empty()) writes.push_back(write);
-
-    VkWriteDescriptorSet skyWrite{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-    skyWrite.descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-    skyWrite.descriptorCount = static_cast<uint32_t>(_sceneSkyTexture.size());
-    skyWrite.dstBinding      = 0;
-    skyWrite.dstSet          = vkDriver->getDescriptorSetCache()->getSceneDescriptorSet().set;
-    std::vector<VkDescriptorImageInfo> skyImageInfos(_sceneSkyTexture.size());
-    for (size_t i = 0; i < _sceneSkyTexture.size(); ++i)
-    {
-        skyImageInfos[i].imageView   = _sceneSkyTexture[i]->descriptor.imageView;
-        skyImageInfos[i].sampler     = VK_NULL_HANDLE;
-        skyImageInfos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    }
-    skyWrite.pImageInfo = skyImageInfos.data();
-    if (!_sceneSkyTexture.empty()) writes.push_back(skyWrite);
-
-    vkUpdateDescriptorSets(vkDriver->getDevice(), writes.size(), writes.data(), 0, nullptr);
 }
 
 void SceneManager::update()
 {
     PLAY_PROFILE_SCOPE("SceneManager::update");
-
-    {
-        PLAY_PROFILE_SCOPE("SceneManager::process pending model loads");
-        _assetLoadingServer.processPendingLoads();
-    }
-
-    {
-        PLAY_PROFILE_SCOPE("SceneManager::process pending model uploads");
-        _assetLoadingServer.processPendingUploads();
-    }
-
-    std::vector<ModelLoadCompletion> completedModels;
-    std::vector<ModelGpuUploadCompletion> completedModelUploads;
-
-    {
-        PLAY_PROFILE_SCOPE("SceneManager::collect completed model loads");
-        ModelLoadCompletion completion;
-        while (_assetLoadingServer.popCompletedModel(completion))
-        {
-            completedModels.push_back(std::move(completion));
-        }
-    }
-
-    {
-        PLAY_PROFILE_SCOPE("SceneManager::collect completed model uploads");
-        ModelGpuUploadCompletion completion;
-        while (_assetLoadingServer.popCompletedModelUpload(completion))
-        {
-            completedModelUploads.push_back(std::move(completion));
-        }
-    }
-
-    {
-        PLAY_PROFILE_SCOPE("SceneManager::apply completed CPU model loads");
-        std::lock_guard<std::mutex> lock(_cpuSceneMutex);
-        for (ModelLoadCompletion& completion : completedModels)
-        {
-            CpuModelComponent* component = _cpuScene.getComponent<CpuModelComponent>(completion.request.requester);
-            if (!component || !isSameModelLoadRequest(component->request, completion.request.id))
-            {
-                continue;
-            }
-
-            if (completion.result.success && completion.result.model)
-            {
-                if (completion.request.uploadPolicy == AssetUploadPolicy::eUploadToGpu)
-                {
-                    applyUploadingModelLoad(*component);
-                }
-                else
-                {
-                    applyCpuLoadedModel(*component);
-                }
-                _cpuScene.notifyComponentChanged();
-                continue;
-            }
-
-            applyFailedModelLoad(*component, completion.result.message);
-            _cpuScene.notifyComponentChanged();
-        }
-    }
-
-    std::vector<PendingModelRegistration> pendingRegistrations;
-    pendingRegistrations.reserve(completedModelUploads.size());
-
-    {
-        PLAY_PROFILE_SCOPE("SceneManager::prepare completed model registrations");
-        std::lock_guard<std::mutex> lock(_cpuSceneMutex);
-        for (ModelGpuUploadCompletion& completion : completedModelUploads)
-        {
-            CpuModelComponent* component = _cpuScene.getComponent<CpuModelComponent>(completion.request.requester);
-            if (!component || !isSameModelLoadRequest(component->request, completion.request.id))
-            {
-                continue;
-            }
-
-            if (completion.success && _gpuScene)
-            {
-                PendingModelRegistration pendingRegistration;
-                pendingRegistration.completion = std::move(completion);
-                pendingRegistrations.push_back(std::move(pendingRegistration));
-                continue;
-            }
-
-            applyFailedModelLoad(*component, completion.message.empty() ? "Model GPU upload failed." : completion.message);
-            _cpuScene.notifyComponentChanged();
-        }
-    }
-
-    const size_t previousSceneTextureCount = _gpuScene ? _gpuScene->getSceneTextures().size() : 0;
-
-    {
-        PLAY_PROFILE_SCOPE("SceneManager::register completed model uploads");
-        for (PendingModelRegistration& pendingRegistration : pendingRegistrations)
-        {
-            pendingRegistration.model = _gpuScene->registerModel(std::move(pendingRegistration.completion.model));
-            pendingRegistration.renderableCount = pendingRegistration.model.isValid()
-                                                      ? static_cast<uint32_t>(
-                                                            _gpuScene->getModels()[pendingRegistration.model.index].renderables.size())
-                                                      : INVALID_SCENE_ID;
-        }
-    }
-
-    {
-        PLAY_PROFILE_SCOPE("SceneManager::apply completed model registrations");
-        std::lock_guard<std::mutex> lock(_cpuSceneMutex);
-        for (const PendingModelRegistration& pendingRegistration : pendingRegistrations)
-        {
-            const ModelGpuUploadCompletion& completion = pendingRegistration.completion;
-            CpuModelComponent* component = _cpuScene.getComponent<CpuModelComponent>(completion.request.requester);
-            if (!component || !isSameModelLoadRequest(component->request, completion.request.id))
-            {
-                continue;
-            }
-
-            if (!pendingRegistration.model.isValid())
-            {
-                applyFailedModelLoad(*component, "Could not register uploaded model in the GPU scene.");
-            }
-            else
-            {
-                applyRegisteredModelLoad(*component, pendingRegistration.model, pendingRegistration.renderableCount);
-            }
-            _cpuScene.notifyComponentChanged();
-        }
-    }
-
-    {
-        PLAY_PROFILE_SCOPE("SceneManager::update loaded model scene state");
-        std::lock_guard<std::mutex> lock(_cpuSceneMutex);
-        _cpuScene.updateWorldTransforms();
-
-        if (_gpuScene && _gpuScene->getType() != GpuSceneType::eGaussian && _gpuScene->getSourceSceneRevision() != _cpuScene.getRevision())
-        {
-            _gpuScene->updateTransforms(_cpuScene);
-        }
-    }
-
-    if (_gpuScene && _gpuScene->getSceneTextures().size() != previousSceneTextureCount)
-    {
-        updateDescriptorSet();
-    }
+    std::lock_guard<std::mutex> lock(_sceneMutex);
+    _scene->tick(static_cast<float>(vkDriver->getDeltaTime()));
 }
 
-SceneManager::~SceneManager() = default;
+bool SceneManager::createProject(const std::string& projectPath, std::string* errorMessage)
+{
+    std::string normalizedPath = projectPath;
+    if (std::filesystem::path(normalizedPath).extension().empty())
+    {
+        normalizedPath += ".project";
+    }
+
+    if (!initializeProject(normalizedPath, errorMessage))
+    {
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(_sceneMutex);
+    _scene = std::make_shared<Scene>(std::filesystem::path(normalizedPath).stem().string());
+    return true;
+}
+
+bool SceneManager::saveProject(std::string* errorMessage)
+{
+    if (!ProjectInfo::isOpen() || !vkDriver || !vkDriver->getAssetManager())
+    {
+        if (errorMessage)
+        {
+            *errorMessage = "No project is currently open.";
+        }
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(_sceneMutex);
+    vkDriver->getAssetManager()->saveAsset(_scene);
+    vkDriver->getAssetManager()->Save();
+    return true;
+}
+
+bool SceneManager::loadProject(const std::string& projectPath, std::string* errorMessage)
+{
+    if (!initializeProject(projectPath, errorMessage))
+    {
+        return false;
+    }
+
+    std::shared_ptr<Scene> loadedScene;
+    if (vkDriver && vkDriver->getAssetManager())
+    {
+        for (const auto& [guid, asset] : vkDriver->getAssetManager()->getAssets())
+        {
+            if (asset && asset->getAssetType() == ASSET_TYPE_SCENE)
+            {
+                loadedScene = std::dynamic_pointer_cast<Scene>(asset);
+                break;
+            }
+        }
+    }
+
+    std::lock_guard<std::mutex> lock(_sceneMutex);
+    _scene = loadedScene ? loadedScene : std::make_shared<Scene>(std::filesystem::path(projectPath).stem().string());
+    return true;
+}
 
 } // namespace Play

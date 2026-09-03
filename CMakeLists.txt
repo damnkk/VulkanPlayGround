@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.22 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
 get_filename_component(PROJECT_NAME ${CMAKE_CURRENT_SOURCE_DIR} NAME)
 project(${PROJECT_NAME} LANGUAGES C CXX)
 
@@ -23,6 +23,8 @@ if(DEFINED ENV{VULKAN_SDK})
 else()
   find_package(SDL3 CONFIG REQUIRED)
 endif()
+find_package(cereal CONFIG REQUIRED)
+find_package(stduuid CONFIG REQUIRED)
 
 # Add compile definitions for nvutils to enable thread pool priority and deadlock check
 # This ensures both the library and our application see the same class layout
@@ -93,44 +95,11 @@ set_property(TARGET upsweep_slang PROPERTY FOLDER "ThirdParty/vrdx")
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/External/spz)
 
 #####################################################################################
-# OpenImageIO
-find_package(OpenImageIO CONFIG REQUIRED)
-
-#####################################################################################
-# assimp
-function(add_assimp_dependency)
-  set(BUILD_SHARED_LIBS OFF)
-  set(ASSIMP_BUILD_ASSIMP_TOOLS OFF)
-  set(ASSIMP_BUILD_SAMPLES OFF)
-  set(ASSIMP_BUILD_TESTS OFF)
-  set(ASSIMP_INSTALL OFF)
-  set(ASSIMP_WARNINGS_AS_ERRORS OFF)
-  set(ASSIMP_NO_EXPORT ON)
-
-  if(TARGET zlibstatic)
-    set(_assimp_zlib_target zlibstatic)
-    set(_assimp_zlib_include_target zlibstatic)
-    if(TARGET zlib)
-      set(_assimp_zlib_include_target zlib)
-    endif()
-  elseif(TARGET zlib)
-    set(_assimp_zlib_target zlib)
-    set(_assimp_zlib_include_target zlib)
-  endif()
-
-  if(_assimp_zlib_target)
-    set(ZLIB_FOUND TRUE)
-    set(ZLIB_LIBRARIES ${_assimp_zlib_target})
-    set(ASSIMP_BUILD_ZLIB ON)
-    get_target_property(_assimp_zlib_include_dirs ${_assimp_zlib_include_target} INTERFACE_INCLUDE_DIRECTORIES)
-    if(_assimp_zlib_include_dirs)
-      set(ZLIB_INCLUDE_DIR ${_assimp_zlib_include_dirs})
-    endif()
-  endif()
-
-  add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/External/assimp EXCLUDE_FROM_ALL)
-endfunction()
-add_assimp_dependency()
+# VPGLoader
+set(VPGLOADER_BUILD_SAMPLE OFF CACHE BOOL "Build the VPGLoader sample" FORCE)
+set(VPGLOADER_ENABLE_PACKAGING OFF CACHE BOOL "Generate VPGLoader package metadata" FORCE)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/External/VPGLoader EXCLUDE_FROM_ALL)
+set_target_properties(VPGLoader PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
 
 #####################################################################################
 # Executable
@@ -183,17 +152,18 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   nvpro2::nvvk
   nvpro2::nvvkglsl
   SDL3::SDL3
+  cereal::cereal
+  stduuid
   Qt6::Widgets
   vk_radix_sort
   RTTR::Core_Lib
-  OpenImageIO::OpenImageIO
+  VPGLoader::VPGLoader
   spirv-reflect-static
   crc32c
   "${CMAKE_CURRENT_SOURCE_DIR}/External/sqlite3/libsqlite3.lib"
   spz
   stb
   tinygltf
-  assimp::assimp
 )
 
 foreach(_vpg_qt_module Core Gui Widgets)

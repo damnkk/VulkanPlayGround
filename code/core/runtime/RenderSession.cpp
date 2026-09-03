@@ -58,11 +58,11 @@ bool RenderSession::init()
             _renderer = std::make_unique<DeferRenderer>(*this);
             break;
         }
-        case eGaussianRendering:
-        {
-            _renderer = std::make_unique<GaussianRenderer>(*this);
-            break;
-        }
+        // case eGaussianRendering:
+        // {
+        //     _renderer = std::make_unique<GaussianRenderer>(*this);
+        //     break;
+        // }
         case eVolumeRendering:
         {
             _renderer = std::make_unique<VolumeRenderer>(*this);
@@ -141,11 +141,6 @@ void RenderSession::renderFrame()
 
     _renderer->RenderFrame();
     _renderer->OnPostRender();
-}
-
-SceneManager* RenderSession::getSceneManager()
-{
-    return _renderer ? _renderer->getSceneManager() : nullptr;
 }
 
 } // namespace Play

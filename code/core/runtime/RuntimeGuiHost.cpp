@@ -10,27 +10,10 @@
 namespace Play::runtime
 {
 
-namespace
+RuntimeGuiHost::RuntimeGuiHost()
 {
-bool parseEditorObjectId(const std::string& text, Play::editor::EditorObjectId& id)
-{
-    Play::editor::EditorObjectId parsedId = 0;
-    for (const char ch : text)
-    {
-        if (ch < '0' || ch > '9')
-        {
-            return false;
-        }
-
-        parsedId = parsedId * 10 + static_cast<Play::editor::EditorObjectId>(ch - '0');
-    }
-
-    id = parsedId;
-    return id != 0;
+    _editor.setStartupProjectReceiver(this);
 }
-} // namespace
-
-RuntimeGuiHost::RuntimeGuiHost() = default;
 
 RuntimeGuiHost::~RuntimeGuiHost()
 {
@@ -56,7 +39,8 @@ bool RuntimeGuiHost::start()
 
     _stopRequested  = false;
     _threadFinished = false;
-    _thread         = SDL_CreateThread(&RuntimeGuiHost::threadMain, "RuntimeGuiHost", this);
+    _startupProjectPath.clear();
+    _thread = SDL_CreateThread(&RuntimeGuiHost::threadMain, "RuntimeGuiHost", this);
     if (!_thread)
     {
         LOGE("RuntimeGuiHost: SDL_CreateThread failed: %s\n", SDL_GetError());
@@ -65,6 +49,61 @@ bool RuntimeGuiHost::start()
         return false;
     }
 
+    return true;
+}
+
+bool RuntimeGuiHost::selectStartupProject(const std::string& projectPath, std::string* errorMessage)
+{
+    if (projectPath.empty())
+    {
+        if (errorMessage)
+        {
+            *errorMessage = "Project path is empty.";
+        }
+        return false;
+    }
+
+    if (!_mutex)
+    {
+        if (errorMessage)
+        {
+            *errorMessage = "Project startup is not available.";
+        }
+        return false;
+    }
+
+    SDL_LockMutex(_mutex);
+    const bool isStopping = _stopRequested;
+    if (!isStopping)
+    {
+        _startupProjectPath = projectPath;
+    }
+    SDL_UnlockMutex(_mutex);
+
+    if (isStopping && errorMessage)
+    {
+        *errorMessage = "Project startup has already stopped.";
+    }
+    return !isStopping;
+}
+
+bool RuntimeGuiHost::takeStartupProject(std::string& projectPath)
+{
+    if (!_mutex)
+    {
+        return false;
+    }
+
+    SDL_LockMutex(_mutex);
+    if (_startupProjectPath.empty())
+    {
+        SDL_UnlockMutex(_mutex);
+        return false;
+    }
+
+    projectPath = _startupProjectPath;
+    _startupProjectPath.clear();
+    SDL_UnlockMutex(_mutex);
     return true;
 }
 
@@ -112,7 +151,7 @@ int RuntimeGuiHost::threadMain(void* data)
 
 int RuntimeGuiHost::run()
 {
-    char  applicationName[] = "VulkanPlayGroundControlPanel";
+    char  applicationName[] = "VulkanPlayGroundEditor";
     char* arguments[]       = {applicationName, nullptr};
     int   argumentCount     = 1;
 

@@ -1,6 +1,7 @@
 #ifndef VULKAN_RESOURCE_UTILS_H
 #define VULKAN_RESOURCE_UTILS_H
 
+#include <VPGLoader/Texture.hpp>
 #include <vulkan/vulkan.h>
 
 namespace Play
@@ -10,6 +11,7 @@ VkImageCreateInfo makeImage3DCreateInfo(VkExtent3D extent, VkFormat format, VkIm
 
 VkImageAspectFlags inferImageAspectFlags(VkFormat format, bool forImageView = false);
 VkAccessFlags2     inferAccessFlags(VkImageLayout layout);
+VkFormat           toVkFormat(const vpgloader::TextureFormat& format, bool isSrgb);
 } // namespace Play
 
 #endif // VULKAN_RESOURCE_UTILS_H

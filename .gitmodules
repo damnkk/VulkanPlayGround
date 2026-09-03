@@ -22,3 +22,6 @@
 [submodule "External/rttr"]
 	path = External/rttr
 	url = https://github.com/rttrorg/rttr.git
+[submodule "External/VPGLoader"]
+	path = External/VPGLoader
+	url = https://github.com/damnkk/VPGLoader.git

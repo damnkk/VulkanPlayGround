@@ -16,6 +16,7 @@
 #include "resourceManagement/vulkan/resources/Resource.h"
 #include "resourceManagement/vulkan/pipeline/ShaderManager.hpp"
 #include "core/RefCounted.h"
+#include "resourceManagement/scene/SceneManager.h"
 
 namespace Play
 {
@@ -131,7 +132,7 @@ void VulkanRuntime::FrameData::reset()
     workerGraphicsPools.reset();
 }
 
-VulkanRuntime::VulkanRuntime(const RuntimeConfig& config, const nvvk::ContextInitInfo& contextInfo)
+VulkanRuntime::VulkanRuntime(const RuntimeConfig& config, const nvvk::ContextInitInfo& contextInfo, RuntimeGuiHost& guiHost) : _guiHost(guiHost)
 {
     if (Play::vkDriver && Play::vkDriver != this)
     {
@@ -142,7 +143,17 @@ VulkanRuntime::VulkanRuntime(const RuntimeConfig& config, const nvvk::ContextIni
     Play::vkDriver      = this;
     _registeredAsGlobal = true;
 
-    init(config, contextInfo);
+    if (!init(config, contextInfo))
+    {
+        return;
+    }
+
+    _assetManager = std::make_unique<Play::AssetManager>();
+    if (!_assetManager->Init())
+    {
+        destroy();
+        return;
+    }
 }
 
 VulkanRuntime::~VulkanRuntime()
@@ -195,6 +206,8 @@ bool VulkanRuntime::init(const RuntimeConfig& config, const nvvk::ContextInitInf
     }
 
     _renderSession = std::make_unique<Play::RenderSession>(Play::RenderSession::Info{.renderMode = _config.renderMode});
+
+    _sceneManager = std::make_unique<Play::SceneManager>();
     getEditorRegistry().clear();
     if (!_renderSession->init())
     {
@@ -207,7 +220,6 @@ bool VulkanRuntime::init(const RuntimeConfig& config, const nvvk::ContextInitInf
     // editor system entrance
     Play::editor::RuntimeEditor& editor = _guiHost.getEditor();
     editor.bindRuntime(*this, *_renderSession, _config.renderMode.c_str());
-    _guiHost.start();
     return true;
 }
 
@@ -269,9 +281,10 @@ void VulkanRuntime::destroy()
         vkDeviceWaitIdle(_context.getDevice());
     }
 
-    _guiHost.stop();
     getEditorRegistry().clear();
     _renderSession.reset();
+    _sceneManager.reset();
+    _assetManager.reset();
     clearSwapchainTextures();
     deinitRenderServices();
     destroyFrameSubmission();
@@ -540,8 +553,7 @@ void VulkanRuntime::flushPendingDeferredDestroyTasks()
         return;
     }
 
-    DeferredDestroyQueue& targetQueue =
-        _deferredDestroyQueues[(_frameIndex + 1) % static_cast<uint32_t>(_deferredDestroyQueues.size())];
+    DeferredDestroyQueue& targetQueue = _deferredDestroyQueues[(_frameIndex + 1) % static_cast<uint32_t>(_deferredDestroyQueues.size())];
     for (auto& task : pendingTasks)
     {
         targetQueue.tasks.push_back(std::move(task));
@@ -954,11 +966,11 @@ void VulkanRuntime::updateGlobalDescriptorSet()
     samplerCreateInfo.compareEnable = VK_FALSE;
     Play::PlayResourceManager::Instance().acquireSampler(samplerList[0], samplerCreateInfo);
     imageInfoList.push_back({samplerList[0]});
-    samplerCreateInfo.magFilter = VK_FILTER_LINEAR;
-    samplerCreateInfo.minFilter = VK_FILTER_LINEAR;
-    samplerCreateInfo.addressModeU  = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-    samplerCreateInfo.addressModeV  = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-    samplerCreateInfo.addressModeW  = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+    samplerCreateInfo.magFilter    = VK_FILTER_LINEAR;
+    samplerCreateInfo.minFilter    = VK_FILTER_LINEAR;
+    samplerCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+    samplerCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+    samplerCreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
     Play::PlayResourceManager::Instance().acquireSampler(samplerList[1], samplerCreateInfo);
     imageInfoList.push_back({samplerList[1]});
 

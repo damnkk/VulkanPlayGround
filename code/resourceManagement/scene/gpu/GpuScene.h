@@ -1,138 +1,150 @@
-#ifndef GPU_SCENE_H
-#define GPU_SCENE_H
+// #ifndef GPU_SCENE_H
+// #define GPU_SCENE_H
 
-#include "resourceManagement/assets/model/ModelGpuAssets.h"
+// #include "resourceManagement/scene/cpu/Scene.h"
 
-namespace Play
-{
+// namespace Play
+// {
 
-enum class GpuSceneType : uint32_t
-{
-    eRaster,
-    eGaussian,
-    eRayTracing
-};
+// enum class GpuSceneType : uint32_t
+// {
+//     eRaster,
+//     eGaussian,
+//     eRayTracing
+// };
 
-struct GpuSceneCommonData
-{
-    Buffer* transformBuffer = nullptr;
-    Buffer* materialBuffer  = nullptr;
-    Buffer* vertexBuffer    = nullptr;
-    Buffer* indexBuffer     = nullptr;
+// struct GpuSceneCommonData
+// {
+//     Buffer* transformBuffer = nullptr;
+//     Buffer* materialBuffer  = nullptr;
+//     Buffer* vertexBuffer    = nullptr;
+//     Buffer* indexBuffer     = nullptr;
 
-    std::vector<glm::mat4>                  transforms;
-    std::vector<MeshInfo>                   meshInfos;
-    std::vector<shaderio::GltfShadeMaterial> materials;
-};
+//     std::vector<glm::mat4>                   transforms;
+//     std::vector<MeshInfo>                    meshInfos;
+//     std::vector<shaderio::GltfShadeMaterial> materials;
+// };
 
-struct RasterGPUData
-{
-    bool enabled = false;
-};
+// struct RasterGPUData
+// {
+//     bool enabled = false;
+// };
 
-struct RayTracingGPUData
-{
-    bool enabled = false;
-    std::vector<RayTracingASInfo> accelerationStructures;
-};
+// struct RayTracingGPUData
+// {
+//     bool                          enabled = false;
+//     std::vector<RayTracingASInfo> accelerationStructures;
+// };
 
-struct GpuModelRange
-{
-    uint32_t firstMeshInfo    = 0;
-    uint32_t meshInfoCount    = 0;
-    uint32_t firstMaterial    = 0;
-    uint32_t materialCount    = 0;
-    uint32_t textureInfoCount = 0;
-    uint32_t firstTexture     = 0;
-    uint32_t textureCount     = 0;
-};
+// struct GpuModelRange
+// {
+//     uint32_t firstMeshInfo    = 0;
+//     uint32_t meshInfoCount    = 0;
+//     uint32_t firstMaterial    = 0;
+//     uint32_t materialCount    = 0;
+//     uint32_t textureInfoCount = 0;
+//     uint32_t firstTexture     = 0;
+//     uint32_t textureCount     = 0;
+// };
 
-class GpuScene
-{
-public:
-    virtual ~GpuScene() = default;
+// class GpuScene
+// {
+// public:
+//     virtual ~GpuScene() = default;
 
-    virtual GpuSceneType getType() const = 0;
-    virtual void         clear();
+//     virtual GpuSceneType getType() const = 0;
+//     virtual void         clear();
 
-    ModelAssetID registerModel(UploadedModel&& model);
-    void         updateTransforms(const CpuScene& scene);
+//     ModelAssetID registerModel(UploadedModel&& model);
+//     void         updateTransforms(const CpuScene& scene);
 
-    uint64_t getSourceSceneRevision() const
-    {
-        return _sourceSceneRevision;
-    }
+//     uint64_t getSourceSceneRevision() const
+//     {
+//         return _sourceSceneRevision;
+//     }
 
-    const GpuSceneCommonData& getCommonData() const
-    {
-        return _common;
-    }
+//     const GpuSceneCommonData& getCommonData() const
+//     {
+//         return _common;
+//     }
 
-    const std::vector<ModelAsset>& getModels() const
-    {
-        return _models;
-    }
+//     const std::vector<vpgloader::ModelHandle>& getModels() const
+//     {
+//         return _models;
+//     }
 
-    const std::vector<ModelGpuResources>& getModelGpuResources() const
-    {
-        return _modelGpuResources;
-    }
+//     const std::vector<std::vector<GpuModelRenderable>>& getModelRenderables() const
+//     {
+//         return _modelRenderables;
+//     }
 
-    const std::vector<GpuModelRange>& getModelRanges() const
-    {
-        return _modelRanges;
-    }
+//     uint32_t getModelGeneration() const
+//     {
+//         return _modelGeneration;
+//     }
 
-    const std::vector<RefPtr<Texture>>& getSceneTextures() const
-    {
-        return _sceneTextures;
-    }
+//     const std::vector<ModelGpuResources>& getModelGpuResources() const
+//     {
+//         return _modelGpuResources;
+//     }
 
-protected:
-    uint32_t appendSceneTextures(std::vector<UploadedModelTexture>& textures);
-    void     registerRasterData(const ModelAsset& model, const GpuModelRange& range);
-    void     registerRayTracingData(const ModelGpuResources& resources, const GpuModelRange& range);
+//     const std::vector<GpuModelRange>& getModelRanges() const
+//     {
+//         return _modelRanges;
+//     }
 
-    GpuSceneCommonData             _common;
-    RasterGPUData                  _rasterData;
-    RayTracingGPUData              _rtData;
-    std::vector<ModelAsset>        _models;
-    std::vector<ModelGpuResources> _modelGpuResources;
-    std::vector<GpuModelRange>     _modelRanges;
-    std::vector<RefPtr<Texture>>   _sceneTextures;
-    std::vector<std::filesystem::path> _sceneTextureSources;
-    std::mutex                     _registrationMutex;
-    uint64_t                       _sourceSceneRevision = 0;
-};
+//     const std::vector<RefPtr<Texture>>& getSceneTextures() const
+//     {
+//         return _sceneTextures;
+//     }
 
-class RasterGpuScene : public GpuScene
-{
-public:
-    RasterGpuScene()
-    {
-        _rasterData.enabled = true;
-    }
+// protected:
+//     uint32_t appendSceneTextures(std::vector<UploadedModelTexture>& textures);
+//     void     registerRasterData(const GpuModelRange& range);
+//     void     registerRayTracingData(const ModelGpuResources& resources, const GpuModelRange& range);
 
-    GpuSceneType getType() const override
-    {
-        return GpuSceneType::eRaster;
-    }
-};
+//     GpuSceneCommonData                           _common;
+//     RasterGPUData                                _rasterData;
+//     RayTracingGPUData                            _rtData;
+//     std::vector<vpgloader::ModelHandle>          _models;
+//     std::vector<std::vector<GpuModelRenderable>> _modelRenderables;
+//     std::vector<ModelGpuResources>               _modelGpuResources;
+//     std::vector<GpuModelRange>                   _modelRanges;
+//     std::vector<RefPtr<Texture>>                 _sceneTextures;
+//     std::vector<std::filesystem::path>           _sceneTextureSources;
+//     std::mutex                                   _registrationMutex;
+//     uint64_t                                     _sourceSceneRevision = 0;
+//     uint32_t                                     _modelGeneration     = 1;
+// };
 
-class RayTracingGpuScene : public GpuScene
-{
-public:
-    RayTracingGpuScene()
-    {
-        _rtData.enabled = true;
-    }
+// class RasterGpuScene : public GpuScene
+// {
+// public:
+//     RasterGpuScene()
+//     {
+//         _rasterData.enabled = true;
+//     }
 
-    GpuSceneType getType() const override
-    {
-        return GpuSceneType::eRayTracing;
-    }
-};
+//     GpuSceneType getType() const override
+//     {
+//         return GpuSceneType::eRaster;
+//     }
+// };
 
-} // namespace Play
+// class RayTracingGpuScene : public GpuScene
+// {
+// public:
+//     RayTracingGpuScene()
+//     {
+//         _rtData.enabled = true;
+//     }
 
-#endif // GPU_SCENE_H
+//     GpuSceneType getType() const override
+//     {
+//         return GpuSceneType::eRayTracing;
+//     }
+// };
+
+// } // namespace Play
+
+// #endif // GPU_SCENE_H

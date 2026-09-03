@@ -15,7 +15,7 @@ class QtRuntimeEditorWindow;
 namespace Play::runtime
 {
 
-class RuntimeGuiHost
+class RuntimeGuiHost : public Play::editor::StartupProjectReceiver
 {
 public:
     RuntimeGuiHost();
@@ -28,6 +28,9 @@ public:
 
     bool start();
     void stop();
+
+    bool selectStartupProject(const std::string& projectPath, std::string* errorMessage) override;
+    bool takeStartupProject(std::string& projectPath);
 
     Play::editor::RuntimeEditor& getEditor()
     {
@@ -56,6 +59,7 @@ private:
     bool                                 _stopRequested  = false;
     bool                                 _threadFinished = false;
     Play::editor::RuntimeEditor          _editor;
+    std::string                          _startupProjectPath;
 };
 
 } // namespace Play::runtime
