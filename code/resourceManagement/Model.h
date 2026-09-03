@@ -7,7 +7,7 @@
 namespace Play
 {
 
-class Model : public Asset, public AssetBinder, public std::enable_shared_from_this<Mesh>
+class Model : public Asset, public AssetBinder, public std::enable_shared_from_this<Model>
 {
 public:
     std::string getAssetTypeName() final

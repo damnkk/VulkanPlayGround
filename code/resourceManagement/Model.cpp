@@ -25,15 +25,15 @@ void Model::onLoadAsset()
         _renderData.assetBuffer     = RefPtr<Buffer>(new Buffer());
         VkBufferCreateInfo bufferCreateInfo{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
         bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        bufferCreateInfo.size += _loadedModel->geometry.positions.size() * sizeof(_loadedModel->geometry.positions[0]);
-        bufferCreateInfo.size += _loadedModel->geometry.normals.size() * sizeof(_loadedModel->geometry.normals[0]);
-        PlayResourceManager::Instance().createBuffer(*_renderData.assetBuffer, const VkBufferCreateInfo& bufferInfo,
-                                                     const VmaAllocationCreateInfo& allocInfo)
+        // bufferCreateInfo.size += _loadedModel->geometry.positions.size() * sizeof(_loadedModel->geometry.positions[0]);
+        // bufferCreateInfo.size += _loadedModel->geometry.normals.size() * sizeof(_loadedModel->geometry.normals[0]);
+        // PlayResourceManager::Instance().createBuffer(*_renderData.assetBuffer, const VkBufferCreateInfo& bufferInfo,
+        //                                              const VmaAllocationCreateInfo& allocInfo)
 
-            VkCommandBuffer cmdbuf = vkDriver->createTempCmdBuffer();
-        nvvk::BufferRange   range;
+        //     VkCommandBuffer cmdbuf = vkDriver->createTempCmdBuffer();
+        // nvvk::BufferRange   range;
 
-        PlayResourceManager::Instance().appendBufferRange(range, nullptr);
+        // PlayResourceManager::Instance().appendBufferRange(range, nullptr);
     }
 }
 
