@@ -247,6 +247,8 @@ public:
 
     VkCommandBuffer                    createTempCmdBuffer();
     void                               submitAndWaitTempCmdBuffer(VkCommandBuffer cmd);
+    VkCommandBuffer                    createTransferTempCmdBuffer();
+    void                               submitAndWaitTransferTempCmdBuffer(VkCommandBuffer cmd);
     VkResult                           submitGraphics(const VkSubmitInfo2& submitInfo, VkFence fence = VK_NULL_HANDLE);
     void                               addWaitSemaphore(const VkSemaphoreSubmitInfo& signalInfo);
     std::vector<VkSemaphoreSubmitInfo> consumePendingFrameWaitSemaphores();
@@ -313,7 +315,9 @@ private:
     std::vector<RefPtr<Play::Texture>> _swapchainTextures{};
     VkSurfaceKHR                       _surface          = VK_NULL_HANDLE;
     VkCommandPool                      _transientCmdPool = VK_NULL_HANDLE;
+    VkCommandPool                      _transferCmdPool  = VK_NULL_HANDLE;
     std::mutex                         _graphicsQueueMutex;
+    std::mutex                         _transferQueueMutex;
     std::mutex                         _registeredObjectMutex;
     std::mutex                         _pendingDestroyMutex;
 

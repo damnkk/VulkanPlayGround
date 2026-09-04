@@ -299,6 +299,11 @@ void VulkanRuntime::destroy()
         vkDestroyCommandPool(_context.getDevice(), _transientCmdPool, nullptr);
         _transientCmdPool = VK_NULL_HANDLE;
     }
+    if (_transferCmdPool != VK_NULL_HANDLE)
+    {
+        vkDestroyCommandPool(_context.getDevice(), _transferCmdPool, nullptr);
+        _transferCmdPool = VK_NULL_HANDLE;
+    }
 
     if (_surface != VK_NULL_HANDLE)
     {
@@ -473,6 +478,18 @@ bool VulkanRuntime::createTransientCommandPool()
         return false;
     }
     NVVK_DBG_NAME(_transientCmdPool);
+
+    const VkCommandPoolCreateInfo transferPoolInfo{
+        .sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags            = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+        .queueFamilyIndex = getTransferQueue().familyIndex,
+    };
+    if (vkCreateCommandPool(_context.getDevice(), &transferPoolInfo, nullptr, &_transferCmdPool) != VK_SUCCESS)
+    {
+        LOGE("Failed to create transfer command pool\n");
+        return false;
+    }
+    NVVK_DBG_NAME(_transferCmdPool);
     return true;
 }
 
@@ -861,6 +878,58 @@ void VulkanRuntime::submitAndWaitTempCmdBuffer(VkCommandBuffer cmd)
         PLAY_PROFILE_SCOPE("VulkanRuntime::free temp command buffer");
         vkFreeCommandBuffers(getDevice(), _transientCmdPool, 1, &cmd);
     }
+}
+
+VkCommandBuffer VulkanRuntime::createTransferTempCmdBuffer()
+{
+    PLAY_PROFILE_SCOPE("VulkanRuntime::createTransferTempCmdBuffer");
+
+    const VkCommandBufferAllocateInfo allocInfo{
+        .sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool        = _transferCmdPool,
+        .level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
+    VkCommandBuffer cmd = VK_NULL_HANDLE;
+    NVVK_CHECK(vkAllocateCommandBuffers(getDevice(), &allocInfo, &cmd));
+
+    const VkCommandBufferBeginInfo beginInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    };
+    NVVK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
+    return cmd;
+}
+
+void VulkanRuntime::submitAndWaitTransferTempCmdBuffer(VkCommandBuffer cmd)
+{
+    PLAY_PROFILE_SCOPE("VulkanRuntime::submitAndWaitTransferTempCmdBuffer");
+    NVVK_CHECK(vkEndCommandBuffer(cmd));
+
+    const VkCommandBufferSubmitInfo cmdInfo{
+        .sType         = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+        .commandBuffer = cmd,
+    };
+    const VkSubmitInfo2 submitInfo{
+        .sType                  = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .commandBufferInfoCount = 1,
+        .pCommandBufferInfos    = &cmdInfo,
+    };
+
+    const nvvk::QueueInfo& transferQueue = getTransferQueue();
+    if (transferQueue.queue == getGfxQueue().queue)
+    {
+        std::lock_guard<std::mutex> lock(_graphicsQueueMutex);
+        NVVK_CHECK(vkQueueSubmit2(transferQueue.queue, 1, &submitInfo, nullptr));
+        NVVK_CHECK(vkQueueWaitIdle(transferQueue.queue));
+    }
+    else
+    {
+        std::lock_guard<std::mutex> lock(_transferQueueMutex);
+        NVVK_CHECK(vkQueueSubmit2(transferQueue.queue, 1, &submitInfo, nullptr));
+        NVVK_CHECK(vkQueueWaitIdle(transferQueue.queue));
+    }
+    vkFreeCommandBuffers(getDevice(), _transferCmdPool, 1, &cmd);
 }
 
 void VulkanRuntime::addWaitSemaphore(const VkSemaphoreSubmitInfo& signalInfo)

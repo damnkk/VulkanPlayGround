@@ -58,43 +58,52 @@ GltfShadeMaterial loadMaterial(GBufferGPUInstanceData instance)
     GltfShadeMaterial material = defaultGltfMaterial();
     if (instance.materialAddress != 0)
     {
-        material = ((GltfShadeMaterial*) instance.materialAddress)[0];
+        material = ((GltfShadeMaterial*) instance.materialAddress)[instance.materialIndex];
     }
     return material;
 }
 
-bool loadTextureInfo(GBufferGPUInstanceData instance, uint textureInfoIndex, out GltfTextureInfo textureInfo)
+bool loadTextureInfo(GBufferGPUInstanceData instance, uint textureInfoIndex, out ModelTextureInfo textureInfo)
 {
-    textureInfo = defaultGltfTextureInfo();
-    if (textureInfoIndex == 0 || textureInfoIndex > instance.textureInfoCount || instance.textureInfoAddress == 0)
+    textureInfo.offset       = float2(0.0);
+    textureInfo.scale        = float2(1.0);
+    textureInfo.rotation     = 0.0;
+    textureInfo.textureIndex = -1;
+    textureInfo.texCoord     = 0;
+    textureInfo._padding     = 0;
+    if (textureInfoIndex == 0 || textureInfoIndex >= instance.textureInfoCount || instance.textureInfoAddress == 0)
     {
         return false;
     }
 
-    GltfTextureInfo* textureInfos = (GltfTextureInfo*) instance.textureInfoAddress;
+    ModelTextureInfo* textureInfos = (ModelTextureInfo*) instance.textureInfoAddress;
     textureInfo                   = textureInfos[textureInfoIndex];
-    return textureInfo.index >= 0 && uint(textureInfo.index) < instance.textureCount;
+    return textureInfo.textureIndex >= 0 && uint(textureInfo.textureIndex) < instance.textureCount;
 }
 
-float2 selectTexCoord(FragmentInput fragIn, GltfTextureInfo textureInfo)
+float2 selectTexCoord(FragmentInput fragIn, ModelTextureInfo textureInfo)
 {
     return textureInfo.texCoord == 1 ? fragIn.uv1 : fragIn.uv;
 }
 
-float2 transformTexCoord(FragmentInput fragIn, GltfTextureInfo textureInfo)
+float2 transformTexCoord(FragmentInput fragIn, ModelTextureInfo textureInfo)
 {
-    return mul(float3(selectTexCoord(fragIn, textureInfo), 1.0), textureInfo.uvTransform).xy;
+    float2 uv = selectTexCoord(fragIn, textureInfo) * textureInfo.scale;
+    float  sine;
+    float  cosine;
+    sincos(textureInfo.rotation, sine, cosine);
+    return float2(cosine * uv.x - sine * uv.y, sine * uv.x + cosine * uv.y) + textureInfo.offset;
 }
 
-float4 sampleSceneTexture(GBufferGPUInstanceData instance, GltfTextureInfo textureInfo, FragmentInput fragIn)
+float4 sampleSceneTexture(GBufferGPUInstanceData instance, ModelTextureInfo textureInfo, FragmentInput fragIn)
 {
-    return s_SceneTextures[instance.textureOffset + uint(textureInfo.index)].Sample(g_GlobalSampler_Linear,
+    return s_SceneTextures[instance.textureOffset + uint(textureInfo.textureIndex)].Sample(g_GlobalSampler_Linear,
                                                                                    transformTexCoord(fragIn, textureInfo));
 }
 
 float4 sampleMaterialTexture(GBufferGPUInstanceData instance, uint textureInfoIndex, FragmentInput fragIn, float4 fallback)
 {
-    GltfTextureInfo textureInfo;
+    ModelTextureInfo textureInfo;
     if (!loadTextureInfo(instance, textureInfoIndex, textureInfo))
     {
         return fallback;
@@ -114,7 +123,7 @@ FragmentOutput main(FragmentInput fragIn)
     float           roughness = material.pbrRoughnessFactor;
     float           metallic  = material.pbrMetallicFactor;
     float           specular  = material.specularFactor;
-    GltfTextureInfo metallicRoughnessTextureInfo;
+    ModelTextureInfo metallicRoughnessTextureInfo;
     if (loadTextureInfo(instance, material.pbrMetallicRoughnessTexture, metallicRoughnessTextureInfo))
     {
         float4 metallicRoughnessSample = sampleSceneTexture(instance, metallicRoughnessTextureInfo, fragIn);
@@ -122,14 +131,14 @@ FragmentOutput main(FragmentInput fragIn)
         metallic *= metallicRoughnessSample.b;
     }
 
-    GltfTextureInfo specularTextureInfo;
+    ModelTextureInfo specularTextureInfo;
     if (loadTextureInfo(instance, material.specularTexture, specularTextureInfo))
     {
         specular *= sampleSceneTexture(instance, specularTextureInfo, fragIn).a;
     }
 
     float           occlusion = material.occlusionStrength;
-    GltfTextureInfo occlusionTextureInfo;
+    ModelTextureInfo occlusionTextureInfo;
     if (loadTextureInfo(instance, material.occlusionTexture, occlusionTextureInfo))
     {
         float occlusionSample = sampleSceneTexture(instance, occlusionTextureInfo, fragIn).r;
@@ -142,7 +151,7 @@ FragmentOutput main(FragmentInput fragIn)
     float3 tangent            = normalize(fragIn.tangent.xyz);
     tangent                   = normalize(tangent - normal * dot(normal, tangent));
     float3          bitangent = normalize(cross(normal, tangent) * fragIn.tangent.w);
-    GltfTextureInfo normalTextureInfo;
+    ModelTextureInfo normalTextureInfo;
     if (loadTextureInfo(instance, material.normalTexture, normalTextureInfo))
     {
         float3 tangentNormal = sampleSceneTexture(instance, normalTextureInfo, fragIn).xyz * 2.0 - 1.0;

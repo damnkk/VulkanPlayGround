@@ -27,17 +27,17 @@ VertexOutput main(VertexInput vin)
         (GBufferGPUInstanceData*) g_gBufferPushConstant.sceneConstant.instanceBufferAddress;
     GBufferGPUInstanceData instance = instances[uint(g_gBufferPushConstant.sceneConstant.instanceIndex)];
 
-    MeshInfo meshInfo = ((MeshInfo*) instance.meshInfoAddress)[0];
-    VertexStreamInfo vertexStream = ((VertexStreamInfo*) meshInfo.vertexBufferAddress)[0];
+    ModelMeshInfo meshInfo = ((ModelMeshInfo*) instance.meshInfoAddress)[instance.meshInfoIndex];
+    ModelVertexStreamInfo vertexStream = ((ModelVertexStreamInfo*) meshInfo.vertexStreamAddress)[0];
 
-    uint* indices = (uint*) meshInfo.IndexBufferAddress;
+    uint* indices = (uint*) meshInfo.indexAddress;
     uint vertexIndex = indices[vin.vertexId];
 
-    float3* positions = (float3*) vertexStream.positionBufferAddress;
-    float3* normals = (float3*) vertexStream.normalBufferAddress;
-    float4* tangents = (float4*) vertexStream.tangentBufferAddress;
-    float2* texCoords0 = (float2*) vertexStream.texCoord0BufferAddress;
-    float2* texCoords1 = (float2*) vertexStream.texCoord1BufferAddress;
+    float3* positions = (float3*) vertexStream.positionAddress;
+    float3* normals = (float3*) vertexStream.normalAddress;
+    float4* tangents = (float4*) vertexStream.tangentAddress;
+    float2* texCoords0 = (float2*) vertexStream.texCoord0Address;
+    float2* texCoords1 = (float2*) vertexStream.texCoord1Address;
 
     float3 position = positions[vertexIndex];
     float3 normal = normals[vertexIndex];
@@ -53,4 +53,3 @@ VertexOutput main(VertexInput vin)
     vout.tangent  = float4(normalize(mul(tangent.xyz, (float3x3) instance.objectToWorld)), tangent.w);
     return vout;
 }
-

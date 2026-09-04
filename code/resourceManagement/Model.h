@@ -3,6 +3,7 @@
 #include "core/assets/Asset.h"
 #include "memory"
 #include "VPGLoader/VPGLoader.hpp"
+#include "Hdevice.h"
 #include "resourceManagement/vulkan/resources/Resource.h"
 namespace Play
 {
@@ -22,28 +23,23 @@ public:
     void onLoadAsset() override;
     void onSaveAsset() override;
 
+    const ModelBufferInfo& getBufferInfo() const
+    {
+        return _renderData.modelDesc;
+    }
+
+    Buffer* getAssetBuffer() const
+    {
+        return _renderData.assetBuffer.get();
+    }
+
 protected:
     vpgloader::ModelHandle _loadedModel;
     struct RenderData
     {
         RefPtr<Buffer>               assetBuffer;
         std::vector<RefPtr<Texture>> textures;
-        struct ModelDesc
-        {
-            uint64_t positionAddress;
-            uint64_t normalAddress;
-            uint64_t tangentsAddress;
-            uint64_t texCoords0Address;
-            uint64_t texcoords1Address;
-            uint64_t colorsAddress;
-            uint64_t indicesAddress;
-            uint64_t meshInfoAddress;
-            uint64_t builtinMaterialAddress;
-            uint64_t textureInfoAddress;
-            uint64_t lodOffset;
-            uint32_t textureOffset;
-
-        } modelDesc;
+        ModelBufferInfo              modelDesc{};
     } _renderData;
 
 private:
