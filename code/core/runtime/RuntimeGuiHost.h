@@ -61,7 +61,8 @@ private:
     bool                                 _threadFinished = false;
     Play::editor::RuntimeEditor          _editor;
     std::string                          _startupProjectPath;
-    void*                                _renderWindowHandle = nullptr;
+    bool                                 _startupProjectSelected = false;
+    void*                                _renderWindowHandle     = nullptr;
 };
 
 } // namespace Play::runtime

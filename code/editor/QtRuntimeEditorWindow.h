@@ -10,6 +10,7 @@ namespace Play::editor
 
 class AssetBrowserWidget;
 class InspectorWidget;
+class ProjectStartupWidget;
 class RuntimeEditor;
 class SceneTreeWidget;
 
@@ -25,15 +26,19 @@ protected:
     void closeEvent(QCloseEvent* event) override;
 
 private:
+    void showStartupPage();
+    void startProject(const QString& projectPath);
+    void createEditor();
     void refresh();
 
-    RuntimeEditor&      _editor;
-    SceneTreeWidget*    _sceneTree    = nullptr;
-    InspectorWidget*    _inspector    = nullptr;
-    AssetBrowserWidget* _assetBrowser = nullptr;
-    QWidget*            _renderContainer = nullptr;
-    qulonglong          _revision     = 0;
-    bool                _hasSnapshot  = false;
+    RuntimeEditor&        _editor;
+    SceneTreeWidget*      _sceneTree       = nullptr;
+    InspectorWidget*      _inspector       = nullptr;
+    AssetBrowserWidget*   _assetBrowser    = nullptr;
+    QWidget*              _renderContainer = nullptr;
+    ProjectStartupWidget* _startupPage     = nullptr;
+    qulonglong            _revision        = 0;
+    bool                  _hasSnapshot     = false;
 };
 
 } // namespace Play::editor

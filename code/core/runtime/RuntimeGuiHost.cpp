@@ -40,7 +40,8 @@ bool RuntimeGuiHost::start()
     _stopRequested  = false;
     _threadFinished = false;
     _startupProjectPath.clear();
-    _thread = SDL_CreateThread(&RuntimeGuiHost::threadMain, "RuntimeGuiHost", this);
+    _startupProjectSelected = false;
+    _thread                 = SDL_CreateThread(&RuntimeGuiHost::threadMain, "RuntimeGuiHost", this);
     if (!_thread)
     {
         LOGE("RuntimeGuiHost: SDL_CreateThread failed: %s\n", SDL_GetError());
@@ -54,15 +55,6 @@ bool RuntimeGuiHost::start()
 
 bool RuntimeGuiHost::selectStartupProject(const std::string& projectPath, std::string* errorMessage)
 {
-    if (projectPath.empty())
-    {
-        if (errorMessage)
-        {
-            *errorMessage = "Project path is empty.";
-        }
-        return false;
-    }
-
     if (!_mutex)
     {
         if (errorMessage)
@@ -76,7 +68,8 @@ bool RuntimeGuiHost::selectStartupProject(const std::string& projectPath, std::s
     const bool isStopping = _stopRequested;
     if (!isStopping)
     {
-        _startupProjectPath = projectPath;
+        _startupProjectPath     = projectPath;
+        _startupProjectSelected = true;
     }
     SDL_UnlockMutex(_mutex);
 
@@ -109,7 +102,7 @@ bool RuntimeGuiHost::takeStartupProject(std::string& projectPath)
     }
 
     SDL_LockMutex(_mutex);
-    if (_startupProjectPath.empty())
+    if (!_startupProjectSelected)
     {
         SDL_UnlockMutex(_mutex);
         return false;
@@ -117,6 +110,7 @@ bool RuntimeGuiHost::takeStartupProject(std::string& projectPath)
 
     projectPath = _startupProjectPath;
     _startupProjectPath.clear();
+    _startupProjectSelected = false;
     SDL_UnlockMutex(_mutex);
     return true;
 }
@@ -197,7 +191,7 @@ int RuntimeGuiHost::run()
     {
         Play::editor::QtRuntimeEditorWindow window(_editor);
         setWindow(&window);
-        // setRenderWindowHandle() shows the complete editor once the viewport is ready.
+        window.show();
         result = application.exec();
         // Also cover exits initiated by SDL (Escape or a native close request).
         // Hide the foreign window before Qt releases its container and reparents it.
@@ -206,6 +200,7 @@ int RuntimeGuiHost::run()
     }
 
     setApplication(nullptr);
+    _editor.requestExit();
     markThreadFinished();
     return result;
 }

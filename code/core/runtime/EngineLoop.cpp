@@ -9,6 +9,7 @@ namespace Play::runtime
 
 int EngineLoop::run(const RuntimeConfig& config, const nvvk::ContextInitInfo& contextInfo)
 {
+    ProjectInfo::clear();
     RuntimeGuiHost guiHost;
     if (!guiHost.start())
     {
@@ -16,12 +17,19 @@ int EngineLoop::run(const RuntimeConfig& config, const nvvk::ContextInitInfo& co
     }
 
     RuntimeConfig runtimeConfig = config;
-    if (runtimeConfig.projectPath.empty())
+    while (!guiHost.takeStartupProject(runtimeConfig.projectPath))
     {
-        runtimeConfig.projectPath = getBaseFilePath().string();
+        if (guiHost.getEditor().exitRequested())
+        {
+            guiHost.stop();
+            return 0;
+        }
+        SDL_Delay(16);
     }
 
-    if (!ProjectInfo::setProjectPath(runtimeConfig.projectPath))
+    // An empty startup path means a new project. The selected base path is
+    // available through ProjectInfo before any runtime initialization begins.
+    if (!runtimeConfig.projectPath.empty() && !ProjectInfo::setProjectPath(std::filesystem::u8path(runtimeConfig.projectPath)))
     {
         guiHost.stop();
         return 1;

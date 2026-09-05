@@ -10,6 +10,7 @@
 #include "resourceManagement/vulkan/cache/FrameBufferCache.h"
 #include "resourceManagement/vulkan/pipeline/PipelineCacheManager.h"
 #include "core/Profiling.h"
+#include "core/ProjectPaths.h"
 #include "RenderSession.h"
 #include "SceneEditorBridge.h"
 #include "resourceManagement/vulkan/resources/PlayAllocator.h"
@@ -150,7 +151,7 @@ VulkanRuntime::VulkanRuntime(const RuntimeConfig& config, const nvvk::ContextIni
     }
 
     _assetManager = std::make_unique<Play::AssetManager>();
-    if (!_assetManager->Init())
+    if (ProjectInfo::isOpen() && !_assetManager->Init())
     {
         destroy();
         return;

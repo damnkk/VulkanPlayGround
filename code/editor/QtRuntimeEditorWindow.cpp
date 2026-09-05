@@ -8,6 +8,7 @@
 
 #include "editor/AssetBrowserWidget.h"
 #include "editor/InspectorWidget.h"
+#include "editor/ProjectStartupWidget.h"
 #include "editor/RuntimeEditor.h"
 #include "editor/SceneTreeWidget.h"
 
@@ -17,9 +18,33 @@ namespace Play::editor
 QtRuntimeEditorWindow::QtRuntimeEditorWindow(RuntimeEditor& editor, QWidget* parent) : QMainWindow(parent), _editor(editor)
 {
     setWindowTitle("VulkanPlayGround Editor");
-    resize(1100, 720);
+    resize(1120, 800);
+    showStartupPage();
+}
 
-    setCentralWidget(new QWidget(this));
+void QtRuntimeEditorWindow::showStartupPage()
+{
+    _startupPage = new ProjectStartupWidget(this);
+    setCentralWidget(_startupPage);
+    connect(_startupPage, &ProjectStartupWidget::projectSelected, this, &QtRuntimeEditorWindow::startProject);
+}
+
+void QtRuntimeEditorWindow::startProject(const QString& projectPath)
+{
+    StartupProjectReceiver* receiver = _editor.getStartupProjectReceiver();
+    std::string             errorMessage;
+    if (!receiver || !receiver->selectStartupProject(projectPath.toStdString(), &errorMessage))
+    {
+        _startupPage->showError(errorMessage.empty() ? "Project startup is not available." : QString::fromStdString(errorMessage));
+        return;
+    }
+
+    _startupPage->showStarting();
+}
+
+void QtRuntimeEditorWindow::createEditor()
+{
+    resize(1100, 720);
 
     _sceneTree             = new SceneTreeWidget(_editor, this);
     QDockWidget* sceneDock = new QDockWidget("Scene", this);
@@ -70,9 +95,14 @@ void QtRuntimeEditorWindow::setRenderWindowHandle(void* handle)
     QWindow* renderWindow = QWindow::fromWinId(reinterpret_cast<WId>(handle));
     _renderContainer      = QWidget::createWindowContainer(renderWindow, this);
     _renderContainer->setFocusPolicy(Qt::StrongFocus);
+    createEditor();
     setCentralWidget(_renderContainer);
+    _startupPage = nullptr;
     refresh();
-    show();
+    if (!_editor.exitRequested())
+    {
+        show();
+    }
 }
 
 void QtRuntimeEditorWindow::refresh()

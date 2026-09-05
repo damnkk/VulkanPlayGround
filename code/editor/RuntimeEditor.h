@@ -11,6 +11,7 @@ class StartupProjectReceiver
 public:
     virtual ~StartupProjectReceiver() = default;
 
+    // UTF-8 base directory for loading; an empty path starts a new project.
     virtual bool selectStartupProject(const std::string& projectPath, std::string* errorMessage) = 0;
 };
 
@@ -35,7 +36,7 @@ private:
     mutable std::mutex         _mutex;
     EditorSnapshot             _snapshot;
     std::vector<EditorCommand> _commands;
-    bool                       _exitRequested = false;
+    bool                       _exitRequested          = false;
     StartupProjectReceiver*    _startupProjectReceiver = nullptr;
 };
 
