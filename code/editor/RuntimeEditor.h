@@ -1,18 +1,8 @@
 #ifndef PLAY_CODE_EDITOR_RUNTIMEEDITOR_H
 #define PLAY_CODE_EDITOR_RUNTIMEEDITOR_H
 
-#include "editor/EditorRegistry.h"
-
-namespace Play
-{
-class RenderSession;
-}
-
-namespace Play::runtime
-{
-class VulkanRuntime;
-}
-
+#include "editor/EditorProtocol.h"
+#include "mutex"
 namespace Play::editor
 {
 
@@ -29,22 +19,24 @@ class RuntimeEditor
 public:
     RuntimeEditor();
 
-    void bindRuntime(Play::runtime::VulkanRuntime& runtime, Play::RenderSession& renderSession, const char* activeMode);
-    void setStartupProjectReceiver(StartupProjectReceiver* receiver);
+    void           publishSnapshot(EditorSnapshot snapshot);
+    EditorSnapshot getSnapshot() const;
 
-    EditorRegistry& getEditorRegistry()
-    {
-        return _editorRegistry;
-    }
+    void                       submit(EditorCommand command);
+    std::vector<EditorCommand> takeCommands();
 
-    const EditorRegistry& getEditorRegistry() const
-    {
-        return _editorRegistry;
-    }
+    void requestExit();
+    bool exitRequested() const;
+
+    void                    setStartupProjectReceiver(StartupProjectReceiver* receiver);
+    StartupProjectReceiver* getStartupProjectReceiver() const;
 
 private:
-    EditorRegistry          _editorRegistry;
-    StartupProjectReceiver* _startupProjectReceiver = nullptr;
+    mutable std::mutex         _mutex;
+    EditorSnapshot             _snapshot;
+    std::vector<EditorCommand> _commands;
+    bool                       _exitRequested = false;
+    StartupProjectReceiver*    _startupProjectReceiver = nullptr;
 };
 
 } // namespace Play::editor

@@ -230,11 +230,6 @@ public:
         return _pipelineCacheManager;
     }
 
-    Play::editor::EditorRegistry& getEditorRegistry()
-    {
-        return _guiHost.getEditor().getEditorRegistry();
-    }
-
     AssetManager* getAssetManager()
     {
         return _assetManager.get();

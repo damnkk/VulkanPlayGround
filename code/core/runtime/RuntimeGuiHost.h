@@ -28,6 +28,7 @@ public:
 
     bool start();
     void stop();
+    void setRenderWindowHandle(void* handle);
 
     bool selectStartupProject(const std::string& projectPath, std::string* errorMessage) override;
     bool takeStartupProject(std::string& projectPath);
@@ -60,6 +61,7 @@ private:
     bool                                 _threadFinished = false;
     Play::editor::RuntimeEditor          _editor;
     std::string                          _startupProjectPath;
+    void*                                _renderWindowHandle = nullptr;
 };
 
 } // namespace Play::runtime

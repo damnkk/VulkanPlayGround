@@ -81,6 +81,7 @@ public:
     }
 
     void setTitle(const char* title);
+    void* getNativeHandle() const;
 
     const char* const* getVulkanInstanceExtensions(uint32_t* count) const;
     bool               createSurface(VkInstance instance, VkSurfaceKHR* surface) const;

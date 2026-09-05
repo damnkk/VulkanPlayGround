@@ -3,7 +3,6 @@
 #include "resourceManagement/vulkan/pipeline/ShaderManager.hpp"
 #include "resourceManagement/renderGraph/RDG.h"
 #include "DeferRendering.h"
-#include "editor/EditorRegistry.h"
 #include "PConstantType.h.slang"
 
 namespace
@@ -62,7 +61,6 @@ void VolumeSkyPass::init()
     _skyViewLut->DebugName()         = "SkyViewLut";
 
     _skyAtmosControler.flushToGPU();
-    vkDriver->getEditorRegistry().registerWritable<AtmosphereParameters>("Atmosphere", _skyAtmosControler, editor::EditorRenderMode::Defer);
 }
 
 void VolumeSkyPass::build(RDG::RDGBuilder* rdgBuilder)

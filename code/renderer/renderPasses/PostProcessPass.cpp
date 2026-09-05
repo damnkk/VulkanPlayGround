@@ -3,7 +3,6 @@
 #include "resourceManagement/renderGraph/RDG.h"
 #include "resourceManagement/vulkan/pipeline/ShaderManager.hpp"
 #include "core/runtime/VulkanRuntime.h"
-#include "editor/EditorRegistry.h"
 #include "resourceManagement/vulkan/resources/PlayAllocator.h"
 
 #include "GBufferConfig.h"
@@ -17,8 +16,6 @@ void PostProcessPass::init()
     _tonemapper.init(&PlayResourceManager::Instance(), {shadermodule->_spvCode});
     _tonemapperControlComponent.flushToGPU();
     vkDriver->updateGlobalTonemapperBuffer(_tonemapperControlComponent.getGPUBuffer());
-    vkDriver->getEditorRegistry().registerWritable<shaderio::TonemapperData>(
-        "Tonemapper", _tonemapperControlComponent, editor::EditorRenderMode::Defer);
 }
 
 void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)

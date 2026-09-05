@@ -208,7 +208,6 @@ bool VulkanRuntime::init(const RuntimeConfig& config, const nvvk::ContextInitInf
     _renderSession = std::make_unique<Play::RenderSession>(Play::RenderSession::Info{.renderMode = _config.renderMode});
 
     _sceneManager = std::make_unique<Play::SceneManager>();
-    getEditorRegistry().clear();
     if (!_renderSession->init())
     {
         destroy();
@@ -216,10 +215,8 @@ bool VulkanRuntime::init(const RuntimeConfig& config, const nvvk::ContextInitInf
     }
 
     _initialized = true;
+    _guiHost.setRenderWindowHandle(_window.getNativeHandle());
 
-    // editor system entrance
-    Play::editor::RuntimeEditor& editor = _guiHost.getEditor();
-    editor.bindRuntime(*this, *_renderSession, _config.renderMode.c_str());
     return true;
 }
 
@@ -232,7 +229,7 @@ void VulkanRuntime::run()
 
     LOGI("Running SDL3 bootstrap runtime\n");
 
-    while (!_window.shouldClose())
+    while (!_window.shouldClose() && !_guiHost.getEditor().exitRequested())
     {
         _window.pollEvents();
         if (_window.getInputState().keyOPressed)
@@ -281,7 +278,6 @@ void VulkanRuntime::destroy()
         vkDeviceWaitIdle(_context.getDevice());
     }
 
-    getEditorRegistry().clear();
     _renderSession.reset();
     _sceneManager.reset();
     _assetManager.reset();

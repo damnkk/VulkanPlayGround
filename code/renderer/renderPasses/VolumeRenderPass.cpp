@@ -7,7 +7,6 @@
 #include "resourceManagement/vulkan/resources/PlayAllocator.h"
 #include "core/ProjectPaths.h"
 #include "resourceManagement/vulkan/resources/VulkanResourceUtils.h"
-#include "editor/EditorRegistry.h"
 #include "tinygltf/json.hpp"
 #include <nvutils/file_operations.hpp>
 #include <nvutils/logger.hpp>
@@ -220,7 +219,6 @@ void VolumeRenderPass::init()
     _postProcessPipeline.setShader(postProcessId);
 
     _lastParameters = _parameters;
-    vkDriver->getEditorRegistry().registerWritable<VolumeRenderParameters>("Volume", _parameters, editor::EditorRenderMode::Volume);
 }
 
 void VolumeRenderPass::build(RDG::RDGBuilder* rdgBuilder)

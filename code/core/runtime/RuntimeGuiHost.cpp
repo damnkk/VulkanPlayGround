@@ -87,6 +87,20 @@ bool RuntimeGuiHost::selectStartupProject(const std::string& projectPath, std::s
     return !isStopping;
 }
 
+void RuntimeGuiHost::setRenderWindowHandle(void* handle)
+{
+    Play::editor::QtRuntimeEditorWindow* window = nullptr;
+    SDL_LockMutex(_mutex);
+    _renderWindowHandle = handle;
+    window              = _window;
+    SDL_UnlockMutex(_mutex);
+
+    if (window)
+    {
+        QMetaObject::invokeMethod(window, [window, handle]() { window->setRenderWindowHandle(handle); }, Qt::QueuedConnection);
+    }
+}
+
 bool RuntimeGuiHost::takeStartupProject(std::string& projectPath)
 {
     if (!_mutex)
@@ -130,6 +144,21 @@ void RuntimeGuiHost::stop()
         QMetaObject::invokeMethod(application, "quit", Qt::QueuedConnection);
     }
 
+    for (;;)
+    {
+        SDL_LockMutex(_mutex);
+        const bool threadFinished = _threadFinished;
+        SDL_UnlockMutex(_mutex);
+
+        if (threadFinished)
+        {
+            break;
+        }
+
+        SDL_PumpEvents();
+        SDL_Delay(1);
+    }
+
     int threadStatus = 0;
     SDL_WaitThread(_thread, &threadStatus);
     _thread         = nullptr;
@@ -156,8 +185,6 @@ int RuntimeGuiHost::run()
     int   argumentCount     = 1;
 
     QApplication application(argumentCount, arguments);
-    // Closing the panel should hide it, not tear down QApplication. Recreating QApplication in this SDL thread can trip Qt platform pixmap state.
-    application.setQuitOnLastWindowClosed(false);
     setApplication(&application);
 
     SDL_LockMutex(_mutex);
@@ -238,7 +265,13 @@ void RuntimeGuiHost::setWindow(Play::editor::QtRuntimeEditorWindow* window)
 {
     SDL_LockMutex(_mutex);
     _window = window;
+    void* renderWindowHandle = _renderWindowHandle;
     SDL_UnlockMutex(_mutex);
+
+    if (window && renderWindowHandle)
+    {
+        window->setRenderWindowHandle(renderWindowHandle);
+    }
 }
 
 void RuntimeGuiHost::markThreadFinished()

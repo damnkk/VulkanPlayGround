@@ -102,6 +102,15 @@ void SdlWindow::setTitle(const char* title)
     }
 }
 
+void* SdlWindow::getNativeHandle() const
+{
+#if defined(SDL_PLATFORM_WINDOWS)
+    return _window ? SDL_GetPointerProperty(SDL_GetWindowProperties(_window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr) : nullptr;
+#else
+    return nullptr;
+#endif
+}
+
 const char* const* SdlWindow::getVulkanInstanceExtensions(uint32_t* count) const
 {
     return SDL_Vulkan_GetInstanceExtensions(count);
