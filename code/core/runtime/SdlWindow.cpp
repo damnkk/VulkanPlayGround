@@ -13,8 +13,9 @@ bool SdlWindow::init(const RuntimeConfig& config)
         return false;
     }
 
-    const SDL_WindowFlags flags = SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
-    _window                    = SDL_CreateWindow(config.windowTitle, static_cast<int>(config.width), static_cast<int>(config.height), flags);
+    // Qt shows this native window after embedding it in the editor.
+    const SDL_WindowFlags flags = SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN;
+    _window                     = SDL_CreateWindow(config.windowTitle, static_cast<int>(config.width), static_cast<int>(config.height), flags);
     if (!_window)
     {
         LOGE("SDL_CreateWindow failed: %s\n", SDL_GetError());
@@ -142,11 +143,11 @@ void SdlWindow::refreshPixelSize()
 
 void SdlWindow::refreshInputState()
 {
-    float mouseX = 0.0F;
-    float mouseY = 0.0F;
+    float                      mouseX                   = 0.0F;
+    float                      mouseY                   = 0.0F;
     const SDL_MouseButtonFlags previousMouseButtonFlags = _mouseButtonFlags;
-    _mouseButtonFlags                                  = SDL_GetMouseState(&mouseX, &mouseY);
-    const bool previousKeyO                            = _inputState.keyO;
+    _mouseButtonFlags                                   = SDL_GetMouseState(&mouseX, &mouseY);
+    const bool previousKeyO                             = _inputState.keyO;
 
     int windowWidth  = 0;
     int windowHeight = 0;
@@ -169,25 +170,22 @@ void SdlWindow::refreshInputState()
 
     int         keyCount = 0;
     const bool* keys     = SDL_GetKeyboardState(&keyCount);
-    auto        keyDown  = [keys, keyCount](SDL_Scancode scancode)
-    {
-        return keys && static_cast<int>(scancode) < keyCount && keys[scancode];
-    };
+    auto        keyDown  = [keys, keyCount](SDL_Scancode scancode) { return keys && static_cast<int>(scancode) < keyCount && keys[scancode]; };
 
     _inputState.ctrl  = keyDown(SDL_SCANCODE_LCTRL) || keyDown(SDL_SCANCODE_RCTRL);
     _inputState.shift = keyDown(SDL_SCANCODE_LSHIFT) || keyDown(SDL_SCANCODE_RSHIFT);
     _inputState.alt   = keyDown(SDL_SCANCODE_LALT) || keyDown(SDL_SCANCODE_RALT);
 
-    _inputState.keyW     = keyDown(SDL_SCANCODE_W);
-    _inputState.keyA     = keyDown(SDL_SCANCODE_A);
-    _inputState.keyS     = keyDown(SDL_SCANCODE_S);
-    _inputState.keyD     = keyDown(SDL_SCANCODE_D);
+    _inputState.keyW        = keyDown(SDL_SCANCODE_W);
+    _inputState.keyA        = keyDown(SDL_SCANCODE_A);
+    _inputState.keyS        = keyDown(SDL_SCANCODE_S);
+    _inputState.keyD        = keyDown(SDL_SCANCODE_D);
     _inputState.keyO        = keyDown(SDL_SCANCODE_O);
     _inputState.keyOPressed = _inputState.keyO && !previousKeyO;
-    _inputState.keyLeft  = keyDown(SDL_SCANCODE_LEFT);
-    _inputState.keyRight = keyDown(SDL_SCANCODE_RIGHT);
-    _inputState.keyUp    = keyDown(SDL_SCANCODE_UP);
-    _inputState.keyDown  = keyDown(SDL_SCANCODE_DOWN);
+    _inputState.keyLeft     = keyDown(SDL_SCANCODE_LEFT);
+    _inputState.keyRight    = keyDown(SDL_SCANCODE_RIGHT);
+    _inputState.keyUp       = keyDown(SDL_SCANCODE_UP);
+    _inputState.keyDown     = keyDown(SDL_SCANCODE_DOWN);
 }
 
 } // namespace Play::runtime

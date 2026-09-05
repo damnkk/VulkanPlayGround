@@ -22,6 +22,9 @@ Formatting is defined in `.clang-format`: 4-space indentation, no tabs, Allman b
 Match existing naming in the area you edit: PascalCase for types and most engine files (`RenderSession.h`, `GBufferPass.cpp`), descriptive shader names, and existing member-prefix style within each class (`_renderer`, `m_app`, etc.). Keep header/source pairs aligned by name.
 
 ## Agent Workflow Preferences
+- This is a personal experimental project. Prioritize working features, clear code, and simple designs over production-grade robustness.
+- Do not add defensive layers, speculative corner-case handling, recovery frameworks, or high-frequency/long-running stability machinery without a concrete need in the current workflow. Keep checks that directly protect normal use and fix actual correctness bugs.
+- Apply the same standard in code reviews: prioritize broken user flows, incorrect behavior, confusing ownership, and unnecessary complexity. Explain a concrete problem and propose the smallest useful change; do not recommend commercial-grade hardening for hypothetical risks.
 - Do not proactively run compile or build commands. The user will manually verify whether compilation succeeds.
 - Do not add or adjust standard library includes (such as C/C++ `std` headers) on your own. Assume the user will ensure required headers exist.
 - When adding engine extension APIs, prefer a generic extensibility point over one method per concrete feature. For example, use node/component APIs such as `addComponent<T>()`, `getComponent<T>()`, and `removeComponent<T>()` instead of growing `attachModel()`, `attachAnimation()`, `attachVideo()`, etc. Add concrete wrappers only when they encode real workflow policy, not merely because a component type exists today.

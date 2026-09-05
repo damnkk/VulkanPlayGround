@@ -12,7 +12,10 @@ class Scene : public Asset, public std::enable_shared_from_this<Scene>
 public:
     Scene() = default;
     Scene(std::string name) : _name(name) {}
-    ~Scene() {};
+    ~Scene()
+    {
+        _idPool.destroyAll();
+    }
     virtual std::string getAssetTypeName() override
     {
         return "Scene";
@@ -34,13 +37,14 @@ public:
     std::shared_ptr<Entity>       getEntity(uint32_t id);
     std::shared_ptr<const Entity> getEntity(uint32_t id) const;
     std::shared_ptr<Entity>       getEntity(std::string name);
-    std::shared_ptr<Entity>       createEntity(std::string name);
+    std::shared_ptr<Entity>       createEntity(std::string name = {});
     bool                          addEntity(std::shared_ptr<Entity> entity);
 
+    // Removes the entity and its descendants from this scene.
     std::shared_ptr<Entity> removeEntity(std::string name);
     std::shared_ptr<Entity> removeEntity(uint32_t id);
 
-    std::string getName()
+    std::string getName() const
     {
         return _name;
     }

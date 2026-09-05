@@ -79,6 +79,10 @@ public:
     {
         return _name;
     }
+    void setName(std::string name)
+    {
+        _name = std::move(name);
+    }
     inline std::weak_ptr<Entity> getFather()
     {
         return _father;

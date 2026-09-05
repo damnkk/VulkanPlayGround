@@ -56,9 +56,9 @@ std::shared_ptr<Entity> Scene::getEntity(std::string name)
 
 std::shared_ptr<Entity> Scene::createEntity(std::string name)
 {
-    auto entity   = std::make_shared<Entity>();
-    entity->_name = name;
+    auto entity = std::make_shared<Entity>();
     _idPool.createID(entity->_id);
+    entity->_name  = name.empty() ? "Entity " + std::to_string(entity->_id + 1) : std::move(name);
     entity->_scene = weak_from_this();
     entity->addComponent<TransformComponent>();
     _entities.push_back(entity);
@@ -80,32 +80,30 @@ bool Scene::addEntity(std::shared_ptr<Entity> entity)
 
 std::shared_ptr<Entity> Scene::removeEntity(std::string name)
 {
-    for (int i = 0; i < _entities.size(); i++)
-    {
-        auto& entity = _entities[i];
-        if (entity->_name == name)
-        {
-            _entities.erase(_entities.begin() + i);
-            entity->_scene = std::weak_ptr<Scene>();
-            return entity;
-        }
-    }
-    return nullptr;
+    auto entity = getEntity(name);
+    return entity ? removeEntity(entity->getID()) : nullptr;
 }
 
 std::shared_ptr<Entity> Scene::removeEntity(uint32_t id)
 {
-    for (int i = 0; i < _entities.size(); i++)
+    auto entity = getEntity(id);
+    if (!entity)
     {
-        auto& entity = _entities[i];
-        if (entity->_id == id)
-        {
-            _entities.erase(_entities.begin() + i);
-            entity->_scene = std::weak_ptr<Scene>();
-            return entity;
-        }
+        return nullptr;
     }
-    return nullptr;
+
+    // Copy the children because removing each one also detaches it from its parent.
+    const auto children = entity->getChildren();
+    for (const auto& child : children)
+    {
+        removeEntity(child->getID());
+    }
+    entity->setFather({});
+    const auto position = std::find(_entities.begin(), _entities.end(), entity);
+    _entities.erase(position);
+    entity->_scene.reset();
+    // Keep IDs unique for queued editor commands; the Scene destructor releases the pool.
+    return entity;
 }
 
 } // namespace Play

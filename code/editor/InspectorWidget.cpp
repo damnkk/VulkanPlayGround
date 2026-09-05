@@ -36,7 +36,7 @@ void InspectorWidget::selectNode(EditorNodeId nodeId)
 
 void InspectorWidget::rebuild()
 {
-    QWidget* content       = new QWidget(this);
+    QWidget*     content    = new QWidget(this);
     QVBoxLayout* rootLayout = new QVBoxLayout(content);
 
     const EditorNode* selectedNode = nullptr;
@@ -51,7 +51,10 @@ void InspectorWidget::rebuild()
 
     if (!selectedNode)
     {
-        rootLayout->addWidget(new QLabel(_snapshot.nodes.empty() ? "No scene data has been published." : "Select a node to inspect.", content));
+        const char* message = _snapshot.revision == 0   ? "Waiting for an engine snapshot."
+                              : _snapshot.nodes.empty() ? "Scene is empty. Use Add Root to create a node."
+                                                        : "Select a node to inspect.";
+        rootLayout->addWidget(new QLabel(message, content));
         rootLayout->addStretch();
         setWidget(content);
         return;
@@ -66,10 +69,10 @@ void InspectorWidget::rebuild()
 
     if (selectedNode->hasTransform)
     {
-        QGroupBox* transformGroup = new QGroupBox("Transform", content);
-        QGridLayout* transformLayout = new QGridLayout(transformGroup);
-        const char* rows[] = {"Translation", "Rotation", "Scale"};
-        const char* axes[] = {"X", "Y", "Z"};
+        QGroupBox*               transformGroup  = new QGroupBox("Transform", content);
+        QGridLayout*             transformLayout = new QGridLayout(transformGroup);
+        const char*              rows[]          = {"Translation", "Rotation", "Scale"};
+        const char*              axes[]          = {"X", "Y", "Z"};
         QVector<QDoubleSpinBox*> editors;
 
         for (int axis = 0; axis < 3; ++axis)
@@ -85,8 +88,9 @@ void InspectorWidget::rebuild()
                 spinBox->setDecimals(4);
                 spinBox->setRange(-1000000.0, 1000000.0);
                 spinBox->setSingleStep(row == 2 ? 0.01 : 0.1);
-                const float* values =
-                    row == 0 ? selectedNode->transform.translation : row == 1 ? selectedNode->transform.rotation : selectedNode->transform.scale;
+                const float* values = row == 0   ? selectedNode->transform.translation
+                                      : row == 1 ? selectedNode->transform.rotation
+                                                 : selectedNode->transform.scale;
                 spinBox->setValue(values[axis]);
                 transformLayout->addWidget(spinBox, row + 1, axis + 1);
                 editors.push_back(spinBox);
@@ -115,7 +119,7 @@ void InspectorWidget::rebuild()
 
     for (const EditorComponent& component : selectedNode->components)
     {
-        QGroupBox* componentGroup = new QGroupBox(QString::fromStdString(component.label.empty() ? component.typeName : component.label), content);
+        QGroupBox*   componentGroup  = new QGroupBox(QString::fromStdString(component.label.empty() ? component.typeName : component.label), content);
         QVBoxLayout* componentLayout = new QVBoxLayout(componentGroup);
         QFormLayout* properties      = new QFormLayout();
         for (const EditorProperty& property : component.properties)
@@ -144,7 +148,7 @@ void InspectorWidget::rebuild()
 
     if (!_snapshot.componentTypes.empty())
     {
-        QWidget* addRow     = new QWidget(content);
+        QWidget*     addRow = new QWidget(content);
         QHBoxLayout* layout = new QHBoxLayout(addRow);
         layout->setContentsMargins(0, 0, 0, 0);
         QComboBox* types = new QComboBox(addRow);

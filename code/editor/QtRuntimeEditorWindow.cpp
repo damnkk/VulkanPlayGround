@@ -2,7 +2,6 @@
 
 #include <QCloseEvent>
 #include <QDockWidget>
-#include <QLabel>
 #include <QStatusBar>
 #include <QTimer>
 #include <QWindow>
@@ -20,23 +19,21 @@ QtRuntimeEditorWindow::QtRuntimeEditorWindow(RuntimeEditor& editor, QWidget* par
     setWindowTitle("VulkanPlayGround Editor");
     resize(1100, 720);
 
-    QLabel* placeholder = new QLabel("The Vulkan viewport is running in the SDL window.\nThis window only owns editor controls.", this);
-    placeholder->setAlignment(Qt::AlignCenter);
-    setCentralWidget(placeholder);
+    setCentralWidget(new QWidget(this));
 
-    _sceneTree = new SceneTreeWidget(_editor, this);
+    _sceneTree             = new SceneTreeWidget(_editor, this);
     QDockWidget* sceneDock = new QDockWidget("Scene", this);
     sceneDock->setObjectName("SceneDock");
     sceneDock->setWidget(_sceneTree);
     addDockWidget(Qt::LeftDockWidgetArea, sceneDock);
 
-    _inspector = new InspectorWidget(_editor, this);
+    _inspector                 = new InspectorWidget(_editor, this);
     QDockWidget* inspectorDock = new QDockWidget("Inspector", this);
     inspectorDock->setObjectName("InspectorDock");
     inspectorDock->setWidget(_inspector);
     addDockWidget(Qt::RightDockWidgetArea, inspectorDock);
 
-    _assetBrowser = new AssetBrowserWidget(this);
+    _assetBrowser          = new AssetBrowserWidget(this);
     QDockWidget* assetDock = new QDockWidget("Assets", this);
     assetDock->setObjectName("AssetDock");
     assetDock->setWidget(_assetBrowser);
@@ -56,8 +53,11 @@ QtRuntimeEditorWindow::~QtRuntimeEditorWindow() = default;
 
 void QtRuntimeEditorWindow::closeEvent(QCloseEvent* event)
 {
+    // Hide the editor and its native viewport together. The engine stops the
+    // Qt event loop after rendering has finished, so the container stays alive.
+    event->ignore();
+    hide();
     _editor.requestExit();
-    event->accept();
 }
 
 void QtRuntimeEditorWindow::setRenderWindowHandle(void* handle)
@@ -71,6 +71,8 @@ void QtRuntimeEditorWindow::setRenderWindowHandle(void* handle)
     _renderContainer      = QWidget::createWindowContainer(renderWindow, this);
     _renderContainer->setFocusPolicy(Qt::StrongFocus);
     setCentralWidget(_renderContainer);
+    refresh();
+    show();
 }
 
 void QtRuntimeEditorWindow::refresh()
@@ -81,7 +83,7 @@ void QtRuntimeEditorWindow::refresh()
         return;
     }
 
-    _revision = snapshot.revision;
+    _revision    = snapshot.revision;
     _hasSnapshot = true;
     _sceneTree->refresh(snapshot);
     _inspector->setSnapshot(snapshot);

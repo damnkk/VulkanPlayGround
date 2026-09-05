@@ -11,6 +11,7 @@
 #include "resourceManagement/vulkan/pipeline/PipelineCacheManager.h"
 #include "core/Profiling.h"
 #include "RenderSession.h"
+#include "SceneEditorBridge.h"
 #include "resourceManagement/vulkan/resources/PlayAllocator.h"
 #include "resourceManagement/vulkan/cache/RenderPassCache.h"
 #include "resourceManagement/vulkan/resources/Resource.h"
@@ -215,7 +216,6 @@ bool VulkanRuntime::init(const RuntimeConfig& config, const nvvk::ContextInitInf
     }
 
     _initialized = true;
-    _guiHost.setRenderWindowHandle(_window.getNativeHandle());
 
     return true;
 }
@@ -228,10 +228,17 @@ void VulkanRuntime::run()
     }
 
     LOGI("Running SDL3 bootstrap runtime\n");
+    publishSceneSnapshot(*_sceneManager, _guiHost.getEditor());
+    _guiHost.setRenderWindowHandle(_window.getNativeHandle());
 
     while (!_window.shouldClose() && !_guiHost.getEditor().exitRequested())
     {
         _window.pollEvents();
+        if (_window.shouldClose() || _guiHost.getEditor().exitRequested())
+        {
+            break;
+        }
+        processSceneCommands(*_sceneManager, _guiHost.getEditor());
         if (_window.getInputState().keyOPressed)
         {
             _guiHost.start();

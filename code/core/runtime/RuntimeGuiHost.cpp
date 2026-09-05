@@ -185,6 +185,7 @@ int RuntimeGuiHost::run()
     int   argumentCount     = 1;
 
     QApplication application(argumentCount, arguments);
+    application.setQuitOnLastWindowClosed(false);
     setApplication(&application);
 
     SDL_LockMutex(_mutex);
@@ -196,8 +197,11 @@ int RuntimeGuiHost::run()
     {
         Play::editor::QtRuntimeEditorWindow window(_editor);
         setWindow(&window);
-        window.show();
+        // setRenderWindowHandle() shows the complete editor once the viewport is ready.
         result = application.exec();
+        // Also cover exits initiated by SDL (Escape or a native close request).
+        // Hide the foreign window before Qt releases its container and reparents it.
+        window.hide();
         setWindow(nullptr);
     }
 
@@ -264,7 +268,7 @@ void RuntimeGuiHost::setApplication(QApplication* application)
 void RuntimeGuiHost::setWindow(Play::editor::QtRuntimeEditorWindow* window)
 {
     SDL_LockMutex(_mutex);
-    _window = window;
+    _window                  = window;
     void* renderWindowHandle = _renderWindowHandle;
     SDL_UnlockMutex(_mutex);
 

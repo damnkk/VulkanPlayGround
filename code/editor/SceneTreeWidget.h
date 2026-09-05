@@ -26,8 +26,7 @@ signals:
 
 private:
     RuntimeEditor& _editor;
-    QTreeWidget*   _tree       = nullptr;
-    bool           _refreshing = false;
+    QTreeWidget*   _tree = nullptr;
 };
 
 } // namespace Play::editor
