@@ -29,6 +29,8 @@ private:
     void showStartupPage();
     void startProject(const QString& projectPath);
     void createEditor();
+    void createEditorActions();
+    void requestSave();
     void refresh();
 
     RuntimeEditor&        _editor;

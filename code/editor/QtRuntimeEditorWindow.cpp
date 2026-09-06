@@ -1,9 +1,13 @@
 #include "editor/QtRuntimeEditorWindow.h"
 
+#include <QAction>
 #include <QCloseEvent>
 #include <QDockWidget>
+#include <QDir>
+#include <QLabel>
 #include <QStatusBar>
 #include <QTimer>
+#include <QToolBar>
 #include <QWindow>
 
 #include "editor/AssetBrowserWidget.h"
@@ -40,11 +44,21 @@ void QtRuntimeEditorWindow::startProject(const QString& projectPath)
     }
 
     _startupPage->showStarting();
+    setWindowTitle(tr("%1 - VulkanPlayGround").arg(QDir(projectPath).dirName()));
+    auto* location = new QLabel(tr("Save location: %1").arg(QDir::toNativeSeparators(projectPath)), this);
+    location->setToolTip(QDir::toNativeSeparators(projectPath));
+    location->setTextFormat(Qt::PlainText);
+    location->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    location->setMinimumWidth(0);
+    location->setMaximumWidth(580);
+    statusBar()->addPermanentWidget(location);
+    statusBar()->hide();
 }
 
 void QtRuntimeEditorWindow::createEditor()
 {
     resize(1100, 720);
+    createEditorActions();
 
     _sceneTree             = new SceneTreeWidget(_editor, this);
     QDockWidget* sceneDock = new QDockWidget("Scene", this);
@@ -67,11 +81,37 @@ void QtRuntimeEditorWindow::createEditor()
     connect(_sceneTree, &SceneTreeWidget::nodeSelected, _inspector,
             [this](qulonglong nodeId) { _inspector->selectNode(static_cast<EditorNodeId>(nodeId)); });
 
+    statusBar()->show();
     statusBar()->showMessage("Waiting for an engine snapshot");
     QTimer* refreshTimer = new QTimer(this);
     connect(refreshTimer, &QTimer::timeout, this, &QtRuntimeEditorWindow::refresh);
     refreshTimer->start(200);
     refresh();
+}
+
+void QtRuntimeEditorWindow::createEditorActions()
+{
+    QAction* saveAction = new QAction(tr("Save"), this);
+    saveAction->setShortcut(QKeySequence::Save);
+    saveAction->setShortcutContext(Qt::WindowShortcut);
+    saveAction->setAutoRepeat(false);
+    saveAction->setToolTip(tr("Save the current project (Ctrl+S)"));
+    connect(saveAction, &QAction::triggered, this, &QtRuntimeEditorWindow::requestSave);
+
+    // A single slim action bar: one row holding every editor command instead of
+    // stacking a menu bar above a toolbar. Grow it with more buttons (or a File
+    // dropdown) rather than adding a second row.
+    QToolBar* editorBar = addToolBar(tr("Editor"));
+    editorBar->setObjectName("EditorToolBar");
+    editorBar->setMovable(false);
+    editorBar->setFloatable(false);
+    editorBar->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    editorBar->addAction(saveAction);
+}
+
+void QtRuntimeEditorWindow::requestSave()
+{
+    _editor.requestSave();
 }
 
 QtRuntimeEditorWindow::~QtRuntimeEditorWindow() = default;

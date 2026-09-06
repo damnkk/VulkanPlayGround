@@ -45,6 +45,20 @@ bool RuntimeEditor::exitRequested() const
     return _exitRequested;
 }
 
+void RuntimeEditor::requestSave()
+{
+    std::lock_guard lock(_mutex);
+    _saveRequested = true;
+}
+
+bool RuntimeEditor::takeSaveRequest()
+{
+    std::lock_guard    lock(_mutex);
+    const bool         requested = _saveRequested;
+    _saveRequested = false;
+    return requested;
+}
+
 void RuntimeEditor::setStartupProjectReceiver(StartupProjectReceiver* receiver)
 {
     _startupProjectReceiver = receiver;

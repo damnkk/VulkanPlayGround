@@ -27,9 +27,8 @@ int EngineLoop::run(const RuntimeConfig& config, const nvvk::ContextInitInfo& co
         SDL_Delay(16);
     }
 
-    // An empty startup path means a new project. The selected base path is
-    // available through ProjectInfo before any runtime initialization begins.
-    if (!runtimeConfig.projectPath.empty() && !ProjectInfo::setProjectPath(std::filesystem::u8path(runtimeConfig.projectPath)))
+    // Both new and existing projects have a save directory before runtime initialization.
+    if (!ProjectInfo::setProjectPath(std::filesystem::u8path(runtimeConfig.projectPath)))
     {
         guiHost.stop();
         return 1;

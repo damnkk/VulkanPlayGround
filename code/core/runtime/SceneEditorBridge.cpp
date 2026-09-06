@@ -83,6 +83,18 @@ void publishSceneSnapshot(SceneManager& sceneManager, editor::RuntimeEditor& edi
     editor.publishSnapshot(std::move(snapshot));
 }
 
+void saveCurrentProject(SceneManager& sceneManager)
+{
+    // Extension point for the real save flow: serialize the scene into the
+    // active project directory and flush its asset manifest. The existing
+    // SceneManager::saveProject() covers that path for now.
+    std::string errorMessage;
+    if (!sceneManager.saveProject(&errorMessage))
+    {
+        LOGW("Save project failed: %s\n", errorMessage.empty() ? "unknown error" : errorMessage.c_str());
+    }
+}
+
 void processSceneCommands(SceneManager& sceneManager, editor::RuntimeEditor& editor)
 {
     const auto commands = editor.takeCommands();

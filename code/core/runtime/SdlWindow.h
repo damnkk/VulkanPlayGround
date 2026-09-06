@@ -28,16 +28,17 @@ struct SdlInputState
     bool shift = false;
     bool alt   = false;
 
-    bool keyW     = false;
-    bool keyA     = false;
-    bool keyS     = false;
-    bool keyD     = false;
-    bool keyO        = false;
-    bool keyOPressed = false;
-    bool keyLeft  = false;
-    bool keyRight = false;
-    bool keyUp    = false;
-    bool keyDown  = false;
+    bool keyW         = false;
+    bool keyA         = false;
+    bool keyS         = false;
+    bool keySPressed  = false;
+    bool keyD         = false;
+    bool keyO         = false;
+    bool keyOPressed  = false;
+    bool keyLeft      = false;
+    bool keyRight     = false;
+    bool keyUp        = false;
+    bool keyDown      = false;
 };
 
 class SdlWindow

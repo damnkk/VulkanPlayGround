@@ -97,7 +97,6 @@ bool SceneManager::saveProject(std::string* errorMessage)
 
     std::lock_guard<std::mutex> lock(_sceneMutex);
     vkDriver->getAssetManager()->saveAsset(_scene);
-    vkDriver->getAssetManager()->Save();
     return true;
 }
 

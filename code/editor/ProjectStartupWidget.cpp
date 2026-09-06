@@ -152,7 +152,7 @@ ProjectStartupWidget::ProjectStartupWidget(QWidget* parent) : QWidget(parent)
 {
     setObjectName("ProjectStartup");
     setAttribute(Qt::WA_StyledBackground);
-    setMinimumSize(900, 680);
+    setMinimumSize(900, 740);
     setStyleSheet(R"(
         QWidget#ProjectStartup { background: #0b1016; }
         QLabel { color: #e9eeea; background: transparent; border: none; font-family: 'Segoe UI'; }
@@ -255,14 +255,65 @@ ProjectStartupWidget::ProjectStartupWidget(QWidget* parent) : QWidget(parent)
     createLayout->setSpacing(10);
     addLabel(createLayout, "01 / A FRESH PERSPECTIVE", "CardIndex");
     addLabel(createLayout, "Create a project", "CardTitle");
-    addLabel(createLayout, "Start with a blank canvas. Make it yours.", "CardDescription");
+    addLabel(createLayout, "Choose an empty folder. Your project will be saved here.", "CardDescription");
     createLayout->addSpacing(4);
+    auto* createPathLabel = addLabel(createLayout, "SAVE LOCATION", "FieldLabel");
+    auto* createPathRow   = new QHBoxLayout();
+    createPathRow->setSpacing(8);
+    auto* createPathEdit = new QLineEdit(createCard);
+    createPathEdit->setMinimumWidth(0);
+    createPathEdit->setPlaceholderText("Select an empty folder...");
+    createPathEdit->setClearButtonEnabled(true);
+    createPathEdit->setAccessibleName("New project save location");
+    createPathLabel->setBuddy(createPathEdit);
+    createPathRow->addWidget(createPathEdit, 1);
+    auto* createBrowseButton = new QPushButton("Browse", createCard);
+    createBrowseButton->setObjectName("BrowseButton");
+    createBrowseButton->setCursor(Qt::PointingHandCursor);
+    createPathRow->addWidget(createBrowseButton);
+    createLayout->addLayout(createPathRow);
     auto* createButton = new QPushButton("Create project  +", createCard);
     createButton->setObjectName("CreateButton");
     createButton->setCursor(Qt::PointingHandCursor);
+    createButton->setEnabled(false);
     createLayout->addWidget(createButton);
     actions->addWidget(createCard);
-    connect(createButton, &QPushButton::clicked, this, [this]() { emit projectSelected({}); });
+    connect(createBrowseButton, &QPushButton::clicked, this,
+            [this, createPathEdit]()
+            {
+                const QString directory =
+                    QFileDialog::getExistingDirectory(this, "Choose or Create an Empty Project Folder", createPathEdit->text().trimmed());
+                if (!directory.isEmpty())
+                {
+                    createPathEdit->setText(QDir::toNativeSeparators(directory));
+                }
+            });
+    connect(createPathEdit, &QLineEdit::textChanged, this,
+            [this, createButton, createPathEdit](const QString& text)
+            {
+                createButton->setEnabled(!text.trimmed().isEmpty());
+                createPathEdit->setToolTip(text);
+                _status->clear();
+            });
+    connect(createButton, &QPushButton::clicked, this,
+            [this, createPathEdit]()
+            {
+                const QFileInfo directory(createPathEdit->text().trimmed());
+                if (createPathEdit->text().trimmed().isEmpty() || !directory.isDir() || !directory.isWritable())
+                {
+                    showError("Choose an existing, writable folder for your new project.");
+                    createPathEdit->setFocus();
+                    return;
+                }
+                if (!QDir(directory.absoluteFilePath()).isEmpty(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System))
+                {
+                    showError("Choose an empty folder for a new project. To use an existing project, choose Open project.");
+                    createPathEdit->setFocus();
+                    return;
+                }
+                emit projectSelected(directory.absoluteFilePath());
+            });
+    connect(createPathEdit, &QLineEdit::returnPressed, createButton, &QPushButton::click);
 
     auto* openCard = new QFrame(_actions);
     openCard->setObjectName("OpenCard");

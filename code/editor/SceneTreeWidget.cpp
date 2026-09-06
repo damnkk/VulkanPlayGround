@@ -22,9 +22,11 @@ SceneTreeWidget::SceneTreeWidget(RuntimeEditor& editor, QWidget* parent) : QWidg
     remove->setEnabled(false);
 
     QHBoxLayout* toolbar = new QHBoxLayout();
-    toolbar->addWidget(addRoot);
-    toolbar->addWidget(addChild);
-    toolbar->addWidget(remove);
+    toolbar->setContentsMargins(4, 1, 4, 1);
+    toolbar->setSpacing(4);
+    toolbar->addWidget(addRoot, 1, Qt::AlignVCenter);
+    toolbar->addWidget(addChild, 1, Qt::AlignVCenter);
+    toolbar->addWidget(remove, 1, Qt::AlignVCenter);
 
     _tree = new QTreeWidget(this);
     _tree->setHeaderHidden(true);
@@ -32,8 +34,9 @@ SceneTreeWidget::SceneTreeWidget(RuntimeEditor& editor, QWidget* parent) : QWidg
 
     QVBoxLayout* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
     layout->addLayout(toolbar);
-    layout->addWidget(_tree);
+    layout->addWidget(_tree, 1);
 
     const auto addNode = [this](bool asChild)
     {

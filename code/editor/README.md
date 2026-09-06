@@ -28,17 +28,23 @@ Snapshots contain copied values only. Components are addressed by opaque IDs and
 
 Publish a new snapshot after a command changes the scene. Avoid publishing an unchanged snapshot every frame because the Qt inspector intentionally rebuilds only when the snapshot revision changes.
 
+## Saving
+
+Saving is a one-shot request, not a scene command: `SceneManager::saveProject()` locks the scene itself, so it must not run inside the `editScene()` lambda that applies commands (that would deadlock). The toolbar Save button in the single slim action bar calls `RuntimeEditor::requestSave()` on the Qt thread; Ctrl+S pressed while the embedded viewport has focus is edge-detected by `SdlWindow` (`keySPressed`) and routed the same way. `VulkanRuntime::run()` consumes the request once per frame through `RuntimeEditor::takeSaveRequest()` and calls `SceneEditorBridge::saveCurrentProject()`, which currently delegates to `SceneManager::saveProject()` and logs failures.
+
+Manual checks: in the editor, trigger a save from the toolbar button, with Ctrl+S while a Qt panel has focus, and with Ctrl+S while the viewport has focus; each press must save exactly once and the viewport must keep rendering.
+
 ## Embedded viewport lifecycle
 
-The Qt window first shows a startup page. Create Project submits an empty path; Load Project submits the selected existing base directory as UTF-8. Cancelling the folder picker keeps the startup page open. Closing the startup page exits without starting Vulkan.
+The Qt window first shows a startup page. Create Project requires an existing, writable, empty folder (a folder can be created in the native picker); Open Project accepts an existing project folder. Both submit the selected absolute base directory as UTF-8. The create button stays disabled until a location is entered, and invalid or non-empty create locations show an inline error. Cancelling the folder picker keeps the startup page open. Closing the startup page exits without starting Vulkan.
 
-`EngineLoop` waits for that selection and sets `ProjectInfo` before constructing `VulkanRuntime`. Read `ProjectInfo::getProjectPath()` during runtime startup: an empty path means a new project, and a non-empty path is the selected project directory. New projects skip the existing asset manifest initialization. The startup UI does not create files or call scene loading APIs.
+`EngineLoop` waits for that selection and sets `ProjectInfo` before constructing `VulkanRuntime`. Both new and existing projects have a non-empty `ProjectInfo::getProjectPath()` during runtime startup. The asset manager accepts a missing manifest as a new project; Save / Ctrl+S writes the scene and asset manifest into the selected directory. The startup UI does not create project files or call scene loading APIs. The editor title shows the folder name, and its status bar shows the save location with a full-path tooltip and selectable text.
 
 SDL creates the Vulkan window with `SDL_WINDOW_HIDDEN`. Once runtime initialization is complete, `VulkanRuntime::run()` supplies its native handle to Qt. `QtRuntimeEditorWindow` replaces the startup page with the viewport and editor panels, so the viewport never needs to appear as a separate visible window during startup.
 
 Closing the editor hides the entire window and requests engine exit, leaving the Qt event loop and container alive. After the render loop finishes and the GPU is idle, `EngineLoop` stops Qt. The Qt window is hidden before container destruction, including exits initiated by SDL; Vulkan and SDL cleanup then follows. Rendering still presents directly to the same SDL Vulkan surface on the engine thread.
 
-Manual checks: confirm startup waits for a choice; cancel the folder picker and try an invalid directory; create a project and check that the project path is empty; load a folder and check `ProjectInfo::getProjectPath()` before runtime initialization; close the startup page and confirm the process exits. After entering the editor, confirm there is no standalone SDL window flash; resize and minimize/restore the editor and confirm the viewport follows; exit both with the editor close button and Escape while the viewport has focus, confirming no detached window appears.
+Manual checks: confirm startup waits for a choice; cancel the folder picker and try an invalid directory; verify Create rejects a non-empty folder; create with an empty folder and check `ProjectInfo::getProjectPath()` before runtime initialization; save and confirm that `assetmap.json` and the scene asset appear in that folder; open that folder again; close the startup page and confirm the process exits. After entering the editor, check the save location, confirm there is no standalone SDL window flash; resize and minimize/restore the editor and confirm the viewport follows; exit both with the editor close button and Escape while the viewport has focus, confirming no detached window appears.
 
 ## Property conventions
 

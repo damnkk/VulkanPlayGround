@@ -2,7 +2,7 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
-
+CEREAL_REGISTER_TYPE(Play::TransformComponent)
 namespace Play
 {
 
@@ -31,7 +31,7 @@ void TransformComponent::onInit()
 
 void TransformComponent::onUpdate(float deltaTime)
 {
-    (void)deltaTime;
+    (void) deltaTime;
 }
 
 void TransformComponent::setTransform(const glm::mat4& mat)

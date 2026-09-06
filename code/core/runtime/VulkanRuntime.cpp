@@ -245,6 +245,19 @@ void VulkanRuntime::run()
             _guiHost.start();
         }
 
+        // Ctrl+S has two exclusive producers depending on keyboard focus: the
+        // Qt window fires its File > Save shortcut while a Qt widget is focused,
+        // and SDL reports the key edge while the embedded viewport is. Both set
+        // the same one-shot request, consumed once per frame below.
+        if (_window.getInputState().keySPressed && _window.getInputState().ctrl)
+        {
+            _guiHost.getEditor().requestSave();
+        }
+        if (_guiHost.getEditor().takeSaveRequest())
+        {
+            saveCurrentProject(*_sceneManager);
+        }
+
         if (!_window.isRenderable())
         {
             SDL_Delay(10);
