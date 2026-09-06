@@ -1,8 +1,14 @@
 #include "Entity.h"
+#include "Scene.h"
 #include "nvutils/logger.hpp"
 
 namespace Play
 {
+
+void Entity::restoreComponentOwners()
+{
+    for (auto& component : _components) component->_entity = weak_from_this();
+}
 
 void Entity::load()
 {
@@ -23,7 +29,11 @@ void Entity::init()
 {
     for (auto& component : _components)
     {
-        if (!component->_init) component->onInit();
+        if (!component->_init)
+        {
+            component->onInit();
+            component->_init = true;
+        }
     }
 }
 
@@ -51,16 +61,31 @@ void Entity::addComponent(std::shared_ptr<Component> component)
 
 void Entity::setFather(std::weak_ptr<Entity> father)
 {
-    if (std::shared_ptr<Entity> oldFather = this->_father.lock())
+    auto parent = father.lock();
+    if (auto scene = _scene.lock())
     {
-        oldFather->removeChild(shared_from_this());
+        if (scene->getRoot().get() == this) return;
+        if (!parent) parent = scene->getRoot();
+        if (parent->getScene() != scene) return;
     }
-    this->_father = std::weak_ptr<Entity>(father);
-
-    if (std::shared_ptr<Entity> newFather = father.lock())
+    else if (parent && parent->getScene())
     {
-        newFather->_children.push_back(shared_from_this());
+        // Scene::addEntity registers an unowned subtree before attaching it.
+        return;
     }
+    for (auto ancestor = parent; ancestor; ancestor = ancestor->_father.lock())
+    {
+        if (ancestor.get() == this) return;
+    }
+    auto oldParent = _father.lock();
+    if (oldParent == parent) return;
+    if (oldParent)
+    {
+        auto& siblings = oldParent->_children;
+        siblings.erase(std::find(siblings.begin(), siblings.end(), shared_from_this()));
+    }
+    _father = parent;
+    if (parent) parent->_children.push_back(shared_from_this());
 }
 
 void Entity::addChild(std::shared_ptr<Entity> child)
@@ -70,17 +95,10 @@ void Entity::addChild(std::shared_ptr<Entity> child)
 
 bool Entity::removeChild(std::shared_ptr<Entity> child)
 {
-    for (int i = 0; i < _children.size(); i++)
-    {
-        auto& myChild = _children.at(i);
-        if (myChild.get() == child.get())
-        {
-            myChild->_father = std::weak_ptr<Entity>();
-            _children.erase(_children.begin() + i);
-            return true;
-        }
-    }
-    return false;
+    if (!child || child->_father.lock().get() != this) return false;
+    if (auto scene = _scene.lock(); scene && scene->getRoot().get() == this) return false;
+    child->setFather({});
+    return true;
 }
 
 } // namespace Play

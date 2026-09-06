@@ -117,6 +117,7 @@ private:
     std::vector<std::shared_ptr<Entity>>    _children;
     std::weak_ptr<Scene>                    _scene;
     friend class Scene;
+    void restoreComponentOwners();
 
 private:
     // clang-format off
@@ -124,8 +125,6 @@ private:
     SerailizeEntry(_name)
     SerailizeEntry(_components)
     SerailizeEntry(_children)
-    for(auto& component:_components) component->_entity = weak_from_this();
-    for(auto& child:_children) child->_father = weak_from_this();
     EndSerailize
     //clang-format on
 };

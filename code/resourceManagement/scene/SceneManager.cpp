@@ -9,34 +9,7 @@
 namespace Play
 {
 
-namespace
-{
-
-bool initializeProject(const std::string& projectPath, std::string* errorMessage)
-{
-    if (!ProjectInfo::setProjectPath(projectPath))
-    {
-        if (errorMessage)
-        {
-            *errorMessage = "Could not initialize the project information.";
-        }
-        return false;
-    }
-
-    if (vkDriver && vkDriver->getAssetManager() && !vkDriver->getAssetManager()->Init())
-    {
-        if (errorMessage)
-        {
-            *errorMessage = "Could not initialize the project asset map.";
-        }
-        return false;
-    }
-
-    return true;
-}
-} // namespace
-
-SceneManager::SceneManager() : _scene(std::make_shared<Scene>("Scene"))
+SceneManager::SceneManager()
 {
     _sceneDescriptorBindings.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr);
     _sceneDescriptorBindings.addBinding(1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr);
@@ -68,60 +41,98 @@ void SceneManager::update()
 
 bool SceneManager::createProject(const std::string& projectPath, std::string* errorMessage)
 {
-    std::string normalizedPath = projectPath;
-    if (std::filesystem::path(normalizedPath).extension().empty())
+    if (!ProjectInfo::setProjectPath(std::filesystem::u8path(projectPath)) || !vkDriver->getAssetManager()->Init())
     {
-        normalizedPath += ".project";
-    }
-
-    if (!initializeProject(normalizedPath, errorMessage))
-    {
+        if (errorMessage) *errorMessage = "Could not initialize the new project.";
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(_sceneMutex);
-    _scene = std::make_shared<Scene>(std::filesystem::path(normalizedPath).stem().string());
-    return true;
+    _scene = std::make_shared<Scene>(ProjectInfo::getProjectName());
+    _scene->onLoadAsset();
+    return saveProject(errorMessage);
 }
 
 bool SceneManager::saveProject(std::string* errorMessage)
 {
-    if (!ProjectInfo::isOpen() || !vkDriver || !vkDriver->getAssetManager())
+    if (!ProjectInfo::isOpen() || !_scene || !vkDriver || !vkDriver->getAssetManager())
     {
-        if (errorMessage)
-        {
-            *errorMessage = "No project is currently open.";
-        }
+        if (errorMessage) *errorMessage = "No project is currently open.";
         return false;
     }
 
     std::lock_guard<std::mutex> lock(_sceneMutex);
-    vkDriver->getAssetManager()->saveAsset(_scene);
+    if (!vkDriver->getAssetManager()->saveAsset(_scene))
+    {
+        if (errorMessage) *errorMessage = "Could not save the scene or asset manifest.";
+        return false;
+    }
+
+    std::ofstream stream(ProjectInfo::getProjectPath() / "project.json", std::ios::trunc);
+    if (!stream)
+    {
+        if (errorMessage) *errorMessage = "Could not write project.json.";
+        return false;
+    }
+    try
+    {
+        cereal::JSONOutputArchive archive(stream);
+        const VUID                startupScene = _scene->getUID();
+        archive(cereal::make_nvp("startupScene", startupScene));
+    }
+    catch (const std::exception& error)
+    {
+        if (errorMessage) *errorMessage = error.what();
+        return false;
+    }
+    stream.close();
+    if (stream.fail())
+    {
+        if (errorMessage) *errorMessage = "Could not finish writing project.json.";
+        return false;
+    }
     return true;
 }
 
 bool SceneManager::loadProject(const std::string& projectPath, std::string* errorMessage)
 {
-    if (!initializeProject(projectPath, errorMessage))
+    if (!ProjectInfo::setProjectPath(std::filesystem::u8path(projectPath)))
     {
+        if (errorMessage) *errorMessage = "Invalid project directory.";
         return false;
     }
 
-    std::shared_ptr<Scene> loadedScene;
-    if (vkDriver && vkDriver->getAssetManager())
+    VUID startupScene;
+    try
     {
-        for (const auto& [guid, asset] : vkDriver->getAssetManager()->getAssets())
+        std::ifstream stream(ProjectInfo::getProjectPath() / "project.json");
+        if (!stream)
         {
-            if (asset && asset->getAssetType() == ASSET_TYPE_SCENE)
-            {
-                loadedScene = std::dynamic_pointer_cast<Scene>(asset);
-                break;
-            }
+            if (errorMessage) *errorMessage = "Could not read project.json. Open a project saved in the current format.";
+            return false;
         }
-    }
+        cereal::JSONInputArchive archive(stream);
+        archive(cereal::make_nvp("startupScene", startupScene));
 
-    std::lock_guard<std::mutex> lock(_sceneMutex);
-    _scene = loadedScene ? loadedScene : std::make_shared<Scene>(std::filesystem::path(projectPath).stem().string());
+        auto* assets = vkDriver->getAssetManager();
+        if (startupScene.is_nil() || !assets->Init())
+        {
+            if (errorMessage) *errorMessage = "Could not restore the project assets or startup scene ID.";
+            return false;
+        }
+        auto scene = assets->getOrLoadAsset<Scene>(startupScene);
+        if (!scene)
+        {
+            if (errorMessage) *errorMessage = "The project's startup scene could not be loaded.";
+            return false;
+        }
+        std::lock_guard<std::mutex> lock(_sceneMutex);
+        _scene = std::move(scene);
+    }
+    catch (const std::exception& error)
+    {
+        if (errorMessage) *errorMessage = error.what();
+        return false;
+    }
     return true;
 }
 

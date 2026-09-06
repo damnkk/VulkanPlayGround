@@ -15,6 +15,7 @@ struct RuntimeConfig
     bool        verbose     = false;
     std::string renderMode  = "defer";
     std::string projectPath;
+    bool        createNewProject = false;
 };
 
 } // namespace Play::runtime

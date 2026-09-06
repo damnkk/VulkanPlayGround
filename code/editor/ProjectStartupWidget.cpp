@@ -311,7 +311,7 @@ ProjectStartupWidget::ProjectStartupWidget(QWidget* parent) : QWidget(parent)
                     createPathEdit->setFocus();
                     return;
                 }
-                emit projectSelected(directory.absoluteFilePath());
+                emit projectSelected(directory.absoluteFilePath(), true);
             });
     connect(createPathEdit, &QLineEdit::returnPressed, createButton, &QPushButton::click);
 
@@ -390,7 +390,7 @@ ProjectStartupWidget::ProjectStartupWidget(QWidget* parent) : QWidget(parent)
                     pathEdit->setFocus();
                     return;
                 }
-                emit projectSelected(directory.absoluteFilePath());
+                emit projectSelected(directory.absoluteFilePath(), false);
             });
     connect(pathEdit, &QLineEdit::returnPressed, loadButton, &QPushButton::click);
 }

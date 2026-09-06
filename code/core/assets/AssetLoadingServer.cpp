@@ -70,25 +70,36 @@ bool AssetManager::Init()
         return false;
     }
 
+    // Construct every object before running load hooks that resolve asset references.
+    const auto entries = _GUIDToPath;
+    for (const auto& [guid, path] : entries)
+    {
+        auto asset = loadAsset(path, false);
+        if (!asset || asset->getUID() != guid)
+        {
+            LOGE("Failed to restore asset {%s} from {%s}\n", uuids::to_string(guid).c_str(), path.c_str());
+            return false;
+        }
+    }
     return true;
 }
 
 void AssetManager::Tick() {}
 
-void AssetManager::Save()
+bool AssetManager::Save()
 {
     const std::filesystem::path manifestPath = ProjectInfo::getAssetMapPath();
     if (manifestPath.empty())
     {
         LOGE("Cannot save the asset manifest without a project path\n");
-        return;
+        return false;
     }
 
     std::ofstream manifestStream(manifestPath, std::ios::trunc);
     if (!manifestStream.is_open())
     {
         LOGE("Failed to open asset manifest for writing {%s}\n", manifestPath.string().c_str());
-        return;
+        return false;
     }
 
     try
@@ -99,7 +110,10 @@ void AssetManager::Save()
     catch (const std::exception& error)
     {
         LOGE("Failed to serialize asset manifest {%s}: %s\n", manifestPath.string().c_str(), error.what());
+        return false;
     }
+    manifestStream.close();
+    return !manifestStream.fail();
 }
 
 VUID AssetManager::filePathToGUID(const std::string& path)
@@ -183,9 +197,9 @@ AssetRef AssetManager::getAsset(const VUID& uid)
     if (iter != _uninitializedAssets.end())
     {
         AssetRef asset = iter->second;
-        asset->onLoadAsset();
         _uninitializedAssets.erase(iter);
         _assets[uid] = asset;
+        asset->onLoadAsset();
         return asset;
     }
 
@@ -193,12 +207,12 @@ AssetRef AssetManager::getAsset(const VUID& uid)
     return {};
 }
 
-void AssetManager::saveAsset(AssetRef asset, const std::string& filePath)
+bool AssetManager::saveAsset(AssetRef asset, const std::string& filePath)
 {
     if (!asset)
     {
         LOGW("Cannot save null asset\n");
-        return;
+        return false;
     }
 
     if (asset->_uid.is_nil())
@@ -215,7 +229,7 @@ void AssetManager::saveAsset(AssetRef asset, const std::string& filePath)
     if (path.empty())
     {
         LOGW("Cannot save asset {%s} without an open project or an explicit path\n", uuids::to_string(asset->getUID()).c_str());
-        return;
+        return false;
     }
 
     std::error_code errorCode;
@@ -223,7 +237,7 @@ void AssetManager::saveAsset(AssetRef asset, const std::string& filePath)
     if (errorCode)
     {
         LOGW("Failed to create asset directory {%s}: %s\n", path.parent_path().string().c_str(), errorCode.message().c_str());
-        return;
+        return false;
     }
 
     asset->onSaveAsset();
@@ -232,7 +246,7 @@ void AssetManager::saveAsset(AssetRef asset, const std::string& filePath)
     if (!assetStream.is_open())
     {
         LOGW("Failed to open asset file for writing {%s}\n", path.string().c_str());
-        return;
+        return false;
     }
 
     try
@@ -243,8 +257,11 @@ void AssetManager::saveAsset(AssetRef asset, const std::string& filePath)
     catch (const std::exception& error)
     {
         LOGW("Failed to serialize asset {%s}: %s\n", path.string().c_str(), error.what());
-        return;
+        return false;
     }
+
+    assetStream.close();
+    if (assetStream.fail()) return false;
 
     updateFilePathAndGUID(path.string(), asset->getUID());
     auto uninitializedAsset = _uninitializedAssets.find(asset->getUID());
@@ -256,7 +273,7 @@ void AssetManager::saveAsset(AssetRef asset, const std::string& filePath)
     {
         _assets[asset->getUID()] = asset;
     }
-    Save();
+    return Save();
 }
 
 void AssetManager::deleteAsset(AssetRef asset)
@@ -335,6 +352,11 @@ AssetRef AssetManager::getOrLoadAssetInternal(const std::string& path)
 AssetRef AssetManager::getOrLoadAssetInternal(const VUID& uid)
 {
     AssetRef asset = getAsset(uid);
+    if (!asset)
+    {
+        const auto path = guidToFilePath(uid);
+        if (!path.empty()) asset = loadAsset(path, true);
+    }
     if (asset == nullptr)
     {
         LOGW("Fail to load asset {%s}", uuids::to_string(uid).c_str());
@@ -383,14 +405,9 @@ AssetRef AssetManager::loadAsset(const std::string& filePath, bool init)
         return nullptr;
     }
 
-    const std::string oldAssetFilePath = asset->getFilePath();
-    if (init)
-    {
-        asset->onLoadAsset();
-        _assets[asset->getUID()] = asset;
-    }
-    this->updateFilePathAndGUID(path.string(), asset->getUID());
-    return asset;
+    updateFilePathAndGUID(path.string(), asset->getUID());
+    _uninitializedAssets[asset->getUID()] = asset;
+    return init ? getAsset(asset->getUID()) : asset;
 }
 
 } // namespace Play

@@ -19,7 +19,7 @@ public:
     void showStarting();
 
 signals:
-    void projectSelected(const QString& projectPath);
+    void projectSelected(const QString& projectPath, bool createNew);
 
 private:
     QLabel*  _status  = nullptr;

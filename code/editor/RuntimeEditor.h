@@ -12,7 +12,7 @@ public:
     virtual ~StartupProjectReceiver() = default;
 
     // UTF-8 base directory for either a new or an existing project; must not be empty.
-    virtual bool selectStartupProject(const std::string& projectPath, std::string* errorMessage) = 0;
+    virtual bool selectStartupProject(const std::string& projectPath, bool createNew, std::string* errorMessage) = 0;
 };
 
 class RuntimeEditor

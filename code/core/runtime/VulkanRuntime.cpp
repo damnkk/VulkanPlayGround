@@ -149,13 +149,6 @@ VulkanRuntime::VulkanRuntime(const RuntimeConfig& config, const nvvk::ContextIni
     {
         return;
     }
-
-    _assetManager = std::make_unique<Play::AssetManager>();
-    if (ProjectInfo::isOpen() && !_assetManager->Init())
-    {
-        destroy();
-        return;
-    }
 }
 
 VulkanRuntime::~VulkanRuntime()
@@ -209,7 +202,18 @@ bool VulkanRuntime::init(const RuntimeConfig& config, const nvvk::ContextInitInf
 
     _renderSession = std::make_unique<Play::RenderSession>(Play::RenderSession::Info{.renderMode = _config.renderMode});
 
+    _assetManager = std::make_unique<Play::AssetManager>();
     _sceneManager = std::make_unique<Play::SceneManager>();
+    std::string projectError;
+    const bool  projectReady = _config.createNewProject ? _sceneManager->createProject(_config.projectPath, &projectError)
+                                                        : _sceneManager->loadProject(_config.projectPath, &projectError);
+    if (!projectReady)
+    {
+        LOGE("Project startup failed: %s\n", projectError.c_str());
+        _guiHost.showError(projectError);
+        destroy();
+        return false;
+    }
     if (!_renderSession->init())
     {
         destroy();

@@ -2,6 +2,7 @@
 
 #include <QApplication>
 #include <QMetaObject>
+#include <QMessageBox>
 
 #include <nvutils/logger.hpp>
 
@@ -53,7 +54,7 @@ bool RuntimeGuiHost::start()
     return true;
 }
 
-bool RuntimeGuiHost::selectStartupProject(const std::string& projectPath, std::string* errorMessage)
+bool RuntimeGuiHost::selectStartupProject(const std::string& projectPath, bool createNew, std::string* errorMessage)
 {
     if (!_mutex)
     {
@@ -69,6 +70,7 @@ bool RuntimeGuiHost::selectStartupProject(const std::string& projectPath, std::s
     if (!isStopping)
     {
         _startupProjectPath     = projectPath;
+        _startupCreateNew       = createNew;
         _startupProjectSelected = true;
     }
     SDL_UnlockMutex(_mutex);
@@ -78,6 +80,18 @@ bool RuntimeGuiHost::selectStartupProject(const std::string& projectPath, std::s
         *errorMessage = "Project startup has already stopped.";
     }
     return !isStopping;
+}
+
+void RuntimeGuiHost::showError(const std::string& message)
+{
+    SDL_LockMutex(_mutex);
+    auto* window = _window;
+    SDL_UnlockMutex(_mutex);
+    if (!window) return;
+    // Keep Qt and the hidden viewport alive until the user has read the error.
+    QMetaObject::invokeMethod(
+        window, [window, message]() { QMessageBox::critical(window, "Project startup failed", QString::fromStdString(message)); },
+        Qt::BlockingQueuedConnection);
 }
 
 void RuntimeGuiHost::setRenderWindowHandle(void* handle)
@@ -94,7 +108,7 @@ void RuntimeGuiHost::setRenderWindowHandle(void* handle)
     }
 }
 
-bool RuntimeGuiHost::takeStartupProject(std::string& projectPath)
+bool RuntimeGuiHost::takeStartupProject(std::string& projectPath, bool& createNew)
 {
     if (!_mutex)
     {
@@ -109,6 +123,7 @@ bool RuntimeGuiHost::takeStartupProject(std::string& projectPath)
     }
 
     projectPath = _startupProjectPath;
+    createNew   = _startupCreateNew;
     _startupProjectPath.clear();
     _startupProjectSelected = false;
     SDL_UnlockMutex(_mutex);

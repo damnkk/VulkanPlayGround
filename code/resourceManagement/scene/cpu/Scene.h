@@ -11,7 +11,7 @@ class Scene : public Asset, public std::enable_shared_from_this<Scene>
 {
 public:
     Scene() = default;
-    Scene(std::string name) : _name(name) {}
+    explicit Scene(std::string name);
     ~Scene()
     {
         _idPool.destroyAll();
@@ -37,8 +37,12 @@ public:
     std::shared_ptr<Entity>       getEntity(uint32_t id);
     std::shared_ptr<const Entity> getEntity(uint32_t id) const;
     std::shared_ptr<Entity>       getEntity(std::string name);
-    std::shared_ptr<Entity>       createEntity(std::string name = {});
-    bool                          addEntity(std::shared_ptr<Entity> entity);
+    std::shared_ptr<Entity>       createEntity(std::string name = {}, std::shared_ptr<Entity> parent = {});
+    std::shared_ptr<Entity>       getRoot() const
+    {
+        return _root;
+    }
+    bool addEntity(std::shared_ptr<Entity> entity);
 
     // Removes the entity and its descendants from this scene.
     std::shared_ptr<Entity> removeEntity(std::string name);
@@ -66,20 +70,19 @@ public:
     }
 
 protected:
+    std::shared_ptr<Entity>              _root;
     std::string                          _name;
     std::vector<std::shared_ptr<Entity>> _entities;
     nvutils::IDPool                      _idPool{UINT32_MAX};
 
 private:
+    void registerSubtree(const std::shared_ptr<Entity>& entity, const std::shared_ptr<Entity>& parent);
+
     // clang-format off
     BeginSerailize()
     SerailizeBaseClass(Asset)
     SerailizeEntry(_name)
-    SerailizeEntry(_entities)
-    for (auto& entity : _entities){
-        entity->_scene = weak_from_this();
-        _idPool.createID(entity->_id);
-    } 
+    SerailizeEntry(_root)
     EndSerailize
     // clang-format on
 };

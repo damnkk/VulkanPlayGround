@@ -33,11 +33,11 @@ void QtRuntimeEditorWindow::showStartupPage()
     connect(_startupPage, &ProjectStartupWidget::projectSelected, this, &QtRuntimeEditorWindow::startProject);
 }
 
-void QtRuntimeEditorWindow::startProject(const QString& projectPath)
+void QtRuntimeEditorWindow::startProject(const QString& projectPath, bool createNew)
 {
     StartupProjectReceiver* receiver = _editor.getStartupProjectReceiver();
     std::string             errorMessage;
-    if (!receiver || !receiver->selectStartupProject(projectPath.toStdString(), &errorMessage))
+    if (!receiver || !receiver->selectStartupProject(projectPath.toStdString(), createNew, &errorMessage))
     {
         _startupPage->showError(errorMessage.empty() ? "Project startup is not available." : QString::fromStdString(errorMessage));
         return;

@@ -26,7 +26,8 @@ signals:
 
 private:
     RuntimeEditor& _editor;
-    QTreeWidget*   _tree = nullptr;
+    QTreeWidget*   _tree       = nullptr;
+    qulonglong     _rootNodeId = 0;
 };
 
 } // namespace Play::editor

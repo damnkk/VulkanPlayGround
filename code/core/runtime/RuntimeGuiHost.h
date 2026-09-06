@@ -29,9 +29,10 @@ public:
     bool start();
     void stop();
     void setRenderWindowHandle(void* handle);
+    void showError(const std::string& message);
 
-    bool selectStartupProject(const std::string& projectPath, std::string* errorMessage) override;
-    bool takeStartupProject(std::string& projectPath);
+    bool selectStartupProject(const std::string& projectPath, bool createNew, std::string* errorMessage) override;
+    bool takeStartupProject(std::string& projectPath, bool& createNew);
 
     Play::editor::RuntimeEditor& getEditor()
     {
@@ -61,6 +62,7 @@ private:
     bool                                 _threadFinished = false;
     Play::editor::RuntimeEditor          _editor;
     std::string                          _startupProjectPath;
+    bool                                 _startupCreateNew       = false;
     bool                                 _startupProjectSelected = false;
     void*                                _renderWindowHandle     = nullptr;
 };

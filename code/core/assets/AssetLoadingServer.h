@@ -14,7 +14,7 @@ public:
     ~AssetManager() {};
     bool Init();
     void Tick();
-    void Save();
+    bool Save();
 
     AssetRef importAsset(AssetRef asset, const std::string& filePath, const std::string& assetFilePath = "");
 
@@ -43,7 +43,7 @@ public:
     AssetRef getAsset(const std::string& filePath);
     AssetRef getAsset(const VUID& guid);
 
-    void saveAsset(AssetRef asset, const std::string& filePath = "");
+    bool saveAsset(AssetRef asset, const std::string& filePath = "");
     void deleteAsset(AssetRef asset);
     void deleteAsset(const std::string& filePath);
 

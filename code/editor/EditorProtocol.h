@@ -46,8 +46,8 @@ struct EditorComponent
 
 struct EditorNode
 {
-    EditorNodeId                 id           = InvalidEditorNodeId;
-    EditorNodeId                 parentId     = InvalidEditorNodeId;
+    EditorNodeId                 id       = InvalidEditorNodeId;
+    EditorNodeId                 parentId = InvalidEditorNodeId;
     std::string                  name;
     bool                         hasTransform = false;
     EditorTransform              transform;
@@ -72,6 +72,7 @@ struct EditorSnapshot
 {
     uint64_t                         revision = 0;
     std::string                      sceneName;
+    EditorNodeId                     rootNodeId = InvalidEditorNodeId;
     std::vector<EditorNode>          nodes;
     std::vector<EditorAsset>         assets;
     std::vector<EditorComponentType> componentTypes;
@@ -93,7 +94,7 @@ enum class EditorCommandType
 
 struct EditorCommand
 {
-    EditorCommandType type = EditorCommandType::CreateNode;
+    EditorCommandType type        = EditorCommandType::CreateNode;
     EditorNodeId      nodeId      = InvalidEditorNodeId;
     EditorNodeId      parentId    = InvalidEditorNodeId;
     EditorComponentId componentId = 0;

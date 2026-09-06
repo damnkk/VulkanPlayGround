@@ -17,7 +17,7 @@ int EngineLoop::run(const RuntimeConfig& config, const nvvk::ContextInitInfo& co
     }
 
     RuntimeConfig runtimeConfig = config;
-    while (!guiHost.takeStartupProject(runtimeConfig.projectPath))
+    while (!guiHost.takeStartupProject(runtimeConfig.projectPath, runtimeConfig.createNewProject))
     {
         if (guiHost.getEditor().exitRequested())
         {

@@ -52,7 +52,7 @@ void InspectorWidget::rebuild()
     if (!selectedNode)
     {
         const char* message = _snapshot.revision == 0   ? "Waiting for an engine snapshot."
-                              : _snapshot.nodes.empty() ? "Scene is empty. Use Add Root to create a node."
+                              : _snapshot.nodes.empty() ? "No scene is loaded."
                                                         : "Select a node to inspect.";
         rootLayout->addWidget(new QLabel(message, content));
         rootLayout->addStretch();

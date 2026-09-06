@@ -33,8 +33,8 @@ bool applyCommand(Scene& scene, const editor::EditorCommand& command)
                 return false;
             }
 
-            auto entity = scene.createEntity(command.name);
-            entity->setFather(parent);
+            auto entity = scene.createEntity(command.name, parent);
+            if (!entity) return false;
             entity->init();
             return true;
         }
@@ -67,7 +67,8 @@ void publishSceneSnapshot(SceneManager& sceneManager, editor::RuntimeEditor& edi
     sceneManager.readScene(
         [&snapshot](const Scene& scene)
         {
-            snapshot.sceneName = scene.getName();
+            snapshot.sceneName  = scene.getName();
+            snapshot.rootNodeId = toEditorId(scene.getRoot()->getID());
             for (const auto& entity : scene.getEntities())
             {
                 editor::EditorNode node;

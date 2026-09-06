@@ -15,7 +15,6 @@ namespace Play::editor
 
 SceneTreeWidget::SceneTreeWidget(RuntimeEditor& editor, QWidget* parent) : QWidget(parent), _editor(editor)
 {
-    QPushButton* addRoot  = new QPushButton("Add Root", this);
     QPushButton* addChild = new QPushButton("Add Child", this);
     QPushButton* remove   = new QPushButton("Remove", this);
     addChild->setEnabled(false);
@@ -24,7 +23,6 @@ SceneTreeWidget::SceneTreeWidget(RuntimeEditor& editor, QWidget* parent) : QWidg
     QHBoxLayout* toolbar = new QHBoxLayout();
     toolbar->setContentsMargins(4, 1, 4, 1);
     toolbar->setSpacing(4);
-    toolbar->addWidget(addRoot, 1, Qt::AlignVCenter);
     toolbar->addWidget(addChild, 1, Qt::AlignVCenter);
     toolbar->addWidget(remove, 1, Qt::AlignVCenter);
 
@@ -38,24 +36,20 @@ SceneTreeWidget::SceneTreeWidget(RuntimeEditor& editor, QWidget* parent) : QWidg
     layout->addLayout(toolbar);
     layout->addWidget(_tree, 1);
 
-    const auto addNode = [this](bool asChild)
-    {
-        EditorCommand command;
-        command.type     = EditorCommandType::CreateNode;
-        command.parentId = asChild && _tree->currentItem() ? _tree->currentItem()->data(0, Qt::UserRole).toULongLong() : InvalidEditorNodeId;
-        if (asChild && _tree->currentItem())
-        {
-            _tree->currentItem()->setExpanded(true);
-        }
-        _editor.submit(std::move(command));
-    };
-
-    connect(addRoot, &QPushButton::clicked, this, [addNode]() { addNode(false); });
-    connect(addChild, &QPushButton::clicked, this, [addNode]() { addNode(true); });
+    connect(addChild, &QPushButton::clicked, this,
+            [this]()
+            {
+                if (!_tree->currentItem()) return;
+                EditorCommand command;
+                command.type     = EditorCommandType::CreateNode;
+                command.parentId = _tree->currentItem()->data(0, Qt::UserRole).toULongLong();
+                _tree->currentItem()->setExpanded(true);
+                _editor.submit(std::move(command));
+            });
     connect(remove, &QPushButton::clicked, this,
             [this]()
             {
-                if (!_tree->currentItem())
+                if (!_tree->currentItem() || _tree->currentItem()->data(0, Qt::UserRole).toULongLong() == _rootNodeId)
                 {
                     return;
                 }
@@ -67,10 +61,10 @@ SceneTreeWidget::SceneTreeWidget(RuntimeEditor& editor, QWidget* parent) : QWidg
     connect(_tree, &QTreeWidget::currentItemChanged, this,
             [this](QTreeWidgetItem* current) { emit nodeSelected(current ? current->data(0, Qt::UserRole).toULongLong() : InvalidEditorNodeId); });
     connect(this, &SceneTreeWidget::nodeSelected, this,
-            [addChild, remove](qulonglong nodeId)
+            [this, addChild, remove](qulonglong nodeId)
             {
                 addChild->setEnabled(nodeId != InvalidEditorNodeId);
-                remove->setEnabled(nodeId != InvalidEditorNodeId);
+                remove->setEnabled(nodeId != InvalidEditorNodeId && nodeId != _rootNodeId);
             });
     connect(_tree, &QTreeWidget::itemChanged, this,
             [this](QTreeWidgetItem* item)
@@ -99,6 +93,8 @@ void SceneTreeWidget::refresh(const EditorSnapshot& snapshot)
         ++iterator;
     }
 
+    const bool firstSnapshot = _rootNodeId == InvalidEditorNodeId;
+    _rootNodeId              = snapshot.rootNodeId;
     const QSignalBlocker blocker(_tree);
     _tree->clear();
     QHash<EditorNodeId, QTreeWidgetItem*> items;
@@ -118,11 +114,11 @@ void SceneTreeWidget::refresh(const EditorSnapshot& snapshot)
         {
             parent->addChild(item);
         }
-        else
+        else if (node.id == snapshot.rootNodeId)
         {
             _tree->addTopLevelItem(item);
         }
-        item->setExpanded(expanded.contains(node.id));
+        item->setExpanded(expanded.contains(node.id) || (firstSnapshot && node.id == snapshot.rootNodeId));
     }
 
     // Restore selection only after the whole tree is attached. When the selected

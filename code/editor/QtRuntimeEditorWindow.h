@@ -27,7 +27,7 @@ protected:
 
 private:
     void showStartupPage();
-    void startProject(const QString& projectPath);
+    void startProject(const QString& projectPath, bool createNew);
     void createEditor();
     void createEditorActions();
     void requestSave();
