@@ -20,7 +20,6 @@ public:
     static const std::string&           getProjectName();
     static const std::filesystem::path& getProjectPath();
     static std::filesystem::path getAssetMapPath();
-    static bool                  ensureFilePathInProject(std::string& filePath, const std::filesystem::path& resourceDirectory, const VUID& uid);
 
 private:
     static std::string           _projectName;

@@ -47,8 +47,12 @@ bool SceneManager::createProject(const std::string& projectPath, std::string* er
         return false;
     }
 
-    _scene = std::make_shared<Scene>(ProjectInfo::getProjectName());
-    _scene->onLoadAsset();
+    _scene = vkDriver->getAssetManager()->createAsset<Scene>(ProjectInfo::getProjectName());
+    if (!_scene)
+    {
+        if (errorMessage) *errorMessage = "Could not create the startup scene asset.";
+        return false;
+    }
     return saveProject(errorMessage);
 }
 

@@ -11,17 +11,18 @@ namespace Play
 class Model : public Asset, public AssetBinder, public std::enable_shared_from_this<Model>
 {
 public:
-    std::string getAssetTypeName() final
+    Model() : Asset("Model") {}
+
+    std::string getAssetTypeName() const final
     {
         return "Model";
     }
 
-    AssetType getAssetType() final
+    AssetType getAssetType() const final
     {
         return ASSET_TYPE_MODEL;
     }
     void onLoadAsset() override;
-    void onSaveAsset() override;
 
     const ModelBufferInfo& getBufferInfo() const
     {
@@ -43,6 +44,11 @@ protected:
     } _renderData;
 
 private:
+    // clang-format off
+    BeginSerailize()
+    SerailizeBaseClass(Asset)
+    EndSerailize
+    // clang-format on
 };
 
 } // namespace Play

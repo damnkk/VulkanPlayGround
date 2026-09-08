@@ -5,19 +5,6 @@
 #include "nvutils/logger.hpp"
 namespace Play
 {
-namespace
-{
-std::filesystem::path makeDefaultAssetPath(const VUID& uid)
-{
-    if (!ProjectInfo::isOpen() || uid.is_nil())
-    {
-        return {};
-    }
-
-    return ProjectInfo::getProjectPath() / "asset" / (uuids::to_string(uid) + ".json");
-}
-} // namespace
-
 bool AssetManager::Init()
 {
     const std::filesystem::path manifestPath = ProjectInfo::getAssetMapPath();
@@ -136,30 +123,69 @@ std::string AssetManager::guidToFilePath(const VUID& uid)
     return iter->second;
 }
 
-AssetRef AssetManager::importAsset(AssetRef asset, const std::string& filePath, const std::string& assetFilePath)
+AssetRef AssetManager::createAssetInternal(AssetRef asset, const std::string& assetName)
 {
-    if (!asset)
+    asset->_filePath.clear();
+    if (!registerAsset(asset, assetName))
     {
-        LOGW("Cannot import null asset from {%s}\n", filePath.c_str());
-        return nullptr;
+        return {};
     }
-
-    if (filePath.empty())
-    {
-        LOGW("Fail to import asset with empty path\n");
-        return nullptr;
-    }
-
-    if (asset->_uid.is_nil())
-    {
-        asset->_uid = createAssetGUID();
-    }
-
-    asset->_filePath = filePath;
     asset->onLoadAsset();
-    _assets[asset->getUID()] = asset;
-    saveAsset(asset, assetFilePath);
     return asset;
+}
+
+AssetRef AssetManager::importAssetInternal(AssetRef asset, const std::string& filePath)
+{
+    std::error_code             errorCode;
+    const std::filesystem::path sourcePath = std::filesystem::absolute(std::filesystem::u8path(filePath), errorCode).lexically_normal();
+    if (filePath.empty() || errorCode || !std::filesystem::is_regular_file(sourcePath, errorCode) || errorCode)
+    {
+        LOGW("Cannot import asset resource {%s}\n", filePath.c_str());
+        return {};
+    }
+
+    asset->_filePath = sourcePath.string();
+    if (!registerAsset(asset, sourcePath.stem().string()))
+    {
+        return {};
+    }
+    asset->onLoadAsset();
+    return saveAsset(asset) ? asset : AssetRef{};
+}
+
+bool AssetManager::registerAsset(AssetRef asset, const std::string& assetName)
+{
+    if (!ProjectInfo::isOpen())
+    {
+        LOGW("Cannot create an asset without an open project\n");
+        return false;
+    }
+
+    asset->_uid = createAssetGUID();
+
+    const std::filesystem::path assetDirectory = ProjectInfo::getProjectPath() / "assets" / asset->getAssetTypeName();
+    std::error_code             errorCode;
+    std::filesystem::create_directories(assetDirectory, errorCode);
+    if (errorCode)
+    {
+        LOGW("Failed to create asset directory {%s}: %s\n", assetDirectory.string().c_str(), errorCode.message().c_str());
+        return false;
+    }
+
+    const std::string     baseName = assetName.empty() ? asset->getAssetTypeName() : assetName;
+    std::string           resolvedName;
+    std::filesystem::path assetPath;
+    uint32_t              suffix = 0;
+    do
+    {
+        resolvedName = baseName + "_" + std::to_string(suffix++);
+        assetPath    = assetDirectory / (resolvedName + ".json");
+    } while (_pathToGUID.find(assetPath.string()) != _pathToGUID.end() || std::filesystem::exists(assetPath));
+
+    asset->setName(resolvedName);
+    updateFilePathAndGUID(assetPath.string(), asset->getUID());
+    _assets[asset->getUID()] = asset;
+    return true;
 }
 
 VUID AssetManager::createAssetGUID()
@@ -207,7 +233,7 @@ AssetRef AssetManager::getAsset(const VUID& uid)
     return {};
 }
 
-bool AssetManager::saveAsset(AssetRef asset, const std::string& filePath)
+bool AssetManager::saveAsset(AssetRef asset)
 {
     if (!asset)
     {
@@ -215,32 +241,17 @@ bool AssetManager::saveAsset(AssetRef asset, const std::string& filePath)
         return false;
     }
 
-    if (asset->_uid.is_nil())
-    {
-        asset->_uid = createAssetGUID();
-    }
-
-    std::filesystem::path path = filePath.empty() ? std::filesystem::path(guidToFilePath(asset->getUID())) : std::filesystem::path(filePath);
+    const std::filesystem::path path = guidToFilePath(asset->getUID());
     if (path.empty())
     {
-        path = makeDefaultAssetPath(asset->getUID());
-    }
-
-    if (path.empty())
-    {
-        LOGW("Cannot save asset {%s} without an open project or an explicit path\n", uuids::to_string(asset->getUID()).c_str());
+        LOGW("Cannot save unregistered asset {%s}\n", uuids::to_string(asset->getUID()).c_str());
         return false;
     }
 
-    std::error_code errorCode;
-    std::filesystem::create_directories(path.parent_path(), errorCode);
-    if (errorCode)
+    if (!asset->onSaveAsset(path.string()))
     {
-        LOGW("Failed to create asset directory {%s}: %s\n", path.parent_path().string().c_str(), errorCode.message().c_str());
         return false;
     }
-
-    asset->onSaveAsset();
 
     std::ofstream assetStream(path, std::ios::trunc);
     if (!assetStream.is_open())
@@ -263,7 +274,6 @@ bool AssetManager::saveAsset(AssetRef asset, const std::string& filePath)
     assetStream.close();
     if (assetStream.fail()) return false;
 
-    updateFilePathAndGUID(path.string(), asset->getUID());
     auto uninitializedAsset = _uninitializedAssets.find(asset->getUID());
     if (uninitializedAsset != _uninitializedAssets.end())
     {

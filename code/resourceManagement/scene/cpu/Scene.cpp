@@ -6,9 +6,11 @@ CEREAL_REGISTER_POLYMORPHIC_RELATION(Play::Asset, Play::Scene)
 namespace Play
 {
 
-Scene::Scene(std::string name) : _root(std::make_shared<Entity>()), _name(std::move(name))
+Scene::Scene() : Scene("Scene") {}
+
+Scene::Scene(std::string name) : Asset(name), _root(std::make_shared<Entity>())
 {
-    _root->_name = _name;
+    _root->_name = getName();
     _root->addComponent<TransformComponent>();
 }
 
@@ -35,12 +37,15 @@ void Scene::onLoadAsset()
     for (auto& entity : _entities) entity->init();
 }
 
-void Scene::onSaveAsset()
+bool Scene::onSaveAsset(const std::string& assetFilePath)
 {
+    if (!Asset::onSaveAsset(assetFilePath)) return false;
+
     for (auto& entity : _entities)
     {
         entity->save();
     }
+    return true;
 }
 
 void Scene::tick(float deltaTime)

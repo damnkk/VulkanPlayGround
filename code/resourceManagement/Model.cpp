@@ -2,6 +2,8 @@
 #include "nvutils/logger.hpp"
 #include "nvvk/check_error.hpp"
 #include "core/runtime/VulkanRuntime.h"
+CEREAL_REGISTER_TYPE(Play::Model)
+CEREAL_REGISTER_POLYMORPHIC_RELATION(Play::Asset, Play::Model)
 namespace Play
 {
 
@@ -154,7 +156,5 @@ void Model::onLoadAsset()
         vkDriver->submitAndWaitTempCmdBuffer(graphicsCmd);
     }
 }
-
-void Model::onSaveAsset() {}
 
 } // namespace Play

@@ -18,36 +18,29 @@ enum AssetType
 class Asset
 {
 public:
-    Asset()          = default;
+    explicit Asset(const std::string& name = "Unknown") : _name(name) {}
     virtual ~Asset() = default;
-    virtual std::string getAssetTypeName()
+    virtual std::string getAssetTypeName() const
     {
         return "Unknown";
     };
-    virtual AssetType getAssetType()
+    virtual AssetType getAssetType() const
     {
         return ASSET_TYPE_UNKNOWN;
     };
-    virtual const char* getAssetResourceDirectory()
-    {
-        switch (getAssetType())
-        {
-            case ASSET_TYPE_MODEL:
-                return "model";
-            case ASSET_TYPE_TEXTURE:
-                return "texture";
-            case ASSET_TYPE_SCENE:
-                return "scene";
-            default:
-                break;
-        }
-        return "unknown";
-    };
-    virtual void      onLoadAsset();
-    virtual void      onSaveAsset() {};
+    virtual void onLoadAsset();
+    virtual bool onSaveAsset(const std::string& assetFilePath);
     inline const VUID getUID()
     {
         return _uid;
+    }
+    inline const std::string& getName() const
+    {
+        return _name;
+    }
+    void setName(const std::string& name)
+    {
+        _name = name;
     }
     inline const std::string& getFilePath() const
     {
@@ -58,11 +51,13 @@ protected:
     VUID _uid;
     friend class Play::AssetManager;
 
+    std::string _name;
     std::string _filePath;
 
 private:
     // clang-format off
     BeginSerailize() 
+    SerailizeEntry(_name)
     SerailizeEntry(_filePath)
     SerailizeEntry(_uid) 
     EndSerailize
@@ -143,7 +138,7 @@ private:
         {                                                        \
             if (bind[i])                                         \
             {                                                    \
-                vkDriver->getAssetManager()->SaveAsset(bind[i]); \
+                vkDriver->getAssetManager()->saveAsset(bind[i]); \
                 uids.push_back(bind[i]->getUID());               \
             }                                                    \
             else                                                 \

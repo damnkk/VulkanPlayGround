@@ -10,23 +10,22 @@ namespace Play
 class Scene : public Asset, public std::enable_shared_from_this<Scene>
 {
 public:
-    Scene() = default;
+    Scene();
     explicit Scene(std::string name);
     ~Scene()
     {
         _idPool.destroyAll();
     }
-    virtual std::string getAssetTypeName() override
+    virtual std::string getAssetTypeName() const override
     {
         return "Scene";
     }
-    virtual AssetType getAssetType() override
+    virtual AssetType getAssetType() const override
     {
         return ASSET_TYPE_SCENE;
     }
-
     virtual void onLoadAsset() override;
-    virtual void onSaveAsset() override;
+    bool         onSaveAsset(const std::string& assetFilePath) override;
 
     void tick(float deltaTime);
 
@@ -48,15 +47,6 @@ public:
     std::shared_ptr<Entity> removeEntity(std::string name);
     std::shared_ptr<Entity> removeEntity(uint32_t id);
 
-    std::string getName() const
-    {
-        return _name;
-    }
-    void setName(std::string name)
-    {
-        _name = name;
-    }
-
     template <typename TComponent>
     std::vector<std::shared_ptr<TComponent>> getComponents()
     {
@@ -71,7 +61,6 @@ public:
 
 protected:
     std::shared_ptr<Entity>              _root;
-    std::string                          _name;
     std::vector<std::shared_ptr<Entity>> _entities;
     nvutils::IDPool                      _idPool{UINT32_MAX};
 
@@ -81,7 +70,6 @@ private:
     // clang-format off
     BeginSerailize()
     SerailizeBaseClass(Asset)
-    SerailizeEntry(_name)
     SerailizeEntry(_root)
     EndSerailize
     // clang-format on

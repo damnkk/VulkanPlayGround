@@ -16,14 +16,18 @@ public:
     void Tick();
     bool Save();
 
-    AssetRef importAsset(AssetRef asset, const std::string& filePath, const std::string& assetFilePath = "");
+    template <typename Type>
+    std::shared_ptr<Type> createAsset(const std::string& assetName = "")
+    {
+        auto asset = std::make_shared<Type>();
+        return createAssetInternal(asset, assetName) ? asset : nullptr;
+    }
 
     template <typename Type>
-    std::shared_ptr<Type> importAsset(const std::string& filePath, const std::string& assetFilePath = "")
+    std::shared_ptr<Type> importAsset(const std::string& filePath)
     {
-        AssetRef asset = std::make_shared<Type>();
-        asset          = importAsset(asset, filePath, assetFilePath);
-        return std::dynamic_pointer_cast<Type>(asset);
+        auto asset = std::make_shared<Type>();
+        return importAssetInternal(asset, filePath) ? asset : nullptr;
     }
 
     template <typename Type>
@@ -43,7 +47,7 @@ public:
     AssetRef getAsset(const std::string& filePath);
     AssetRef getAsset(const VUID& guid);
 
-    bool saveAsset(AssetRef asset, const std::string& filePath = "");
+    bool saveAsset(AssetRef asset);
     void deleteAsset(AssetRef asset);
     void deleteAsset(const std::string& filePath);
 
@@ -61,6 +65,9 @@ private:
     VUID        createAssetGUID();
     VUID        filePathToGUID(const std::string& filePath);
     std::string guidToFilePath(const VUID& guid);
+    AssetRef    createAssetInternal(AssetRef asset, const std::string& assetName);
+    AssetRef    importAssetInternal(AssetRef asset, const std::string& filePath);
+    bool        registerAsset(AssetRef asset, const std::string& assetName);
     void        updateFilePathAndGUID(const std::string& filePath, const VUID& uid);
     AssetRef    getOrLoadAssetInternal(const std::string& filePath);
     AssetRef    getOrLoadAssetInternal(const VUID& guid);
