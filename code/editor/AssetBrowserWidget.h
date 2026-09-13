@@ -6,19 +6,25 @@
 #include "editor/EditorProtocol.h"
 
 class QTreeWidget;
+class QComboBox;
 
 namespace Play::editor
 {
 
+class RuntimeEditor;
+
 class AssetBrowserWidget final : public QWidget
 {
 public:
-    explicit AssetBrowserWidget(QWidget* parent = nullptr);
+    explicit AssetBrowserWidget(RuntimeEditor& editor, QWidget* parent = nullptr);
 
     void refresh(const EditorSnapshot& snapshot);
+    void importSelectedAssetType();
 
 private:
-    QTreeWidget* _tree = nullptr;
+    RuntimeEditor& _editor;
+    QComboBox*     _typeSelector = nullptr;
+    QTreeWidget*   _tree         = nullptr;
 };
 
 } // namespace Play::editor

@@ -35,16 +35,20 @@ public:
     void requestSave();
     bool takeSaveRequest();
 
+    void                                  requestAssetImport(EditorAssetImportRequest request);
+    std::vector<EditorAssetImportRequest> takeAssetImportRequests();
+
     void                    setStartupProjectReceiver(StartupProjectReceiver* receiver);
     StartupProjectReceiver* getStartupProjectReceiver() const;
 
 private:
-    mutable std::mutex         _mutex;
-    EditorSnapshot             _snapshot;
-    std::vector<EditorCommand> _commands;
-    bool                       _exitRequested          = false;
-    bool                       _saveRequested          = false;
-    StartupProjectReceiver*    _startupProjectReceiver = nullptr;
+    mutable std::mutex                    _mutex;
+    EditorSnapshot                        _snapshot;
+    std::vector<EditorCommand>            _commands;
+    std::vector<EditorAssetImportRequest> _assetImportRequests;
+    bool                                  _exitRequested          = false;
+    bool                                  _saveRequested          = false;
+    StartupProjectReceiver*               _startupProjectReceiver = nullptr;
 };
 
 } // namespace Play::editor

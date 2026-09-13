@@ -1,7 +1,9 @@
 #include "SceneEditorBridge.h"
 
+#include "core/assets/AssetLoadingServer.h"
 #include "editor/RuntimeEditor.h"
 #include "nvutils/logger.hpp"
+#include "resourceManagement/Model.h"
 #include "resourceManagement/scene/SceneManager.h"
 
 namespace Play::runtime
@@ -61,7 +63,7 @@ bool applyCommand(Scene& scene, const editor::EditorCommand& command)
 
 } // namespace
 
-void publishSceneSnapshot(SceneManager& sceneManager, editor::RuntimeEditor& editor)
+void publishSceneSnapshot(SceneManager& sceneManager, AssetManager& assetManager, editor::RuntimeEditor& editor)
 {
     editor::EditorSnapshot snapshot;
     sceneManager.readScene(
@@ -81,6 +83,16 @@ void publishSceneSnapshot(SceneManager& sceneManager, editor::RuntimeEditor& edi
                 snapshot.nodes.push_back(std::move(node));
             }
         });
+    for (const auto& asset : assetManager.getRegisteredAssets())
+    {
+        if (!asset) continue;
+        editor::EditorAsset editorAsset;
+        editorAsset.id   = uuids::to_string(asset->getUID());
+        editorAsset.type = asset->getAssetTypeName();
+        editorAsset.name = asset->getName();
+        editorAsset.path = asset->getFilePath();
+        snapshot.assets.push_back(std::move(editorAsset));
+    }
     editor.publishSnapshot(std::move(snapshot));
 }
 
@@ -96,7 +108,7 @@ void saveCurrentProject(SceneManager& sceneManager)
     }
 }
 
-void processSceneCommands(SceneManager& sceneManager, editor::RuntimeEditor& editor)
+void processSceneCommands(SceneManager& sceneManager, AssetManager& assetManager, editor::RuntimeEditor& editor)
 {
     const auto commands = editor.takeCommands();
     if (commands.empty())
@@ -116,7 +128,44 @@ void processSceneCommands(SceneManager& sceneManager, editor::RuntimeEditor& edi
         });
     if (changed)
     {
-        publishSceneSnapshot(sceneManager, editor);
+        publishSceneSnapshot(sceneManager, assetManager, editor);
+    }
+}
+
+void processAssetImports(AssetManager& assetManager, SceneManager& sceneManager, editor::RuntimeEditor& editor)
+{
+    const auto requests = editor.takeAssetImportRequests();
+    if (requests.empty()) return;
+
+    bool changed = false;
+    for (const auto& request : requests)
+    {
+        try
+        {
+            switch (request.type)
+            {
+                case editor::EditorAssetType::Model:
+                    if (assetManager.importAsset<Model>(request.sourcePath))
+                    {
+                        LOGI("Imported model asset {%s}\n", request.sourcePath.c_str());
+                        changed = true;
+                    }
+                    else
+                    {
+                        LOGW("Failed to import model asset {%s}\n", request.sourcePath.c_str());
+                    }
+                    break;
+            }
+        }
+        catch (const std::exception& error)
+        {
+            LOGW("Failed to import asset {%s}: %s\n", request.sourcePath.c_str(), error.what());
+        }
+    }
+
+    if (changed)
+    {
+        publishSceneSnapshot(sceneManager, assetManager, editor);
     }
 }
 

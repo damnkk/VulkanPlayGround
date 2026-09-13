@@ -3,8 +3,9 @@
 
 namespace Play
 {
+class AssetManager;
 class SceneManager;
-}
+} // namespace Play
 
 namespace Play::editor
 {
@@ -15,8 +16,9 @@ namespace Play::runtime
 {
 
 // Called on the engine thread; Qt only receives copied scene data.
-void publishSceneSnapshot(SceneManager& sceneManager, editor::RuntimeEditor& editor);
-void processSceneCommands(SceneManager& sceneManager, editor::RuntimeEditor& editor);
+void publishSceneSnapshot(SceneManager& sceneManager, AssetManager& assetManager, editor::RuntimeEditor& editor);
+void processSceneCommands(SceneManager& sceneManager, AssetManager& assetManager, editor::RuntimeEditor& editor);
+void processAssetImports(AssetManager& assetManager, SceneManager& sceneManager, editor::RuntimeEditor& editor);
 
 // Consumes a UI save request and persists the open project. Kept out of the
 // command path because saving locks the scene itself; the runtime loop calls

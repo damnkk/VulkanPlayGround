@@ -29,7 +29,7 @@ public:
         return ASSET_TYPE_UNKNOWN;
     };
     virtual void onLoadAsset();
-    virtual bool onSaveAsset(const std::string& assetFilePath);
+    virtual bool onSaveAsset();
     inline const VUID getUID()
     {
         return _uid;

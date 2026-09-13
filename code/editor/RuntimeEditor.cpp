@@ -53,10 +53,24 @@ void RuntimeEditor::requestSave()
 
 bool RuntimeEditor::takeSaveRequest()
 {
-    std::lock_guard    lock(_mutex);
-    const bool         requested = _saveRequested;
-    _saveRequested = false;
+    std::lock_guard lock(_mutex);
+    const bool      requested = _saveRequested;
+    _saveRequested            = false;
     return requested;
+}
+
+void RuntimeEditor::requestAssetImport(EditorAssetImportRequest request)
+{
+    std::lock_guard lock(_mutex);
+    _assetImportRequests.push_back(std::move(request));
+}
+
+std::vector<EditorAssetImportRequest> RuntimeEditor::takeAssetImportRequests()
+{
+    std::lock_guard                       lock(_mutex);
+    std::vector<EditorAssetImportRequest> requests;
+    requests.swap(_assetImportRequests);
+    return requests;
 }
 
 void RuntimeEditor::setStartupProjectReceiver(StartupProjectReceiver* receiver)

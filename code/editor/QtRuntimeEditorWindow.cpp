@@ -5,9 +5,12 @@
 #include <QDockWidget>
 #include <QDir>
 #include <QLabel>
+#include <QMenu>
 #include <QStatusBar>
+#include <QStyle>
 #include <QTimer>
 #include <QToolBar>
+#include <QToolButton>
 #include <QWindow>
 
 #include "editor/AssetBrowserWidget.h"
@@ -58,7 +61,6 @@ void QtRuntimeEditorWindow::startProject(const QString& projectPath, bool create
 void QtRuntimeEditorWindow::createEditor()
 {
     resize(1100, 720);
-    createEditorActions();
 
     _sceneTree             = new SceneTreeWidget(_editor, this);
     QDockWidget* sceneDock = new QDockWidget("Scene", this);
@@ -72,11 +74,12 @@ void QtRuntimeEditorWindow::createEditor()
     inspectorDock->setWidget(_inspector);
     addDockWidget(Qt::RightDockWidgetArea, inspectorDock);
 
-    _assetBrowser          = new AssetBrowserWidget(this);
+    _assetBrowser          = new AssetBrowserWidget(_editor, this);
     QDockWidget* assetDock = new QDockWidget("Assets", this);
     assetDock->setObjectName("AssetDock");
     assetDock->setWidget(_assetBrowser);
     addDockWidget(Qt::BottomDockWidgetArea, assetDock);
+    createEditorActions();
 
     connect(_sceneTree, &SceneTreeWidget::nodeSelected, _inspector,
             [this](qulonglong nodeId) { _inspector->selectNode(static_cast<EditorNodeId>(nodeId)); });
@@ -91,22 +94,35 @@ void QtRuntimeEditorWindow::createEditor()
 
 void QtRuntimeEditorWindow::createEditorActions()
 {
-    QAction* saveAction = new QAction(tr("Save"), this);
+    QAction* saveAction = new QAction(style()->standardIcon(QStyle::SP_DialogSaveButton), tr("&Save"), this);
     saveAction->setShortcut(QKeySequence::Save);
     saveAction->setShortcutContext(Qt::WindowShortcut);
     saveAction->setAutoRepeat(false);
     saveAction->setToolTip(tr("Save the current project (Ctrl+S)"));
     connect(saveAction, &QAction::triggered, this, &QtRuntimeEditorWindow::requestSave);
 
-    // A single slim action bar: one row holding every editor command instead of
-    // stacking a menu bar above a toolbar. Grow it with more buttons (or a File
-    // dropdown) rather than adding a second row.
+    QAction* importAction = new QAction(style()->standardIcon(QStyle::SP_DialogOpenButton), tr("&Import Asset..."), this);
+    importAction->setToolTip(tr("Import external resources into the project"));
+    connect(importAction, &QAction::triggered, _assetBrowser, &AssetBrowserWidget::importSelectedAssetType);
+
     QToolBar* editorBar = addToolBar(tr("Editor"));
     editorBar->setObjectName("EditorToolBar");
     editorBar->setMovable(false);
     editorBar->setFloatable(false);
     editorBar->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    editorBar->addAction(saveAction);
+
+    QToolButton* fileButton = new QToolButton(editorBar);
+    fileButton->setText(tr("&File"));
+    fileButton->setToolTip(tr("Project and asset operations"));
+    fileButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    fileButton->setPopupMode(QToolButton::InstantPopup);
+    fileButton->setAutoRaise(true);
+    QMenu* fileMenu = new QMenu(fileButton);
+    fileMenu->addAction(saveAction);
+    fileMenu->addSeparator();
+    fileMenu->addAction(importAction);
+    fileButton->setMenu(fileMenu);
+    editorBar->addWidget(fileButton);
 }
 
 void QtRuntimeEditorWindow::requestSave()

@@ -55,6 +55,7 @@ public:
     {
         return _assets;
     }
+    std::vector<AssetRef> getRegisteredAssets() const;
 
 private:
     std::unordered_map<VUID, AssetRef>    _assets;

@@ -62,6 +62,17 @@ struct EditorAsset
     std::string path;
 };
 
+enum class EditorAssetType
+{
+    Model
+};
+
+struct EditorAssetImportRequest
+{
+    EditorAssetType type = EditorAssetType::Model;
+    std::string     sourcePath;
+};
+
 struct EditorComponentType
 {
     std::string typeName;

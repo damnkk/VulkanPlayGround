@@ -233,7 +233,7 @@ void VulkanRuntime::run()
     }
 
     LOGI("Running SDL3 bootstrap runtime\n");
-    publishSceneSnapshot(*_sceneManager, _guiHost.getEditor());
+    publishSceneSnapshot(*_sceneManager, *_assetManager, _guiHost.getEditor());
     _guiHost.setRenderWindowHandle(_window.getNativeHandle());
 
     while (!_window.shouldClose() && !_guiHost.getEditor().exitRequested())
@@ -243,7 +243,8 @@ void VulkanRuntime::run()
         {
             break;
         }
-        processSceneCommands(*_sceneManager, _guiHost.getEditor());
+        processSceneCommands(*_sceneManager, *_assetManager, _guiHost.getEditor());
+        processAssetImports(*_assetManager, *_sceneManager, _guiHost.getEditor());
         if (_window.getInputState().keyOPressed)
         {
             _guiHost.start();

@@ -29,6 +29,7 @@ void Scene::registerSubtree(const std::shared_ptr<Entity>& entity, const std::sh
 
 void Scene::onLoadAsset()
 {
+    Asset::onLoadAsset();
     if (!_root) throw cereal::Exception("Scene has no root node.");
     _entities.clear();
     _idPool.destroyAll();
@@ -37,9 +38,9 @@ void Scene::onLoadAsset()
     for (auto& entity : _entities) entity->init();
 }
 
-bool Scene::onSaveAsset(const std::string& assetFilePath)
+bool Scene::onSaveAsset()
 {
-    if (!Asset::onSaveAsset(assetFilePath)) return false;
+    if (!Asset::onSaveAsset()) return false;
 
     for (auto& entity : _entities)
     {

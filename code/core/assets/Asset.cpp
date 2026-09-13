@@ -27,18 +27,20 @@ bool isPathInsideDirectory(const std::filesystem::path& path, const std::filesys
 }
 } // namespace
 
-void Asset::onLoadAsset() {}
+bool Asset::onSaveAsset()
+{
+    return true;
+}
 
-bool Asset::onSaveAsset(const std::string& assetFilePath)
+void Asset::onLoadAsset()
 {
     if (!_filePath.empty())
     {
         const std::filesystem::path sourcePath = normalizePath(_filePath);
         if (!isPathInsideDirectory(sourcePath, ProjectInfo::getProjectPath()))
         {
-            const std::filesystem::path serializedPath(assetFilePath);
             const std::filesystem::path targetPath =
-                serializedPath.parent_path() / (serializedPath.stem().string() + sourcePath.extension().string());
+                ProjectInfo::getProjectPath() / "assets" / getAssetTypeName() / (_name + sourcePath.extension().string());
 
             std::error_code errorCode;
             std::filesystem::copy_file(sourcePath, targetPath, std::filesystem::copy_options::overwrite_existing, errorCode);
@@ -48,13 +50,11 @@ bool Asset::onSaveAsset(const std::string& assetFilePath)
                      sourcePath.string().c_str(),
                      targetPath.string().c_str(),
                      errorCode.message().c_str());
-                return false;
+                throw std::filesystem::filesystem_error("Failed to copy asset resource", sourcePath, targetPath, errorCode);
             }
             _filePath = normalizePath(targetPath).string();
         }
     }
-
-    return true;
 }
 
 } // namespace Play

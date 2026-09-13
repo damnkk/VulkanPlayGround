@@ -62,7 +62,12 @@ bool AssetManager::Init()
     for (const auto& [guid, path] : entries)
     {
         auto asset = loadAsset(path, false);
-        if (!asset || asset->getUID() != guid)
+        if (!asset)
+        {
+            LOGW("Skipping unavailable asset {%s} from {%s}\n", uuids::to_string(guid).c_str(), path.c_str());
+            continue;
+        }
+        if (asset->getUID() != guid)
         {
             LOGE("Failed to restore asset {%s} from {%s}\n", uuids::to_string(guid).c_str(), path.c_str());
             return false;
@@ -149,8 +154,21 @@ AssetRef AssetManager::importAssetInternal(AssetRef asset, const std::string& fi
     {
         return {};
     }
-    asset->onLoadAsset();
-    return saveAsset(asset) ? asset : AssetRef{};
+    try
+    {
+        asset->onLoadAsset();
+    }
+    catch (...)
+    {
+        deleteAsset(asset);
+        throw;
+    }
+    if (!saveAsset(asset))
+    {
+        deleteAsset(asset);
+        return {};
+    }
+    return asset;
 }
 
 bool AssetManager::registerAsset(AssetRef asset, const std::string& assetName)
@@ -233,6 +251,21 @@ AssetRef AssetManager::getAsset(const VUID& uid)
     return {};
 }
 
+std::vector<AssetRef> AssetManager::getRegisteredAssets() const
+{
+    std::vector<AssetRef> assets;
+    assets.reserve(_assets.size() + _uninitializedAssets.size());
+    for (const auto& entry : _assets)
+    {
+        assets.push_back(entry.second);
+    }
+    for (const auto& entry : _uninitializedAssets)
+    {
+        assets.push_back(entry.second);
+    }
+    return assets;
+}
+
 bool AssetManager::saveAsset(AssetRef asset)
 {
     if (!asset)
@@ -248,7 +281,7 @@ bool AssetManager::saveAsset(AssetRef asset)
         return false;
     }
 
-    if (!asset->onSaveAsset(path.string()))
+    if (!asset->onSaveAsset())
     {
         return false;
     }
@@ -310,8 +343,8 @@ void AssetManager::updateFilePathAndGUID(const std::string& filePath, const VUID
         auto uidIter = _GUIDToPath.find(uid);
         if (uidIter != _GUIDToPath.end())
         {
-            _GUIDToPath.erase(uidIter);
             _pathToGUID.erase(uidIter->second);
+            _GUIDToPath.erase(uidIter);
         }
     }
     else

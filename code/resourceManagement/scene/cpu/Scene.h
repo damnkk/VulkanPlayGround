@@ -25,7 +25,7 @@ public:
         return ASSET_TYPE_SCENE;
     }
     virtual void onLoadAsset() override;
-    bool         onSaveAsset(const std::string& assetFilePath) override;
+    bool         onSaveAsset() override;
 
     void tick(float deltaTime);
 

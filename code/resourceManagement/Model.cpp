@@ -1,4 +1,5 @@
 #include "Model.h"
+#include "core/ProjectPaths.h"
 #include "nvutils/logger.hpp"
 #include "nvvk/check_error.hpp"
 #include "core/runtime/VulkanRuntime.h"
@@ -42,6 +43,13 @@ void Model::onLoadAsset()
     {
         LOGW("VPGLoader returned an empty model for {%s}\n", _filePath.c_str());
         return;
+    }
+
+    const std::filesystem::path targetPath = ProjectInfo::getProjectPath() / "assets" / getAssetTypeName() / (_name + ".vpgmodel");
+    if (std::filesystem::path(_filePath).lexically_normal() != targetPath.lexically_normal())
+    {
+        vpgloader::ModelExporter::Save(_loadedModel, targetPath);
+        _filePath = targetPath.lexically_normal().string();
     }
 
     const vpgloader::ModelGeometryData& geometry = _loadedModel->geometry;

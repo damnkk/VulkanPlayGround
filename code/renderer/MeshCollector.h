@@ -6,7 +6,7 @@ namespace Play
 {
 class Renderer;
 // at the begining,just a small structure with single mesh info, later will be extended
-struct MeshBatch
+struct Drawable
 {
     uint32_t              materialID = 0;
     std::vector<uint32_t> drawItemIDs;

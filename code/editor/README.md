@@ -2,7 +2,7 @@
 
 The editor and the engine communicate through `EditorProtocol.h`. The editor never owns a scene, entity, component, asset, or reflected instance from the engine.
 
-`core/runtime/SceneEditorBridge.*` is the engine-facing adapter. `VulkanRuntime::run()` publishes the initial scene and consumes commands on the engine thread, even while the viewport is not renderable. The bridge publishes another snapshot only after a scene command changes state.
+`core/runtime/SceneEditorBridge.*` is the engine-facing adapter. `VulkanRuntime::run()` publishes the initial scene and consumes commands on the engine thread, even while the viewport is not renderable. The bridge publishes another snapshot after a scene command changes state or an asset import succeeds.
 
 Connected commands: `CreateNode` (child), `RemoveNode` (whole subtree), and `RenameNode`. Every new entity has the engine's default `TransformComponent`; transform/property/component/resource editing is not connected or exposed by the snapshot yet. Entity IDs are encoded as `id + 1` because zero is the editor's invalid node ID. `Scene::getEntities()` contains all entities, including children; parent/child links describe their hierarchy.
 
@@ -30,9 +30,13 @@ Publish a new snapshot after a command changes the scene. Avoid publishing an un
 
 ## Saving
 
-Saving is a one-shot request, not a scene command: `SceneManager::saveProject()` locks the scene itself, so it must not run inside the `editScene()` lambda that applies commands (that would deadlock). The toolbar Save button in the single slim action bar calls `RuntimeEditor::requestSave()` on the Qt thread; Ctrl+S pressed while the embedded viewport has focus is edge-detected by `SdlWindow` (`keySPressed`) and routed the same way. `VulkanRuntime::run()` consumes the request once per frame through `RuntimeEditor::takeSaveRequest()` and calls `SceneEditorBridge::saveCurrentProject()`, which currently delegates to `SceneManager::saveProject()` and logs failures.
+Saving is a one-shot request, not a scene command: `SceneManager::saveProject()` locks the scene itself, so it must not run inside the `editScene()` lambda that applies commands (that would deadlock). `File > Save` calls `RuntimeEditor::requestSave()` on the Qt thread; Ctrl+S pressed while the embedded viewport has focus is edge-detected by `SdlWindow` (`keySPressed`) and routed the same way. `VulkanRuntime::run()` consumes the request once per frame through `RuntimeEditor::takeSaveRequest()` and calls `SceneEditorBridge::saveCurrentProject()`, which currently delegates to `SceneManager::saveProject()` and logs failures.
 
-Manual checks: in the editor, trigger a save from the toolbar button, with Ctrl+S while a Qt panel has focus, and with Ctrl+S while the viewport has focus; each press must save exactly once and the viewport must keep rendering.
+Manual checks: in the editor, trigger a save from `File > Save`, with Ctrl+S while a Qt panel has focus, and with Ctrl+S while the viewport has focus; each press must save exactly once and the viewport must keep rendering.
+
+## Importing assets
+
+`File > Import Asset...` and the Assets panel Import button share the panel's selected asset type and native multi-file picker. Import requests cross the Qt/engine boundary as copied type/path values and run on the engine thread. The first supported type is Model. A successful import is packaged as a project-local `.vpgmodel` with sibling KTX2 textures, registered in the asset manifest, and published in the next editor snapshot. The Assets panel includes both initialized and deferred assets without forcing deferred assets to allocate runtime or GPU resources.
 
 ## Embedded viewport lifecycle
 
