@@ -13,10 +13,12 @@ void RuntimeEditor::publishSnapshot(EditorSnapshot snapshot)
     _snapshot         = std::move(snapshot);
 }
 
-EditorSnapshot RuntimeEditor::getSnapshot() const
+bool RuntimeEditor::readSnapshot(EditorSnapshot& snapshot) const
 {
     std::lock_guard lock(_mutex);
-    return _snapshot;
+    if (snapshot.revision == _snapshot.revision) return false;
+    snapshot = _snapshot;
+    return true;
 }
 
 void RuntimeEditor::submit(EditorCommand command)
@@ -54,8 +56,11 @@ void RuntimeEditor::requestSave()
 bool RuntimeEditor::takeSaveRequest()
 {
     std::lock_guard lock(_mutex);
-    const bool      requested = _saveRequested;
-    _saveRequested            = false;
+    // The engine calls this after applying its drained command/import batches.
+    // Edits arriving after those batches were taken must run before the save.
+    if (!_commands.empty() || !_assetImportRequests.empty()) return false;
+    const bool requested = _saveRequested;
+    _saveRequested       = false;
     return requested;
 }
 
@@ -73,14 +78,21 @@ std::vector<EditorAssetImportRequest> RuntimeEditor::takeAssetImportRequests()
     return requests;
 }
 
-void RuntimeEditor::setStartupProjectReceiver(StartupProjectReceiver* receiver)
+void RuntimeEditor::selectStartupProject(std::string projectPath, bool createNew)
 {
-    _startupProjectReceiver = receiver;
+    std::lock_guard lock(_mutex);
+    _startupProjectPath = std::move(projectPath);
+    _startupCreateNew   = createNew;
 }
 
-StartupProjectReceiver* RuntimeEditor::getStartupProjectReceiver() const
+bool RuntimeEditor::takeStartupProject(std::string& projectPath, bool& createNew)
 {
-    return _startupProjectReceiver;
+    std::lock_guard lock(_mutex);
+    if (_startupProjectPath.empty()) return false;
+    projectPath = std::move(_startupProjectPath);
+    _startupProjectPath.clear();
+    createNew = _startupCreateNew;
+    return true;
 }
 
 } // namespace Play::editor

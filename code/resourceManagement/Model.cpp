@@ -113,6 +113,26 @@ void Model::onLoadAsset()
         meshInfo.materialIndex       = sourceMesh.materialIndex;
     }
 
+    _renderData.textures.clear();
+    _renderData.textures.resize(_loadedModel->textures.size());
+    for (size_t textureIndex = 0; textureIndex < _loadedModel->textures.size(); ++textureIndex)
+    {
+        const auto& sourceTexture = _loadedModel->textures[textureIndex];
+        if (!sourceTexture.texture)
+        {
+            LOGW("Skipping missing model texture {%s}: %s\n", sourceTexture.name.c_str(), sourceTexture.loadError.c_str());
+            continue;
+        }
+
+        auto texture = RefPtr<Texture>(new Texture(_name + "/" + sourceTexture.name, *sourceTexture.texture, sourceTexture.isSrgb));
+        if (texture->image == VK_NULL_HANDLE)
+        {
+            LOGW("Failed to upload model texture {%s}\n", sourceTexture.name.c_str());
+            continue;
+        }
+        _renderData.textures[textureIndex] = std::move(texture);
+    }
+
     std::vector<ModelTextureInfo> textureInfos(_loadedModel->textureInfos.size());
     for (size_t textureInfoIndex = 0; textureInfoIndex < _loadedModel->textureInfos.size(); ++textureInfoIndex)
     {
@@ -121,7 +141,9 @@ void Model::onLoadAsset()
         textureInfo.offset                             = sourceInfo.offset;
         textureInfo.scale                              = sourceInfo.scale;
         textureInfo.rotation                           = sourceInfo.rotation;
-        textureInfo.textureIndex = sourceInfo.textureIndex == vpgloader::InvalidModelIndex ? -1 : static_cast<int32_t>(sourceInfo.textureIndex);
+        textureInfo.textureIndex = sourceInfo.textureIndex < _renderData.textures.size() && _renderData.textures[sourceInfo.textureIndex]
+                                       ? static_cast<int32_t>(sourceInfo.textureIndex)
+                                       : -1;
         textureInfo.texCoord     = sourceInfo.texCoord > 1 ? 1 : sourceInfo.texCoord;
     }
 
@@ -163,6 +185,13 @@ void Model::onLoadAsset()
         acquireBarriers.cmdPipelineBarrier(graphicsCmd, 0);
         vkDriver->submitAndWaitTempCmdBuffer(graphicsCmd);
     }
+
+    // The geometry, mesh, material and texture-info blocks are now owned by
+    // the GPU buffer, and texture pixels are owned by _renderData.textures.
+    // Keep the node hierarchy and transforms on the CPU for
+    // per-frame updates and release the rest of the CPU-side model data.
+    _modelAsset = _loadedModel->asset;
+    _loadedModel.reset();
 }
 
 } // namespace Play

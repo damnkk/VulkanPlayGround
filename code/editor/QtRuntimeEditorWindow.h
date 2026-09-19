@@ -3,6 +3,8 @@
 
 #include <QMainWindow>
 
+#include "editor/EditorProtocol.h"
+
 class QCloseEvent;
 
 namespace Play::editor
@@ -34,13 +36,12 @@ private:
     void refresh();
 
     RuntimeEditor&        _editor;
+    EditorSnapshot        _snapshot;
     SceneTreeWidget*      _sceneTree       = nullptr;
     InspectorWidget*      _inspector       = nullptr;
     AssetBrowserWidget*   _assetBrowser    = nullptr;
     QWidget*              _renderContainer = nullptr;
     ProjectStartupWidget* _startupPage     = nullptr;
-    qulonglong            _revision        = 0;
-    bool                  _hasSnapshot     = false;
 };
 
 } // namespace Play::editor

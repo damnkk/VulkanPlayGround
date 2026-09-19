@@ -6,22 +6,14 @@
 namespace Play::editor
 {
 
-class StartupProjectReceiver
-{
-public:
-    virtual ~StartupProjectReceiver() = default;
-
-    // UTF-8 base directory for either a new or an existing project; must not be empty.
-    virtual bool selectStartupProject(const std::string& projectPath, bool createNew, std::string* errorMessage) = 0;
-};
-
 class RuntimeEditor
 {
 public:
     RuntimeEditor();
 
-    void           publishSnapshot(EditorSnapshot snapshot);
-    EditorSnapshot getSnapshot() const;
+    void publishSnapshot(EditorSnapshot snapshot);
+    // Copy only when the caller's snapshot is out of date.
+    bool readSnapshot(EditorSnapshot& snapshot) const;
 
     void                       submit(EditorCommand command);
     std::vector<EditorCommand> takeCommands();
@@ -38,17 +30,19 @@ public:
     void                                  requestAssetImport(EditorAssetImportRequest request);
     std::vector<EditorAssetImportRequest> takeAssetImportRequests();
 
-    void                    setStartupProjectReceiver(StartupProjectReceiver* receiver);
-    StartupProjectReceiver* getStartupProjectReceiver() const;
+    // The startup page supplies a validated, non-empty UTF-8 directory once.
+    void selectStartupProject(std::string projectPath, bool createNew);
+    bool takeStartupProject(std::string& projectPath, bool& createNew);
 
 private:
     mutable std::mutex                    _mutex;
     EditorSnapshot                        _snapshot;
     std::vector<EditorCommand>            _commands;
     std::vector<EditorAssetImportRequest> _assetImportRequests;
-    bool                                  _exitRequested          = false;
-    bool                                  _saveRequested          = false;
-    StartupProjectReceiver*               _startupProjectReceiver = nullptr;
+    bool                                  _exitRequested = false;
+    bool                                  _saveRequested = false;
+    std::string                           _startupProjectPath;
+    bool                                  _startupCreateNew = false;
 };
 
 } // namespace Play::editor

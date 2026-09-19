@@ -15,6 +15,8 @@ class PropertyWidgetFactory
 public:
     static QWidget* create(const EditorProperty& property, const EditorSnapshot& snapshot, EditorNodeId nodeId, EditorComponentId componentId,
                            RuntimeEditor& editor, QWidget* parent);
+    // False means an active edit/popup temporarily prevented the update.
+    static bool update(QWidget* widget, const EditorProperty& property, const EditorSnapshot& snapshot);
 };
 
 } // namespace Play::editor

@@ -56,17 +56,33 @@ AssetBrowserWidget::AssetBrowserWidget(RuntimeEditor& editor, QWidget* parent) :
 
 void AssetBrowserWidget::refresh(const EditorSnapshot& snapshot)
 {
+    bool unchanged = _items.size() == snapshot.assets.size();
+    for (const auto& asset : snapshot.assets)
+    {
+        const auto* item = _items.value(QString::fromStdString(asset.id));
+        if (!item || item->text(0) != QString::fromStdString(asset.name) || item->text(1) != QString::fromStdString(asset.type) ||
+            item->data(2, Qt::UserRole).toString() != QString::fromStdString(asset.path))
+        {
+            unchanged = false;
+            break;
+        }
+    }
+    if (unchanged) return;
+
     const QString    selectedId        = _tree->currentItem() ? _tree->currentItem()->data(0, Qt::UserRole).toString() : QString();
     QTreeWidgetItem* restoredSelection = nullptr;
     _tree->clear();
+    _items.clear();
     for (const EditorAsset& asset : snapshot.assets)
     {
         QTreeWidgetItem* item = new QTreeWidgetItem(_tree);
         item->setText(0, QString::fromStdString(asset.name));
         item->setText(1, QString::fromStdString(asset.type));
         const QString resourcePath = QString::fromStdString(asset.path);
+        item->setData(2, Qt::UserRole, resourcePath);
         item->setText(2, resourcePath.isEmpty() ? tr("—") : QDir::toNativeSeparators(resourcePath));
         item->setData(0, Qt::UserRole, QString::fromStdString(asset.id));
+        _items.insert(QString::fromStdString(asset.id), item);
         if (!resourcePath.isEmpty()) item->setToolTip(2, QDir::toNativeSeparators(resourcePath));
         if (item->data(0, Qt::UserRole).toString() == selectedId) restoredSelection = item;
     }

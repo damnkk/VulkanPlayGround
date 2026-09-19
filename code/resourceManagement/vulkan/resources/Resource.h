@@ -8,6 +8,10 @@
 #include "resourceManagement/vulkan/pipeline/ShaderManager.hpp"
 #include "core/RefCounted.h"
 #include <rttr/rttr_enable.h>
+namespace vpgloader
+{
+class Texture;
+}
 namespace Play
 {
 class PlayAllocator;
@@ -31,6 +35,8 @@ public:
     Texture(uint32_t size, VkFormat format, VkImageUsageFlags usage, VkImageLayout initialLayout, uint32_t mipLevels = 1);
     Texture(const std::filesystem::path& imagePath, VkImageLayout finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, uint32_t mipLevels = 1,
             bool isSrgb = true);
+    Texture(std::string name, const vpgloader::Texture& source, bool isSrgb,
+            VkImageLayout finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, uint32_t mipLevels = 0);
     Texture(std::string name, VkImage image, VkImageView imageView, VkFormat format, VkExtent3D extent, VkImageUsageFlags usage, VkImageLayout layout,
             VkImageAspectFlags aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT, uint32_t mipLevels = 1, uint32_t layerCount = 1,
             VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT, bool ownsImage = false);

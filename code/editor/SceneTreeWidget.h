@@ -2,10 +2,12 @@
 #define PLAY_CODE_EDITOR_SCENETREEWIDGET_H
 
 #include <QWidget>
+#include <QHash>
 
 #include "editor/EditorProtocol.h"
 
 class QTreeWidget;
+class QTreeWidgetItem;
 
 namespace Play::editor
 {
@@ -25,9 +27,10 @@ signals:
     void nodeSelected(qulonglong nodeId);
 
 private:
-    RuntimeEditor& _editor;
-    QTreeWidget*   _tree       = nullptr;
-    qulonglong     _rootNodeId = 0;
+    RuntimeEditor&                        _editor;
+    QTreeWidget*                          _tree       = nullptr;
+    qulonglong                            _rootNodeId = 0;
+    QHash<EditorNodeId, QTreeWidgetItem*> _items;
 };
 
 } // namespace Play::editor

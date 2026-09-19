@@ -307,6 +307,11 @@ Texture::Texture(uint32_t size, VkFormat format, VkImageUsageFlags usage, VkImag
     aspectFlags = inferImageAspectFlags(format, false);
 }
 
+Texture::Texture(std::string name, const vpgloader::Texture& source, bool isSrgb, VkImageLayout finalLayout, uint32_t mipLevels) : Texture()
+{
+    uploadTexture(*this, std::move(name), source, isSrgb, finalLayout, mipLevels);
+}
+
 Texture::Texture(const std::filesystem::path& imagePath, VkImageLayout finalLayout, uint32_t mipLevels, bool isSrgb) : Texture()
 {
     PLAY_PROFILE_SCOPE("Texture::Texture(file)");

@@ -9,6 +9,7 @@ namespace Play::editor
 {
 
 void reflectProperties(rttr::type type, rttr::instance instance, std::vector<EditorProperty>& output);
+void reflectActions(rttr::type type, std::vector<EditorAction>& output);
 
 } // namespace Play::editor
 
