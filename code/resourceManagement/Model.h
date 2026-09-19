@@ -41,10 +41,13 @@ public:
 
 protected:
     vpgloader::ModelHandle _loadedModel;
-    // CPU-side node hierarchy and transforms, kept after the GPU upload for
-    // per-frame updates. Everything else in _loadedModel is released in
+    // CPU-side drawables and model bounds, kept after the GPU upload for
+    // per-frame updates. VPGLoader v3 resolves the source node hierarchy at
+    // import time, so a drawable's modelFromMesh maps its mesh-local vertices
+    // straight into model space. Everything else in _loadedModel is released in
     // onLoadAsset once it has been uploaded to GPU buffers and textures.
-    vpgloader::ModelAsset _modelAsset;
+    std::vector<vpgloader::ModelDrawable> _drawables;
+    vpgloader::AABB                       _modelBounds;
     struct RenderData
     {
         RefPtr<Buffer>               assetBuffer;

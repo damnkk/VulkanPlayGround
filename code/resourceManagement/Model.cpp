@@ -38,7 +38,17 @@ void Model::onLoadAsset()
         LOGW("file {%s} does not exist\n", _filePath.c_str());
         return;
     }
-    _loadedModel = vpgloader::ModelLoader::Load(_filePath, {});
+    try
+    {
+        _loadedModel = vpgloader::ModelLoader::Load(_filePath, {});
+    }
+    catch (const std::exception& error)
+    {
+        // VPGLoader writes .vpgmodel v3. Assets cached by an older version, or
+        // any other malformed input, must be re-exported from the source model.
+        LOGW("Failed to load model {%s}: %s\n", _filePath.c_str(), error.what());
+        return;
+    }
     if (!_loadedModel)
     {
         LOGW("VPGLoader returned an empty model for {%s}\n", _filePath.c_str());
@@ -188,9 +198,10 @@ void Model::onLoadAsset()
 
     // The geometry, mesh, material and texture-info blocks are now owned by
     // the GPU buffer, and texture pixels are owned by _renderData.textures.
-    // Keep the node hierarchy and transforms on the CPU for
-    // per-frame updates and release the rest of the CPU-side model data.
-    _modelAsset = _loadedModel->asset;
+    // Keep the drawables and model bounds on the CPU for per-frame updates and
+    // release the rest of the CPU-side model data.
+    _drawables   = _loadedModel->drawables;
+    _modelBounds = _loadedModel->bounds;
     _loadedModel.reset();
 }
 
