@@ -7,22 +7,30 @@ CEREAL_REGISTER_POLYMORPHIC_RELATION(Play::Component, Play::StaticMeshComponent)
 
 namespace Play
 {
-StaticMeshComponent::~StaticMeshComponent() = default;
+StaticMeshComponent::~StaticMeshComponent() {}
 
 void StaticMeshComponent::onLoad()
 {
-    const auto iter = _assetMap.find("_model");
-    setModel(iter != _assetMap.end() && !iter->second.is_nil()
-                 ? vkDriver->getAssetManager()->getOrLoadAsset<Model>(iter->second)
-                 : nullptr);
+    // clang-format off
+    BeginLoadAssetBind() 
+    LoadAssetBind(Model, _model)
+    EndLoadAssetBind
+    // clang-format on
 }
 
 void StaticMeshComponent::onSave()
 {
-    _assetMap["_model"] = _model ? _model->getUID() : VUID{};
+    // clang-format off
+    BeginSaveAssetBind()
+    SaveAssetBind(_model)
+    EndSaveAssetBind
+    // clang-format on
 }
 
-void StaticMeshComponent::onInit() {}
+void StaticMeshComponent::onInit()
+{
+    Component::onInit();
+}
 void StaticMeshComponent::onUpdate(float deltaTime) {}
 
 void StaticMeshComponent::collectDrawBatch(std::vector<DrawBatch>& batches)

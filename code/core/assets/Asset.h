@@ -28,8 +28,8 @@ public:
     {
         return ASSET_TYPE_UNKNOWN;
     };
-    virtual void onLoadAsset();
-    virtual bool onSaveAsset();
+    virtual void      onLoadAsset();
+    virtual bool      onSaveAsset();
     inline const VUID getUID()
     {
         return _uid;
@@ -83,33 +83,33 @@ private:
 #define LoadAssetBind(className, bind)                                             \
     do                                                                             \
     {                                                                              \
-        auto iter = assetMap.find(#bind);                                          \
-        if (iter != assetMap.end() && !iter->second.IsEmpty())                     \
+        auto iter = _assetMap.find(#bind);                                         \
+        if (iter != _assetMap.end() && !iter->second.is_nil())                     \
         {                                                                          \
-            bind = vkDriver->getAssetManager()->getAsset<className>(iter->second); \
+            bind = vkDriver->getAssetManager()->getOrLoadAsset<className>(iter->second); \
         }                                                                          \
     } while (0);
-#define ResizeAssetArray(bind)                 \
-    do                                         \
-    {                                          \
-        auto iter = assetArrayMap.find(#bind); \
-        if (iter != assetArrayMap.end())       \
-        {                                      \
-            bind.resize(iter->second.size());  \
-        }                                      \
+#define ResizeAssetArray(bind)                  \
+    do                                          \
+    {                                           \
+        auto iter = _assetArrayMap.find(#bind); \
+        if (iter != _assetArrayMap.end())       \
+        {                                       \
+            bind.resize(iter->second.size());   \
+        }                                       \
     } while (0);
 
 #define LoadAssetArrayBind(className, bind)                                                      \
     do                                                                                           \
     {                                                                                            \
-        auto iter = assetArrayMap.find(#bind);                                                   \
-        if (iter != assetArrayMap.end())                                                         \
+        auto iter = _assetArrayMap.find(#bind);                                                  \
+        if (iter != _assetArrayMap.end())                                                        \
         {                                                                                        \
             for (uint32_t i = 0; i < iter->second.size(); i++)                                   \
             {                                                                                    \
-                if (!iter->second[i].IsEmpty())                                                  \
+                if (!iter->second[i].is_nil())                                                   \
                 {                                                                                \
-                    bind[i] = vkDriver->getAssetManager()->getAsset<className>(iter->second[i]); \
+                    bind[i] = vkDriver->getAssetManager()->getOrLoadAsset<className>(iter->second[i]); \
                 }                                                                                \
             }                                                                                    \
         }                                                                                        \
@@ -118,17 +118,17 @@ private:
 
 #define BeginSaveAssetBind() \
     {                        \
-        assetMap.clear();    \
-        assetArrayMap.clear();
+        _assetMap.clear();   \
+        _assetArrayMap.clear();
 
 #define SaveAssetBind(bind)                           \
     if (bind)                                         \
     {                                                 \
         vkDriver->getAssetManager()->saveAsset(bind); \
-        assetMap.emplace(#bind, bind->getUID());      \
+        _assetMap.emplace(#bind, bind->getUID());     \
     }                                                 \
     else                                              \
-        assetMap.emplace(#bind, VUID{});
+        _assetMap.emplace(#bind, VUID{});
 
 #define SaveAssetArrayBind(bind)                                 \
     do                                                           \
@@ -144,7 +144,7 @@ private:
             else                                                 \
                 uids.push_back(VUID{});                          \
         }                                                        \
-        assetArrayMap.emplace(#bind, uids);                      \
+        _assetArrayMap.emplace(#bind, uids);                     \
     } while (0);
 
 #define EndSaveAssetBind }
