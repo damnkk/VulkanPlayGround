@@ -15,10 +15,10 @@ class QtRuntimeEditorWindow;
 namespace Play::runtime
 {
 
-class RuntimeGuiHost : public Play::editor::StartupProjectReceiver
+class RuntimeGuiHost
 {
 public:
-    RuntimeGuiHost();
+    RuntimeGuiHost() = default;
     ~RuntimeGuiHost();
 
     RuntimeGuiHost(const RuntimeGuiHost&)            = delete;
@@ -26,13 +26,12 @@ public:
     RuntimeGuiHost(RuntimeGuiHost&&)                 = delete;
     RuntimeGuiHost& operator=(RuntimeGuiHost&&)      = delete;
 
+    // One host per application session; start once, stop before destroying Vulkan.
     bool start();
     void stop();
+    void requestShowWindow();
     void setRenderWindowHandle(void* handle);
     void showError(const std::string& message);
-
-    bool selectStartupProject(const std::string& projectPath, bool createNew, std::string* errorMessage) override;
-    bool takeStartupProject(std::string& projectPath, bool& createNew);
 
     Play::editor::RuntimeEditor& getEditor()
     {
@@ -48,8 +47,6 @@ private:
     static int threadMain(void* data);
 
     int  run();
-    void cleanupFinishedThread();
-    void requestShowWindow();
     void setApplication(QApplication* application);
     void setWindow(Play::editor::QtRuntimeEditorWindow* window);
     void markThreadFinished();
@@ -61,10 +58,6 @@ private:
     bool                                 _stopRequested  = false;
     bool                                 _threadFinished = false;
     Play::editor::RuntimeEditor          _editor;
-    std::string                          _startupProjectPath;
-    bool                                 _startupCreateNew       = false;
-    bool                                 _startupProjectSelected = false;
-    void*                                _renderWindowHandle     = nullptr;
 };
 
 } // namespace Play::runtime

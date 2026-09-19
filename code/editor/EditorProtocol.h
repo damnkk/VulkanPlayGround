@@ -35,6 +35,12 @@ struct EditorProperty
     std::string   resourceId;
 };
 
+struct EditorAction
+{
+    std::string name;
+    std::string label;
+};
+
 struct EditorComponent
 {
     EditorComponentId           id = 0;
@@ -42,15 +48,17 @@ struct EditorComponent
     std::string                 label;
     bool                        removable = true;
     std::vector<EditorProperty> properties;
+    std::vector<EditorAction>   actions;
 };
 
 struct EditorNode
 {
-    EditorNodeId                 id       = InvalidEditorNodeId;
-    EditorNodeId                 parentId = InvalidEditorNodeId;
-    std::string                  name;
-    bool                         hasTransform = false;
-    EditorTransform              transform;
+    EditorNodeId    id       = InvalidEditorNodeId;
+    EditorNodeId    parentId = InvalidEditorNodeId;
+    std::string     name;
+    bool            hasTransform = false;
+    EditorTransform transform;
+    // Components displayed by the generic Inspector; Transform is represented above.
     std::vector<EditorComponent> components;
 };
 
@@ -94,13 +102,13 @@ enum class EditorCommandType
     CreateNode,
     RemoveNode,
     RenameNode,
-    ReparentNode,
     SetTransform,
     AddComponent,
     RemoveComponent,
     SetProperty,
     BindAsset,
-    ClearAsset
+    ClearAsset,
+    InvokeAction
 };
 
 struct EditorCommand

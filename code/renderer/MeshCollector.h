@@ -5,9 +5,14 @@
 namespace Play
 {
 class Renderer;
-// at the begining,just a small structure with single mesh info, later will be extended
+struct DrawBatch
+{
+};
 struct Drawable
 {
+    virtual void          collectDrawBatch(std::vector<DrawBatch>& batcheds) = 0;
+    virtual void          collectAccelerationStructureInstance() {};
+    virtual void          collectSurfaceCacheTask() {};
     uint32_t              materialID = 0;
     std::vector<uint32_t> drawItemIDs;
 };
@@ -18,11 +23,11 @@ class MeshCollector
 public:
     MeshCollector(Renderer* render) : _renderer(render) {};
     ~MeshCollector() = default;
-    std::vector<MeshBatch>& collectMeshBatches();
+    std::vector<Drawable>& collectMeshBatches();
 
 private:
-    std::vector<MeshBatch> _meshBatches;
-    Renderer*              _renderer = nullptr;
+    std::vector<Drawable> _meshBatches;
+    Renderer*             _renderer = nullptr;
 };
 } // namespace Play
 

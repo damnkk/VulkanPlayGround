@@ -79,6 +79,28 @@ SceneTreeWidget::SceneTreeWidget(RuntimeEditor& editor, QWidget* parent) : QWidg
 
 void SceneTreeWidget::refresh(const EditorSnapshot& snapshot)
 {
+    bool sameHierarchy = _rootNodeId == snapshot.rootNodeId && _items.size() == snapshot.nodes.size();
+    for (const auto& node : snapshot.nodes)
+    {
+        auto* item = _items.value(node.id);
+        if (!item || item->parent() != _items.value(node.parentId))
+        {
+            sameHierarchy = false;
+            break;
+        }
+    }
+    if (sameHierarchy)
+    {
+        const QSignalBlocker blocker(_tree);
+        for (const auto& node : snapshot.nodes)
+        {
+            auto*         item = _items.value(node.id);
+            const QString name = QString::fromStdString(node.name);
+            if (item->text(0) != name) item->setText(0, name);
+        }
+        return;
+    }
+
     QTreeWidgetItem*        selected   = _tree->currentItem();
     const EditorNodeId      selectedId = selected ? selected->data(0, Qt::UserRole).toULongLong() : InvalidEditorNodeId;
     const EditorNodeId      parentId = selected && selected->parent() ? selected->parent()->data(0, Qt::UserRole).toULongLong() : InvalidEditorNodeId;
@@ -97,19 +119,19 @@ void SceneTreeWidget::refresh(const EditorSnapshot& snapshot)
     _rootNodeId              = snapshot.rootNodeId;
     const QSignalBlocker blocker(_tree);
     _tree->clear();
-    QHash<EditorNodeId, QTreeWidgetItem*> items;
+    _items.clear();
     for (const EditorNode& node : snapshot.nodes)
     {
         QTreeWidgetItem* item = new QTreeWidgetItem();
         item->setText(0, QString::fromStdString(node.name));
         item->setData(0, Qt::UserRole, QVariant::fromValue<qulonglong>(node.id));
         item->setFlags(item->flags() | Qt::ItemIsEditable);
-        items.insert(node.id, item);
+        _items.insert(node.id, item);
     }
     for (const EditorNode& node : snapshot.nodes)
     {
-        QTreeWidgetItem* item   = items.value(node.id);
-        QTreeWidgetItem* parent = items.value(node.parentId);
+        QTreeWidgetItem* item   = _items.value(node.id);
+        QTreeWidgetItem* parent = _items.value(node.parentId);
         if (parent)
         {
             parent->addChild(item);
@@ -123,10 +145,10 @@ void SceneTreeWidget::refresh(const EditorSnapshot& snapshot)
 
     // Restore selection only after the whole tree is attached. When the selected
     // node was deleted, continue editing its parent (or a remaining root).
-    QTreeWidgetItem* current = items.value(selectedId);
+    QTreeWidgetItem* current = _items.value(selectedId);
     if (!current)
     {
-        current = items.value(parentId);
+        current = _items.value(parentId);
     }
     if (!current && _tree->topLevelItemCount() > 0)
     {

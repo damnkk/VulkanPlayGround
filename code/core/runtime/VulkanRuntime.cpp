@@ -247,7 +247,7 @@ void VulkanRuntime::run()
         processAssetImports(*_assetManager, *_sceneManager, _guiHost.getEditor());
         if (_window.getInputState().keyOPressed)
         {
-            _guiHost.start();
+            _guiHost.requestShowWindow();
         }
 
         // Ctrl+S has two exclusive producers depending on keyboard focus: the

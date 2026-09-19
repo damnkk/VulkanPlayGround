@@ -9,7 +9,7 @@
 namespace Play
 {
 
-std::vector<MeshBatch>& MeshCollector::collectMeshBatches()
+std::vector<Drawable>& MeshCollector::collectMeshBatches()
 {
     assert(_renderer);
     assert(vkDriver->getSceneManager());

@@ -11,11 +11,6 @@
 namespace Play::runtime
 {
 
-RuntimeGuiHost::RuntimeGuiHost()
-{
-    _editor.setStartupProjectReceiver(this);
-}
-
 RuntimeGuiHost::~RuntimeGuiHost()
 {
     stop();
@@ -23,14 +18,6 @@ RuntimeGuiHost::~RuntimeGuiHost()
 
 bool RuntimeGuiHost::start()
 {
-    cleanupFinishedThread();
-
-    if (_thread)
-    {
-        requestShowWindow();
-        return true;
-    }
-
     _mutex = SDL_CreateMutex();
     if (!_mutex)
     {
@@ -38,11 +25,7 @@ bool RuntimeGuiHost::start()
         return false;
     }
 
-    _stopRequested  = false;
-    _threadFinished = false;
-    _startupProjectPath.clear();
-    _startupProjectSelected = false;
-    _thread                 = SDL_CreateThread(&RuntimeGuiHost::threadMain, "RuntimeGuiHost", this);
+    _thread = SDL_CreateThread(&RuntimeGuiHost::threadMain, "RuntimeGuiHost", this);
     if (!_thread)
     {
         LOGE("RuntimeGuiHost: SDL_CreateThread failed: %s\n", SDL_GetError());
@@ -52,34 +35,6 @@ bool RuntimeGuiHost::start()
     }
 
     return true;
-}
-
-bool RuntimeGuiHost::selectStartupProject(const std::string& projectPath, bool createNew, std::string* errorMessage)
-{
-    if (!_mutex)
-    {
-        if (errorMessage)
-        {
-            *errorMessage = "Project startup is not available.";
-        }
-        return false;
-    }
-
-    SDL_LockMutex(_mutex);
-    const bool isStopping = _stopRequested;
-    if (!isStopping)
-    {
-        _startupProjectPath     = projectPath;
-        _startupCreateNew       = createNew;
-        _startupProjectSelected = true;
-    }
-    SDL_UnlockMutex(_mutex);
-
-    if (isStopping && errorMessage)
-    {
-        *errorMessage = "Project startup has already stopped.";
-    }
-    return !isStopping;
 }
 
 void RuntimeGuiHost::showError(const std::string& message)
@@ -98,36 +53,13 @@ void RuntimeGuiHost::setRenderWindowHandle(void* handle)
 {
     Play::editor::QtRuntimeEditorWindow* window = nullptr;
     SDL_LockMutex(_mutex);
-    _renderWindowHandle = handle;
-    window              = _window;
+    window = _window;
     SDL_UnlockMutex(_mutex);
 
     if (window)
     {
         QMetaObject::invokeMethod(window, [window, handle]() { window->setRenderWindowHandle(handle); }, Qt::QueuedConnection);
     }
-}
-
-bool RuntimeGuiHost::takeStartupProject(std::string& projectPath, bool& createNew)
-{
-    if (!_mutex)
-    {
-        return false;
-    }
-
-    SDL_LockMutex(_mutex);
-    if (!_startupProjectSelected)
-    {
-        SDL_UnlockMutex(_mutex);
-        return false;
-    }
-
-    projectPath = _startupProjectPath;
-    createNew   = _startupCreateNew;
-    _startupProjectPath.clear();
-    _startupProjectSelected = false;
-    SDL_UnlockMutex(_mutex);
-    return true;
 }
 
 void RuntimeGuiHost::stop()
@@ -220,31 +152,6 @@ int RuntimeGuiHost::run()
     return result;
 }
 
-void RuntimeGuiHost::cleanupFinishedThread()
-{
-    if (!_thread)
-    {
-        return;
-    }
-
-    SDL_LockMutex(_mutex);
-    const bool threadFinished = _threadFinished;
-    SDL_UnlockMutex(_mutex);
-
-    if (!threadFinished)
-    {
-        return;
-    }
-
-    int threadStatus = 0;
-    SDL_WaitThread(_thread, &threadStatus);
-    _thread         = nullptr;
-    _threadFinished = false;
-
-    SDL_DestroyMutex(_mutex);
-    _mutex = nullptr;
-}
-
 void RuntimeGuiHost::requestShowWindow()
 {
     Play::editor::QtRuntimeEditorWindow* window = nullptr;
@@ -278,14 +185,8 @@ void RuntimeGuiHost::setApplication(QApplication* application)
 void RuntimeGuiHost::setWindow(Play::editor::QtRuntimeEditorWindow* window)
 {
     SDL_LockMutex(_mutex);
-    _window                  = window;
-    void* renderWindowHandle = _renderWindowHandle;
+    _window = window;
     SDL_UnlockMutex(_mutex);
-
-    if (window && renderWindowHandle)
-    {
-        window->setRenderWindowHandle(renderWindowHandle);
-    }
 }
 
 void RuntimeGuiHost::markThreadFinished()

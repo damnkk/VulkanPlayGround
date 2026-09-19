@@ -1,6 +1,7 @@
 #include "editor/QtRuntimeEditorWindow.h"
 
 #include <QAction>
+#include <QApplication>
 #include <QCloseEvent>
 #include <QDockWidget>
 #include <QDir>
@@ -38,15 +39,8 @@ void QtRuntimeEditorWindow::showStartupPage()
 
 void QtRuntimeEditorWindow::startProject(const QString& projectPath, bool createNew)
 {
-    StartupProjectReceiver* receiver = _editor.getStartupProjectReceiver();
-    std::string             errorMessage;
-    if (!receiver || !receiver->selectStartupProject(projectPath.toStdString(), createNew, &errorMessage))
-    {
-        _startupPage->showError(errorMessage.empty() ? "Project startup is not available." : QString::fromStdString(errorMessage));
-        return;
-    }
-
     _startupPage->showStarting();
+    _editor.selectStartupProject(projectPath.toStdString(), createNew);
     setWindowTitle(tr("%1 - VulkanPlayGround").arg(QDir(projectPath).dirName()));
     auto* location = new QLabel(tr("Save location: %1").arg(QDir::toNativeSeparators(projectPath)), this);
     location->setToolTip(QDir::toNativeSeparators(projectPath));
@@ -68,7 +62,7 @@ void QtRuntimeEditorWindow::createEditor()
     sceneDock->setWidget(_sceneTree);
     addDockWidget(Qt::LeftDockWidgetArea, sceneDock);
 
-    _inspector                 = new InspectorWidget(_editor, this);
+    _inspector                 = new InspectorWidget(_editor, _snapshot, this);
     QDockWidget* inspectorDock = new QDockWidget("Inspector", this);
     inspectorDock->setObjectName("InspectorDock");
     inspectorDock->setWidget(_inspector);
@@ -98,6 +92,7 @@ void QtRuntimeEditorWindow::createEditorActions()
     saveAction->setShortcut(QKeySequence::Save);
     saveAction->setShortcutContext(Qt::WindowShortcut);
     saveAction->setAutoRepeat(false);
+    addAction(saveAction);
     saveAction->setToolTip(tr("Save the current project (Ctrl+S)"));
     connect(saveAction, &QAction::triggered, this, &QtRuntimeEditorWindow::requestSave);
 
@@ -127,6 +122,8 @@ void QtRuntimeEditorWindow::createEditorActions()
 
 void QtRuntimeEditorWindow::requestSave()
 {
+    // End the active edit before saving, including spin boxes and tree renames.
+    if (QWidget* focused = QApplication::focusWidget()) focused->clearFocus();
     _editor.requestSave();
 }
 
@@ -154,7 +151,6 @@ void QtRuntimeEditorWindow::setRenderWindowHandle(void* handle)
     createEditor();
     setCentralWidget(_renderContainer);
     _startupPage = nullptr;
-    refresh();
     if (!_editor.exitRequested())
     {
         show();
@@ -163,18 +159,17 @@ void QtRuntimeEditorWindow::setRenderWindowHandle(void* handle)
 
 void QtRuntimeEditorWindow::refresh()
 {
-    const EditorSnapshot snapshot = _editor.getSnapshot();
-    if (_hasSnapshot && snapshot.revision == _revision)
+    if (_editor.readSnapshot(_snapshot))
     {
-        return;
+        _sceneTree->refresh(_snapshot);
+        _inspector->refresh();
+        _assetBrowser->refresh(_snapshot);
+        statusBar()->showMessage(_snapshot.sceneName.empty() ? "Waiting for an engine snapshot" : QString::fromStdString(_snapshot.sceneName));
     }
-
-    _revision    = snapshot.revision;
-    _hasSnapshot = true;
-    _sceneTree->refresh(snapshot);
-    _inspector->setSnapshot(snapshot);
-    _assetBrowser->refresh(snapshot);
-    statusBar()->showMessage(snapshot.sceneName.empty() ? "Waiting for an engine snapshot" : QString::fromStdString(snapshot.sceneName));
+    else
+    {
+        _inspector->refreshPendingValues();
+    }
 }
 
 } // namespace Play::editor

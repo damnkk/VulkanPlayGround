@@ -26,9 +26,27 @@
 #include "resourceManagement/vulkan/resources/Resource.h"
 #include "resourceManagement/scene/SceneManager.h"
 #include "resourceManagement/vulkan/pipeline/ShaderManager.hpp"
+#include "resourceManagement/scene/component/StaticMeshComponent.h"
 
 RTTR_REGISTRATION
 {
+    rttr::type::register_converter_func([](const Play::ModelRef& model, bool& ok) -> Play::AssetRef
+    {
+        ok = true;
+        return model;
+    });
+    rttr::type::register_converter_func([](const Play::AssetRef& asset, bool& ok) -> Play::ModelRef
+    {
+        auto model = std::dynamic_pointer_cast<Play::Model>(asset);
+        ok = !asset || model != nullptr;
+        return model;
+    });
+    rttr::registration::class_<Play::StaticMeshComponent>("Play::StaticMeshComponent")
+        .property("model", &Play::StaticMeshComponent::getModel, &Play::StaticMeshComponent::setModel)
+        (rttr::metadata("ui.label", "Model"), rttr::metadata("ui.resource_type", "Model"))
+        .property("castShadow", &Play::StaticMeshComponent::getCastShadow, &Play::StaticMeshComponent::setCastShadow)
+        (rttr::metadata("ui.label", "Cast Shadow"));
+
     rttr::registration::class_<Play::runtime::RuntimeConfig>("Play::runtime::RuntimeConfig");
     rttr::registration::class_<Play::runtime::SdlInputState>("Play::runtime::SdlInputState");
     rttr::registration::class_<Play::runtime::VulkanRuntime>("Play::runtime::VulkanRuntime");

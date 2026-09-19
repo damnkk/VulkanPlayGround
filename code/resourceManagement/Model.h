@@ -34,8 +34,17 @@ public:
         return _renderData.assetBuffer.get();
     }
 
+    const std::vector<RefPtr<Texture>>& getTextures() const
+    {
+        return _renderData.textures;
+    }
+
 protected:
     vpgloader::ModelHandle _loadedModel;
+    // CPU-side node hierarchy and transforms, kept after the GPU upload for
+    // per-frame updates. Everything else in _loadedModel is released in
+    // onLoadAsset once it has been uploaded to GPU buffers and textures.
+    vpgloader::ModelAsset _modelAsset;
     struct RenderData
     {
         RefPtr<Buffer>               assetBuffer;
@@ -50,6 +59,8 @@ private:
     EndSerailize
     // clang-format on
 };
+
+using ModelRef = std::shared_ptr<Model>;
 
 } // namespace Play
 
