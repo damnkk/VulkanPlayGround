@@ -26,6 +26,10 @@ public:
     virtual void onLoad() {};
     virtual void onSave() {};
     virtual void onInit() {};
+    // Called after the entity joins a scene, or when attached to an entity already in a scene.
+    virtual void onEnterScene() {};
+    // Called before detaching. During Scene destruction, getScene() may already be expired.
+    virtual void onExitScene() {};
     virtual void onUpdate(float deltaTime) = 0;
     inline bool  inited()
     {

@@ -5,17 +5,17 @@
 #include "nvvk/descriptors.hpp"
 #include "resourceManagement/scene/cpu/Scene.h"
 #include "resourceManagement/scene/gpu/GaussianScene.h"
+#include "resourceManagement/scene/gpu/GpuScene.h"
 
 namespace Play
 {
 class Texture;
-class GPUScene;
 
 class SceneManager
 {
 public:
-    static constexpr uint32_t SceneTextureBinding      = 3;
-    static constexpr uint32_t SceneTexturePoolCapacity = 1024;
+    static constexpr uint32_t SceneTextureBinding      = GpuScene::TextureBinding;
+    static constexpr uint32_t SceneTexturePoolCapacity = GpuScene::TextureCapacity;
 
     SceneManager();
     ~SceneManager();
@@ -27,6 +27,11 @@ public:
     const Scene& getScene() const
     {
         return *_scene;
+    }
+
+    const std::shared_ptr<GpuScene>& getGpuScene() const
+    {
+        return _gpuScene;
     }
 
     template <typename Fn>
@@ -55,7 +60,7 @@ private:
     nvvk::DescriptorBindings     _sceneDescriptorBindings;
     std::vector<RefPtr<Texture>> _sceneSkyTexture;
     std::shared_ptr<Scene>       _scene;
-    std::shared_ptr<GPUScene>    _gpuScene = nullptr;
+    std::shared_ptr<GpuScene>    _gpuScene;
     mutable std::mutex           _sceneMutex;
 };
 

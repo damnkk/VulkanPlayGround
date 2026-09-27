@@ -49,6 +49,8 @@ public:
             std::shared_ptr<TComponent> cast      = std::dynamic_pointer_cast<TComponent>(component);
             if (cast)
             {
+                if (!_scene.expired()) component->onExitScene();
+                component->_entity.reset();
                 _components.erase(_components.begin() + i);
                 return true;
             }
@@ -60,8 +62,7 @@ public:
     std::shared_ptr<TComponent> addComponent(Args&&... args)
     {
         std::shared_ptr<TComponent> component = std::make_shared<TComponent>(std::forward<Args>(args)...);
-        component->_entity                    = weak_from_this();
-        _components.push_back(component);
+        addComponent(component);
         return component;
     }
 
@@ -117,7 +118,8 @@ private:
     std::vector<std::shared_ptr<Entity>>    _children;
     std::weak_ptr<Scene>                    _scene;
     friend class Scene;
-    void restoreComponentOwners();
+    void enterScene(std::weak_ptr<Scene> scene);
+    void exitScene();
 
 private:
     // clang-format off

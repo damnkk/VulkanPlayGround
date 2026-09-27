@@ -9,13 +9,13 @@
 namespace Play
 {
 
-SceneManager::SceneManager()
+SceneManager::SceneManager() : _gpuScene(std::make_shared<GpuScene>())
 {
     _sceneDescriptorBindings.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr);
     _sceneDescriptorBindings.addBinding(1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr);
     _sceneDescriptorBindings.addBinding(2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr);
     _sceneDescriptorBindings.addBinding(3, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, SceneTexturePoolCapacity, VK_SHADER_STAGE_ALL, nullptr,
-                                        VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT);
+                                        VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT);
 
     vkDriver->getDescriptorSetCache()->initSceneDescriptorSets(_sceneDescriptorBindings);
 }
@@ -30,6 +30,20 @@ void SceneManager::addSkyBoxTexture(const RefPtr<Texture>& texture)
 void SceneManager::updateDescriptorSet()
 {
     PLAY_PROFILE_SCOPE("SceneManager::updateDescriptorSet");
+    auto* cache = vkDriver->getDescriptorSetCache();
+    if (cache->getSceneDescriptorSetCount() != vkDriver->getFrameCycleSize()) cache->initSceneDescriptorSets(_sceneDescriptorBindings);
+    const VkDescriptorSet set = cache->getSceneDescriptorSet().set;
+    for (uint32_t binding = 0; binding < _sceneSkyTexture.size() && binding < SceneTextureBinding; ++binding)
+    {
+        VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+        write.dstSet          = set;
+        write.dstBinding      = binding;
+        write.descriptorCount = 1;
+        write.descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        write.pImageInfo      = &_sceneSkyTexture[binding]->descriptor;
+        vkUpdateDescriptorSets(vkDriver->getDevice(), 1, &write, 0, nullptr);
+    }
+    _gpuScene->updateTextureDescriptors(set);
 }
 
 void SceneManager::update()
@@ -37,6 +51,8 @@ void SceneManager::update()
     PLAY_PROFILE_SCOPE("SceneManager::update");
     std::lock_guard<std::mutex> lock(_sceneMutex);
     _scene->tick(static_cast<float>(vkDriver->getDeltaTime()));
+    _gpuScene->prepareFrame();
+    updateDescriptorSet();
 }
 
 bool SceneManager::createProject(const std::string& projectPath, std::string* errorMessage)

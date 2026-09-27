@@ -748,29 +748,8 @@ void RDGBuilder::afterPassExecute()
     VkSemaphoreSubmitInfo signalInfo{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
     signalInfo.semaphore = _renderContext->_frameData->semaphore;
     signalInfo.value     = ++_renderContext->_frameData->timelineValue;
-    switch (_renderContext->_prevPassNode->type())
-    {
-        case PassNode::Type::Render:
-        {
-            signalInfo.stageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-            break;
-        }
-        case PassNode::Type::Compute:
-        {
-            signalInfo.stageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-            break;
-        }
-        case PassNode::Type::RayTracing:
-        {
-            signalInfo.stageMask = VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR;
-            break;
-        }
-        default:
-        {
-            signalInfo.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
-            break;
-        }
-    }
+    // This timeline also retires resources used by transfer commands in the batch.
+    signalInfo.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
     VkSubmitInfo2 submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
     submitInfo.commandBufferInfoCount   = 1;
     submitInfo.pCommandBufferInfos      = &cmdInfo;
@@ -896,29 +875,8 @@ RenderContext* RDGBuilder::prepareRenderContext(PassNode* pass)
             VkSemaphoreSubmitInfo signalInfo{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
             signalInfo.semaphore = _renderContext->_frameData->semaphore;
             signalInfo.value     = ++_renderContext->_frameData->timelineValue;
-            switch (pass->type())
-            {
-                case PassNode::Type::Render:
-                {
-                    signalInfo.stageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-                    break;
-                }
-                case PassNode::Type::Compute:
-                {
-                    signalInfo.stageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-                    break;
-                }
-                case PassNode::Type::RayTracing:
-                {
-                    signalInfo.stageMask = VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR;
-                    break;
-                }
-                default:
-                {
-                    signalInfo.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
-                    break;
-                }
-            }
+            // Cover uploads as well as the pass's shader stages before retirement.
+            signalInfo.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
             VkSubmitInfo2 submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
             submitInfo.commandBufferInfoCount   = 1;
             submitInfo.pCommandBufferInfos      = &cmdInfo;

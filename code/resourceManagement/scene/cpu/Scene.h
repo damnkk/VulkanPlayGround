@@ -12,10 +12,7 @@ class Scene : public Asset, public std::enable_shared_from_this<Scene>
 public:
     Scene();
     explicit Scene(std::string name);
-    ~Scene()
-    {
-        _idPool.destroyAll();
-    }
+    ~Scene();
     virtual std::string getAssetTypeName() const override
     {
         return "Scene";
