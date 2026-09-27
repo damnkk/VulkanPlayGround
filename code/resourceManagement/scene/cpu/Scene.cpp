@@ -14,13 +14,18 @@ Scene::Scene(std::string name) : Asset(name), _root(std::make_shared<Entity>())
     _root->addComponent<TransformComponent>();
 }
 
+Scene::~Scene()
+{
+    for (auto it = _entities.rbegin(); it != _entities.rend(); ++it) (*it)->exitScene();
+    _idPool.destroyAll();
+}
+
 void Scene::registerSubtree(const std::shared_ptr<Entity>& entity, const std::shared_ptr<Entity>& parent)
 {
-    entity->_scene  = weak_from_this();
     entity->_father = parent;
-    entity->restoreComponentOwners();
     _idPool.createID(entity->_id);
     _entities.push_back(entity);
+    entity->enterScene(weak_from_this());
     for (const auto& child : entity->_children)
     {
         registerSubtree(child, entity);
@@ -31,6 +36,7 @@ void Scene::onLoadAsset()
 {
     Asset::onLoadAsset();
     if (!_root) throw cereal::Exception("Scene has no root node.");
+    for (auto it = _entities.rbegin(); it != _entities.rend(); ++it) (*it)->exitScene();
     _entities.clear();
     _idPool.destroyAll();
     registerSubtree(_root, {});
@@ -84,11 +90,12 @@ std::shared_ptr<Entity> Scene::createEntity(std::string name, std::shared_ptr<En
     if (!parent || parent->getScene().get() != this) return nullptr;
     auto entity = std::make_shared<Entity>();
     _idPool.createID(entity->_id);
-    entity->_name  = name.empty() ? "Entity " + std::to_string(entity->_id + 1) : std::move(name);
-    entity->_scene = weak_from_this();
+    entity->_name = name.empty() ? "Entity " + std::to_string(entity->_id + 1) : std::move(name);
     entity->addComponent<TransformComponent>();
     _entities.push_back(entity);
-    entity->setFather(parent);
+    entity->_father = parent;
+    parent->_children.push_back(entity);
+    entity->enterScene(weak_from_this());
     return entity;
 }
 
@@ -98,8 +105,8 @@ bool Scene::addEntity(std::shared_ptr<Entity> entity)
     {
         return false;
     }
-    registerSubtree(entity, _root);
     _root->_children.push_back(entity);
+    registerSubtree(entity, _root);
     return true;
 }
 
@@ -123,6 +130,7 @@ std::shared_ptr<Entity> Scene::removeEntity(uint32_t id)
     {
         removeEntity(child->getID());
     }
+    entity->exitScene();
     if (auto parent = entity->_father.lock())
     {
         auto& siblings = parent->_children;
@@ -131,7 +139,6 @@ std::shared_ptr<Entity> Scene::removeEntity(uint32_t id)
     entity->_father.reset();
     const auto position = std::find(_entities.begin(), _entities.end(), entity);
     _entities.erase(position);
-    entity->_scene.reset();
     // Keep IDs unique for queued editor commands; the Scene destructor releases the pool.
     return entity;
 }

@@ -32,23 +32,23 @@ void DescriptorSetBindings::reset(DescriptorEnum setSlot)
     {
         _setSlot = setSlot;
     }
-    _setLayoutDirty      = true;
-    _descInfoDirty      |= 1 << 0;
+    _setLayoutDirty = true;
+    _descInfoDirty |= 1 << 0;
     _descriptorSetDirty  = true;
     _cachedDescriptorSet = VK_NULL_HANDLE;
 }
 
 void DescriptorSetBindings::markLayoutDirty()
 {
-    _setLayoutDirty      = true;
-    _descInfoDirty      |= 1 << 0;
+    _setLayoutDirty = true;
+    _descInfoDirty |= 1 << 0;
     _descriptorSetDirty  = true;
     _cachedDescriptorSet = VK_NULL_HANDLE;
 }
 
 void DescriptorSetBindings::markDescriptorInfoDirty()
 {
-    _descInfoDirty      |= 1 << 0;
+    _descInfoDirty |= 1 << 0;
     _descriptorSetDirty = true;
 }
 
@@ -64,17 +64,17 @@ DescriptorSetBindings& DescriptorSetBindings::addBinding(const BindInfo& binding
                 return *this;
             }
 
-            bool layoutChanged = false;
+            bool               layoutChanged    = false;
             VkShaderStageFlags mergedStageFlags = _bindingInfos[i].shaderStageFlags | bindingInfo.shaderStageFlags;
             if (_bindingInfos[i].shaderStageFlags != mergedStageFlags)
             {
                 _bindingInfos[i].shaderStageFlags = mergedStageFlags;
-                layoutChanged = true;
+                layoutChanged                     = true;
             }
             if (_bindingInfos[i].descriptorCount < bindingInfo.descriptorCount)
             {
                 _bindingInfos[i].descriptorCount = bindingInfo.descriptorCount;
-                layoutChanged = true;
+                layoutChanged                    = true;
             }
             if (layoutChanged)
             {
@@ -335,8 +335,6 @@ VkDescriptorSet DescriptorSetBindings::getOrAcquireDescriptorSet(DescriptorEnum 
     return _cachedDescriptorSet;
 }
 
-
-
 DescriptorBufferManagerExt::~DescriptorBufferManagerExt() {}
 
 void DescriptorBufferManagerExt::init(VkPhysicalDevice physicalDevice, VkDevice device)
@@ -531,7 +529,7 @@ VkDescriptorSet DescriptorSetCache::requestDescriptorSet(DescriptorSetBindings* 
             case static_cast<uint32_t>(DescriptorEnum::eGlobalDescriptorSet):
                 return _globalDescriptorSet.set;
             case static_cast<uint32_t>(DescriptorEnum::eSceneDescriptorSet):
-                return _sceneDescriptorSet.set;
+                return getSceneDescriptorSet().set;
             case static_cast<uint32_t>(DescriptorEnum::eFrameDescriptorSet):
                 return _frameDescriptorSet.set;
         }
@@ -560,8 +558,8 @@ VkDescriptorSet DescriptorSetCache::requestDescriptorSet(DescriptorSetBindings* 
     }
     else
     { // damn new layout, create new pool array
-        LOGD("descriptor set cache miss: set=%u layoutHash=%llu bindingsHash=%llu, new layout\n", setIdx,
-             static_cast<unsigned long long>(layoutHash), static_cast<unsigned long long>(BindingsHash));
+        LOGD("descriptor set cache miss: set=%u layoutHash=%llu bindingsHash=%llu, new layout\n", setIdx, static_cast<unsigned long long>(layoutHash),
+             static_cast<unsigned long long>(BindingsHash));
         auto cacheNode                 = std::make_shared<DescriptorSetCache::CacheNode>();
         _descriptorPoolMap[layoutHash] = cacheNode;
         return createDescriptorSet(*cacheNode, setManager);
@@ -718,20 +716,31 @@ void DescriptorSetCache::initFrameDescriptorSets(nvvk::DescriptorBindings& setBi
 }
 void DescriptorSetCache::initSceneDescriptorSets(nvvk::DescriptorBindings& setBindings)
 {
+    // Frame-count changes happen after the runtime's device-idle swapchain rebuild.
+    if (_sceneDescriptorPool) vkDestroyDescriptorPool(vkDriver->getDevice(), _sceneDescriptorPool, nullptr);
+    const uint32_t                    frameCount = vkDriver->getFrameCycleSize();
     VkDescriptorPoolCreateInfo        poolInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
-    std::vector<VkDescriptorPoolSize> poolSizes = setBindings.calculatePoolSizes(1);
+    std::vector<VkDescriptorPoolSize> poolSizes = setBindings.calculatePoolSizes(frameCount);
     poolInfo.poolSizeCount                      = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes                         = poolSizes.data();
-    poolInfo.maxSets                            = 1;
-    poolInfo.flags                              = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT;
+    poolInfo.maxSets                            = frameCount;
+    poolInfo.flags                              = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
     NVVK_CHECK(vkCreateDescriptorPool(vkDriver->getDevice(), &poolInfo, nullptr, &_sceneDescriptorPool));
-    setBindings.createDescriptorSetLayout(vkDriver->getDevice(), VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
-                                          &_sceneDescriptorSet.layout);
+    if (_sceneDescriptorSet.layout == VK_NULL_HANDLE)
+        setBindings.createDescriptorSetLayout(vkDriver->getDevice(), VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
+                                              &_sceneDescriptorSet.layout);
+    std::vector<VkDescriptorSetLayout> layouts(frameCount, _sceneDescriptorSet.layout);
+    _sceneDescriptorSets.resize(frameCount);
     VkDescriptorSetAllocateInfo allocInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
     allocInfo.descriptorPool     = _sceneDescriptorPool;
-    allocInfo.descriptorSetCount = 1;
-    allocInfo.pSetLayouts        = &_sceneDescriptorSet.layout;
-    NVVK_CHECK(vkAllocateDescriptorSets(vkDriver->getDevice(), &allocInfo, &_sceneDescriptorSet.set));
+    allocInfo.descriptorSetCount = frameCount;
+    allocInfo.pSetLayouts        = layouts.data();
+    NVVK_CHECK(vkAllocateDescriptorSets(vkDriver->getDevice(), &allocInfo, _sceneDescriptorSets.data()));
+}
+
+CommonDescriptorSet DescriptorSetCache::getSceneDescriptorSet()
+{
+    return {_sceneDescriptorSets.at(vkDriver->getFrameCycleIndex()), _sceneDescriptorSet.layout};
 }
 
 } // namespace Play

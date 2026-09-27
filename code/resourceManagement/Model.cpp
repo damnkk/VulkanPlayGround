@@ -74,6 +74,7 @@ void Model::onLoadAsset()
     const BufferRegion indexRegion        = appendAlignedRegion(bufferSize, geometry.indices.size() * sizeof(geometry.indices[0]));
     const BufferRegion vertexStreamRegion = appendAlignedRegion(bufferSize, _loadedModel->meshes.size() * sizeof(ModelVertexStreamInfo));
     const BufferRegion meshInfoRegion     = appendAlignedRegion(bufferSize, _loadedModel->meshes.size() * sizeof(ModelMeshInfo));
+    const BufferRegion drawableRegion     = appendAlignedRegion(bufferSize, _loadedModel->drawables.size() * sizeof(ModelDrawableInfo));
     const BufferRegion materialRegion     = appendAlignedRegion(bufferSize, _loadedModel->materials.size() * sizeof(_loadedModel->materials[0]));
     const BufferRegion textureInfoRegion  = appendAlignedRegion(bufferSize, _loadedModel->textureInfos.size() * sizeof(ModelTextureInfo));
     if (bufferSize == 0)
@@ -82,26 +83,43 @@ void Model::onLoadAsset()
         return;
     }
 
-    _renderData.assetBuffer = RefPtr<Buffer>(new Buffer(
+    _assetBuffer = RefPtr<Buffer>(new Buffer(
         "Model asset buffer", VK_BUFFER_USAGE_2_TRANSFER_DST_BIT | VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT,
         bufferSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
 
-    const uint64_t baseAddress = _renderData.assetBuffer->address;
+    const uint64_t baseAddress = _assetBuffer->address;
     auto regionAddress         = [baseAddress](const BufferRegion& region) -> uint64_t { return region.size == 0 ? 0 : baseAddress + region.offset; };
 
-    _renderData.modelDesc.positionAddress    = regionAddress(positionRegion);
-    _renderData.modelDesc.normalAddress      = regionAddress(normalRegion);
-    _renderData.modelDesc.tangentAddress     = regionAddress(tangentRegion);
-    _renderData.modelDesc.texCoord0Address   = regionAddress(texCoord0Region);
-    _renderData.modelDesc.texCoord1Address   = regionAddress(texCoord1Region);
-    _renderData.modelDesc.colorAddress       = regionAddress(colorRegion);
-    _renderData.modelDesc.indexAddress       = regionAddress(indexRegion);
-    _renderData.modelDesc.meshInfoAddress    = regionAddress(meshInfoRegion);
-    _renderData.modelDesc.materialAddress    = regionAddress(materialRegion);
-    _renderData.modelDesc.textureInfoAddress = regionAddress(textureInfoRegion);
-    _renderData.modelDesc.meshCount          = static_cast<uint32_t>(_loadedModel->meshes.size());
-    _renderData.modelDesc.materialCount      = static_cast<uint32_t>(_loadedModel->materials.size());
-    _renderData.modelDesc.textureInfoCount   = static_cast<uint32_t>(_loadedModel->textureInfos.size());
+    _modelDesc.positionAddress    = regionAddress(positionRegion);
+    _modelDesc.normalAddress      = regionAddress(normalRegion);
+    _modelDesc.tangentAddress     = regionAddress(tangentRegion);
+    _modelDesc.texCoord0Address   = regionAddress(texCoord0Region);
+    _modelDesc.texCoord1Address   = regionAddress(texCoord1Region);
+    _modelDesc.colorAddress       = regionAddress(colorRegion);
+    _modelDesc.indexAddress       = regionAddress(indexRegion);
+    _modelDesc.meshInfoAddress    = regionAddress(meshInfoRegion);
+    _modelDesc.materialAddress    = regionAddress(materialRegion);
+    _modelDesc.textureInfoAddress = regionAddress(textureInfoRegion);
+    _modelDesc.meshCount          = static_cast<uint32_t>(_loadedModel->meshes.size());
+    _modelDesc.materialCount      = static_cast<uint32_t>(_loadedModel->materials.size());
+    _modelDesc.textureInfoCount   = static_cast<uint32_t>(_loadedModel->textureInfos.size());
+    _drawableAddress              = regionAddress(drawableRegion);
+
+    _drawableInfos.resize(_loadedModel->drawables.size());
+    for (size_t drawableIndex = 0; drawableIndex < _loadedModel->drawables.size(); ++drawableIndex)
+    {
+        const auto& drawable = _loadedModel->drawables[drawableIndex];
+        const auto& mesh     = _loadedModel->meshes[drawable.meshIndex];
+        const auto  bounds   = vpgloader::TransformAABB(mesh.bounds, drawable.modelFromMesh);
+        auto&       info     = _drawableInfos[drawableIndex];
+        info.modelFromMesh   = drawable.modelFromMesh;
+        info.boundsMin       = glm::vec4(bounds.min, bounds.valid ? 1.0f : 0.0f);
+        info.boundsMax       = glm::vec4(bounds.max, 0.0f);
+        info.meshIndex       = drawable.meshIndex;
+        info.materialIndex   = mesh.materialIndex;
+        info.firstIndex      = mesh.firstIndex;
+        info.indexCount      = mesh.indexCount;
+    }
 
     std::vector<ModelVertexStreamInfo> vertexStreams(_loadedModel->meshes.size());
     std::vector<ModelMeshInfo>         meshInfos(_loadedModel->meshes.size());
@@ -109,22 +127,22 @@ void Model::onLoadAsset()
     {
         const vpgloader::ModelMeshAsset& sourceMesh   = _loadedModel->meshes[meshIndex];
         ModelVertexStreamInfo&           vertexStream = vertexStreams[meshIndex];
-        vertexStream.positionAddress  = _renderData.modelDesc.positionAddress + sourceMesh.firstVertex * sizeof(geometry.positions[0]);
-        vertexStream.normalAddress    = _renderData.modelDesc.normalAddress + sourceMesh.firstVertex * sizeof(geometry.normals[0]);
-        vertexStream.tangentAddress   = _renderData.modelDesc.tangentAddress + sourceMesh.firstVertex * sizeof(geometry.tangents[0]);
-        vertexStream.texCoord0Address = _renderData.modelDesc.texCoord0Address + sourceMesh.firstVertex * sizeof(geometry.texCoords0[0]);
-        vertexStream.texCoord1Address = _renderData.modelDesc.texCoord1Address + sourceMesh.firstVertex * sizeof(geometry.texCoords1[0]);
-        vertexStream.colorAddress     = _renderData.modelDesc.colorAddress + sourceMesh.firstVertex * sizeof(geometry.colors[0]);
+        vertexStream.positionAddress                  = _modelDesc.positionAddress + sourceMesh.firstVertex * sizeof(geometry.positions[0]);
+        vertexStream.normalAddress                    = _modelDesc.normalAddress + sourceMesh.firstVertex * sizeof(geometry.normals[0]);
+        vertexStream.tangentAddress                   = _modelDesc.tangentAddress + sourceMesh.firstVertex * sizeof(geometry.tangents[0]);
+        vertexStream.texCoord0Address                 = _modelDesc.texCoord0Address + sourceMesh.firstVertex * sizeof(geometry.texCoords0[0]);
+        vertexStream.texCoord1Address                 = _modelDesc.texCoord1Address + sourceMesh.firstVertex * sizeof(geometry.texCoords1[0]);
+        vertexStream.colorAddress                     = _modelDesc.colorAddress + sourceMesh.firstVertex * sizeof(geometry.colors[0]);
 
         ModelMeshInfo& meshInfo      = meshInfos[meshIndex];
         meshInfo.vertexStreamAddress = regionAddress(vertexStreamRegion) + meshIndex * sizeof(ModelVertexStreamInfo);
-        meshInfo.indexAddress        = _renderData.modelDesc.indexAddress + sourceMesh.firstIndex * sizeof(geometry.indices[0]);
+        meshInfo.indexAddress        = _modelDesc.indexAddress + sourceMesh.firstIndex * sizeof(geometry.indices[0]);
         meshInfo.indexCount          = sourceMesh.indexCount;
         meshInfo.materialIndex       = sourceMesh.materialIndex;
     }
 
-    _renderData.textures.clear();
-    _renderData.textures.resize(_loadedModel->textures.size());
+    _textures.clear();
+    _textures.resize(_loadedModel->textures.size());
     for (size_t textureIndex = 0; textureIndex < _loadedModel->textures.size(); ++textureIndex)
     {
         const auto& sourceTexture = _loadedModel->textures[textureIndex];
@@ -140,7 +158,7 @@ void Model::onLoadAsset()
             LOGW("Failed to upload model texture {%s}\n", sourceTexture.name.c_str());
             continue;
         }
-        _renderData.textures[textureIndex] = std::move(texture);
+        _textures[textureIndex] = std::move(texture);
     }
 
     std::vector<ModelTextureInfo> textureInfos(_loadedModel->textureInfos.size());
@@ -151,10 +169,9 @@ void Model::onLoadAsset()
         textureInfo.offset                             = sourceInfo.offset;
         textureInfo.scale                              = sourceInfo.scale;
         textureInfo.rotation                           = sourceInfo.rotation;
-        textureInfo.textureIndex = sourceInfo.textureIndex < _renderData.textures.size() && _renderData.textures[sourceInfo.textureIndex]
-                                       ? static_cast<int32_t>(sourceInfo.textureIndex)
-                                       : -1;
-        textureInfo.texCoord     = sourceInfo.texCoord > 1 ? 1 : sourceInfo.texCoord;
+        textureInfo.textureIndex =
+            sourceInfo.textureIndex < _textures.size() && _textures[sourceInfo.textureIndex] ? static_cast<int32_t>(sourceInfo.textureIndex) : -1;
+        textureInfo.texCoord = sourceInfo.texCoord > 1 ? 1 : sourceInfo.texCoord;
     }
 
     PlayResourceManager& uploader          = PlayResourceManager::Instance();
@@ -168,7 +185,7 @@ void Model::onLoadAsset()
     {
         if (region.size != 0)
         {
-            NVVK_CHECK(uploader.appendBuffer(*_renderData.assetBuffer, region.offset, region.size, data));
+            NVVK_CHECK(uploader.appendBuffer(*_assetBuffer, region.offset, region.size, data));
         }
     };
     appendRegion(positionRegion, geometry.positions.data());
@@ -180,6 +197,7 @@ void Model::onLoadAsset()
     appendRegion(indexRegion, geometry.indices.data());
     appendRegion(vertexStreamRegion, vertexStreams.data());
     appendRegion(meshInfoRegion, meshInfos.data());
+    appendRegion(drawableRegion, _drawableInfos.data());
     appendRegion(materialRegion, _loadedModel->materials.data());
     appendRegion(textureInfoRegion, textureInfos.data());
 
@@ -197,7 +215,7 @@ void Model::onLoadAsset()
     }
 
     // The geometry, mesh, material and texture-info blocks are now owned by
-    // the GPU buffer, and texture pixels are owned by _renderData.textures.
+    // the GPU buffer, and texture pixels are owned by _textures.
     // Keep the drawables and model bounds on the CPU for per-frame updates and
     // release the rest of the CPU-side model data.
     _drawables   = _loadedModel->drawables;

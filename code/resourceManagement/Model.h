@@ -26,17 +26,26 @@ public:
 
     const ModelBufferInfo& getBufferInfo() const
     {
-        return _renderData.modelDesc;
+        return _modelDesc;
     }
 
     Buffer* getAssetBuffer() const
     {
-        return _renderData.assetBuffer.get();
+        return _assetBuffer.get();
     }
 
     const std::vector<RefPtr<Texture>>& getTextures() const
     {
-        return _renderData.textures;
+        return _textures;
+    }
+
+    const std::vector<ModelDrawableInfo>& getDrawableInfos() const
+    {
+        return _drawableInfos;
+    }
+    uint64_t getDrawableAddress() const
+    {
+        return _drawableAddress;
     }
 
 protected:
@@ -47,13 +56,12 @@ protected:
     // straight into model space. Everything else in _loadedModel is released in
     // onLoadAsset once it has been uploaded to GPU buffers and textures.
     std::vector<vpgloader::ModelDrawable> _drawables;
+    std::vector<ModelDrawableInfo>        _drawableInfos;
     vpgloader::AABB                       _modelBounds;
-    struct RenderData
-    {
-        RefPtr<Buffer>               assetBuffer;
-        std::vector<RefPtr<Texture>> textures;
-        ModelBufferInfo              modelDesc{};
-    } _renderData;
+    RefPtr<Buffer>                        _assetBuffer;
+    std::vector<RefPtr<Texture>>          _textures;
+    ModelBufferInfo                       _modelDesc{};
+    uint64_t                              _drawableAddress = 0;
 
 private:
     // clang-format off

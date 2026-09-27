@@ -5,9 +5,17 @@
 namespace Play
 {
 
-void Entity::restoreComponentOwners()
+void Entity::enterScene(std::weak_ptr<Scene> scene)
 {
+    _scene = scene;
     for (auto& component : _components) component->_entity = weak_from_this();
+    for (auto& component : _components) component->onEnterScene();
+}
+
+void Entity::exitScene()
+{
+    for (auto& component : _components) component->onExitScene();
+    _scene.reset();
 }
 
 void Entity::load()
@@ -57,6 +65,7 @@ void Entity::addComponent(std::shared_ptr<Component> component)
     }
     _components.push_back(component);
     component->_entity = weak_from_this();
+    if (!_scene.expired()) component->onEnterScene();
 }
 
 void Entity::setFather(std::weak_ptr<Entity> father)

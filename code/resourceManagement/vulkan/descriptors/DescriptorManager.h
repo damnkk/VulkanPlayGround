@@ -35,7 +35,7 @@ public:
     DescriptorSetBindings();
     explicit DescriptorSetBindings(DescriptorEnum setSlot);
     ~DescriptorSetBindings();
-    void reset(DescriptorEnum setSlot = DescriptorEnum::eCount);
+    void                   reset(DescriptorEnum setSlot = DescriptorEnum::eCount);
     DescriptorSetBindings& addBinding(uint32_t bindingIdx, uint32_t descriptorCount, VkDescriptorType descriptorType,
                                       VkShaderStageFlags shaderStageFlags);
     DescriptorSetBindings& addBinding(const BindInfo& bindingInfo);
@@ -148,14 +148,13 @@ public:
     void updateDescriptor(uint32_t setIdx, uint32_t bindingIdx, VkDescriptorType descriptorType, uint32_t descriptorCount,
                           nvvk::AccelerationStructure* accels);
 
-
 protected:
     size_t getDescriptorSize(VkDescriptorType descriptorType);
 
 private:
-    RefPtr<Buffer>                                                                                      _descBuffer;
-    VkDevice                                                                                            _device;
-    VkPhysicalDevice                                                                                    _physicalDevice;
+    RefPtr<Buffer>                                                                                  _descBuffer;
+    VkDevice                                                                                        _device;
+    VkPhysicalDevice                                                                                _physicalDevice;
     VkPhysicalDeviceDescriptorBufferPropertiesEXT                                                   _descriptorBufferProperties;
     std::array<std::unordered_map<uint32_t, size_t>, static_cast<uint32_t>(DescriptorEnum::eCount)> _descriptorOffsetInfo;
 };
@@ -177,9 +176,10 @@ public:
     {
         return _globalDescriptorSet;
     }
-    CommonDescriptorSet getSceneDescriptorSet()
+    CommonDescriptorSet getSceneDescriptorSet();
+    uint32_t            getSceneDescriptorSetCount() const
     {
-        return _sceneDescriptorSet;
+        return static_cast<uint32_t>(_sceneDescriptorSets.size());
     }
     CommonDescriptorSet getFrameDescriptorSet()
     {
@@ -221,9 +221,10 @@ private:
     CommonDescriptorSet                                      _globalDescriptorSet  = {VK_NULL_HANDLE, VK_NULL_HANDLE};
     VkDescriptorPool                                         _globalDescriptorPool = VK_NULL_HANDLE;
     CommonDescriptorSet                                      _sceneDescriptorSet   = {VK_NULL_HANDLE, VK_NULL_HANDLE};
-    VkDescriptorPool                                         _sceneDescriptorPool  = VK_NULL_HANDLE;
-    CommonDescriptorSet                                      _frameDescriptorSet   = {VK_NULL_HANDLE, VK_NULL_HANDLE};
-    VkDescriptorPool                                         _frameDescriptorPool  = VK_NULL_HANDLE;
+    std::vector<VkDescriptorSet>                             _sceneDescriptorSets;
+    VkDescriptorPool                                         _sceneDescriptorPool = VK_NULL_HANDLE;
+    CommonDescriptorSet                                      _frameDescriptorSet  = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    VkDescriptorPool                                         _frameDescriptorPool = VK_NULL_HANDLE;
 };
 
 } // namespace Play

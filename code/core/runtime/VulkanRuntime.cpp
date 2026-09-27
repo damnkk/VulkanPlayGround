@@ -517,6 +517,9 @@ bool VulkanRuntime::createTransientCommandPool()
 
 bool VulkanRuntime::createFrameSubmission(uint32_t frameCount)
 {
+    // Swapchain recreation has waited for the graphics queue, including scene uploads.
+    // Retire staging references before destroying the old frame timeline semaphores.
+    if (!_frames.empty()) Play::PlayResourceManager::Instance().releaseStaging();
     destroyFrameSubmission();
 
     _frames.resize(frameCount);

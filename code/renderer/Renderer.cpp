@@ -38,8 +38,8 @@ Renderer::Renderer()
 
     for (int i = 0; i < _cameraUniformData.size(); ++i)
     {
-        _cameraUniformData[i] = RefPtr<Buffer>(new Buffer("cameraInfoBuf" + std::to_string(i), VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT, sizeof(CameraData),
-                                               VkMemoryPropertyFlagBits::VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT));
+        _cameraUniformData[i] = RefPtr<Buffer>(new Buffer("cameraInfoBuf" + std::to_string(i), VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT,
+                                                          sizeof(CameraData), VkMemoryPropertyFlagBits::VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT));
     }
 }
 
@@ -86,11 +86,15 @@ void Renderer::OnResize(int width, int height)
 
     for (auto& camera : _cameras)
     {
-        camera->onResize({(uint32_t)width, (uint32_t)height});
+        camera->onResize({(uint32_t) width, (uint32_t) height});
     }
 
     _rdgBuilder.reset();
     _rdgBuilder = std::make_unique<RDG::RDGBuilder>();
+
+    _rdgBuilder->createComputePass("GpuSceneUpload")
+        .execute([](RDG::PassNode*, RDG::RenderContext& context) { vkDriver->getSceneManager()->getGpuScene()->cmdUpload(context._currCmdBuffer); })
+        .finish();
 
     if (_passes.empty())
     {

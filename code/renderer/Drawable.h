@@ -1,12 +1,23 @@
-#ifndef MESH_COLLECTOR_H
-#define MESH_COLLECTOR_H
+#ifndef DRAWABLE_H
+#define DRAWABLE_H
 #include <cstdint>
 #include <vector>
 namespace Play
 {
 class Renderer;
+class MaterialInstance;
+
+struct DrawCommand
+{
+    uint32_t          drawID              = ~0U;
+    uint32_t          modelID             = ~0U;
+    uint32_t          drawableID          = ~0U;
+    MaterialInstance* materialInstanceRef = nullptr;
+};
 struct DrawBatch
 {
+    MaterialInstance*        materialInstanceRef = nullptr;
+    std::vector<DrawCommand> commands;
 };
 struct Drawable
 {
@@ -17,18 +28,6 @@ struct Drawable
     std::vector<uint32_t> drawItemIDs;
 };
 
-// one submit class, recreate per frame
-class MeshCollector
-{
-public:
-    MeshCollector(Renderer* render) : _renderer(render) {};
-    ~MeshCollector() = default;
-    std::vector<Drawable>& collectMeshBatches();
-
-private:
-    std::vector<Drawable> _meshBatches;
-    Renderer*             _renderer = nullptr;
-};
 } // namespace Play
 
-#endif // MESH_COLLECTOR_H
+#endif // DRAWABLE_H
