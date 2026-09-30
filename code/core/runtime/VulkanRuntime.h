@@ -15,6 +15,8 @@
 namespace Play
 {
 class DescriptorSetCache;
+class Material;
+class MaterialInstance;
 class FrameBufferCache;
 class PipelineCacheManager;
 class RefCounted;
@@ -225,6 +227,11 @@ public:
         return _descriptorSetCache;
     }
 
+    const std::shared_ptr<Play::MaterialInstance>& getDefaultGBufferMaterialInstance() const
+    {
+        return _defaultGBufferMaterialInstance;
+    }
+
     Play::PipelineCacheManager* getPipelineCacheManager()
     {
         return _pipelineCacheManager;
@@ -316,18 +323,20 @@ private:
     std::mutex                         _registeredObjectMutex;
     std::mutex                         _pendingDestroyMutex;
 
-    std::vector<FrameData>               _frames{};
-    std::vector<DeferredDestroyQueue>    _deferredDestroyQueues{};
-    std::vector<std::function<void()>>   _pendingDeferredDestroyTasks{};
-    std::vector<Play::RefCounted*>       _registeredObjects{};
-    std::vector<VkSemaphoreSubmitInfo>   _pendingFrameWaitSemaphores{};
-    std::unique_ptr<Play::RenderSession> _renderSession{};
-    std::unique_ptr<Play::SceneManager>  _sceneManager{};
-    nvvk::DescriptorBindings             _globalDescriptorBindings{};
-    nvvk::DescriptorBindings             _frameDescriptorBindings{};
-    Play::DescriptorSetCache*            _descriptorSetCache = nullptr;
-    Play::RenderPassCache*               _renderPassCache    = nullptr;
-    Play::FrameBufferCache*              _frameBufferCache   = nullptr;
+    std::vector<FrameData>                  _frames{};
+    std::vector<DeferredDestroyQueue>       _deferredDestroyQueues{};
+    std::vector<std::function<void()>>      _pendingDeferredDestroyTasks{};
+    std::vector<Play::RefCounted*>          _registeredObjects{};
+    std::vector<VkSemaphoreSubmitInfo>      _pendingFrameWaitSemaphores{};
+    std::unique_ptr<Play::RenderSession>    _renderSession{};
+    std::unique_ptr<Play::SceneManager>     _sceneManager{};
+    nvvk::DescriptorBindings                _globalDescriptorBindings{};
+    nvvk::DescriptorBindings                _frameDescriptorBindings{};
+    Play::DescriptorSetCache*               _descriptorSetCache = nullptr;
+    std::shared_ptr<Play::Material>         _defaultGBufferMaterial;
+    std::shared_ptr<Play::MaterialInstance> _defaultGBufferMaterialInstance;
+    Play::RenderPassCache*                  _renderPassCache  = nullptr;
+    Play::FrameBufferCache*                 _frameBufferCache = nullptr;
 
     std::unique_ptr<Play::AssetManager> _assetManager = nullptr;
     FrameStats                          _frameStats{};

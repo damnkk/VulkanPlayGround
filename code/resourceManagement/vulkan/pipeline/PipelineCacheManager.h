@@ -143,7 +143,6 @@ public:
     PipelineKey pipelineKey = ~0U;
 };
 
-
 struct GraphicsShaderSet
 {
     ShaderID vertexModuleID = ~0U;
@@ -164,7 +163,7 @@ struct RenderTargetState
     std::vector<VkFormat> colorFormats;
     VkFormat              depthAttachmentFormat   = VK_FORMAT_UNDEFINED;
     VkFormat              stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
-    VkSampleCountFlagBits sampleCount              = VK_SAMPLE_COUNT_1_BIT;
+    VkSampleCountFlagBits sampleCount             = VK_SAMPLE_COUNT_1_BIT;
 
     PipelineKey getPipelineKey() const;
 };
@@ -172,29 +171,27 @@ struct RenderTargetState
 class PipelineLayout
 {
 public:
-    VkPipelineLayout vkHandle = VK_NULL_HANDLE;
-    PipelineKey      hash     = 0;
-    uint32_t         setCount = 0;
-    std::array<VkDescriptorSetLayout, static_cast<size_t>(DescriptorEnum::eCount)> setLayouts = {VK_NULL_HANDLE};
-    VkPushConstantRange pushConstantRange = {};
-    bool                hasPushConstant   = false;
+    VkPipelineLayout                                                               vkHandle          = VK_NULL_HANDLE;
+    PipelineKey                                                                    hash              = 0;
+    uint32_t                                                                       setCount          = 0;
+    std::array<VkDescriptorSetLayout, static_cast<size_t>(DescriptorEnum::eCount)> setLayouts        = {VK_NULL_HANDLE};
+    VkPushConstantRange                                                            pushConstantRange = {};
+    bool                                                                           hasPushConstant   = false;
 };
 
 class PipelineLayoutDesc
 {
 public:
     PipelineLayoutDesc& setDescriptorSetLayout(DescriptorEnum setSlot, VkDescriptorSetLayout layout);
-    PipelineLayoutDesc& setDescriptorSet(DescriptorEnum setSlot, DescriptorSetBindings& descriptorSet);
-    PipelineLayoutDesc& setMaterialDescriptorSet(DescriptorSetBindings& descriptorSet);
     PipelineLayoutDesc& setPushConstantRange(const VkPushConstantRange& range);
 
     template <typename T>
     PipelineLayoutDesc& setPushConstant(VkShaderStageFlags stage = VK_SHADER_STAGE_ALL)
     {
         VkPushConstantRange range = {};
-        range.stageFlags         = stage;
-        range.offset             = 0;
-        range.size               = static_cast<uint32_t>(sizeof(T));
+        range.stageFlags          = stage;
+        range.offset              = 0;
+        range.size                = static_cast<uint32_t>(sizeof(T));
         return setPushConstantRange(range);
     }
 
@@ -217,9 +214,9 @@ public:
     }
 
 private:
-    std::array<VkDescriptorSetLayout, static_cast<size_t>(DescriptorEnum::eCount)> _setLayouts = {VK_NULL_HANDLE};
-    VkPushConstantRange _pushConstantRange = {};
-    bool                _hasPushConstantRange = false;
+    std::array<VkDescriptorSetLayout, static_cast<size_t>(DescriptorEnum::eCount)> _setLayouts           = {VK_NULL_HANDLE};
+    VkPushConstantRange                                                            _pushConstantRange    = {};
+    bool                                                                           _hasPushConstantRange = false;
 };
 
 class PipelineLayoutCache
@@ -232,32 +229,31 @@ private:
     VkDescriptorSetLayout getEmptyDescriptorSetLayout();
 
     std::unordered_map<PipelineKey, std::unique_ptr<PipelineLayout>> _pipelineLayoutMap;
-    VkDescriptorSetLayout _emptyDescriptorSetLayout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout                                            _emptyDescriptorSetLayout = VK_NULL_HANDLE;
 };
 
 class GraphicsPipelineStateInitializer
 {
 public:
-    GraphicsShaderSet  shaderSet;
-    PSOState           psoState;
-    RenderTargetState  renderTargetState;
-    DescriptorSetBindings* materialDescriptorSet = nullptr;
-    PipelineLayout*         pipelineLayout        = nullptr;
-    VkPushConstantRange     pushConstantRange     = {};
-    bool                    hasPushConstantRange  = false;
+    GraphicsShaderSet   shaderSet;
+    PSOState            psoState;
+    RenderTargetState   renderTargetState;
+    CommonDescriptorSet materialDescriptorSet;
+    PipelineLayout*     pipelineLayout       = nullptr;
+    VkPushConstantRange pushConstantRange    = {};
+    bool                hasPushConstantRange = false;
 
     GraphicsPipelineStateInitializer& setShader(ShaderID vertexModuleID, ShaderID fragModuleID);
     GraphicsPipelineStateInitializer& setMeshShader(ShaderID meshModuleID, ShaderID fragModuleID, ShaderID taskModuleID = ~0U);
-    GraphicsPipelineStateInitializer& setMaterialDescriptorSet(DescriptorSetBindings& descriptorSet);
     GraphicsPipelineStateInitializer& setPushConstantRange(const VkPushConstantRange& range);
 
     template <typename T>
     GraphicsPipelineStateInitializer& setPushConstant(VkShaderStageFlags stage = VK_SHADER_STAGE_ALL)
     {
         VkPushConstantRange range = {};
-        range.stageFlags         = stage;
-        range.offset             = 0;
-        range.size               = static_cast<uint32_t>(sizeof(T));
+        range.stageFlags          = stage;
+        range.offset              = 0;
+        range.size                = static_cast<uint32_t>(sizeof(T));
         return setPushConstantRange(range);
     }
 
@@ -267,23 +263,22 @@ public:
 class ComputePipelineStateInitializer
 {
 public:
-    ShaderID computeModuleID = ~0U;
-    DescriptorSetBindings* materialDescriptorSet = nullptr;
-    PipelineLayout*         pipelineLayout        = nullptr;
-    VkPushConstantRange     pushConstantRange     = {};
-    bool                    hasPushConstantRange  = false;
+    ShaderID            computeModuleID = ~0U;
+    CommonDescriptorSet materialDescriptorSet;
+    PipelineLayout*     pipelineLayout       = nullptr;
+    VkPushConstantRange pushConstantRange    = {};
+    bool                hasPushConstantRange = false;
 
     ComputePipelineStateInitializer& setShader(ShaderID moduleID);
-    ComputePipelineStateInitializer& setMaterialDescriptorSet(DescriptorSetBindings& descriptorSet);
     ComputePipelineStateInitializer& setPushConstantRange(const VkPushConstantRange& range);
 
     template <typename T>
     ComputePipelineStateInitializer& setPushConstant(VkShaderStageFlags stage = VK_SHADER_STAGE_COMPUTE_BIT)
     {
         VkPushConstantRange range = {};
-        range.stageFlags         = stage;
-        range.offset             = 0;
-        range.size               = static_cast<uint32_t>(sizeof(T));
+        range.stageFlags          = stage;
+        range.offset              = 0;
+        range.size                = static_cast<uint32_t>(sizeof(T));
         return setPushConstantRange(range);
     }
 
@@ -303,10 +298,10 @@ class PipelineCacheManager
 public:
     PipelineCacheManager();
     virtual ~PipelineCacheManager();
-    VkPipeline getOrCreateGraphicsPipeline(GraphicsPipelineStateInitializer& initializer);
-    VkPipeline getOrCreateComputePipeline(ComputePipelineStateInitializer& initializer);
+    VkPipeline      getOrCreateGraphicsPipeline(GraphicsPipelineStateInitializer& initializer);
+    VkPipeline      getOrCreateComputePipeline(ComputePipelineStateInitializer& initializer);
     PipelineLayout* getOrCreatePipelineLayout(const PipelineLayoutDesc& desc);
-    VkPipeline getOrCreateRTPipeline(RTPipelineState& rtState);
+    VkPipeline      getOrCreateRTPipeline(RTPipelineState& rtState);
     VkPipeline getOrCreateMeshPipeline(PSOState& psoState, RenderPass* renderPass, ShaderID mShaderID, ShaderID fShaderID, ShaderID tShaderID = ~0U);
 
 private:

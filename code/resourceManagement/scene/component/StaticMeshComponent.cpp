@@ -32,8 +32,14 @@ void StaticMeshComponent::setMaterialInstance(uint32_t drawableID, MaterialInsta
     if (_materialArray.at(drawableID) == material) return;
     _materialArray.at(drawableID) = material;
     if (_drawCommands.empty()) return;
-    _drawCommands.at(drawableID).materialInstanceRef = material;
+    _drawCommands.at(drawableID).materialInstanceRef = getMaterialInstance(drawableID);
     if (auto scene = _gpuScene.lock()) scene->updateDrawCommands(_drawCommands);
+}
+
+MaterialInstance* StaticMeshComponent::getMaterialInstance(uint32_t drawableID) const
+{
+    if (auto* overrideMaterial = _materialArray.at(drawableID)) return overrideMaterial;
+    return _model->getDefaultMaterialInstance(_model->getDrawableInfos().at(drawableID).materialIndex);
 }
 
 void StaticMeshComponent::setCastShadow(bool value)
@@ -223,7 +229,7 @@ void StaticMeshComponent::registerModel()
     _drawCommands.resize(count);
     for (uint32_t drawableID = 0; drawableID < count; ++drawableID)
     {
-        _drawCommands[drawableID] = {_drawRange.offset + drawableID, _modelID, drawableID, _materialArray[drawableID]};
+        _drawCommands[drawableID] = {_drawRange.offset + drawableID, _modelID, drawableID, getMaterialInstance(drawableID)};
     }
     scene->updateDrawCommands(_drawCommands);
     _drawsDirty = true;

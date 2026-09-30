@@ -5,7 +5,7 @@ namespace Play
 namespace
 {
 constexpr DescriptorEnum MATERIAL_DESCRIPTOR_SET = DescriptorEnum::eDrawObjectDescriptorSet;
-uint32_t getDescriptorCount(const SpvReflectDescriptorBinding& binding)
+uint32_t                 getDescriptorCount(const SpvReflectDescriptorBinding& binding)
 {
     if (binding.array.dims_count == 0)
     {
@@ -69,8 +69,7 @@ MaterialParameterKind getParameterKind(const SpvReflectBlockVariable& variable)
 }
 
 void collectBlockParameters(MaterialParameterDeclarationMap& declarations, MaterialParamMap& defaultParams,
-                            const MaterialDescriptorDeclaration& descriptor, const SpvReflectBlockVariable& variable,
-                            const std::string& prefix)
+                            const MaterialDescriptorDeclaration& descriptor, const SpvReflectBlockVariable& variable, const std::string& prefix)
 {
     for (uint32_t index = 0; index < variable.member_count; ++index)
     {
@@ -85,11 +84,11 @@ void collectBlockParameters(MaterialParameterDeclarationMap& declarations, Mater
         }
 
         MaterialParameterDeclaration declaration;
-        declaration.name           = paramName;
-        declaration.kind           = getParameterKind(member);
-        declaration.descriptorName = descriptor.name;
-        declaration.byteOffset     = member.absolute_offset;
-        declaration.byteSize       = member.size;
+        declaration.name               = paramName;
+        declaration.kind               = getParameterKind(member);
+        declaration.descriptorName     = descriptor.name;
+        declaration.byteOffset         = member.absolute_offset;
+        declaration.byteSize           = member.size;
         declarations[declaration.name] = declaration;
 
         if (defaultParams.find(declaration.name) == defaultParams.end())
@@ -122,8 +121,8 @@ MaterialParameterKind getDescriptorParameterKind(VkDescriptorType descriptorType
 
 bool isScalarValue(const rttr::variant& value)
 {
-    return value.is_type<bool>() || value.is_type<int>() || value.is_type<uint32_t>() || value.is_type<int64_t>() ||
-           value.is_type<uint64_t>() || value.is_type<float>() || value.is_type<double>();
+    return value.is_type<bool>() || value.is_type<int>() || value.is_type<uint32_t>() || value.is_type<int64_t>() || value.is_type<uint64_t>() ||
+           value.is_type<float>() || value.is_type<double>();
 }
 
 bool isBufferResourceValue(const rttr::variant& value)
@@ -136,8 +135,7 @@ bool isImageResourceValue(const rttr::variant& value)
     return value.is_type<Texture*>() || value.is_type<std::vector<Texture*>>();
 }
 
-bool isParameterValueCompatible(const MaterialParameterDeclaration& declaration, const rttr::variant& value,
-                                const rttr::variant* materialValue)
+bool isParameterValueCompatible(const MaterialParameterDeclaration& declaration, const rttr::variant& value, const rttr::variant* materialValue)
 {
     if (!value.is_valid()) return true;
 
@@ -168,7 +166,7 @@ bool applyBufferResource(DescriptorSetBindings& descriptorBindings, const Materi
     if (resource.is_type<Buffer*>())
     {
         Buffer* buffer = resource.get_value<Buffer*>();
-        if (!buffer) return false;
+        if (!buffer || buffer->buffer == VK_NULL_HANDLE || declaration.descriptorCount != 1) return false;
         descriptorBindings.setDescInfo(declaration.bindingIdx, *buffer);
         return true;
     }
@@ -180,7 +178,7 @@ bool applyBufferResource(DescriptorSetBindings& descriptorBindings, const Materi
         std::vector<VkDescriptorBufferInfo> bufferInfos(declaration.descriptorCount);
         for (uint32_t index = 0; index < declaration.descriptorCount; ++index)
         {
-            if (!values[index]) return false;
+            if (!values[index] || values[index]->buffer == VK_NULL_HANDLE) return false;
             bufferInfos[index].buffer = values[index]->buffer;
             bufferInfos[index].offset = 0;
             bufferInfos[index].range  = values[index]->BufferRange();
@@ -194,10 +192,19 @@ bool applyBufferResource(DescriptorSetBindings& descriptorBindings, const Materi
 
 bool applyImageResource(DescriptorSetBindings& descriptorBindings, const MaterialDescriptorDeclaration& declaration, const rttr::variant& resource)
 {
+    auto validTexture = [&](const Texture* texture)
+    {
+        if (!texture) return false;
+        if (declaration.descriptorType != VK_DESCRIPTOR_TYPE_SAMPLER && texture->descriptor.imageView == VK_NULL_HANDLE) return false;
+        if ((declaration.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLER || declaration.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) &&
+            texture->descriptor.sampler == VK_NULL_HANDLE)
+            return false;
+        return true;
+    };
     if (resource.is_type<Texture*>())
     {
         Texture* texture = resource.get_value<Texture*>();
-        if (!texture) return false;
+        if (!validTexture(texture) || declaration.descriptorCount != 1) return false;
         descriptorBindings.setDescInfo(declaration.bindingIdx, *texture);
         return true;
     }
@@ -209,7 +216,7 @@ bool applyImageResource(DescriptorSetBindings& descriptorBindings, const Materia
         std::vector<VkDescriptorImageInfo> imageInfos(declaration.descriptorCount);
         for (uint32_t index = 0; index < declaration.descriptorCount; ++index)
         {
-            if (!values[index]) return false;
+            if (!validTexture(values[index])) return false;
             imageInfos[index] = values[index]->descriptor;
         }
         descriptorBindings.setDescInfo(declaration.bindingIdx, imageInfos.data(), declaration.descriptorCount);
@@ -355,73 +362,25 @@ MaterialParamValidationResult MaterialInstance::validateOverrideParamMap() const
     return result;
 }
 
-DescriptorSetBindings& MaterialInstance::getDescriptorSetState(bool requireBoundResources)
+bool MaterialInstance::buildDescriptorBindings(DescriptorSetBindings& bindings) const
 {
-    if (isOutOfDate())
+    bindings.reset();
+    if (!_material) return false;
+    for (const auto& [name, binding] : _descriptorBindings)
     {
-        syncFromMaterial(true);
+        const auto& declaration = binding.declaration;
+        if (declaration.descriptorType == VK_DESCRIPTOR_TYPE_MAX_ENUM) return false;
+        bindings.addBinding(declaration.bindingIdx, declaration.descriptorCount, declaration.descriptorType, declaration.shaderStageFlags);
     }
-    if (_descriptorSetStateVersion != _sourceMaterialVersion)
+    bindings.finalizeBindings();
+    for (const auto& [name, binding] : _descriptorBindings)
     {
-        _descriptorSetState.reset(MATERIAL_DESCRIPTOR_SET);
-        _descriptorSetStateVersion = _sourceMaterialVersion;
+        const auto&          declaration = binding.declaration;
+        const rttr::variant* resource    = getParam(declaration.name);
+        if ((!resource || !resource->is_valid()) && binding.isBound()) resource = &binding.resource;
+        if (!resource || !resource->is_valid() || !applyDescriptorResource(bindings, declaration, *resource)) return false;
     }
-    buildDescriptorSetState(_descriptorSetState, requireBoundResources);
-    return _descriptorSetState;
-}
-
-bool MaterialInstance::buildDescriptorSetState(DescriptorSetBindings& descriptorBindings, bool requireBoundResources) const
-{
-    descriptorBindings.setDescriptorSetSlot(MATERIAL_DESCRIPTOR_SET);
-    return buildDrawObjectDescriptorBindings(descriptorBindings, requireBoundResources);
-}
-
-bool MaterialInstance::buildDrawObjectDescriptorBindings(DescriptorSetBindings& descriptorBindings, bool requireBoundResources) const
-{
-    bool supportedLayout     = true;
-    bool resourcesComplete   = true;
-    bool boundResourcesValid = true;
-
-    for (const auto& pair : _descriptorBindings)
-    {
-        const MaterialDescriptorDeclaration& declaration = pair.second.declaration;
-        if (declaration.descriptorType == VK_DESCRIPTOR_TYPE_MAX_ENUM)
-        {
-            supportedLayout = false;
-            continue;
-        }
-
-        descriptorBindings.addBinding(declaration.bindingIdx, declaration.descriptorCount, declaration.descriptorType,
-                                      declaration.shaderStageFlags);
-    }
-
-    descriptorBindings.finalizeLayout();
-
-    for (const auto& pair : _descriptorBindings)
-    {
-        const MaterialDescriptorBinding& binding     = pair.second;
-        const MaterialDescriptorDeclaration& declaration = binding.declaration;
-        if (declaration.descriptorType == VK_DESCRIPTOR_TYPE_MAX_ENUM) continue;
-
-        const rttr::variant* resource = getParam(declaration.name);
-        if ((!resource || !resource->is_valid()) && binding.isBound())
-        {
-            resource = &binding.resource;
-        }
-
-        if (!resource || !resource->is_valid())
-        {
-            resourcesComplete = false;
-            continue;
-        }
-
-        if (!applyDescriptorResource(descriptorBindings, declaration, *resource))
-        {
-            boundResourcesValid = false;
-        }
-    }
-
-    return supportedLayout && boundResourcesValid && (!requireBoundResources || resourcesComplete);
+    return true;
 }
 
 Material::~Material()
@@ -504,12 +463,12 @@ bool Material::reflectDrawObjectDescriptorSet()
         if (!shaderModule || shaderModule->_spvCode.empty()) continue;
 
         SpvReflectShaderModule reflectModule = {};
-        const size_t spirvSize = shaderModule->_spvCode.size() * sizeof(uint32_t);
-        SpvReflectResult result = spvReflectCreateShaderModule(spirvSize, shaderModule->_spvCode.data(), &reflectModule);
+        const size_t           spirvSize     = shaderModule->_spvCode.size() * sizeof(uint32_t);
+        SpvReflectResult       result        = spvReflectCreateShaderModule(spirvSize, shaderModule->_spvCode.data(), &reflectModule);
         if (result != SPV_REFLECT_RESULT_SUCCESS) continue;
 
         uint32_t bindingCount = 0;
-        result = spvReflectEnumerateDescriptorBindings(&reflectModule, &bindingCount, nullptr);
+        result                = spvReflectEnumerateDescriptorBindings(&reflectModule, &bindingCount, nullptr);
         if (result == SPV_REFLECT_RESULT_SUCCESS && bindingCount > 0)
         {
             std::vector<SpvReflectDescriptorBinding*> bindings(bindingCount);
@@ -522,9 +481,8 @@ bool Material::reflectDrawObjectDescriptorSet()
                     if (!reflectedBinding || reflectedBinding->set != targetSet) continue;
                     // Reflect the declared material interface, independent of whether entry-point code currently reads it.
 
-                    const std::string reflectedName = getDescriptorName(*reflectedBinding);
-                    std::string declarationName =
-                        findDescriptorDeclarationName(_descriptorDeclarations, reflectedBinding->binding);
+                    const std::string reflectedName   = getDescriptorName(*reflectedBinding);
+                    std::string       declarationName = findDescriptorDeclarationName(_descriptorDeclarations, reflectedBinding->binding);
                     if (declarationName.empty())
                     {
                         declarationName = reflectedName;
@@ -553,9 +511,9 @@ bool Material::reflectDrawObjectDescriptorSet()
                     if (parameterKind != MaterialParameterKind::eUnknown)
                     {
                         MaterialParameterDeclaration parameterDeclaration;
-                        parameterDeclaration.name           = declaration.name;
-                        parameterDeclaration.kind           = parameterKind;
-                        parameterDeclaration.descriptorName = declaration.name;
+                        parameterDeclaration.name                         = declaration.name;
+                        parameterDeclaration.kind                         = parameterKind;
+                        parameterDeclaration.descriptorName               = declaration.name;
                         _parameterDeclarations[parameterDeclaration.name] = parameterDeclaration;
                         if (_paramMap.find(parameterDeclaration.name) == _paramMap.end())
                         {

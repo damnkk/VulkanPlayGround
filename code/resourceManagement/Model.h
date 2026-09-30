@@ -7,6 +7,7 @@
 #include "resourceManagement/vulkan/resources/Resource.h"
 namespace Play
 {
+class MaterialInstance;
 
 class Model : public Asset, public AssetBinder, public std::enable_shared_from_this<Model>
 {
@@ -48,6 +49,11 @@ public:
         return _drawableAddress;
     }
 
+    MaterialInstance* getDefaultMaterialInstance(uint32_t materialIndex) const
+    {
+        return _materialInstances.at(materialIndex).get();
+    }
+
 protected:
     vpgloader::ModelHandle _loadedModel;
     // CPU-side drawables and model bounds, kept after the GPU upload for
@@ -55,13 +61,14 @@ protected:
     // import time, so a drawable's modelFromMesh maps its mesh-local vertices
     // straight into model space. Everything else in _loadedModel is released in
     // onLoadAsset once it has been uploaded to GPU buffers and textures.
-    std::vector<vpgloader::ModelDrawable> _drawables;
-    std::vector<ModelDrawableInfo>        _drawableInfos;
-    vpgloader::AABB                       _modelBounds;
-    RefPtr<Buffer>                        _assetBuffer;
-    std::vector<RefPtr<Texture>>          _textures;
-    ModelBufferInfo                       _modelDesc{};
-    uint64_t                              _drawableAddress = 0;
+    std::vector<vpgloader::ModelDrawable>          _drawables;
+    std::vector<ModelDrawableInfo>                 _drawableInfos;
+    vpgloader::AABB                                _modelBounds;
+    RefPtr<Buffer>                                 _assetBuffer;
+    std::vector<RefPtr<Texture>>                   _textures;
+    ModelBufferInfo                                _modelDesc{};
+    uint64_t                                       _drawableAddress = 0;
+    std::vector<std::shared_ptr<MaterialInstance>> _materialInstances;
 
 private:
     // clang-format off
