@@ -54,7 +54,7 @@ struct RDGBufferState
 class PassNode : public Node
 {
 public:
-    PassNode(size_t id, std::string name, NodeType type) : Node(id, type), _name(std::move(name)), _descBindings(DescriptorEnum::ePerPassDescriptorSet) {}
+    PassNode(size_t id, std::string name, NodeType type) : Node(id, type), _name(std::move(name)) {}
     ~PassNode() override;
 
     void setFunc(std::function<void(PassNode* passNode, RenderContext& context)> func)
@@ -245,8 +245,7 @@ public:
         return readTexture(binding, texture, stage, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, queueFamilyIndex);
     }
 
-    Derived& sampledRead(uint32_t binding, RDGTextureRef texture, VkPipelineStageFlagBits2 stage,
-                         uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED)
+    Derived& sampledRead(uint32_t binding, RDGTextureRef texture, VkPipelineStageFlagBits2 stage, uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED)
     {
         return readTexture(binding, texture, stage, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, queueFamilyIndex);
     }
@@ -296,7 +295,8 @@ public:
         return addBufferState(buffer, accessInfo);
     }
 
-    Derived& storageWrite(uint32_t binding, RDGTextureRef texture, VkPipelineStageFlagBits2 stage, uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED)
+    Derived& storageWrite(uint32_t binding, RDGTextureRef texture, VkPipelineStageFlagBits2 stage,
+                          uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED)
     {
         TextureSubresourceAccessInfo subResource;
         TextureAccessInfo&           accessInfo = subResource.emplace_back();

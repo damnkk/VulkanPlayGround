@@ -214,6 +214,8 @@ void Model::onLoadAsset()
         vkDriver->submitAndWaitTempCmdBuffer(graphicsCmd);
     }
 
+    _materialInstances.assign(_loadedModel->materials.size(), vkDriver->getDefaultGBufferMaterialInstance());
+
     // The geometry, mesh, material and texture-info blocks are now owned by
     // the GPU buffer, and texture pixels are owned by _textures.
     // Keep the drawables and model bounds on the CPU for per-frame updates and

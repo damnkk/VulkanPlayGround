@@ -22,11 +22,12 @@ public:
     ~StaticMeshComponent() override;
 
     // Model, materials and rendering properties.
-    void     setModel(ModelRef model);
-    ModelRef getModel() const;
-    void     setMaterialInstance(uint32_t drawableID, MaterialInstance* material);
-    void     setCastShadow(bool value);
-    bool     getCastShadow() const;
+    void              setModel(ModelRef model);
+    ModelRef          getModel() const;
+    void              setMaterialInstance(uint32_t drawableID, MaterialInstance* material);
+    MaterialInstance* getMaterialInstance(uint32_t drawableID) const;
+    void              setCastShadow(bool value);
+    bool              getCastShadow() const;
 
     // Instance data.
     void     setInstanceCount(int32_t count);

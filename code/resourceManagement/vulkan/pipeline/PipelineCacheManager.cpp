@@ -193,7 +193,6 @@ PipelineKey PSOState::getPipelineKey()
     return key;
 }
 
-
 PipelineKey GraphicsShaderSet::getShaderKey() const
 {
     PipelineKey key = 0;
@@ -224,17 +223,6 @@ PipelineLayoutDesc& PipelineLayoutDesc::setDescriptorSetLayout(DescriptorEnum se
     return *this;
 }
 
-PipelineLayoutDesc& PipelineLayoutDesc::setDescriptorSet(DescriptorEnum setSlot, DescriptorSetBindings& descriptorSet)
-{
-    descriptorSet.setDescriptorSetSlot(setSlot);
-    return setDescriptorSetLayout(setSlot, descriptorSet.finalizeLayout());
-}
-
-PipelineLayoutDesc& PipelineLayoutDesc::setMaterialDescriptorSet(DescriptorSetBindings& descriptorSet)
-{
-    return setDescriptorSet(DescriptorEnum::eDrawObjectDescriptorSet, descriptorSet);
-}
-
 PipelineLayoutDesc& PipelineLayoutDesc::setPushConstantRange(const VkPushConstantRange& range)
 {
     _pushConstantRange    = range;
@@ -257,7 +245,7 @@ uint32_t PipelineLayoutDesc::getSetLayoutCount() const
 
 PipelineKey PipelineLayoutDesc::getPipelineKey() const
 {
-    PipelineKey key = 0;
+    PipelineKey    key      = 0;
     const uint32_t setCount = getSetLayoutCount();
     nvutils::hashCombine(key, setCount);
     for (uint32_t index = 0; index < setCount; ++index)
@@ -304,18 +292,18 @@ VkDescriptorSetLayout PipelineLayoutCache::getEmptyDescriptorSetLayout()
 
 PipelineLayout* PipelineLayoutCache::getOrCreatePipelineLayout(const PipelineLayoutDesc& desc)
 {
-    PipelineKey key = desc.getPipelineKey();
+    PipelineKey key  = desc.getPipelineKey();
     auto        iter = _pipelineLayoutMap.find(key);
     if (iter != _pipelineLayoutMap.end())
     {
         return iter->second.get();
     }
 
-    auto layout = std::make_unique<PipelineLayout>();
-    layout->hash = key;
-    layout->setCount = desc.getSetLayoutCount();
-    layout->setLayouts = desc.getSetLayouts();
-    layout->hasPushConstant = desc.hasPushConstantRange();
+    auto layout               = std::make_unique<PipelineLayout>();
+    layout->hash              = key;
+    layout->setCount          = desc.getSetLayoutCount();
+    layout->setLayouts        = desc.getSetLayouts();
+    layout->hasPushConstant   = desc.hasPushConstantRange();
     layout->pushConstantRange = desc.getPushConstantRange();
 
     std::vector<VkDescriptorSetLayout> setLayouts(layout->setCount);
@@ -331,7 +319,7 @@ PipelineLayout* PipelineLayoutCache::getOrCreatePipelineLayout(const PipelineLay
     createInfo.pPushConstantRanges    = layout->hasPushConstant ? &layout->pushConstantRange : nullptr;
     NVVK_CHECK(vkCreatePipelineLayout(vkDriver->getDevice(), &createInfo, nullptr, &layout->vkHandle));
 
-    PipelineLayout* result = layout.get();
+    PipelineLayout* result  = layout.get();
     _pipelineLayoutMap[key] = std::move(layout);
     return result;
 }
@@ -351,13 +339,6 @@ GraphicsPipelineStateInitializer& GraphicsPipelineStateInitializer::setMeshShade
     shaderSet.fragModuleID   = fragModuleID;
     shaderSet.taskModuleID   = taskModuleID;
     shaderSet.meshModuleID   = meshModuleID;
-    return *this;
-}
-
-GraphicsPipelineStateInitializer& GraphicsPipelineStateInitializer::setMaterialDescriptorSet(DescriptorSetBindings& descriptorSet)
-{
-    materialDescriptorSet = &descriptorSet;
-    materialDescriptorSet->setDescriptorSetSlot(DescriptorEnum::eDrawObjectDescriptorSet);
     return *this;
 }
 
@@ -570,7 +551,6 @@ PipelineCacheManager::~PipelineCacheManager()
     }
 }
 
-
 PipelineLayout* PipelineCacheManager::getOrCreatePipelineLayout(const PipelineLayoutDesc& desc)
 {
     return _pipelineLayoutCache.getOrCreatePipelineLayout(desc);
@@ -579,13 +559,6 @@ PipelineLayout* PipelineCacheManager::getOrCreatePipelineLayout(const PipelineLa
 ComputePipelineStateInitializer& ComputePipelineStateInitializer::setShader(ShaderID moduleID)
 {
     computeModuleID = moduleID;
-    return *this;
-}
-
-ComputePipelineStateInitializer& ComputePipelineStateInitializer::setMaterialDescriptorSet(DescriptorSetBindings& descriptorSet)
-{
-    materialDescriptorSet = &descriptorSet;
-    materialDescriptorSet->setDescriptorSetSlot(DescriptorEnum::eDrawObjectDescriptorSet);
     return *this;
 }
 
@@ -638,10 +611,10 @@ VkPipeline PipelineCacheManager::getOrCreateGraphicsPipeline(GraphicsPipelineSta
         _gfxPipelineCreator.addShader(VK_SHADER_STAGE_FRAGMENT_BIT, fragShaderModule->_entryPoint.c_str(), fragShaderModule->_shaderModule);
     }
 
-    _gfxPipelineCreator.pipelineInfo.layout                 = initializer.pipelineLayout->vkHandle;
-    _gfxPipelineCreator.renderingState.depthAttachmentFormat = initializer.renderTargetState.depthAttachmentFormat;
+    _gfxPipelineCreator.pipelineInfo.layout                    = initializer.pipelineLayout->vkHandle;
+    _gfxPipelineCreator.renderingState.depthAttachmentFormat   = initializer.renderTargetState.depthAttachmentFormat;
     _gfxPipelineCreator.renderingState.stencilAttachmentFormat = initializer.renderTargetState.stencilAttachmentFormat;
-    _gfxPipelineCreator.colorFormats = initializer.renderTargetState.colorFormats;
+    _gfxPipelineCreator.colorFormats                           = initializer.renderTargetState.colorFormats;
 
     auto       block = _cacheBlockManager->getOrCreateBlock(key);
     VkPipeline pipeline;

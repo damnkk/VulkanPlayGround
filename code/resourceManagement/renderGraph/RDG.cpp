@@ -4,6 +4,7 @@
 #include "RDGBarrierUtils.h"
 #include "resourceManagement/vulkan/cache/RenderPassCache.h"
 #include "resourceManagement/vulkan/pipeline/RenderPass.h"
+#include "resourceManagement/vulkan/pipeline/Material.h"
 #include "core/runtime/VulkanRuntime.h"
 #include "core/Profiling.h"
 #include "resourceManagement/vulkan/descriptors/DescriptorManager.h"
@@ -162,12 +163,12 @@ PassNode* BlackBoard::getPass(std::string name)
     return _passMap[name];
 }
 
-void RenderContext::bindPipeline(GraphicsPipelineStateInitializer& initializer)
+bool RenderContext::bindPipeline(GraphicsPipelineStateInitializer& initializer, const MaterialInstance* material)
 {
     if (!_pendingGfxState || !_pendingGfxState->_renderPass)
     {
         LOGE("Graphics render pass is not prepared");
-        return;
+        return false;
     }
 
     DescriptorSetCache* descriptorCache = vkDriver->getDescriptorSetCache();
@@ -175,13 +176,27 @@ void RenderContext::bindPipeline(GraphicsPipelineStateInitializer& initializer)
     CommonDescriptorSet sceneSet        = descriptorCache->getSceneDescriptorSet();
     CommonDescriptorSet frameSet        = descriptorCache->getFrameDescriptorSet();
 
+    if (material)
+    {
+        DescriptorSetBindings bindings;
+        if (!material->buildDescriptorBindings(bindings))
+        {
+            LOGE("Material has missing or unsupported descriptor resources\n");
+            return false;
+        }
+        const auto& shaders = material->getMaterial()->getShaderSet();
+        if (shaders.hasShader(ShaderStage::eRayMesh))
+            initializer.setMeshShader(shaders.getShader(ShaderStage::eRayMesh), shaders.getShader(ShaderStage::eFragment),
+                                      shaders.getShader(ShaderStage::eRayTask));
+        else
+            initializer.setShader(shaders.getShader(ShaderStage::eVertex), shaders.getShader(ShaderStage::eFragment));
+        material->applyToPSOState(initializer.psoState);
+        initializer.materialDescriptorSet = descriptorCache->getOrCreateDescriptorSet(bindings);
+    }
+
     VkDescriptorSet passSet = _pendingGfxState->_passDescriptorSet;
 
-    VkDescriptorSet materialSet = VK_NULL_HANDLE;
-    if (initializer.materialDescriptorSet)
-    {
-        materialSet = initializer.materialDescriptorSet->getOrAcquireDescriptorSet(DescriptorEnum::eDrawObjectDescriptorSet);
-    }
+    VkDescriptorSet materialSet = initializer.materialDescriptorSet.set;
 
     PipelineLayoutDesc layoutDesc;
     layoutDesc.setDescriptorSetLayout(DescriptorEnum::eGlobalDescriptorSet, globalSet.layout);
@@ -191,9 +206,9 @@ void RenderContext::bindPipeline(GraphicsPipelineStateInitializer& initializer)
     {
         layoutDesc.setDescriptorSetLayout(DescriptorEnum::ePerPassDescriptorSet, _pendingGfxState->_passDescriptorSetLayout);
     }
-    if (initializer.materialDescriptorSet)
+    if (initializer.materialDescriptorSet.layout != VK_NULL_HANDLE)
     {
-        layoutDesc.setMaterialDescriptorSet(*initializer.materialDescriptorSet);
+        layoutDesc.setDescriptorSetLayout(DescriptorEnum::eDrawObjectDescriptorSet, initializer.materialDescriptorSet.layout);
     }
     if (initializer.hasPushConstantRange)
     {
@@ -203,17 +218,17 @@ void RenderContext::bindPipeline(GraphicsPipelineStateInitializer& initializer)
     auto* dynamicRenderPass = dynamic_cast<DynamicRenderPass*>(_pendingGfxState->_renderPass);
     if (dynamicRenderPass)
     {
-        initializer.renderTargetState.colorFormats             = dynamicRenderPass->getColorAttachmentFormats();
-        initializer.renderTargetState.depthAttachmentFormat    = dynamicRenderPass->getDepthAttachmentFormat();
-        initializer.renderTargetState.stencilAttachmentFormat  = dynamicRenderPass->getStencilAttachmentFormat();
+        initializer.renderTargetState.colorFormats            = dynamicRenderPass->getColorAttachmentFormats();
+        initializer.renderTargetState.depthAttachmentFormat   = dynamicRenderPass->getDepthAttachmentFormat();
+        initializer.renderTargetState.stencilAttachmentFormat = dynamicRenderPass->getStencilAttachmentFormat();
     }
 
     initializer.pipelineLayout = vkDriver->getPipelineCacheManager()->getOrCreatePipelineLayout(layoutDesc);
-    VkPipeline pipeline       = vkDriver->getPipelineCacheManager()->getOrCreateGraphicsPipeline(initializer);
+    VkPipeline pipeline        = vkDriver->getPipelineCacheManager()->getOrCreateGraphicsPipeline(initializer);
     if (pipeline == VK_NULL_HANDLE)
     {
         LOGE("Graphics pipeline creation failed");
-        return;
+        return false;
     }
 
     vkCmdBindPipeline(_currCmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
@@ -235,9 +250,10 @@ void RenderContext::bindPipeline(GraphicsPipelineStateInitializer& initializer)
         vkCmdBindDescriptorSets(_currCmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, initializer.pipelineLayout->vkHandle,
                                 static_cast<uint32_t>(DescriptorEnum::eDrawObjectDescriptorSet), 1, &materialSet, 0, nullptr);
     }
+    return true;
 }
 
-void RenderContext::bindPipeline(ComputePipelineStateInitializer& initializer)
+bool RenderContext::bindPipeline(ComputePipelineStateInitializer& initializer)
 {
     DescriptorSetCache* descriptorCache = vkDriver->getDescriptorSetCache();
     CommonDescriptorSet globalSet       = descriptorCache->getEngineDescriptorSet();
@@ -246,11 +262,7 @@ void RenderContext::bindPipeline(ComputePipelineStateInitializer& initializer)
 
     VkDescriptorSet passSet = _pendingComputeState->_passDescriptorSet;
 
-    VkDescriptorSet materialSet = VK_NULL_HANDLE;
-    if (initializer.materialDescriptorSet)
-    {
-        materialSet = initializer.materialDescriptorSet->getOrAcquireDescriptorSet(DescriptorEnum::eDrawObjectDescriptorSet);
-    }
+    VkDescriptorSet materialSet = initializer.materialDescriptorSet.set;
 
     PipelineLayoutDesc layoutDesc;
     layoutDesc.setDescriptorSetLayout(DescriptorEnum::eGlobalDescriptorSet, globalSet.layout);
@@ -260,9 +272,9 @@ void RenderContext::bindPipeline(ComputePipelineStateInitializer& initializer)
     {
         layoutDesc.setDescriptorSetLayout(DescriptorEnum::ePerPassDescriptorSet, _pendingComputeState->_passDescriptorSetLayout);
     }
-    if (initializer.materialDescriptorSet)
+    if (initializer.materialDescriptorSet.layout != VK_NULL_HANDLE)
     {
-        layoutDesc.setMaterialDescriptorSet(*initializer.materialDescriptorSet);
+        layoutDesc.setDescriptorSetLayout(DescriptorEnum::eDrawObjectDescriptorSet, initializer.materialDescriptorSet.layout);
     }
     if (initializer.hasPushConstantRange)
     {
@@ -270,11 +282,11 @@ void RenderContext::bindPipeline(ComputePipelineStateInitializer& initializer)
     }
 
     initializer.pipelineLayout = vkDriver->getPipelineCacheManager()->getOrCreatePipelineLayout(layoutDesc);
-    VkPipeline pipeline       = vkDriver->getPipelineCacheManager()->getOrCreateComputePipeline(initializer);
+    VkPipeline pipeline        = vkDriver->getPipelineCacheManager()->getOrCreateComputePipeline(initializer);
     if (pipeline == VK_NULL_HANDLE)
     {
         LOGE("Compute pipeline creation failed");
-        return;
+        return false;
     }
 
     vkCmdBindPipeline(_currCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
@@ -296,6 +308,7 @@ void RenderContext::bindPipeline(ComputePipelineStateInitializer& initializer)
         vkCmdBindDescriptorSets(_currCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, initializer.pipelineLayout->vkHandle,
                                 static_cast<uint32_t>(DescriptorEnum::eDrawObjectDescriptorSet), 1, &materialSet, 0, nullptr);
     }
+    return true;
 }
 RDGBuilder::RDGBuilder()
 {
@@ -355,8 +368,9 @@ void RDGBuilder::prepareDescriptorSets(RenderContext& context, PassNode* pass)
         programDescManager.setDescInfo(bufferInfo.binding, *state.buffer->_rhi);
     }
 
-    VkDescriptorSetLayout currPassSetLayout = programDescManager.finalizeLayout();
-    VkDescriptorSet       currPassSet       = programDescManager.getOrAcquireDescriptorSet(DescriptorEnum::ePerPassDescriptorSet);
+    const auto                  passSet           = vkDriver->getDescriptorSetCache()->getOrCreateDescriptorSet(programDescManager);
+    const VkDescriptorSetLayout currPassSetLayout = passSet.layout;
+    const VkDescriptorSet       currPassSet       = passSet.set;
     switch (pass->type())
     {
         case PassNode::Type::Render:
@@ -662,7 +676,7 @@ void RDGBuilder::compile()
                                                inferShaderStageFromPipelineStage(currAccessInfo.stageMask));
         }
 
-        passNode->_descBindings.finalizeLayout();
+        passNode->_descBindings.finalizeBindings();
     }
 }
 
@@ -714,8 +728,8 @@ void RDGBuilder::afterPassExecute()
     // after the last pass in the frame, we need to submit the command buffer if exists.
     NVVK_CHECK(vkEndCommandBuffer(_renderContext->_currCmdBuffer));
     VkCommandBufferSubmitInfo cmdInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
-    cmdInfo.commandBuffer = _renderContext->_currCmdBuffer;
-    cmdInfo.deviceMask    = 0;
+    cmdInfo.commandBuffer                        = _renderContext->_currCmdBuffer;
+    cmdInfo.deviceMask                           = 0;
     std::vector<VkSemaphoreSubmitInfo> waitInfos = vkDriver->consumePendingFrameWaitSemaphores();
     VkSemaphoreSubmitInfo              waitInfo{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
     waitInfo.semaphore = _renderContext->_frameData->semaphore;
