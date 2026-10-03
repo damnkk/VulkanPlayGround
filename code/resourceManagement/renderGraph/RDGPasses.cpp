@@ -6,11 +6,7 @@
 
 namespace Play::RDG
 {
-PassNode::~PassNode()
-{
-    VkDescriptorSetLayout layout = this->_descBindings.getSetLayout();
-    vkDestroyDescriptorSetLayout(vkDriver->getDevice(), layout, nullptr);
-}
+PassNode::~PassNode()             = default;
 const uint32_t ATTACHMENT_DEPTH   = 0xFFFFFFFF;
 const uint32_t ATTACHMENT_STENCIL = 0xFFFFFFFF;
 RenderPassNode::RenderPassNode(uint32_t id, std::string name) : PassNode(id, std::move(name), NodeType::eRenderPass) {}

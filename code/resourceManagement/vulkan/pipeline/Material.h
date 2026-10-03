@@ -18,8 +18,8 @@ namespace Play
 
 class MaterialInstance;
 
-constexpr ShaderID       MATERIAL_INVALID_SHADER_ID  = ~0U;
-constexpr uint32_t       MATERIAL_SHADER_STAGE_COUNT = static_cast<uint32_t>(ShaderStage::eCount);
+constexpr ShaderID MATERIAL_INVALID_SHADER_ID  = ~0U;
+constexpr uint32_t MATERIAL_SHADER_STAGE_COUNT = static_cast<uint32_t>(ShaderStage::eCount);
 
 enum class MaterialParameterKind : uint32_t
 {
@@ -68,8 +68,7 @@ struct MaterialRenderState
     bool                     depthTestEnable      = true;
     bool                     depthWriteEnable     = true;
     uint32_t                 colorAttachmentCount = 1;
-    VkColorComponentFlags    colorWriteMask       = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
-                                             VK_COLOR_COMPONENT_A_BIT;
+    VkColorComponentFlags colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 };
 
 using MaterialParamMap         = std::unordered_map<std::string, rttr::variant>;
@@ -519,9 +518,7 @@ public:
         psoState.dirtyFlag = true;
     }
 
-    bool buildDrawObjectDescriptorBindings(DescriptorSetBindings& descriptorBindings, bool requireBoundResources = false) const;
-    bool buildDescriptorSetState(DescriptorSetBindings& descriptorBindings, bool requireBoundResources = false) const;
-    DescriptorSetBindings& getDescriptorSetState(bool requireBoundResources = false);
+    bool buildDescriptorBindings(DescriptorSetBindings& bindings) const;
 
     RTTR_ENABLE()
 
@@ -658,14 +655,12 @@ private:
     }
 
 private:
-    Material*                       _material = nullptr;
+    Material*                       _material              = nullptr;
     uint32_t                        _sourceMaterialVersion = 0;
     MaterialParamOverrideMap        _overrideParamMap;
     MaterialDescriptorBindingMap    _descriptorBindings;
     MaterialParameterDeclarationMap _parameterDeclarations;
     MaterialRenderState             _renderState;
-    DescriptorSetBindings           _descriptorSetState{DescriptorEnum::eDrawObjectDescriptorSet};
-    uint32_t                        _descriptorSetStateVersion = 0;
 };
 
 inline std::shared_ptr<MaterialInstance> Material::createMaterialInstance()

@@ -20,6 +20,7 @@ struct BindInfo
     uint32_t           descriptorCount;
     VkDescriptorType   descriptorType;
     VkShaderStageFlags shaderStageFlags;
+    bool               operator==(const BindInfo&) const = default;
 };
 
 union DescriptorInfo
@@ -32,23 +33,10 @@ union DescriptorInfo
 class DescriptorSetBindings : public nvvk::DescriptorBindings
 {
 public:
-    DescriptorSetBindings();
-    explicit DescriptorSetBindings(DescriptorEnum setSlot);
-    ~DescriptorSetBindings();
-    void                   reset(DescriptorEnum setSlot = DescriptorEnum::eCount);
+    void                   reset();
     DescriptorSetBindings& addBinding(uint32_t bindingIdx, uint32_t descriptorCount, VkDescriptorType descriptorType,
                                       VkShaderStageFlags shaderStageFlags);
     DescriptorSetBindings& addBinding(const BindInfo& bindingInfo);
-
-    void setDescriptorSetSlot(DescriptorEnum setSlot)
-    {
-        _setSlot = setSlot;
-    }
-
-    DescriptorEnum getDescriptorSetSlot() const
-    {
-        return _setSlot;
-    }
 
     void setDescInfo(uint32_t bindingIdx, const nvvk::Buffer& buffer, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE);
 
@@ -66,57 +54,22 @@ public:
     void setDescInfo(uint32_t bindingIdx, const VkDescriptorImageInfo* imageInfos, uint32_t count);
     void setDescInfo(uint32_t bindingIdx, const VkAccelerationStructureKHR* accels, uint32_t count);
 
-    int                   descriptorOffset(uint32_t bindingIdx);
-    uint64_t              getBindingsHash(); // flush dirty flag
-    uint64_t              getDescsetLayoutHash();
-    VkDescriptorSetLayout finalizeLayout(); // flush recorded flag
-    VkDescriptorSet       getOrAcquireDescriptorSet(DescriptorEnum setSlot = DescriptorEnum::eCount);
-
-    bool isLayoutDirty() const
-    {
-        return _setLayoutDirty;
-    }
-
-    bool isDescriptorInfoDirty() const
-    {
-        return _descInfoDirty != 0;
-    }
-
-    bool isDescriptorSetDirty() const
-    {
-        return _descriptorSetDirty;
-    }
-
-    const VkDescriptorSetLayout& getSetLayout()
-    {
-        return _layout;
-    }
-
-    VkDescriptorSet getCachedDescriptorSet() const
-    {
-        return _cachedDescriptorSet;
-    }
+    int descriptorOffset(uint32_t bindingIdx);
+    // Finalize binding order and CPU descriptor storage before assigning resources.
+    void finalizeBindings();
 
     const std::vector<DescriptorInfo>& getDescriptorInfos()
     {
         return _descInfos;
     }
 
-protected:
-    std::vector<BindInfo>       _bindingInfos;
-    uint64_t                    _setBindingHash = 0;
-    VkDescriptorSetLayout       _layout         = VK_NULL_HANDLE;
-    std::vector<DescriptorInfo> _descInfos;
-
 private:
-    void markLayoutDirty();
-    void markDescriptorInfoDirty();
+    friend class DescriptorSetCache;
+    std::vector<uint64_t> getDescriptorKey() const;
 
-    DescriptorEnum  _setSlot             = DescriptorEnum::eCount;
-    VkDescriptorSet _cachedDescriptorSet = VK_NULL_HANDLE;
-    bool            _setLayoutDirty      = true; // layout changing state
-    uint8_t         _descInfoDirty       = 0;    // descinfo changing state | bit0: binding changed, bit1: constant range changed
-    bool            _descriptorSetDirty  = true;
+    std::vector<BindInfo>       _bindingInfos;
+    std::vector<DescriptorInfo> _descInfos;
+    bool                        _bindingsDirty = true;
 };
 // 256 descriptor slot for global
 const size_t GLOBAL_DESCRIPTOR_SET_OFFSET = 0;
@@ -161,8 +114,8 @@ private:
 
 struct CommonDescriptorSet
 {
-    VkDescriptorSet       set;
-    VkDescriptorSetLayout layout;
+    VkDescriptorSet       set    = VK_NULL_HANDLE;
+    VkDescriptorSetLayout layout = VK_NULL_HANDLE;
 };
 
 class DescriptorSetCache
@@ -170,8 +123,8 @@ class DescriptorSetCache
 public:
     DescriptorSetCache() {}
     ~DescriptorSetCache();
-    void                deInit();
-    VkDescriptorSet     requestDescriptorSet(DescriptorSetBindings* setManager, uint32_t setIdx);
+    // Cache immutable sets by layout and bound resources. Empty bindings require no set.
+    CommonDescriptorSet getOrCreateDescriptorSet(DescriptorSetBindings& bindings);
     CommonDescriptorSet getEngineDescriptorSet()
     {
         return _globalDescriptorSet;
@@ -191,6 +144,7 @@ public:
     void initSceneDescriptorSets(nvvk::DescriptorBindings& setBindings);
 
 private:
+    VkDescriptorSetLayout getOrCreateDescriptorSetLayout(DescriptorSetBindings& bindings);
     struct CacheNode
     {
         struct PoolNode
@@ -198,33 +152,30 @@ private:
             static const uint32_t maxSetPerPool = 32;
             VkDescriptorPool      pool;
             uint32_t              availableCount = maxSetPerPool;
-            uint64_t              lastUsedFrame  = 0;
         };
         struct CachedSet
         {
-            uint32_t        parentPoolIndex;
-            VkDescriptorSet descriptorSet;
+            std::vector<uint64_t> descriptorKey;
+            VkDescriptorSet       descriptorSet = VK_NULL_HANDLE;
         };
-        CachedSet createCachedSet()
-        {
-            CachedSet newSet;
-            newSet.parentPoolIndex = pools.size() - 1;
-            newSet.descriptorSet   = VK_NULL_HANDLE;
-            return newSet;
-        }
-        std::unordered_map<size_t, CachedSet> descriptorSetMap;
-        std::vector<PoolNode>                 pools;
+        std::unordered_map<size_t, std::vector<CachedSet>> descriptorSetMap;
+        std::vector<PoolNode>                              pools;
     };
-    VkDescriptorSet                                          createDescriptorSet(CacheNode& cacheNode, DescriptorSetBindings* setManager);
-    CacheNode::CachedSet                                     createDescriptorSetImplement(CacheNode& cacheNode, DescriptorSetBindings* setManager);
-    std::unordered_map<uint64_t, std::shared_ptr<CacheNode>> _descriptorPoolMap;
-    CommonDescriptorSet                                      _globalDescriptorSet  = {VK_NULL_HANDLE, VK_NULL_HANDLE};
-    VkDescriptorPool                                         _globalDescriptorPool = VK_NULL_HANDLE;
-    CommonDescriptorSet                                      _sceneDescriptorSet   = {VK_NULL_HANDLE, VK_NULL_HANDLE};
-    std::vector<VkDescriptorSet>                             _sceneDescriptorSets;
-    VkDescriptorPool                                         _sceneDescriptorPool = VK_NULL_HANDLE;
-    CommonDescriptorSet                                      _frameDescriptorSet  = {VK_NULL_HANDLE, VK_NULL_HANDLE};
-    VkDescriptorPool                                         _frameDescriptorPool = VK_NULL_HANDLE;
+    VkDescriptorSet createDescriptorSet(CacheNode& cacheNode, VkDescriptorSetLayout layout, DescriptorSetBindings& bindings);
+    struct LayoutEntry
+    {
+        std::vector<BindInfo> bindings;
+        VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+    };
+    std::unordered_map<uint64_t, std::vector<LayoutEntry>> _descriptorLayoutMap;
+    std::unordered_map<VkDescriptorSetLayout, CacheNode>   _descriptorPoolMap;
+    CommonDescriptorSet                                    _globalDescriptorSet  = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    VkDescriptorPool                                       _globalDescriptorPool = VK_NULL_HANDLE;
+    CommonDescriptorSet                                    _sceneDescriptorSet   = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    std::vector<VkDescriptorSet>                           _sceneDescriptorSets;
+    VkDescriptorPool                                       _sceneDescriptorPool = VK_NULL_HANDLE;
+    CommonDescriptorSet                                    _frameDescriptorSet  = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    VkDescriptorPool                                       _frameDescriptorPool = VK_NULL_HANDLE;
 };
 
 } // namespace Play

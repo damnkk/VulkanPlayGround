@@ -22,6 +22,7 @@ GPU resource when RDG compile.
 namespace Play
 {
 class RenderPass;
+class MaterialInstance;
 class GraphicsPipelineStateInitializer;
 class ComputePipelineStateInitializer;
 } // namespace Play
@@ -124,8 +125,8 @@ struct RenderContext
         _pendingRTState      = std::make_shared<PendingRTState>(this);
     }
     ~RenderContext() {}
-    void bindPipeline(GraphicsPipelineStateInitializer& initializer);
-    void bindPipeline(ComputePipelineStateInitializer& initializer);
+    bool bindPipeline(GraphicsPipelineStateInitializer& initializer, const MaterialInstance* material = nullptr);
+    bool bindPipeline(ComputePipelineStateInitializer& initializer);
 
     template <typename T>
     void bindPushConstant(const T& pushConstant)
@@ -146,14 +147,14 @@ struct RenderContext
         vkCmdPushConstants(_currCmdBuffer, _boundPipelineLayout->vkHandle, range.stageFlags, range.offset, range.size, &pushConstant);
     }
 
-    PlayFrameData*                       _frameData           = nullptr;
-    PassNode*                            _prevPassNode        = nullptr;
-    VkCommandBuffer                      _currCmdBuffer       = VK_NULL_HANDLE;
-    PipelineLayout*                      _boundPipelineLayout = nullptr;
+    PlayFrameData*                       _frameData              = nullptr;
+    PassNode*                            _prevPassNode           = nullptr;
+    VkCommandBuffer                      _currCmdBuffer          = VK_NULL_HANDLE;
+    PipelineLayout*                      _boundPipelineLayout    = nullptr;
     VkPipelineBindPoint                  _boundPipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    std::shared_ptr<PendingComputeState> _pendingComputeState = nullptr;
-    std::shared_ptr<PendingGfxState>     _pendingGfxState     = nullptr;
-    std::shared_ptr<PendingRTState>      _pendingRTState      = nullptr;
+    std::shared_ptr<PendingComputeState> _pendingComputeState    = nullptr;
+    std::shared_ptr<PendingGfxState>     _pendingGfxState        = nullptr;
+    std::shared_ptr<PendingRTState>      _pendingRTState         = nullptr;
 };
 
 class RDGBuilder

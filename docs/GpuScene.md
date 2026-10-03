@@ -92,12 +92,27 @@ fragment 阶段如果需要模型材质，vertex 阶段可通过 `nointerpolatio
 
 ## Indirect 入口
 
-`GpuScene::getDrawBuckets()` 返回当前帧的桶；初版按同一个 `MaterialInstance*` 分桶，空指针对应渲染 pass 的默认材质。调用者应保证这个材质引用的生命周期，并为当前 pass 选择兼容 pipeline/layout；不同 pass 可以采用自己的过滤与分桶策略。
+`GpuScene::getDrawBuckets()` 返回当前帧准备完成的桶，统一按 `MaterialInstance*` 分桶。所有模型默认材质槽引用同一个 instance，因此自然合桶，不需要识别内置材质的特殊分支。单桶仍受 `maxDrawIndirectCount` 限制。Custom MaterialInstance 及其绑定的 Buffer/Texture 由调用者保证生命周期。
+
+Runtime 初始化 shader 后，使用 Shader ID 创建普通的 Default GBuffer Material，再创建一个无 per-material 参数的共享 instance。Model 加载时只将这个 instance 的引用填入默认材质数组，不创建新 instance，也不按导入材质修改共享实例的渲染状态。Component 的材质数组只保存覆盖项，`nullptr` 表示恢复模型默认项；`getMaterialInstance(drawableID)` 与 DrawCommand 得到的均为解析后的 instance。模型参数仍由原 drawable 的 `materialIndex` 选择，Material 类型不认识模型参数或 Default GBuffer 这一具体用途。
+
+GpuScene 只维护材质引用及 draw 分桶，不准备材质资源或 pipeline。绘制时 `RenderContext::bindPipeline(pipeline, materialInstance)` 读取材质的 shader、渲染状态和资源描述，通过 `DescriptorSetCache::getOrCreateDescriptorSet()` 获取 set 4，再绑定 pipeline 和 descriptor sets。资源缺失或 pipeline 创建失败时返回 false，调用者跳过绘制。
+
+`MaterialInstance::buildDescriptorBindings()` 只生成 CPU 侧绑定描述；`DescriptorSetBindings::finalizeBindings()` 只整理绑定顺序和描述信息存储，不创建 Vulkan 对象。DescriptorSetCache 是 layout/set 的唯一所有者，以 layout 和完整资源绑定内容复用不可变 set，只有未命中时分配并写入。空 bindings 不分配占位 set。资源绑定变化在下一次 bindPipeline 时生效；Buffer 内容变化不要求改写 descriptor，上传及同步由 Buffer 的使用者负责。Material、MaterialInstance、GpuScene 和 PassNode 都不持有 descriptor 缓存或销毁缓存的 layout。
+
+Custom shader 的 set 4 UBO 通过 `setBuffer(reflectedName, buffer)` 提供，纹理通过 `setTexture(reflectedName, texture)` 提供。当前没有把数值 paramMap 自动打包并上传 UBO；数组绑定需要提供完整资源数组。缓存池沿用 runtime 生命周期，暂不做逐 set 回收。
+
+调用者仍负责 pass 附件、push constant 协议、透明材质过滤及排序。GpuScene 的 indirect 命令使用 vertex pulling；即使 RenderContext 支持绑定 mesh shader pipeline，也不能用 `cmdDrawBucket()` 提交 mesh-task draw。
 
 对每个桶，先绑定 pipeline、scene descriptor set 和该桶材质，将 `sceneAddress`、`bucketID` 放入对应 pipeline 的 push constant，然后调用：
 
 ```cpp
-gpuScene->cmdDrawBucket(cmd, bucketID);
+const auto& bucket = gpuScene->getDrawBuckets().at(bucketID);
+if (context.bindPipeline(pipeline, bucket.materialInstanceRef))
+{
+    // 设置当前 pipeline 对应的 push constants，然后绘制。
+    gpuScene->cmdDrawBucket(cmd, bucketID);
+}
 ```
 
 这个方法执行 `vkCmdDrawIndirectCount`，由 shader 完成 index/vertex pulling。也可自行调用 Vulkan：`getFrameBuffer()->buffer` 同时作为 indirect buffer 和 count buffer，`getIndirectOffset(bucketID)`、`getCountOffset(bucketID)` 返回**字节偏移**；bucket 的 `firstCommand`、`countIndex` 是**元素偏移**。
