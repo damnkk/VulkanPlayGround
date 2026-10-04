@@ -17,7 +17,7 @@
 #include "resourceManagement/vulkan/cache/RenderPassCache.h"
 #include "resourceManagement/vulkan/resources/Resource.h"
 #include "resourceManagement/vulkan/pipeline/ShaderManager.hpp"
-#include "resourceManagement/vulkan/pipeline/Material.h"
+#include "resourceManagement/vulkan/pipeline/MaterialManager.h"
 #include "core/RefCounted.h"
 #include "resourceManagement/scene/SceneManager.h"
 
@@ -406,12 +406,10 @@ bool VulkanRuntime::initRenderServices()
 
     Play::PlayResourceManager::Instance().initialize();
     Play::ShaderManager::Instance().init();
-    auto& shaders           = Play::ShaderManager::Instance();
-    _defaultGBufferMaterial = std::make_shared<Play::Material>(
-        shaders.getShaderIdByName(Play::BuiltinShaders::BUILTIN_DEFAULT_GBUFFER_VERT_SHADER_NAME),
-        shaders.getShaderIdByName(Play::BuiltinShaders::BUILTIN_DEFAULT_GBUFFER_FRAG_SHADER_NAME), "Default GBuffer");
-    _defaultGBufferMaterialInstance = _defaultGBufferMaterial->createMaterialInstance();
-    _defaultGBufferMaterialInstance->setColorAttachmentCount(6);
+    if (!Play::MaterialManager::Instance().initBuiltinMaterials())
+    {
+        return false;
+    }
 
     if (!_enableDynamicRendering)
     {
@@ -431,6 +429,8 @@ void VulkanRuntime::deinitRenderServices()
     {
         return;
     }
+
+    Play::MaterialManager::Instance().deInit();
 
     std::vector<Play::RefCounted*> leakedObjects;
     {

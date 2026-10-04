@@ -94,7 +94,7 @@ fragment 阶段如果需要模型材质，vertex 阶段可通过 `nointerpolatio
 
 `GpuScene::getDrawBuckets()` 返回当前帧准备完成的桶，统一按 `MaterialInstance*` 分桶。所有模型默认材质槽引用同一个 instance，因此自然合桶，不需要识别内置材质的特殊分支。单桶仍受 `maxDrawIndirectCount` 限制。Custom MaterialInstance 及其绑定的 Buffer/Texture 由调用者保证生命周期。
 
-Runtime 初始化 shader 后，使用 Shader ID 创建普通的 Default GBuffer Material，再创建一个无 per-material 参数的共享 instance。Model 加载时只将这个 instance 的引用填入默认材质数组，不创建新 instance，也不按导入材质修改共享实例的渲染状态。Component 的材质数组只保存覆盖项，`nullptr` 表示恢复模型默认项；`getMaterialInstance(drawableID)` 与 DrawCommand 得到的均为解析后的 instance。模型参数仍由原 drawable 的 `materialIndex` 选择，Material 类型不认识模型参数或 Default GBuffer 这一具体用途。
+Runtime 初始化 shader 后调用 `MaterialManager::initBuiltinMaterials()`，由 Manager 创建并按名称注册 `defaultgbufferMaterial`。每个注册的 Material 都附带一个由 Manager 持有的默认 instance；`getMaterial(materialName)` 和 `getDefaultMaterialInstance(materialName)` 统一按名称查询，重名注册会失败。自定义材质加载器负责创建和配置 Material，再调用 `registerMaterial()`；材质名称在注册期间保持不变。普通 instance 仍由调用者持有，Material 内部的 `_instances` 只是用于同步和注销的非拥有列表。Model 加载时将 Manager 中 Default GBuffer instance 的引用填入默认材质数组，不创建新 instance，也不按导入材质修改共享实例的渲染状态。Component 的材质数组只保存覆盖项，`nullptr` 表示恢复模型默认项；`getMaterialInstance(drawableID)` 与 DrawCommand 得到的均为解析后的 instance。模型参数仍由原 drawable 的 `materialIndex` 选择，Material 类型不认识模型参数或 Default GBuffer 这一具体用途。关闭引擎时先释放场景与资产，再清空 Manager，最后释放 descriptor、pipeline 和 shader 服务。
 
 GpuScene 只维护材质引用及 draw 分桶，不准备材质资源或 pipeline。绘制时 `RenderContext::bindPipeline(pipeline, materialInstance)` 读取材质的 shader、渲染状态和资源描述，通过 `DescriptorSetCache::getOrCreateDescriptorSet()` 获取 set 4，再绑定 pipeline 和 descriptor sets。资源缺失或 pipeline 创建失败时返回 false，调用者跳过绘制。
 

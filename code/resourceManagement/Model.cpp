@@ -3,6 +3,7 @@
 #include "nvutils/logger.hpp"
 #include "nvvk/check_error.hpp"
 #include "core/runtime/VulkanRuntime.h"
+#include "resourceManagement/vulkan/pipeline/MaterialManager.h"
 CEREAL_REGISTER_TYPE(Play::Model)
 CEREAL_REGISTER_POLYMORPHIC_RELATION(Play::Asset, Play::Model)
 namespace Play
@@ -214,7 +215,8 @@ void Model::onLoadAsset()
         vkDriver->submitAndWaitTempCmdBuffer(graphicsCmd);
     }
 
-    _materialInstances.assign(_loadedModel->materials.size(), vkDriver->getDefaultGBufferMaterialInstance());
+    _materialInstances.assign(_loadedModel->materials.size(),
+                              MaterialManager::Instance().getDefaultMaterialInstance(BuiltinMaterials::BUILTIN_DEFAULT_GBUFFER_MATERIAL_NAME));
 
     // The geometry, mesh, material and texture-info blocks are now owned by
     // the GPU buffer, and texture pixels are owned by _textures.
