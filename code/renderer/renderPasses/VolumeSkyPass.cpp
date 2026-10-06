@@ -87,7 +87,8 @@ void VolumeSkyPass::build(RDG::RDGBuilder* rdgBuilder)
                 {
                     PerFrameConstant perFrameConstant{};
                     perFrameConstant.cameraBufferDeviceAddress = ownedRender->getCurrentCameraBuffer()->address;
-                    context.bindPipeline(_transmittanceLutPipeline);
+                    const auto pipeline = context.createPipelineStateBuilder().build(_transmittanceLutPipeline);
+                    context.bindPipeline(pipeline);
                     context.bindPushConstant(perFrameConstant);
                     vkCmdDispatch(context._currCmdBuffer, (kTransmittanceLutWidth + kTransmittanceGroupSize - 1) / kTransmittanceGroupSize,
                                   (kTransmittanceLutHeight + kTransmittanceGroupSize - 1) / kTransmittanceGroupSize, 1);
@@ -104,7 +105,8 @@ void VolumeSkyPass::build(RDG::RDGBuilder* rdgBuilder)
                 {
                     PerFrameConstant perFrameConstant{};
                     perFrameConstant.cameraBufferDeviceAddress = ownedRender->getCurrentCameraBuffer()->address;
-                    context.bindPipeline(_multiScatteringLutPipeline);
+                    const auto pipeline = context.createPipelineStateBuilder().build(_multiScatteringLutPipeline);
+                    context.bindPipeline(pipeline);
                     context.bindPushConstant(perFrameConstant);
                     vkCmdDispatch(context._currCmdBuffer, kMultiScatteringLutWidth, kMultiScatteringLutHeight, 1);
                 })
@@ -121,7 +123,8 @@ void VolumeSkyPass::build(RDG::RDGBuilder* rdgBuilder)
                 {
                     PerFrameConstant perFrameConstant{};
                     perFrameConstant.cameraBufferDeviceAddress = ownedRender->getCurrentCameraBuffer()->address;
-                    context.bindPipeline(_skyViewLutPipeline);
+                    const auto pipeline = context.createPipelineStateBuilder().build(_skyViewLutPipeline);
+                    context.bindPipeline(pipeline);
                     context.bindPushConstant(perFrameConstant);
                     vkCmdDispatch(context._currCmdBuffer, (kSkyViewLutWidth + kSkyViewGroupSize - 1) / kSkyViewGroupSize,
                                   (kSkyViewLutHeight + kSkyViewGroupSize - 1) / kSkyViewGroupSize, 1);
@@ -140,7 +143,8 @@ void VolumeSkyPass::build(RDG::RDGBuilder* rdgBuilder)
                     VkCommandBuffer  cmd              = context._currCmdBuffer;
                     PerFrameConstant perFrameConstant{};
                     perFrameConstant.cameraBufferDeviceAddress = ownedRender->getCurrentCameraBuffer()->address;
-                    context.bindPipeline(this->_skyBoxPipeline);
+                    const auto pipeline = context.createPipelineStateBuilder().build(this->_skyBoxPipeline);
+                    context.bindPipeline(pipeline);
                     context.bindPushConstant(perFrameConstant);
                     VkViewport viewport = {0, 0, (float) vkDriver->getViewportSize().width, (float) vkDriver->getViewportSize().height, 0.0f, 1.0f};
                     VkRect2D   scissor  = {{0, 0}, {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height}};

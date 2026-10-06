@@ -19,10 +19,10 @@ GPU resource when RDG compile.
 #include "RDGResources.h"
 #include "RDGPasses.hpp"
 #include "resourceManagement/vulkan/pipeline/PipelineCacheManager.h"
+#include "resourceManagement/vulkan/pipeline/PipelineStateBuilder.h"
 namespace Play
 {
 class RenderPass;
-class MaterialInstance;
 class GraphicsPipelineStateInitializer;
 class ComputePipelineStateInitializer;
 } // namespace Play
@@ -125,8 +125,9 @@ struct RenderContext
         _pendingRTState      = std::make_shared<PendingRTState>(this);
     }
     ~RenderContext() {}
-    bool bindPipeline(GraphicsPipelineStateInitializer& initializer, const MaterialInstance* material = nullptr);
-    bool bindPipeline(ComputePipelineStateInitializer& initializer);
+    PipelineStateBuilder createPipelineStateBuilder() const;
+    void                 bindPipeline(const GraphicsPipelineStateInitializer& initializer);
+    void                 bindPipeline(const ComputePipelineStateInitializer& initializer);
 
     template <typename T>
     void bindPushConstant(const T& pushConstant)
@@ -155,6 +156,10 @@ struct RenderContext
     std::shared_ptr<PendingComputeState> _pendingComputeState    = nullptr;
     std::shared_ptr<PendingGfxState>     _pendingGfxState        = nullptr;
     std::shared_ptr<PendingRTState>      _pendingRTState         = nullptr;
+
+private:
+    void bindDescriptorSets(VkPipelineBindPoint bindPoint, const PipelineLayout& layout, const PendingState& pendingState,
+                            VkDescriptorSet materialSet);
 };
 
 class RDGBuilder

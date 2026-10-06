@@ -77,6 +77,11 @@ public:
         return m_config;
     }
 
+    const RenderPassConfig& getConfig() const
+    {
+        return m_config;
+    }
+
     void setMultiThreadRecordingState(bool enable)
     {
         m_config.needMultiThreadRecording = enable;

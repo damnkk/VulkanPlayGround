@@ -291,7 +291,8 @@ void VolumeRenderPass::build(RDG::RDGBuilder* rdgBuilder)
                                     {
                                         return;
                                     }
-                                    context.bindPipeline(_gradientPipeline);
+                                    const auto pipeline = context.createPipelineStateBuilder().build(_gradientPipeline);
+                                    context.bindPipeline(pipeline);
                                     vkCmdDispatch(context._currCmdBuffer, divRoundUp(_volumeExtent.width, kVolumeGroupSize),
                                                   divRoundUp(_volumeExtent.height, kVolumeGroupSize), divRoundUp(_volumeExtent.depth, kVolumeGroupSize));
                                     _gradientGenerated = true;
@@ -313,7 +314,8 @@ void VolumeRenderPass::build(RDG::RDGBuilder* rdgBuilder)
         .execute(
             [this](RDG::PassNode* passNode, RDG::RenderContext& context)
             {
-                context.bindPipeline(_generateRaysPipeline);
+                const auto pipeline = context.createPipelineStateBuilder().build(_generateRaysPipeline);
+                context.bindPipeline(pipeline);
                 vkCmdDispatch(context._currCmdBuffer, divRoundUp(vkDriver->getViewportSize().width, kVolumeGroupSize),
                               divRoundUp(vkDriver->getViewportSize().height, kVolumeGroupSize), 1);
             })
@@ -332,7 +334,8 @@ void VolumeRenderPass::build(RDG::RDGBuilder* rdgBuilder)
         .execute(
             [this](RDG::PassNode* passNode, RDG::RenderContext& context)
             {
-                context.bindPipeline(_radiancePipeline);
+                const auto pipeline = context.createPipelineStateBuilder().build(_radiancePipeline);
+                context.bindPipeline(pipeline);
                 vkCmdDispatch(context._currCmdBuffer, divRoundUp(vkDriver->getViewportSize().width, kVolumeGroupSize),
                               divRoundUp(vkDriver->getViewportSize().height, kVolumeGroupSize), 1);
             })
@@ -345,7 +348,8 @@ void VolumeRenderPass::build(RDG::RDGBuilder* rdgBuilder)
         .execute(
             [this](RDG::PassNode* passNode, RDG::RenderContext& context)
             {
-                context.bindPipeline(_accumulatePipeline);
+                const auto pipeline = context.createPipelineStateBuilder().build(_accumulatePipeline);
+                context.bindPipeline(pipeline);
                 vkCmdDispatch(context._currCmdBuffer, divRoundUp(vkDriver->getViewportSize().width, kVolumeGroupSize),
                               divRoundUp(vkDriver->getViewportSize().height, kVolumeGroupSize), 1);
             })
@@ -358,7 +362,8 @@ void VolumeRenderPass::build(RDG::RDGBuilder* rdgBuilder)
         .execute(
             [this](RDG::PassNode* passNode, RDG::RenderContext& context)
             {
-                context.bindPipeline(_postProcessPipeline);
+                const auto pipeline = context.createPipelineStateBuilder().build(_postProcessPipeline);
+                context.bindPipeline(pipeline);
                 vkCmdDispatch(context._currCmdBuffer, divRoundUp(vkDriver->getViewportSize().width, kVolumeGroupSize),
                               divRoundUp(vkDriver->getViewportSize().height, kVolumeGroupSize), 1);
             })

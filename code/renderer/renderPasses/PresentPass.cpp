@@ -29,7 +29,8 @@ void PresentPass::build(RDG::RDGBuilder* rdgBuilder)
             [this](RDG::PassNode* passNode, RDG::RenderContext& context)
             {
                 VkCommandBuffer cmd = context._currCmdBuffer;
-                context.bindPipeline(this->_presentPipeline);
+                const auto pipeline = context.createPipelineStateBuilder().build(this->_presentPipeline);
+                context.bindPipeline(pipeline);
                 VkViewport viewport = {0, 0, (float) vkDriver->getViewportSize().width, (float) vkDriver->getViewportSize().height, 0.0f, 1.0f};
                 VkRect2D   scissor  = {{0, 0}, {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height}};
                 vkCmdSetViewportWithCount(cmd, 1, &viewport);

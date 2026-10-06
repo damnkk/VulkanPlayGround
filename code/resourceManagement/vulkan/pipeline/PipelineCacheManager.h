@@ -138,9 +138,7 @@ public:
     std::vector<VkDynamicState> dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT, VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT};
     VkPipelineCreateFlags2      flags2        = 0;
     // Calculate a hash key for caching
-    PipelineKey getPipelineKey();
-    bool        dirtyFlag   = true;
-    PipelineKey pipelineKey = ~0U;
+    PipelineKey getPipelineKey() const;
 };
 
 struct GraphicsShaderSet
@@ -245,6 +243,7 @@ public:
 
     GraphicsPipelineStateInitializer& setShader(ShaderID vertexModuleID, ShaderID fragModuleID);
     GraphicsPipelineStateInitializer& setMeshShader(ShaderID meshModuleID, ShaderID fragModuleID, ShaderID taskModuleID = ~0U);
+    GraphicsPipelineStateInitializer& setRenderTargetState(const RenderTargetState& state);
     GraphicsPipelineStateInitializer& setPushConstantRange(const VkPushConstantRange& range);
 
     template <typename T>
@@ -257,7 +256,7 @@ public:
         return setPushConstantRange(range);
     }
 
-    PipelineKey getPipelineKey();
+    PipelineKey getPipelineKey() const;
 };
 
 class ComputePipelineStateInitializer
@@ -282,7 +281,7 @@ public:
         return setPushConstantRange(range);
     }
 
-    PipelineKey getPipelineKey();
+    PipelineKey getPipelineKey() const;
 };
 class RTPipelineState
 {
@@ -298,8 +297,8 @@ class PipelineCacheManager
 public:
     PipelineCacheManager();
     virtual ~PipelineCacheManager();
-    VkPipeline      getOrCreateGraphicsPipeline(GraphicsPipelineStateInitializer& initializer);
-    VkPipeline      getOrCreateComputePipeline(ComputePipelineStateInitializer& initializer);
+    VkPipeline      getOrCreateGraphicsPipeline(const GraphicsPipelineStateInitializer& initializer);
+    VkPipeline      getOrCreateComputePipeline(const ComputePipelineStateInitializer& initializer);
     PipelineLayout* getOrCreatePipelineLayout(const PipelineLayoutDesc& desc);
     VkPipeline      getOrCreateRTPipeline(RTPipelineState& rtState);
     VkPipeline getOrCreateMeshPipeline(PSOState& psoState, RenderPass* renderPass, ShaderID mShaderID, ShaderID fShaderID, ShaderID tShaderID = ~0U);

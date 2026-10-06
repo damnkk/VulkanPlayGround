@@ -55,7 +55,8 @@ void LightPass::build(RDG::RDGBuilder* rdgBuilder)
                     VkCommandBuffer  cmd = context._currCmdBuffer;
                     PerFrameConstant perFrameConstant{};
                     perFrameConstant.cameraBufferDeviceAddress = _ownedRender->getCurrentCameraBuffer()->address;
-                    context.bindPipeline(this->_lightPassPipeline);
+                    const auto pipeline = context.createPipelineStateBuilder().build(this->_lightPassPipeline);
+                    context.bindPipeline(pipeline);
                     context.bindPushConstant(perFrameConstant);
                     VkViewport viewport = {0, 0, (float) vkDriver->getViewportSize().width, (float) vkDriver->getViewportSize().height, 0.0f, 1.0f};
                     VkRect2D   scissor  = {{0, 0}, {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height}};

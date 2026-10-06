@@ -21,7 +21,6 @@ bool MaterialManager::initBuiltinMaterials()
         return false;
     }
 
-    getDefaultMaterialInstance(material->getName())->setColorAttachmentCount(6);
     return true;
 }
 

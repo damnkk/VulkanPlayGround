@@ -118,9 +118,8 @@ void PplCacheBlock::createPipeline(std::function<VkPipeline(PplCacheBlock*)>&& c
     }
 }
 
-PipelineKey PSOState::getPipelineKey()
+PipelineKey PSOState::getPipelineKey() const
 {
-    if (!dirtyFlag) return pipelineKey;
     PipelineKey key = 0;
 
     // 1. Hash Rasterization State
@@ -189,7 +188,6 @@ PipelineKey PSOState::getPipelineKey()
     {
         nvutils::hashCombine(key, ds);
     }
-    dirtyFlag = false;
     return key;
 }
 
@@ -349,7 +347,23 @@ GraphicsPipelineStateInitializer& GraphicsPipelineStateInitializer::setPushConst
     return *this;
 }
 
-PipelineKey GraphicsPipelineStateInitializer::getPipelineKey()
+GraphicsPipelineStateInitializer& GraphicsPipelineStateInitializer::setRenderTargetState(const RenderTargetState& state)
+{
+    renderTargetState                                 = state;
+    const size_t                      attachmentCount = renderTargetState.colorFormats.size();
+    const nvvk::GraphicsPipelineState defaults;
+    const auto blendEnable   = psoState.colorBlendEnables.empty() ? defaults.colorBlendEnables.front() : psoState.colorBlendEnables.front();
+    const auto writeMask     = psoState.colorWriteMasks.empty() ? defaults.colorWriteMasks.front() : psoState.colorWriteMasks.front();
+    const auto blendEquation = psoState.colorBlendEquations.empty() ? defaults.colorBlendEquations.front() : psoState.colorBlendEquations.front();
+
+    psoState.colorBlendEnables.resize(attachmentCount, blendEnable);
+    psoState.colorWriteMasks.resize(attachmentCount, writeMask);
+    psoState.colorBlendEquations.resize(attachmentCount, blendEquation);
+    psoState.multisampleState.rasterizationSamples = renderTargetState.sampleCount;
+    return *this;
+}
+
+PipelineKey GraphicsPipelineStateInitializer::getPipelineKey() const
 {
     PipelineKey key = psoState.getPipelineKey();
     nvutils::hashCombine(key, shaderSet.getShaderKey());
@@ -569,20 +583,16 @@ ComputePipelineStateInitializer& ComputePipelineStateInitializer::setPushConstan
     return *this;
 }
 
-PipelineKey ComputePipelineStateInitializer::getPipelineKey()
+PipelineKey ComputePipelineStateInitializer::getPipelineKey() const
 {
     PipelineKey key = 0;
     nvutils::hashCombine(key, computeModuleID);
     nvutils::hashCombine(key, pipelineLayout ? pipelineLayout->hash : 0);
     return key;
 }
-VkPipeline PipelineCacheManager::getOrCreateGraphicsPipeline(GraphicsPipelineStateInitializer& initializer)
+VkPipeline PipelineCacheManager::getOrCreateGraphicsPipeline(const GraphicsPipelineStateInitializer& initializer)
 {
-    if (!initializer.pipelineLayout || initializer.pipelineLayout->vkHandle == VK_NULL_HANDLE)
-    {
-        LOGE("Graphics pipeline initializer has no resolved pipeline layout");
-        return VK_NULL_HANDLE;
-    }
+    assert(initializer.pipelineLayout && initializer.pipelineLayout->vkHandle != VK_NULL_HANDLE);
 
     uint64_t key = initializer.getPipelineKey();
     if (_pipelineMap.find(key) != _pipelineMap.end())
@@ -616,24 +626,20 @@ VkPipeline PipelineCacheManager::getOrCreateGraphicsPipeline(GraphicsPipelineSta
     _gfxPipelineCreator.renderingState.stencilAttachmentFormat = initializer.renderTargetState.stencilAttachmentFormat;
     _gfxPipelineCreator.colorFormats                           = initializer.renderTargetState.colorFormats;
 
-    auto       block = _cacheBlockManager->getOrCreateBlock(key);
-    VkPipeline pipeline;
+    auto       block    = _cacheBlockManager->getOrCreateBlock(key);
+    VkPipeline pipeline = VK_NULL_HANDLE;
     block->createPipeline(
         [pipelineCreatorPtr = &_gfxPipelineCreator, initializerPtr = &initializer, pipelinePtr = &pipeline](PplCacheBlock* block)
         {
-            pipelineCreatorPtr->createGraphicsPipeline(vkDriver->getDevice(), block->_vkHandle, initializerPtr->psoState, pipelinePtr);
+            NVVK_CHECK(pipelineCreatorPtr->createGraphicsPipeline(vkDriver->getDevice(), block->_vkHandle, initializerPtr->psoState, pipelinePtr));
             return *pipelinePtr;
         });
     _pipelineMap[key] = pipeline;
     return pipeline;
 }
-VkPipeline PipelineCacheManager::getOrCreateComputePipeline(ComputePipelineStateInitializer& initializer)
+VkPipeline PipelineCacheManager::getOrCreateComputePipeline(const ComputePipelineStateInitializer& initializer)
 {
-    if (!initializer.pipelineLayout || initializer.pipelineLayout->vkHandle == VK_NULL_HANDLE)
-    {
-        LOGE("Compute pipeline initializer has no resolved pipeline layout");
-        return VK_NULL_HANDLE;
-    }
+    assert(initializer.pipelineLayout && initializer.pipelineLayout->vkHandle != VK_NULL_HANDLE);
 
     uint64_t key = initializer.getPipelineKey();
     if (_pipelineMap.find(key) != _pipelineMap.end())
@@ -651,12 +657,12 @@ VkPipeline PipelineCacheManager::getOrCreateComputePipeline(ComputePipelineState
     createInfo.layout       = initializer.pipelineLayout->vkHandle;
     createInfo.flags        = 0;
 
-    auto       block = _cacheBlockManager->getOrCreateBlock(key);
-    VkPipeline pipeline;
+    auto       block    = _cacheBlockManager->getOrCreateBlock(key);
+    VkPipeline pipeline = VK_NULL_HANDLE;
     block->createPipeline(
         [pipelineCreatorPtr = &createInfo, pipelinePtr = &pipeline](PplCacheBlock* block)
         {
-            vkCreateComputePipelines(vkDriver->getDevice(), block->_vkHandle, 1, pipelineCreatorPtr, nullptr, pipelinePtr);
+            NVVK_CHECK(vkCreateComputePipelines(vkDriver->getDevice(), block->_vkHandle, 1, pipelineCreatorPtr, nullptr, pipelinePtr));
             return *pipelinePtr;
         });
     _pipelineMap[key] = pipeline;

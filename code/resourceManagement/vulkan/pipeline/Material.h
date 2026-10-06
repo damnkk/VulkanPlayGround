@@ -62,12 +62,11 @@ enum class MaterialDepthCompareMode : uint32_t
 
 struct MaterialRenderState
 {
-    MaterialRasterMode       rasterMode           = MaterialRasterMode::eTriangle;
-    MaterialBlendMode        blendMode            = MaterialBlendMode::eOpaque;
-    MaterialDepthCompareMode depthCompareMode     = MaterialDepthCompareMode::eLessEqual;
-    bool                     depthTestEnable      = true;
-    bool                     depthWriteEnable     = true;
-    uint32_t                 colorAttachmentCount = 1;
+    MaterialRasterMode       rasterMode       = MaterialRasterMode::eTriangle;
+    MaterialBlendMode        blendMode        = MaterialBlendMode::eOpaque;
+    MaterialDepthCompareMode depthCompareMode = MaterialDepthCompareMode::eLessEqual;
+    bool                     depthTestEnable  = true;
+    bool                     depthWriteEnable = true;
     VkColorComponentFlags colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 };
 
@@ -488,17 +487,6 @@ public:
         return _renderState.depthCompareMode;
     }
 
-    MaterialInstance& setColorAttachmentCount(uint32_t count)
-    {
-        _renderState.colorAttachmentCount = count;
-        return *this;
-    }
-
-    uint32_t getColorAttachmentCount() const
-    {
-        return _renderState.colorAttachmentCount;
-    }
-
     MaterialInstance& setColorWriteMask(VkColorComponentFlags mask)
     {
         _renderState.colorWriteMask = mask;
@@ -510,12 +498,12 @@ public:
         return _renderState.colorWriteMask;
     }
 
+    // Attachment arrays must already be sized by the pass initializer.
     void applyToPSOState(PSOState& psoState) const
     {
         applyRasterState(psoState);
         applyDepthState(psoState);
         applyBlendState(psoState);
-        psoState.dirtyFlag = true;
     }
 
     bool buildDescriptorBindings(DescriptorSetBindings& bindings) const;
@@ -636,17 +624,10 @@ private:
 
     void applyBlendState(PSOState& psoState) const
     {
-        uint32_t attachmentCount = _renderState.colorAttachmentCount;
-        if (attachmentCount == 0) attachmentCount = 1;
-
-        psoState.colorBlendEnables.resize(attachmentCount);
-        psoState.colorWriteMasks.resize(attachmentCount);
-        psoState.colorBlendEquations.resize(attachmentCount);
-
         const VkBool32                blendEnable = isBlendEnabled(_renderState.blendMode) ? VK_TRUE : VK_FALSE;
         const VkColorBlendEquationEXT equation    = makeBlendEquation(_renderState.blendMode);
 
-        for (uint32_t index = 0; index < attachmentCount; ++index)
+        for (size_t index = 0; index < psoState.colorBlendEnables.size(); ++index)
         {
             psoState.colorBlendEnables[index]   = blendEnable;
             psoState.colorWriteMasks[index]     = _renderState.colorWriteMask;

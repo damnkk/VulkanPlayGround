@@ -10,11 +10,6 @@
 namespace Play
 {
 
-namespace
-{
-constexpr uint32_t kGBufferColorAttachmentCount = 6;
-}
-
 void GBufferPass::init()
 {
     const uint32_t vertexShaderID = ShaderManager::Instance().getShaderIdByName(BuiltinShaders::BUILTIN_DEFAULT_GBUFFER_VERT_SHADER_NAME);
@@ -22,11 +17,6 @@ void GBufferPass::init()
 
     _gbufferPipeline.setShader(vertexShaderID, fragShaderID);
     _gbufferPipeline.setPushConstant<GBufferPushConstant>();
-    _gbufferPipeline.psoState.colorBlendEnables.resize(kGBufferColorAttachmentCount, VK_FALSE);
-    _gbufferPipeline.psoState.colorWriteMasks.resize(
-        kGBufferColorAttachmentCount, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
-    const VkColorBlendEquationEXT defaultBlendEquation = _gbufferPipeline.psoState.colorBlendEquations.front();
-    _gbufferPipeline.psoState.colorBlendEquations.resize(kGBufferColorAttachmentCount, defaultBlendEquation);
 }
 
 void GBufferPass::prepareRenderList() {}
