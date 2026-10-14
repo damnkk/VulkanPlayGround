@@ -1,15 +1,15 @@
 # GPUScene 注册、更新与渲染入口
 
-当前实现负责模型/纹理注册、持久的 draw/instance 快照、脏区间上传，以及 GPU 剔除需要的候选列表和输出缓冲区。`GBufferPass` 的执行体原本为空，这次没有替它选择 Custom Material pipeline 或实现剔除算法。CPU 不生成每帧可见 draw 参数：每帧 count 清零后，需要 compute 写入 indirect 参数、visibleDrawIDs 和 count，绘制才会产生输出。
+当前实现负责模型/纹理注册、持久的 draw/instance 快照、脏区间上传和 GBuffer indirect 绘制。暂不做 GPU 剔除：CPU 根据已注册 draw 打包全部 indirect 命令，上传 drawID 映射与每桶 count；`GBufferPass` 按材质桶绑定 pipeline 并调用 `vkCmdDrawIndirectCount`。
 
 ## 生命周期
 
 1. `StaticMeshComponent::onLoad()` 在 `LoadAssetBind(Model, _model)` 后调用 `registerModel()`；运行时 `setModel()` 走同一注册入口。
 2. `GpuScene::registerModel()` 持有 `ModelRef`，同一模型只注册一次，返回稳定的 `modelID`。模型与纹理区间保留到这个 GPUScene 销毁，组件删除只回收 draw/instance 区间。
 3. 注册时把模型纹理追加到 GPUScene 的纹理列表，保持模型内纹理索引不变。起始位置写入 GPUScene 模型表副本的 `buffers.textureOffset`；原始 Model 的地址表不携带特定场景的索引。
-4. 组件在注册时调用 `GpuScene::updateDrawCommands()` 缓存 draw，换材质时更新缓存，删除时通过 `releaseDraws()` 注销。`Component::onSceneChanged()` 在组件或实体的加入、移除及销毁时通知组件，外部保留 shared_ptr 也不会阻止 draw 注销。脱离场景的组件只注册模型，重新加入场景时恢复 draw 注册。
+4. 组件在注册时调用 `GpuScene::updateDrawCommands()` 缓存 draw，换材质时更新缓存，删除时通过 `releaseDraws()` 注销。`onEnterScene()` / `onExitScene()` 在组件或实体的加入、移除及销毁时通知组件，外部保留 shared_ptr 也不会阻止 draw 注销。脱离场景的组件只注册模型，重新加入场景时恢复 draw 注册。
 5. `VulkanRuntime::prepareFrame()` 等待当前 frame slot 完成。之后 `Renderer::OnPreRender()` → `SceneManager::update()` → scene tick → `GpuScene::prepareFrame()`，只同步该 slot 的脏区间。scene tick 不再提交或收集 draw。
-6. RDG 的首个 `GpuSceneUpload` pass 在 graphics queue 上调用 `cmdUpload()`，有脏数据时记录 buffer copy 和可见性屏障，并在 GPU 上清零当前帧的可见 count，然后才执行其他 pass。
+6. RDG 的首个 `GpuSceneUpload` pass 在 graphics queue 上调用 `cmdUpload()`，有脏数据时记录 buffer copy 和可见性屏障，同时上传有变化的 indirect 命令、drawID 映射及每桶 count，然后才执行其他 pass。
 
 模型资源和纹理图像跨帧共享。动态数据按实际 `getFrameCycleSize()` 分配：每个 frame slot 一个 device-local arena 和一个 scene descriptor set。arena 内按 16 字节边界划分 root、models、draws、instances、candidates、buckets、indirect、counts、visibleDrawIDs 区域。
 
@@ -36,9 +36,9 @@ mesh->updateInstanceRange(20, 5, [](size_t index, Play::InstanceData& instance)
 
 CPU 修改会标记每个 frame slot 的脏区间。每个 slot 上传后只清除自己的标记；同一张表在该 slot 上的多次修改合并为一个覆盖区间。实例区间按二次幂扩容，迁移时更新该组件所有 draw 的 `instanceBase`。空闲 CPU 区间可以复用，因为 GPU 每个 slot 持有独立快照。
 
-GPUScene 持久保存 draw 注册表、候选列表和材质桶。只有 draw 增删或材质桶归属改变时，`rebuildDrawSnapshot()` 才重建一次候选/桶快照，并分别标记各 frame slot 待同步。实例数量变为零仍保留候选记录，由 compute 处理；数量或实例基址变化只更新 draw POD，实例变换变化只更新实例表。首次同步完成后，静止场景不会重新分桶、复制候选列表或上传 root/draw/instance。
+GPUScene 持久保存 draw 注册表、候选列表和材质桶。只有 draw 增删或材质桶归属改变时，`rebuildDrawSnapshot()` 才重建一次候选/桶快照，并分别标记各 frame slot 待同步。实例数量变为零仍保留候选记录，对应 indirect 命令的 `instanceCount` 为零，不产生顶点调用；数量或实例基址变化更新 draw POD 和 indirect 命令，实例变换变化只更新实例表。首次同步完成后，静止场景不会重新分桶、复制候选列表或上传 root/draw/instance。
 
-可见 count、indirect 参数、visibleDrawIDs 属于每帧 GPU 输出，与上述持久输入分开。CPU 只预留输出容量，不上传这些输出的默认绘制内容；每帧 GPU 清零 count 后，compute 根据当前相机重新产生结果。输出缓冲区旧内容无需整体清空，有效前缀由新的 count 限定。
+当前无剔除路径保留每个候选 draw 的固定槽位，`visibleDrawIDs[slot] = candidate.drawID`，每桶 count 等于该桶候选数量。分桶快照变化时上传映射和 count；分桶快照或 draw POD 变化时重新打包并上传 indirect 参数。所有 frame slot 分别消费自己的脏标记，静止场景复用已经上传的命令。以后接入剔除时，同一组 GPU 缓冲区可以改由 compute 写入。
 
 ## 根地址与 shader 跳转
 
@@ -96,7 +96,7 @@ fragment 阶段如果需要模型材质，vertex 阶段可通过 `nointerpolatio
 
 Runtime 初始化 shader 后调用 `MaterialManager::initBuiltinMaterials()`，由 Manager 创建并按名称注册 `defaultgbufferMaterial`。每个注册的 Material 都附带一个由 Manager 持有的默认 instance；`getMaterial(materialName)` 和 `getDefaultMaterialInstance(materialName)` 统一按名称查询，重名注册会失败。自定义材质加载器负责创建和配置 Material，再调用 `registerMaterial()`；材质名称在注册期间保持不变。普通 instance 仍由调用者持有，Material 内部的 `_instances` 只是用于同步和注销的非拥有列表。Model 加载时将 Manager 中 Default GBuffer instance 的引用填入默认材质数组，不创建新 instance，也不按导入材质修改共享实例的渲染状态。Component 的材质数组只保存覆盖项，`nullptr` 表示恢复模型默认项；`getMaterialInstance(drawableID)` 与 DrawCommand 得到的均为解析后的 instance。模型参数仍由原 drawable 的 `materialIndex` 选择，Material 类型不认识模型参数或 Default GBuffer 这一具体用途。关闭引擎时先释放场景与资产，再清空 Manager，最后释放 descriptor、pipeline 和 shader 服务。
 
-GpuScene 只维护材质引用及 draw 分桶，不准备材质资源或 pipeline。绘制时 `RenderContext::bindPipeline(pipeline, materialInstance)` 读取材质的 shader、渲染状态和资源描述，通过 `DescriptorSetCache::getOrCreateDescriptorSet()` 获取 set 4，再绑定 pipeline 和 descriptor sets。资源缺失或 pipeline 创建失败时返回 false，调用者跳过绘制。
+GpuScene 只维护材质引用及 draw 分桶，不准备材质资源或 pipeline。绘制时 `context.createPipelineStateBuilder().build(defaults, materialInstance)` 读取材质的 shader、渲染状态和资源描述，通过 `DescriptorSetCache::getOrCreateDescriptorSet()` 获取 set 4，再由 `context.bindPipeline(pipeline)` 绑定 pipeline 和 descriptor sets。
 
 `MaterialInstance::buildDescriptorBindings()` 只生成 CPU 侧绑定描述；`DescriptorSetBindings::finalizeBindings()` 只整理绑定顺序和描述信息存储，不创建 Vulkan 对象。DescriptorSetCache 是 layout/set 的唯一所有者，以 layout 和完整资源绑定内容复用不可变 set，只有未命中时分配并写入。空 bindings 不分配占位 set。资源绑定变化在下一次 bindPipeline 时生效；Buffer 内容变化不要求改写 descriptor，上传及同步由 Buffer 的使用者负责。Material、MaterialInstance、GpuScene 和 PassNode 都不持有 descriptor 缓存或销毁缓存的 layout。
 
@@ -108,18 +108,21 @@ Custom shader 的 set 4 UBO 通过 `setBuffer(reflectedName, buffer)` 提供，�
 
 ```cpp
 const auto& bucket = gpuScene->getDrawBuckets().at(bucketID);
-if (context.bindPipeline(pipeline, bucket.materialInstanceRef))
-{
-    // 设置当前 pipeline 对应的 push constants，然后绘制。
-    gpuScene->cmdDrawBucket(cmd, bucketID);
-}
+const auto pipeline = context.createPipelineStateBuilder().build(defaults, bucket.materialInstanceRef);
+context.bindPipeline(pipeline);
+GBufferPushConstant pushConstant{};
+pushConstant.perFrameConstant.cameraBufferDeviceAddress = cameraBuffer->address;
+pushConstant.sceneConstant.sceneAddress = gpuScene->getRootAddress();
+pushConstant.sceneConstant.bucketID = bucketID;
+context.bindPushConstant(pushConstant);
+gpuScene->cmdDrawBucket(cmd, bucketID);
 ```
 
 这个方法执行 `vkCmdDrawIndirectCount`，由 shader 完成 index/vertex pulling。也可自行调用 Vulkan：`getFrameBuffer()->buffer` 同时作为 indirect buffer 和 count buffer，`getIndirectOffset(bucketID)`、`getCountOffset(bucketID)` 返回**字节偏移**；bucket 的 `firstCommand`、`countIndex` 是**元素偏移**。
 
-`GpuSceneIndirectDrawCommand` 与 `VkDrawIndirectCommand` 都是 16 字节，字段依次为 `{ vertexCount, instanceCount, firstVertex, firstInstance }`，compute 应写入 `{ drawable.indexCount, draw.instanceCount, 0, draw.instanceBase }`。现有 DefaultGbuffer vertex shader 的手动 index pulling 与此一致；接入 root 后保留这一步索引读取。Custom Material 的参数依然由已有材质绑定系统提供，没有自动打包进 GPUScene root。
+`GpuSceneIndirectDrawCommand` 与 `VkDrawIndirectCommand` 都是 16 字节，字段依次为 `{ vertexCount, instanceCount, firstVertex, firstInstance }`，当前 CPU 打包写入 `{ drawable.indexCount, draw.instanceCount, 0, draw.instanceBase }`。DefaultGbuffer vertex shader 通过 `SV_DrawIndex` 查 drawID，通过 `SV_VulkanInstanceID` 读取含 `firstInstance` 的实例索引，再做手动 index/vertex pulling。位置应用 drawable 和 instance 的完整变换；法线使用完整线性变换的余因子计算逆转置方向，支持非均匀缩放；fragment 按 drawable 材质索引读取模型材质和纹理，支持 alpha mask，输出 instance customData。velocity 暂时为零。Custom Material 的参数依然由已有材质绑定系统提供，没有自动打包进 GPUScene root。
 
-接 GPU 剔除时，首个 `GpuSceneUpload` pass 已调用 `cmdResetDrawCounts(cmd)`；在其后的同一 graphics queue 上、render pass 外 dispatch，再调用 `cmdBarrierAfterCulling(cmd)`。compute 遍历持久的 `candidateAddress[0..candidateCount)`，每个 candidate 带 `drawID` 与 `bucketID`，跳过 `instanceCount == 0` 的记录，对可见者执行：
+以后接 GPU 剔除时，在 `GpuSceneUpload` 后先显式调用 `cmdResetDrawCounts(cmd)`，再在同一 graphics queue 上、render pass 外 dispatch，最后调用 `cmdBarrierAfterCulling(cmd)`。当前上传路径不会自动清零 count。compute 遍历持久的 `candidateAddress[0..candidateCount)`，每个 candidate 带 `drawID` 与 `bucketID`，跳过 `instanceCount == 0` 的记录，对可见者执行：
 
 ```text
 localSlot = atomicAdd(counts[bucket.countIndex], 1)

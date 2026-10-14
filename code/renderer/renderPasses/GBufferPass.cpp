@@ -3,6 +3,7 @@
 #include "DeferRendering.h"
 #include "PConstantType.h.slang"
 #include "core/runtime/VulkanRuntime.h"
+#include "resourceManagement/scene/SceneManager.h"
 #include "resourceManagement/renderGraph/RDG.h"
 #include "resourceManagement/vulkan/pipeline/ShaderManager.hpp"
 #include "resourceManagement/vulkan/resources/VulkanResourceUtils.h"
@@ -18,16 +19,6 @@ void GBufferPass::init()
     _gbufferPipeline.setShader(vertexShaderID, fragShaderID);
     _gbufferPipeline.setPushConstant<GBufferPushConstant>();
 }
-
-void GBufferPass::prepareRenderList() {}
-
-void GBufferPass::collectVisibleInstances(const CpuScene&, const GpuScene&, const CameraData&) {}
-
-void GBufferPass::buildRenderList(const GpuScene&) {}
-
-void GBufferPass::sortRenderList() {}
-
-void GBufferPass::uploadGPUInstanceData() {}
 
 void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
 {
@@ -97,7 +88,33 @@ void GBufferPass::build(RDG::RDGBuilder* rdgBuilder)
                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
         .depth(DepthRT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-        .execute([](RDG::PassNode*, RDG::RenderContext&) {})
+        .execute(
+            [this](RDG::PassNode*, RDG::RenderContext& context)
+            {
+                const auto  gpuScene = vkDriver->getSceneManager()->getGpuScene();
+                const auto& buckets  = gpuScene->getDrawBuckets();
+                if (buckets.empty()) return;
+
+                VkCommandBuffer cmd      = context._currCmdBuffer;
+                const auto      extent   = vkDriver->getViewportSize();
+                VkViewport      viewport = {0, 0, float(extent.width), float(extent.height), 0.0f, 1.0f};
+                VkRect2D        scissor  = {{0, 0}, extent};
+                vkCmdSetViewportWithCount(cmd, 1, &viewport);
+                vkCmdSetScissorWithCount(cmd, 1, &scissor);
+
+                GBufferPushConstant pushConstant{};
+                pushConstant.perFrameConstant.cameraBufferDeviceAddress = _ownedRender->getCurrentCameraBuffer()->address;
+                pushConstant.sceneConstant.sceneAddress                 = gpuScene->getRootAddress();
+                const auto pipelineBuilder                              = context.createPipelineStateBuilder();
+                for (uint32_t bucketID = 0; bucketID < buckets.size(); ++bucketID)
+                {
+                    const auto pipeline = pipelineBuilder.build(_gbufferPipeline, buckets[bucketID].materialInstanceRef);
+                    context.bindPipeline(pipeline);
+                    pushConstant.sceneConstant.bucketID = bucketID;
+                    context.bindPushConstant(pushConstant);
+                    gpuScene->cmdDrawBucket(cmd, bucketID);
+                }
+            })
         .finish();
 }
 

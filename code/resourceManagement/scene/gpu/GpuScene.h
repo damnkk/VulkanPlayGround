@@ -42,8 +42,8 @@ public:
     // Call only after VulkanRuntime has waited for the current frame slot.
     void prepareFrame();
     void updateTextureDescriptors(VkDescriptorSet descriptorSet);
-    // Upload dirty inputs and reset visibility counts on the GPU. Record on the
-    // graphics queue through RDG, outside a render pass, before culling and scene consumers.
+    // Upload dirty inputs and unculled indirect commands on the GPU. Record on the
+    // graphics queue through RDG, outside a render pass, before scene consumers.
     // Finish scene mutations before prepareFrame; cmdUpload consumes those dirty inputs.
     void cmdUpload(VkCommandBuffer cmd);
 
@@ -55,8 +55,8 @@ public:
     VkDeviceSize                   getCountOffset(uint32_t bucketID) const;
     // Caller binds the bucket's pipeline/material and pushes rootAddress + bucketID.
     void cmdDrawBucket(VkCommandBuffer cmd, uint32_t bucketID) const;
-    // cmdUpload resets counts for the first culling pass. Reset again only when
-    // starting another culling result; publish compute writes before drawing.
+    // A future culling pass must reset counts before producing its own result,
+    // then publish compute writes before drawing.
     void cmdResetDrawCounts(VkCommandBuffer cmd) const;
     void cmdBarrierAfterCulling(VkCommandBuffer cmd) const;
 

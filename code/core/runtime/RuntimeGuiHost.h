@@ -31,6 +31,7 @@ public:
     void stop();
     void requestShowWindow();
     void setRenderWindowHandle(void* handle);
+    void setFrameStats(double fps, double frameMs);
     void showError(const std::string& message);
 
     Play::editor::RuntimeEditor& getEditor()

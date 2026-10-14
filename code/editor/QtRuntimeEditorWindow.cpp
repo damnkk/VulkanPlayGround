@@ -25,7 +25,7 @@ namespace Play::editor
 
 QtRuntimeEditorWindow::QtRuntimeEditorWindow(RuntimeEditor& editor, QWidget* parent) : QMainWindow(parent), _editor(editor)
 {
-    setWindowTitle("VulkanPlayGround Editor");
+    setWindowTitle(_baseWindowTitle);
     resize(1120, 800);
     showStartupPage();
 }
@@ -41,7 +41,8 @@ void QtRuntimeEditorWindow::startProject(const QString& projectPath, bool create
 {
     _startupPage->showStarting();
     _editor.selectStartupProject(projectPath.toStdString(), createNew);
-    setWindowTitle(tr("%1 - VulkanPlayGround").arg(QDir(projectPath).dirName()));
+    _baseWindowTitle = tr("%1 - VulkanPlayGround").arg(QDir(projectPath).dirName());
+    setWindowTitle(_baseWindowTitle);
     auto* location = new QLabel(tr("Save location: %1").arg(QDir::toNativeSeparators(projectPath)), this);
     location->setToolTip(QDir::toNativeSeparators(projectPath));
     location->setTextFormat(Qt::PlainText);
@@ -155,6 +156,11 @@ void QtRuntimeEditorWindow::setRenderWindowHandle(void* handle)
     {
         show();
     }
+}
+
+void QtRuntimeEditorWindow::setFrameStats(double fps, double frameMs)
+{
+    setWindowTitle(tr("%1 - %2 FPS (%3 ms)").arg(_baseWindowTitle).arg(fps, 0, 'f', 1).arg(frameMs, 0, 'f', 2));
 }
 
 void QtRuntimeEditorWindow::refresh()

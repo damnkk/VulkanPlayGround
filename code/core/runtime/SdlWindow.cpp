@@ -2,6 +2,10 @@
 
 #include <nvutils/logger.hpp>
 
+#if defined(SDL_PLATFORM_WINDOWS)
+#include <windows.h>
+#endif
+
 namespace Play::runtime
 {
 
@@ -169,25 +173,54 @@ void SdlWindow::refreshInputState()
     _inputState.mmbPressed = _inputState.mmb && (previousMouseButtonFlags & SDL_BUTTON_MMASK) == 0;
     _inputState.rmbPressed = _inputState.rmb && (previousMouseButtonFlags & SDL_BUTTON_RMASK) == 0;
 
-    int         keyCount = 0;
-    const bool* keys     = SDL_GetKeyboardState(&keyCount);
-    auto        keyDown  = [keys, keyCount](SDL_Scancode scancode) { return keys && static_cast<int>(scancode) < keyCount && keys[scancode]; };
+#if defined(SDL_PLATFORM_WINDOWS)
+    // The embedded SDL child is not the foreground window, so SDL's keyboard
+    // focus tracking cannot be used here. Keep keyboard input local to the viewport.
+    const HWND viewport = static_cast<HWND>(getNativeHandle());
+    if (_inputState.mouseInWindow && (_inputState.lmbPressed || _inputState.mmbPressed || _inputState.rmbPressed))
+    {
+        SetFocus(viewport);
+    }
+    const bool keyboardFocused = viewport && GetFocus() == viewport && GetForegroundWindow() == GetAncestor(viewport, GA_ROOT);
+    auto       keyDown         = [keyboardFocused](int virtualKey) { return keyboardFocused && (GetAsyncKeyState(virtualKey) & 0x8000) != 0; };
+
+    _inputState.ctrl  = keyDown(VK_CONTROL);
+    _inputState.shift = keyDown(VK_SHIFT);
+    _inputState.alt   = keyDown(VK_MENU);
+
+    _inputState.keyW     = keyDown('W');
+    _inputState.keyA     = keyDown('A');
+    _inputState.keyS     = keyDown('S');
+    _inputState.keyD     = keyDown('D');
+    _inputState.keyO     = keyDown('O');
+    _inputState.keyLeft  = keyDown(VK_LEFT);
+    _inputState.keyRight = keyDown(VK_RIGHT);
+    _inputState.keyUp    = keyDown(VK_UP);
+    _inputState.keyDown  = keyDown(VK_DOWN);
+#else
+    int         keyCount        = 0;
+    const bool* keys            = SDL_GetKeyboardState(&keyCount);
+    const bool  keyboardFocused = _window && SDL_GetKeyboardFocus() == _window;
+    auto        keyDown         = [keys, keyCount, keyboardFocused](SDL_Scancode scancode)
+    { return keyboardFocused && keys && static_cast<int>(scancode) < keyCount && keys[scancode]; };
 
     _inputState.ctrl  = keyDown(SDL_SCANCODE_LCTRL) || keyDown(SDL_SCANCODE_RCTRL);
     _inputState.shift = keyDown(SDL_SCANCODE_LSHIFT) || keyDown(SDL_SCANCODE_RSHIFT);
     _inputState.alt   = keyDown(SDL_SCANCODE_LALT) || keyDown(SDL_SCANCODE_RALT);
 
-    _inputState.keyW        = keyDown(SDL_SCANCODE_W);
-    _inputState.keyA        = keyDown(SDL_SCANCODE_A);
-    _inputState.keyS        = keyDown(SDL_SCANCODE_S);
+    _inputState.keyW     = keyDown(SDL_SCANCODE_W);
+    _inputState.keyA     = keyDown(SDL_SCANCODE_A);
+    _inputState.keyS     = keyDown(SDL_SCANCODE_S);
+    _inputState.keyD     = keyDown(SDL_SCANCODE_D);
+    _inputState.keyO     = keyDown(SDL_SCANCODE_O);
+    _inputState.keyLeft  = keyDown(SDL_SCANCODE_LEFT);
+    _inputState.keyRight = keyDown(SDL_SCANCODE_RIGHT);
+    _inputState.keyUp    = keyDown(SDL_SCANCODE_UP);
+    _inputState.keyDown  = keyDown(SDL_SCANCODE_DOWN);
+#endif
+
     _inputState.keySPressed = _inputState.keyS && !previousKeyS;
-    _inputState.keyD        = keyDown(SDL_SCANCODE_D);
-    _inputState.keyO        = keyDown(SDL_SCANCODE_O);
     _inputState.keyOPressed = _inputState.keyO && !previousKeyO;
-    _inputState.keyLeft     = keyDown(SDL_SCANCODE_LEFT);
-    _inputState.keyRight    = keyDown(SDL_SCANCODE_RIGHT);
-    _inputState.keyUp       = keyDown(SDL_SCANCODE_UP);
-    _inputState.keyDown     = keyDown(SDL_SCANCODE_DOWN);
 }
 
 } // namespace Play::runtime

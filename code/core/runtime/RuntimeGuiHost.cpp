@@ -62,6 +62,18 @@ void RuntimeGuiHost::setRenderWindowHandle(void* handle)
     }
 }
 
+void RuntimeGuiHost::setFrameStats(double fps, double frameMs)
+{
+    SDL_LockMutex(_mutex);
+    auto* window = _window;
+    SDL_UnlockMutex(_mutex);
+
+    if (window)
+    {
+        QMetaObject::invokeMethod(window, [window, fps, frameMs]() { window->setFrameStats(fps, frameMs); }, Qt::QueuedConnection);
+    }
+}
+
 void RuntimeGuiHost::stop()
 {
     if (!_thread)

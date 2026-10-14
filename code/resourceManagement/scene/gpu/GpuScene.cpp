@@ -335,6 +335,20 @@ void GpuScene::cmdUpload(VkCommandBuffer cmd)
         append(offset + stride * dirty.first, stride * (dirty.end - dirty.first), static_cast<const char*>(data) + stride * dirty.first);
         dirty = {};
     };
+    // Without culling, every registered draw keeps its bucket slot. Transform-only
+    // changes update the instance table without rebuilding indirect commands.
+    if (frame.snapshotDirty || frame.drawsDirty.first != InvalidID)
+    {
+        std::vector<GpuSceneIndirectDrawCommand> commands;
+        commands.reserve(_candidates.size());
+        for (const auto& candidate : _candidates)
+        {
+            const auto& draw     = _drawData.at(candidate.drawID);
+            const auto& drawable = _models.at(draw.modelID)->getDrawableInfos().at(draw.drawableID);
+            commands.push_back({drawable.indexCount, draw.instanceCount, 0, draw.instanceBase});
+        }
+        append(frame.indirectOffset, commands.size() * sizeof(GpuSceneIndirectDrawCommand), commands.data());
+    }
     appendDirty(frame.modelOffset, sizeof(GpuSceneModelData), _modelData.data(), frame.modelsDirty);
     appendDirty(frame.drawOffset, sizeof(GpuSceneDrawData), _drawData.data(), frame.drawsDirty);
     appendDirty(frame.instanceOffset, sizeof(GpuSceneInstanceData), _instanceData.data(), frame.instancesDirty);
@@ -342,6 +356,14 @@ void GpuScene::cmdUpload(VkCommandBuffer cmd)
     {
         append(frame.candidateOffset, _candidates.size() * sizeof(GpuSceneDrawCandidate), _candidates.data());
         append(frame.bucketOffset, _gpuBuckets.size() * sizeof(GpuSceneDrawBucket), _gpuBuckets.data());
+        std::vector<uint32_t> drawIDs;
+        drawIDs.reserve(_candidates.size());
+        for (const auto& candidate : _candidates) drawIDs.push_back(candidate.drawID);
+        append(frame.visibleDrawIDOffset, drawIDs.size() * sizeof(uint32_t), drawIDs.data());
+        std::vector<uint32_t> counts;
+        counts.reserve(_gpuBuckets.size());
+        for (const auto& bucket : _gpuBuckets) counts.push_back(bucket.capacity);
+        append(frame.countOffset, counts.size() * sizeof(uint32_t), counts.data());
         frame.snapshotDirty = false;
     }
     // Append and record together: no pending scene uploads remain in the shared uploader.
@@ -351,8 +373,6 @@ void GpuScene::cmdUpload(VkCommandBuffer cmd)
         memoryBarrier(cmd, VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
                       VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT);
     }
-    // Visibility is per-frame output. Persistent input tables are never rebuilt here.
-    cmdResetDrawCounts(cmd);
 }
 
 VkDeviceAddress GpuScene::getRootAddress() const

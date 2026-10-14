@@ -23,6 +23,7 @@ public:
     ~QtRuntimeEditorWindow() override;
 
     void setRenderWindowHandle(void* handle);
+    void setFrameStats(double fps, double frameMs);
 
 protected:
     void closeEvent(QCloseEvent* event) override;
@@ -37,6 +38,7 @@ private:
 
     RuntimeEditor&        _editor;
     EditorSnapshot        _snapshot;
+    QString               _baseWindowTitle = "VulkanPlayGround Editor";
     SceneTreeWidget*      _sceneTree       = nullptr;
     InspectorWidget*      _inspector       = nullptr;
     AssetBrowserWidget*   _assetBrowser    = nullptr;

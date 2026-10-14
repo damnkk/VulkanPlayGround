@@ -1,55 +1,46 @@
-#include "common.slang"
 #include "GBufferCommon.h.slang"
 
 struct VertexInput
 {
-    uint vertexId : SV_VertexID;
-}
-
-struct VertexOutput
-{
-    float4 position : SV_Position;
-    float3 normal : NORMAL;
-    float4 tangent : TANGENT;
-    float2 uv : TEXCOORD0;
-    float2 uv1 : TEXCOORD1;
+    uint vertexID : SV_VulkanVertexID;
+    uint instanceIndex : SV_VulkanInstanceID;
+    uint drawIndex : SV_DrawIndex;
 };
 
-[[vk::push_constant]]
-ConstantBuffer<GBufferPushConstant> g_gBufferPushConstant;
-
 [shader("vertex")]
-VertexOutput main(VertexInput vin)
+GBufferVertexOutput main(VertexInput vin)
 {
-    CameraData* camData = (CameraData*) g_gBufferPushConstant.perFrameConstant.cameraBufferDeviceAddress;
+    CameraData camera = ((CameraData*) g_gBufferPushConstant.perFrameConstant.cameraBufferDeviceAddress)[0];
+    GpuSceneData scene = loadGpuScene(g_gBufferPushConstant.sceneConstant.sceneAddress);
+    uint drawID = loadGpuSceneDrawID(scene, g_gBufferPushConstant.sceneConstant.bucketID, vin.drawIndex);
+    GpuSceneDrawData draw = loadGpuSceneDraw(scene, drawID);
+    GpuSceneModelData model = loadGpuSceneModel(scene, draw.modelID);
+    ModelDrawableInfo drawable = loadGpuSceneDrawable(model, draw.drawableID);
+    ModelMeshInfo mesh = loadGpuSceneMesh(model, drawable);
+    ModelVertexStreamInfo streams = loadGpuSceneVertexStreams(mesh);
+    GpuSceneInstanceData instance = loadGpuSceneInstance(scene, vin.instanceIndex);
+    uint vertexIndex = loadGpuSceneVertexIndex(mesh, vin.vertexID);
 
-    GBufferGPUInstanceData* instances =
-        (GBufferGPUInstanceData*) g_gBufferPushConstant.sceneConstant.instanceBufferAddress;
-    GBufferGPUInstanceData instance = instances[uint(g_gBufferPushConstant.sceneConstant.instanceIndex)];
+    float3 position = ((float3*) streams.positionAddress)[vertexIndex];
+    float3 normal = ((float3*) streams.normalAddress)[vertexIndex];
+    float4 tangent = ((float4*) streams.tangentAddress)[vertexIndex];
 
-    ModelMeshInfo meshInfo = ((ModelMeshInfo*) instance.meshInfoAddress)[instance.meshInfoIndex];
-    ModelVertexStreamInfo vertexStream = ((ModelVertexStreamInfo*) meshInfo.vertexStreamAddress)[0];
+    // Slang's row-major view of the uploaded GLM matrices uses row vectors.
+    float4x4 worldFromMesh = mul(drawable.modelFromMesh, instance.worldFromModel);
+    float3x3 linear = (float3x3) worldFromMesh;
+    float3 cofactor0 = cross(linear[1], linear[2]);
+    float3 cofactor1 = cross(linear[2], linear[0]);
+    float3 cofactor2 = cross(linear[0], linear[1]);
+    float handedness = dot(linear[0], cofactor0) < 0.0 ? -1.0 : 1.0;
 
-    uint* indices = (uint*) meshInfo.indexAddress;
-    uint vertexIndex = indices[vin.vertexId];
-
-    float3* positions = (float3*) vertexStream.positionAddress;
-    float3* normals = (float3*) vertexStream.normalAddress;
-    float4* tangents = (float4*) vertexStream.tangentAddress;
-    float2* texCoords0 = (float2*) vertexStream.texCoord0Address;
-    float2* texCoords1 = (float2*) vertexStream.texCoord1Address;
-
-    float3 position = positions[vertexIndex];
-    float3 normal = normals[vertexIndex];
-    float4 tangent = tangents[vertexIndex];
-    float2 uv = texCoords0[vertexIndex];
-    float2 uv1 = texCoords1[vertexIndex];
-
-    VertexOutput vout;
-    vout.uv       = uv;
-    vout.uv1      = uv1;
-    vout.position = mul(mul(mul(float4(position, 1.0), instance.objectToWorld), camData->viewMatrix), camData->projMatrix);
-    vout.normal   = normalize(mul(float4(normal, 0.0), instance.worldToObject).xyz);
-    vout.tangent  = float4(normalize(mul(tangent.xyz, (float3x3) instance.objectToWorld)), tangent.w);
+    GBufferVertexOutput vout;
+    vout.position = mul(mul(float4(position, 1.0), worldFromMesh), camera.viewProjMatrix);
+    // Cofactors give the inverse-transpose direction, including drawable scale.
+    vout.normal = normalize((normal.x * cofactor0 + normal.y * cofactor1 + normal.z * cofactor2) * handedness);
+    vout.tangent = float4(normalize(mul(tangent.xyz, linear)), tangent.w * handedness);
+    vout.uv = ((float2*) streams.texCoord0Address)[vertexIndex];
+    vout.uv1 = ((float2*) streams.texCoord1Address)[vertexIndex];
+    vout.drawID = drawID;
+    vout.customData = instance.customData;
     return vout;
 }

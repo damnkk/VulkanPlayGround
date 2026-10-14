@@ -1146,6 +1146,7 @@ void VulkanRuntime::updateFrameStatsTitle()
     char title[128]{};
     SDL_snprintf(title, sizeof(title), "%s - %.1f FPS (%.2f ms)", _config.windowTitle, fps, frameMs);
     _window.setTitle(title);
+    _guiHost.setFrameStats(fps, frameMs);
 
     _frameStats.framesSinceLastTitleUpdate = 0;
     _frameStats.lastTitleUpdateTicks       = currentTicks;
