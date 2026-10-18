@@ -30,6 +30,15 @@ BufferRegion appendAlignedRegion(VkDeviceSize& bufferSize, VkDeviceSize size)
     bufferSize += size;
     return region;
 }
+
+// Imported material traits become pipeline render state here. Each distinct
+// state gets its own shared MaterialInstance from MaterialManager.
+MaterialRenderState makeGBufferRenderState(const vpgloader::ModelMaterial& material)
+{
+    MaterialRenderState renderState;
+    renderState.rasterMode = material.doubleSided != 0 ? MaterialRasterMode::eTwoSidedTriangle : MaterialRasterMode::eTriangle;
+    return renderState;
+}
 } // namespace
 
 void Model::onLoadAsset()
@@ -215,8 +224,14 @@ void Model::onLoadAsset()
         vkDriver->submitAndWaitTempCmdBuffer(graphicsCmd);
     }
 
-    _materialInstances.assign(_loadedModel->materials.size(),
-                              MaterialManager::Instance().getDefaultMaterialInstance(BuiltinMaterials::BUILTIN_DEFAULT_GBUFFER_MATERIAL_NAME));
+    auto& materialManager = MaterialManager::Instance();
+    _materialInstances.resize(_loadedModel->materials.size());
+    for (size_t materialIndex = 0; materialIndex < _loadedModel->materials.size(); ++materialIndex)
+    {
+        _materialInstances[materialIndex] =
+            materialManager.getOrCreateMaterialInstance(BuiltinMaterials::BUILTIN_DEFAULT_GBUFFER_MATERIAL_NAME,
+                                                        makeGBufferRenderState(_loadedModel->materials[materialIndex]));
+    }
 
     // The geometry, mesh, material and texture-info blocks are now owned by
     // the GPU buffer, and texture pixels are owned by _textures.

@@ -5,12 +5,13 @@
 #include "renderPasses/VolumeSkyPass.h"
 #include "renderPasses/GBufferPass.h"
 #include "renderPasses/LightPass.h"
+#include "renderPasses/TransimissionPass.h"
 #include "resourceManagement/scene/SceneManager.h"
 #include "core/runtime/VulkanRuntime.h"
 namespace Play
 {
 
-DeferRenderer::DeferRenderer(RenderSession& session) 
+DeferRenderer::DeferRenderer(RenderSession& session)
 {
     _view = &session;
     // TODO: Load raster models through CpuModelComponent once the component-owned loader is wired.
@@ -30,6 +31,7 @@ void DeferRenderer::setupPasses()
     _passes.push_back(std::make_unique<VolumeSkyPass>(this));
     _passes.push_back(std::make_unique<GBufferPass>(this));
     _passes.push_back(std::make_unique<LightPass>(this));
+    _passes.push_back(std::make_unique<TransimissionPass>(this));
     _passes.push_back(std::make_unique<PostProcessPass>(this));
     _passes.push_back(std::make_unique<PresentPass>(this));
 }

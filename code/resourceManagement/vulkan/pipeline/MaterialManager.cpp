@@ -16,12 +16,7 @@ bool MaterialManager::initBuiltinMaterials()
     auto  material = std::make_shared<Material>(shaders.getShaderIdByName(BuiltinShaders::BUILTIN_DEFAULT_GBUFFER_VERT_SHADER_NAME),
                                                 shaders.getShaderIdByName(BuiltinShaders::BUILTIN_DEFAULT_GBUFFER_FRAG_SHADER_NAME),
                                                 BuiltinMaterials::BUILTIN_DEFAULT_GBUFFER_MATERIAL_NAME);
-    if (!registerMaterial(material))
-    {
-        return false;
-    }
-
-    return true;
+    return registerMaterial(material);
 }
 
 bool MaterialManager::registerMaterial(const std::shared_ptr<Material>& material)
@@ -39,7 +34,7 @@ bool MaterialManager::registerMaterial(const std::shared_ptr<Material>& material
         return false;
     }
 
-    _materials.emplace(name, MaterialEntry{material, material->createMaterialInstance()});
+    _materials.emplace(name, MaterialEntry{material, {material->createMaterialInstance()}});
     return true;
 }
 
@@ -49,10 +44,28 @@ std::shared_ptr<Material> MaterialManager::getMaterial(const std::string& materi
     return iter == _materials.end() ? nullptr : iter->second.material;
 }
 
-std::shared_ptr<MaterialInstance> MaterialManager::getDefaultMaterialInstance(const std::string& materialName) const
+std::shared_ptr<MaterialInstance> MaterialManager::getOrCreateMaterialInstance(const std::string&        materialName,
+                                                                              const MaterialRenderState& renderState)
 {
     const auto iter = _materials.find(materialName);
-    return iter == _materials.end() ? nullptr : iter->second.defaultInstance;
+    if (iter == _materials.end())
+    {
+        return nullptr;
+    }
+
+    MaterialEntry& entry = iter->second;
+    for (const auto& instance : entry.instances)
+    {
+        if (instance->getRenderState() == renderState)
+        {
+            return instance;
+        }
+    }
+
+    auto instance = entry.material->createMaterialInstance();
+    instance->setRenderState(renderState);
+    entry.instances.push_back(instance);
+    return instance;
 }
 
 void MaterialManager::deInit()

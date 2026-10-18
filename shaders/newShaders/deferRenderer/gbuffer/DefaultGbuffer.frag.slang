@@ -29,7 +29,7 @@ float4 sampleMaterialTexture(GpuSceneModelData model, uint textureInfoIndex, GBu
 }
 
 [shader("fragment")]
-FragmentOutput main(GBufferVertexOutput fragIn)
+FragmentOutput main(GBufferVertexOutput fragIn, bool isFrontFace : SV_IsFrontFace)
 {
     GpuSceneData scene = loadGpuScene(g_gBufferPushConstant.sceneConstant.sceneAddress);
     GpuSceneDrawData draw = loadGpuSceneDraw(scene, fragIn.drawID);
@@ -79,6 +79,7 @@ FragmentOutput main(GBufferVertexOutput fragIn)
         tangentNormal.xy *= material.normalTextureScale;
         normal = normalize(tangentNormal.x * tangent + tangentNormal.y * bitangent + tangentNormal.z * normal);
     }
+    if (material.doubleSided != 0 && !isFrontFace) normal = -normal;
     float2 encodedNormal = encodeOctahedron(normal);
 
     FragmentOutput output;
