@@ -57,6 +57,7 @@ void TAAPass::build(RDG::RDGBuilder* rdgBuilder)
 
     RDG::RDGTextureRef inputRef    = rdgBuilder->getTexture(INPUT_TEXTURE_NAME);
     RDG::RDGTextureRef velocityRef = rdgBuilder->getTexture(GBufferConfig::Get(GBufferType::GVelocity).debugName);
+    RDG::RDGTextureRef depthRef    = rdgBuilder->getTexture(GBufferConfig::Get(GBufferType::GSceneDepth).debugName);
     RDG::RDGTextureRef historyRef  = rdgBuilder->createTexture("TAAHistory").Import(_historyTexture.get()).finish();
     RDG::RDGTextureRef resolvedRef = rdgBuilder->createTexture("TAAResolved")
                                          .Extent({extent.width, extent.height, 1})
@@ -71,6 +72,7 @@ void TAAPass::build(RDG::RDGBuilder* rdgBuilder)
         .read(1, velocityRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
         .read(2, historyRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
         .storageWrite(3, resolvedRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+        .read(4, depthRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
         .execute(
             [this, groupsX, groupsY](RDG::PassNode*, RDG::RenderContext& context)
             {
@@ -82,10 +84,11 @@ void TAAPass::build(RDG::RDGBuilder* rdgBuilder)
                 }
                 if (control.historyReset()) _historyValid = false;
                 TAAPushConstant pushConstant{};
-                pushConstant.currentWeight    = _historyValid ? control.settings().taa.currentWeight : 1.0f;
-                pushConstant.jitterUV         = _ownedRender->getCurrentCameraData().jitterUV;
-                pushConstant.previousJitterUV = _ownedRender->getCurrentCameraData().previousJitterUV;
-                const auto pipeline           = context.createPipelineStateBuilder().build(_resolvePipeline);
+                pushConstant.currentWeight             = _historyValid ? control.settings().taa.currentWeight : 1.0f;
+                pushConstant.jitterUV                  = _ownedRender->getCurrentCameraData().jitterUV;
+                pushConstant.previousJitterUV          = _ownedRender->getCurrentCameraData().previousJitterUV;
+                pushConstant.cameraBufferDeviceAddress = _ownedRender->getCurrentCameraBuffer()->address;
+                const auto pipeline                    = context.createPipelineStateBuilder().build(_resolvePipeline);
                 context.bindPipeline(pipeline);
                 context.bindPushConstant(pushConstant);
                 vkCmdDispatch(context._currCmdBuffer, groupsX, groupsY, 1);

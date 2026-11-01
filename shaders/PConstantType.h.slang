@@ -32,6 +32,7 @@ struct TAAPushConstant
     float _padding;
     float2 jitterUV;
     float2 previousJitterUV;
+    uint64_t cameraBufferDeviceAddress;
 };
 
 #endif // P_CONSTANT_TYPE_H

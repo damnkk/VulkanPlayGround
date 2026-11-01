@@ -8,7 +8,7 @@ namespace Play
 struct TAASettings
 {
     bool  enabled       = true;
-    float currentWeight = 0.1f;
+    float currentWeight = 0.15f;
     float jitterScale   = 1.0f;
 };
 

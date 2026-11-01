@@ -53,7 +53,11 @@ void main(FragmentInput fragIn, out FragmentOutput fragOut)
         float  lightVieCosAngle   = lightOnPlane.x;
         bool   intersectGround    = raySphereIntersectNearest(WorldPos, WorldDir, float3(0, 0, 0), u_atmosParameter.BottomRadius) >= 0.0f;
         SkyViewLutParamsToUv(u_atmosParameter, intersectGround, viewZenithCosAngle, lightVieCosAngle, viewHeight, skyviewLutUV);
-        fragOut.color = float4(g_SkyViewLut.Sample(g_GlobalSampler_Linear_Clamp, skyviewLutUV).rgb + GetSunLuminance(WorldPos, WorldDir, sun_direction, u_atmosParameter.BottomRadius), 1.0);
+        float3 skyColor = g_SkyViewLut.Sample(g_GlobalSampler_Linear_Clamp, skyviewLutUV).rgb
+                        + GetSunLuminance(WorldPos, WorldDir, sun_direction, u_atmosParameter.BottomRadius);
+        // SkyBoxRT is RGBA16F. The procedural sun emits 1e6, beyond FP16's
+        // finite range; bound it before storage, not after it has become Inf.
+        fragOut.color = float4(clamp(skyColor, 0.0, 65504.0), 1.0);
         // fragOut.color.xyz = sun_direction;
         // fragOut.color.xyz = 100.0 * fragOut.color.xyz;
         // fragOut.color = g_SkyViewLut.Sample(g_GlobalSampler_Linear_Clamp, fragIn.uv)*100;

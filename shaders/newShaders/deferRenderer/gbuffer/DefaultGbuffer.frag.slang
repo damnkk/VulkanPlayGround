@@ -86,7 +86,13 @@ FragmentOutput main(GBufferVertexOutput fragIn, bool isFrontFace : SV_IsFrontFac
     // Subtract jitter from SV_Position's UV; prevClip uses the clean previous VP.
     CameraData camera  = ((CameraData*) g_gBufferPushConstant.perFrameConstant.cameraBufferDeviceAddress)[0];
     float2     currUV  = fragIn.position.xy / camera.viewPortSize - camera.jitterUV;
-    float2     prevUV  = fragIn.prevClip.xy / fragIn.prevClip.w * 0.5 + 0.5;
+    // A point behind the previous camera (or outside its depth range) has no
+    // valid history. Encode an offscreen previous UV so resolve rejects it.
+    bool previousDepthValid = fragIn.prevClip.w > 0.0
+                           && fragIn.prevClip.z >= 0.0 && fragIn.prevClip.z <= fragIn.prevClip.w;
+    float2 prevUV = float2(-1.0, -1.0);
+    if (previousDepthValid)
+        prevUV = fragIn.prevClip.xy / fragIn.prevClip.w * 0.5 + 0.5;
     float2     velocity = currUV - prevUV;
 
     FragmentOutput output;
