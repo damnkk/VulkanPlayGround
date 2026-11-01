@@ -11,9 +11,8 @@ LightPass::~LightPass() = default;
 
 void LightPass::init()
 {
-    auto lightPassFragID =
-        ShaderManager::Instance().loadShaderFromFile("lightPassFrag", "newShaders/deferRenderer/lighting/DefaultLightPass.frag.slang",
-                                                     ShaderStage::eFragment);
+    auto lightPassFragID = ShaderManager::Instance().loadShaderFromFile(
+        "lightPassFrag", "newShaders/deferRenderer/lighting/DefaultLightPass.frag.slang", ShaderStage::eFragment);
     auto fullScreenVertID = ShaderManager::Instance().getShaderIdByName(BuiltinShaders::BUILTIN_FULL_SCREEN_QUAD_VERT_SHADER_NAME);
     _lightPassPipeline.setShader(fullScreenVertID, lightPassFragID);
     _lightPassPipeline.setPushConstant<PerFrameConstant>();
@@ -31,12 +30,12 @@ void LightPass::build(RDG::RDGBuilder* rdgBuilder)
     RDG::RDGTextureRef velocityRT    = rdgBuilder->getTexture(GBufferConfig::Get(GBufferType::GVelocity).debugName);
     RDG::RDGTextureRef depthRT       = rdgBuilder->getTexture(GBufferConfig::Get(GBufferType::GSceneDepth).debugName);
     RDG::RDGTextureRef outputLight   = rdgBuilder->createTexture("LightPassOutput")
-                                         .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
-                                         .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
-                                         .Format(VK_FORMAT_R16G16B16A16_SFLOAT)
-                                         .UsageFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
-                                         .MipmapLevel(1)
-                                         .finish();
+                                           .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
+                                           .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
+                                           .Format(VK_FORMAT_R16G16B16A16_SFLOAT)
+                                           .UsageFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT)
+                                           .MipmapLevel(1)
+                                           .finish();
 
     RDG::RenderPassNodeRef lightPass =
         rdgBuilder->createRenderPass("Lighting Pass")
@@ -55,7 +54,7 @@ void LightPass::build(RDG::RDGBuilder* rdgBuilder)
                     VkCommandBuffer  cmd = context._currCmdBuffer;
                     PerFrameConstant perFrameConstant{};
                     perFrameConstant.cameraBufferDeviceAddress = _ownedRender->getCurrentCameraBuffer()->address;
-                    const auto pipeline = context.createPipelineStateBuilder().build(this->_lightPassPipeline);
+                    const auto pipeline                        = context.createPipelineStateBuilder().build(this->_lightPassPipeline);
                     context.bindPipeline(pipeline);
                     context.bindPushConstant(perFrameConstant);
                     VkViewport viewport = {0, 0, (float) vkDriver->getViewportSize().width, (float) vkDriver->getViewportSize().height, 0.0f, 1.0f};

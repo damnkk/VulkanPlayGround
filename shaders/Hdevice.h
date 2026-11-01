@@ -19,12 +19,16 @@ struct CameraData
     float4x4 viewMatrix;
     float4x4 projMatrix;
     float4x4 viewProjMatrix;
+    float4x4 prevViewProjMatrix;
     float4x4 invViewMatrix;
     float4x4 invProjMatrix;
     float4x4 invViewProjMatrix;
     float3   cameraPosition;
     float2   viewPortSize;
     float    WorldTime;
+    // UV displacement of rasterized geometry; all matrices above are unjittered.
+    float2   jitterUV;
+    float2   previousJitterUV;
 };
 
 // GPU-only model data. Keep these structures POD so the host can upload them

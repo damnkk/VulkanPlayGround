@@ -1,6 +1,7 @@
 #ifndef RENDERSESSION_H
 #define RENDERSESSION_H
 #include "resourceManagement/vulkan/resources/Resource.h"
+#include "ViewControl.h"
 
 namespace Play
 {
@@ -44,6 +45,15 @@ public:
         return _renderMode;
     }
 
+    ViewControl& getViewControl()
+    {
+        return _viewControl;
+    }
+    const ViewControl& getViewControl() const
+    {
+        return _viewControl;
+    }
+
 protected:
     // RenderPassCache
     // FrameBufferCache
@@ -51,7 +61,8 @@ protected:
     std::unique_ptr<Renderer> _renderer;
 
 private:
-    Info _info;
+    ViewControl _viewControl;
+    Info        _info;
     friend class RTRenderer;
     friend class VolumeRenderer;
     friend class ShadingRateRenderer;

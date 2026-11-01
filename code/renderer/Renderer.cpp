@@ -2,6 +2,7 @@
 #include "resourceManagement/vulkan/resources/Resource.h"
 #include "core/PlayCamera.h"
 #include "core/runtime/VulkanRuntime.h"
+#include "core/runtime/RenderSession.h"
 #include "resourceManagement/scene/SceneManager.h"
 #include "resourceManagement/renderGraph/RDG.h"
 #include "renderPasses/RenderPass.h"
@@ -20,6 +21,7 @@ void Renderer::addCamera()
 void Renderer::setActiveCamera(size_t index)
 {
     _activeCameraIdx = index;
+    _hasPrevViewProj = false;
 }
 
 Buffer* Renderer::getCurrentCameraBuffer() const
@@ -45,24 +47,46 @@ Renderer::Renderer()
 
 Renderer::~Renderer() = default;
 
+const ViewControl& Renderer::getViewControl() const
+{
+    return _view->getViewControl();
+}
+
 void Renderer::updateCameraBuffer()
 {
     // update curr activated camera into camera buffer
     PlayCamera* camera = getActiveCamera();
     camera->update(vkDriver->getInputState(), static_cast<float>(vkDriver->getDeltaTime()));
     CameraData data{};
-    data.cameraPosition    = camera->getCameraManipulator()->getEye();
-    data.projMatrix        = camera->getCameraManipulator()->getPerspectiveMatrix();
-    data.viewMatrix        = camera->getCameraManipulator()->getViewMatrix();
-    data.viewPortSize      = {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height};
+    data.cameraPosition = camera->getCameraManipulator()->getEye();
+    data.projMatrix     = camera->getCameraManipulator()->getPerspectiveMatrix();
+    data.viewMatrix     = camera->getCameraManipulator()->getViewMatrix();
+    data.viewPortSize   = {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height};
+
+    // All matrices remain unjittered. Rasterization applies jitter separately.
+    if (_view)
+    {
+        data.jitterUV         = getViewControl().jitterPixels() / data.viewPortSize;
+        data.previousJitterUV = getViewControl().previousJitterPixels() / data.viewPortSize;
+    }
+
     data.viewProjMatrix    = data.projMatrix * data.viewMatrix;
     data.invViewMatrix     = glm::inverse(data.viewMatrix);
     data.invProjMatrix     = glm::inverse(data.projMatrix);
     data.invViewProjMatrix = glm::inverse(data.viewProjMatrix);
 
+    if (!_hasPrevViewProj)
+    {
+        _prevViewProjMatrix = data.viewProjMatrix;
+        _hasPrevViewProj    = true;
+    }
+    data.prevViewProjMatrix = _prevViewProjMatrix;
+
     _cameraDatas[vkDriver->getFrameCycleIndex()] = data;
     memcpy(getCurrentCameraBuffer()->mapping, &data, sizeof(CameraData));
     PlayResourceManager::Instance().flushBuffer(*getCurrentCameraBuffer(), 0, VK_WHOLE_SIZE);
+
+    _prevViewProjMatrix = data.viewProjMatrix;
 }
 
 void Renderer::OnPreRender()
@@ -81,8 +105,9 @@ void Renderer::OnPostRender() {}
 
 void Renderer::OnResize(int width, int height)
 {
-    width  = std::max(width, 1);
-    height = std::max(height, 1);
+    _hasPrevViewProj = false;
+    width            = std::max(width, 1);
+    height           = std::max(height, 1);
 
     for (auto& camera : _cameras)
     {

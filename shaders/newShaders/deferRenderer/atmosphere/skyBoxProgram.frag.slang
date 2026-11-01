@@ -34,6 +34,8 @@ void main(FragmentInput fragIn, out FragmentOutput fragOut)
 {
     float3      clipSpace  = float3(fragIn.uv * float2(2.0, 2.0) - float2(1.0, 1.0), 1.0);
     CameraData* cameraData = (CameraData*) g_PerFrameConstant.cameraBufferDeviceAddress;
+    // Undo raster jitter before reconstructing a ray with the clean inverse projection.
+    clipSpace.xy -= 2.0 * cameraData->jitterUV;
     float4      HViewPos   = mul(float4(clipSpace, 1.0), cameraData->invProjMatrix);
     float3      WorldDir   = normalize(mul(HViewPos.xyz / HViewPos.w, (float3x3) cameraData->invViewMatrix));
     float3      WorldPos   = cameraData->cameraPosition + float3(0, u_atmosParameter.BottomRadius, 0);

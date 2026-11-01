@@ -22,6 +22,7 @@ class DeferRenderer : public Renderer
 public:
     explicit DeferRenderer(RenderSession& session);
     ~DeferRenderer() override;
+    void OnPreRender() override;
 
     RTTR_ENABLE(Renderer)
 

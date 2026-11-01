@@ -5,11 +5,17 @@
 #include "renderPasses/VolumeSkyPass.h"
 #include "renderPasses/GBufferPass.h"
 #include "renderPasses/LightPass.h"
+#include "renderPasses/TAAPass.h"
 #include "renderPasses/TransimissionPass.h"
 #include "resourceManagement/scene/SceneManager.h"
 #include "core/runtime/VulkanRuntime.h"
 namespace Play
 {
+void DeferRenderer::OnPreRender()
+{
+    _view->getViewControl().beginFrame(!_hasPrevViewProj);
+    Renderer::OnPreRender();
+}
 
 DeferRenderer::DeferRenderer(RenderSession& session)
 {
@@ -32,6 +38,7 @@ void DeferRenderer::setupPasses()
     _passes.push_back(std::make_unique<GBufferPass>(this));
     _passes.push_back(std::make_unique<LightPass>(this));
     _passes.push_back(std::make_unique<TransimissionPass>(this));
+    _passes.push_back(std::make_unique<TAAPass>(this));
     _passes.push_back(std::make_unique<PostProcessPass>(this));
     _passes.push_back(std::make_unique<PresentPass>(this));
 }

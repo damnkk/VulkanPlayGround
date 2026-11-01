@@ -12,6 +12,7 @@ struct GBufferVertexOutput
     float2 uv1 : TEXCOORD1;
     nointerpolation uint drawID : TEXCOORD2;
     nointerpolation float4 customData : TEXCOORD3;
+    float4 prevClip : TEXCOORD4;
 };
 
 [[vk::push_constant]]

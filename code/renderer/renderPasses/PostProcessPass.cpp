@@ -1,5 +1,6 @@
 #include "PostProcessPass.h"
 #include "DeferRendering.h"
+#include "TAAPass.h"
 #include "resourceManagement/renderGraph/RDG.h"
 #include "resourceManagement/vulkan/pipeline/ShaderManager.hpp"
 #include "core/runtime/VulkanRuntime.h"
@@ -20,7 +21,7 @@ void PostProcessPass::init()
 
 void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
 {
-    auto inputTextureRef = rdgBuilder->getTexture("LightPassOutput");
+    auto inputTextureRef = rdgBuilder->getTexture(TAAPass::OUTPUT_TEXTURE_NAME);
     auto outputTexRef    = rdgBuilder->createTexture("outputTexture")
                             .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
                             .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
@@ -30,7 +31,7 @@ void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
                             .finish();
 
     auto pass = rdgBuilder->createComputePass("postProcessPass")
-                    .read(0, inputTextureRef, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
+                    .read(0, inputTextureRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
                     .storageWrite(1, outputTexRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
                     .execute(
                         [inputTextureRef, outputTexRef, this](RDG::PassNode* passNode, RDG::RenderContext& context)

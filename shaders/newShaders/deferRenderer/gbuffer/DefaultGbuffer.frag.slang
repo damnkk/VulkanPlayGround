@@ -82,12 +82,19 @@ FragmentOutput main(GBufferVertexOutput fragIn, bool isFrontFace : SV_IsFrontFac
     if (material.doubleSided != 0 && !isFrontFace) normal = -normal;
     float2 encodedNormal = encodeOctahedron(normal);
 
+    // Motion excludes sampling jitter. Both endpoints are unjittered UVs.
+    // Subtract jitter from SV_Position's UV; prevClip uses the clean previous VP.
+    CameraData camera  = ((CameraData*) g_gBufferPushConstant.perFrameConstant.cameraBufferDeviceAddress)[0];
+    float2     currUV  = fragIn.position.xy / camera.viewPortSize - camera.jitterUV;
+    float2     prevUV  = fragIn.prevClip.xy / fragIn.prevClip.w * 0.5 + 0.5;
+    float2     velocity = currUV - prevUV;
+
     FragmentOutput output;
     output.albedo      = float4(baseColor.rgb, occlusion);
     output.worldNormal = float4(encodedNormal, metallic, baseColor.a);
     output.pbr         = float4(roughness, roughness, specular, 0.0);
     output.emissive    = float4(emissive, 0.0);
     output.custom      = fragIn.customData;
-    output.velocity    = float4(0.0, 0.0, 0.0, 0.0);
+    output.velocity    = float4(velocity, 0.0, 0.0);
     return output;
 }

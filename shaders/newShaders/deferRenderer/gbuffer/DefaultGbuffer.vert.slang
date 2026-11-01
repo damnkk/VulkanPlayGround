@@ -33,8 +33,16 @@ GBufferVertexOutput main(VertexInput vin)
     float3 cofactor2 = cross(linear[0], linear[1]);
     float handedness = dot(linear[0], cofactor0) < 0.0 ? -1.0 : 1.0;
 
+    float4 localPosition = float4(position, 1.0);
+
     GBufferVertexOutput vout;
-    vout.position = mul(mul(float4(position, 1.0), worldFromMesh), camera.viewProjMatrix);
+    vout.position = mul(mul(localPosition, worldFromMesh), camera.viewProjMatrix);
+    // Convert UV jitter to NDC, applying a constant offset after perspective divide.
+    vout.position.xy += 2.0 * camera.jitterUV * vout.position.w;
+    // Static geometry: the world position is identical in both frames, so only
+    // the camera matrices differ. With animation this becomes the previous
+    // frame's deformed world position.
+    vout.prevClip = mul(mul(localPosition, worldFromMesh), camera.prevViewProjMatrix);
     // Cofactors give the inverse-transpose direction, including drawable scale.
     vout.normal = normalize((normal.x * cofactor0 + normal.y * cofactor1 + normal.z * cofactor2) * handedness);
     vout.tangent = float4(normalize(mul(tangent.xyz, linear)), tangent.w * handedness);

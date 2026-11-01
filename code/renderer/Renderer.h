@@ -12,6 +12,7 @@ namespace Play
 {
 class PlayCamera;
 class RenderSession;
+class ViewControl;
 class Texture;
 class Buffer;
 class BasePass;
@@ -30,11 +31,11 @@ class Renderer
 public:
     Renderer();
     virtual ~Renderer();
-    virtual void     OnPreRender();
-    virtual void     OnPostRender();
-    virtual void     RenderFrame();
-    virtual void     OnResize(int width, int height);
-    virtual void     addCamera();
+    virtual void OnPreRender();
+    virtual void OnPostRender();
+    virtual void RenderFrame();
+    virtual void OnResize(int width, int height);
+    virtual void addCamera();
 
     virtual void        setActiveCamera(size_t index);
     virtual PlayCamera* getActiveCamera() const
@@ -42,8 +43,9 @@ public:
         return _cameras[_activeCameraIdx].get();
     }
 
-    Buffer*       getCurrentCameraBuffer() const;
-    const CameraData& getCurrentCameraData() const;
+    Buffer*            getCurrentCameraBuffer() const;
+    const CameraData&  getCurrentCameraData() const;
+    const ViewControl& getViewControl() const;
     RTTR_ENABLE()
 
 protected:
@@ -54,10 +56,14 @@ protected:
     uint32_t                                 _activeCameraIdx = 0;
     std::array<CameraData, 3>                _cameraDatas;
     std::array<RefPtr<Buffer>, 3>            _cameraUniformData;
+    // Snapshot of the view-projection used by the previously submitted frame.
+    // Frame slots cannot be used for this because they hold N-3's data.
+    glm::mat4 _prevViewProjMatrix{1.0f};
+    bool      _hasPrevViewProj = false;
 
-    std::unique_ptr<RDG::RDGBuilder>         _rdgBuilder;
-    std::vector<std::unique_ptr<BasePass>>   _passes;
-    RenderSession*                           _view = nullptr;
+    std::unique_ptr<RDG::RDGBuilder>       _rdgBuilder;
+    std::vector<std::unique_ptr<BasePass>> _passes;
+    RenderSession*                         _view = nullptr;
 
 private:
     void updatePresentTexture();
