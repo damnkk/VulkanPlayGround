@@ -45,13 +45,33 @@ set(CMAKE_AUTOMOC ON)
 
 #####################################################################################
 # Qt6
+set(_vpg_bundled_qt_root "${CMAKE_CURRENT_SOURCE_DIR}/External/QT6")
 if(CMAKE_BUILD_TYPE MATCHES "^[Dd]ebug$")
-  set(_vpg_qt_default_root ${CMAKE_CURRENT_SOURCE_DIR}/External/QT6/debug)
+  set(_vpg_qt_default_root "${_vpg_bundled_qt_root}/debug")
 else()
-  set(_vpg_qt_default_root ${CMAKE_CURRENT_SOURCE_DIR}/External/QT6/release)
+  set(_vpg_qt_default_root "${_vpg_bundled_qt_root}/release")
 endif()
-set(VPG_QT6_ROOT ${_vpg_qt_default_root} CACHE PATH "Qt6 install prefix used by VulkanPlayGround")
-list(PREPEND CMAKE_PREFIX_PATH ${VPG_QT6_ROOT})
+set(VPG_QT6_ROOT "" CACHE PATH "Custom Qt6 install prefix (empty selects the bundled Qt6)")
+# Older build directories cached the bundled prefix as if it were an override.
+if(VPG_QT6_ROOT STREQUAL "${_vpg_bundled_qt_root}/debug" OR VPG_QT6_ROOT STREQUAL "${_vpg_bundled_qt_root}/release")
+  set(VPG_QT6_ROOT "" CACHE PATH "Custom Qt6 install prefix (empty selects the bundled Qt6)" FORCE)
+endif()
+set(_vpg_qt_root "${_vpg_qt_default_root}")
+if(VPG_QT6_ROOT)
+  set(_vpg_qt_root "${VPG_QT6_ROOT}")
+endif()
+
+# Qt's dependency packages cache their own directories as well as Qt6_DIR.
+if(DEFINED Qt6_DIR AND NOT _vpg_qt_root STREQUAL _vpg_qt_previous_root)
+  get_cmake_property(_vpg_cache_vars CACHE_VARIABLES)
+  foreach(_vpg_cache_var IN LISTS _vpg_cache_vars)
+    if(_vpg_cache_var MATCHES "^Qt6.*_DIR$")
+      unset(${_vpg_cache_var} CACHE)
+    endif()
+  endforeach()
+endif()
+set(_vpg_qt_previous_root "${_vpg_qt_root}" CACHE INTERNAL "Qt6 prefix used by the previous configure")
+list(PREPEND CMAKE_PREFIX_PATH "${_vpg_qt_root}")
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Widgets)
 
 #####################################################################################
@@ -175,12 +195,12 @@ foreach(_vpg_qt_module Core Gui Widgets)
 endforeach()
 
 foreach(_vpg_qt_plugin_dir platforms styles imageformats)
-  if(EXISTS "${VPG_QT6_ROOT}/plugins/${_vpg_qt_plugin_dir}")
+  if(EXISTS "${_vpg_qt_root}/plugins/${_vpg_qt_plugin_dir}")
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_FILE_DIR:${PROJECT_NAME}>/${_vpg_qt_plugin_dir}"
       COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${VPG_QT6_ROOT}/plugins/${_vpg_qt_plugin_dir}"
+        "${_vpg_qt_root}/plugins/${_vpg_qt_plugin_dir}"
         "$<TARGET_FILE_DIR:${PROJECT_NAME}>/${_vpg_qt_plugin_dir}"
     )
   endif()
