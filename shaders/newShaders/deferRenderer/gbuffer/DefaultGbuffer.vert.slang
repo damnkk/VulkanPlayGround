@@ -19,7 +19,7 @@ GBufferVertexOutput main(VertexInput vin)
     ModelMeshInfo mesh = loadGpuSceneMesh(model, drawable);
     ModelVertexStreamInfo streams = loadGpuSceneVertexStreams(mesh);
     GpuSceneInstanceData instance = loadGpuSceneInstance(scene, vin.instanceIndex);
-    uint vertexIndex = loadGpuSceneVertexIndex(mesh, vin.vertexID);
+    uint vertexIndex = vin.vertexID;
 
     float3 position = ((float3*) streams.positionAddress)[vertexIndex];
     float3 normal = ((float3*) streams.normalAddress)[vertexIndex];

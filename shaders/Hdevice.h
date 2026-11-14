@@ -46,7 +46,6 @@ struct ModelVertexStreamInfo
 struct ModelMeshInfo
 {
     uint64_t vertexStreamAddress;
-    uint64_t indexAddress;
     uint     indexCount;
     uint     materialIndex;
 };
@@ -87,7 +86,7 @@ struct ModelDrawableInfo
     float4   boundsMax;
     uint     meshIndex;
     uint     materialIndex;
-    uint     firstIndex; // Offset into ModelBufferInfo.indexAddress; already folded into ModelMeshInfo.indexAddress.
+    uint     firstIndex; // Index element offset from ModelBufferInfo.indexAddress.
     uint     indexCount;
 };
 
@@ -129,12 +128,13 @@ struct GpuSceneDrawBucket
     uint _padding;
 };
 
-// Byte layout matches VkDrawIndirectCommand (16 bytes). Shaders pull indices and vertices.
+// Byte layout matches VkDrawIndexedIndirectCommand (20 bytes).
 struct GpuSceneIndirectDrawCommand
 {
-    uint vertexCount; // Drawable indexCount: one vertex invocation per index entry.
+    uint indexCount;
     uint instanceCount;
-    uint firstVertex; // Zero: ModelMeshInfo.indexAddress already points to this mesh's indices.
+    uint firstIndex;
+    int  vertexOffset; // Zero: stream addresses already include the mesh's base vertex.
     uint firstInstance;
 };
 
@@ -161,7 +161,7 @@ struct GpuSceneData
 
 #ifdef __cplusplus
 static_assert(sizeof(ModelVertexStreamInfo) == 48);
-static_assert(sizeof(ModelMeshInfo) == 24);
+static_assert(sizeof(ModelMeshInfo) == 16);
 static_assert(sizeof(ModelTextureInfo) == 32);
 static_assert(sizeof(ModelBufferInfo) == 96);
 static_assert(sizeof(ModelDrawableInfo) == 112);
@@ -170,7 +170,7 @@ static_assert(sizeof(GpuSceneInstanceData) == 144);
 static_assert(sizeof(GpuSceneDrawData) == 16);
 static_assert(sizeof(GpuSceneDrawCandidate) == 8);
 static_assert(sizeof(GpuSceneDrawBucket) == 16);
-static_assert(sizeof(GpuSceneIndirectDrawCommand) == 16);
+static_assert(sizeof(GpuSceneIndirectDrawCommand) == 20);
 static_assert(sizeof(GpuSceneData) == 96);
 #endif
 

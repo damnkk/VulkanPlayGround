@@ -5,7 +5,7 @@
 
 namespace Play
 {
-static_assert(sizeof(GpuSceneIndirectDrawCommand) == sizeof(VkDrawIndirectCommand));
+static_assert(sizeof(GpuSceneIndirectDrawCommand) == sizeof(VkDrawIndexedIndirectCommand));
 namespace
 {
 uint32_t growCapacity(uint32_t required)
@@ -163,7 +163,8 @@ void GpuScene::updateDrawCommands(const std::vector<DrawCommand>& commands)
     for (const auto& command : commands)
     {
         auto& cached = _drawCommands.at(command.drawID);
-        if (cached.drawID != command.drawID || cached.materialInstanceRef != command.materialInstanceRef) _drawSnapshotDirty = true;
+        if (cached.drawID != command.drawID || cached.modelID != command.modelID || cached.materialInstanceRef != command.materialInstanceRef)
+            _drawSnapshotDirty = true;
         cached = command;
     }
 }
@@ -195,7 +196,7 @@ void GpuScene::ensureFrameCapacity(FrameResources& frame, uint32_t commandCount,
     frame.instanceOffset      = reserveRegion(size, frame.instanceCapacity, sizeof(GpuSceneInstanceData));
     frame.candidateOffset     = reserveRegion(size, frame.commandCapacity, sizeof(GpuSceneDrawCandidate));
     frame.bucketOffset        = reserveRegion(size, frame.bucketCapacity, sizeof(GpuSceneDrawBucket));
-    frame.indirectOffset      = reserveRegion(size, frame.commandCapacity, sizeof(VkDrawIndirectCommand));
+    frame.indirectOffset      = reserveRegion(size, frame.commandCapacity, sizeof(GpuSceneIndirectDrawCommand));
     frame.countOffset         = reserveRegion(size, frame.bucketCapacity, sizeof(uint32_t));
     frame.visibleDrawIDOffset = reserveRegion(size, frame.commandCapacity, sizeof(uint32_t));
 
@@ -216,19 +217,21 @@ void GpuScene::rebuildDrawSnapshot()
     _buckets.clear();
     _gpuBuckets.clear();
     _candidates.clear();
-    std::vector<std::vector<uint32_t>>              bucketDraws;
-    std::unordered_map<MaterialInstance*, uint32_t> bucketIDs;
-    const uint32_t                                  maxDrawCount = vkDriver->_physicalDeviceProperties2.properties.limits.maxDrawIndirectCount;
+    std::vector<std::vector<uint32_t>> bucketDraws;
+    // An indexed multidraw uses the index buffer bound for the entire bucket.
+    std::unordered_map<uint32_t, std::unordered_map<MaterialInstance*, uint32_t>> bucketIDsByModel;
+    const uint32_t maxDrawCount = vkDriver->_physicalDeviceProperties2.properties.limits.maxDrawIndirectCount;
     for (const auto& command : _drawCommands)
     {
         if (command.drawID == InvalidID) continue;
-        auto iter = bucketIDs.find(command.materialInstanceRef);
+        auto& bucketIDs = bucketIDsByModel[command.modelID];
+        auto  iter      = bucketIDs.find(command.materialInstanceRef);
         if (iter == bucketIDs.end() || bucketDraws[iter->second].size() == maxDrawCount)
         {
             const uint32_t bucketID                = static_cast<uint32_t>(bucketDraws.size());
             bucketIDs[command.materialInstanceRef] = bucketID;
             bucketDraws.emplace_back();
-            _buckets.push_back({command.materialInstanceRef, {}});
+            _buckets.push_back({command.materialInstanceRef, command.modelID, {}});
             iter = bucketIDs.find(command.materialInstanceRef);
         }
         bucketDraws[iter->second].push_back(command.drawID);
@@ -345,7 +348,7 @@ void GpuScene::cmdUpload(VkCommandBuffer cmd)
         {
             const auto& draw     = _drawData.at(candidate.drawID);
             const auto& drawable = _models.at(draw.modelID)->getDrawableInfos().at(draw.drawableID);
-            commands.push_back({drawable.indexCount, draw.instanceCount, 0, draw.instanceBase});
+            commands.push_back({drawable.indexCount, draw.instanceCount, drawable.firstIndex, 0, draw.instanceBase});
         }
         append(frame.indirectOffset, commands.size() * sizeof(GpuSceneIndirectDrawCommand), commands.data());
     }
@@ -398,7 +401,7 @@ const std::vector<GpuScene::DrawBucket>& GpuScene::getDrawBuckets() const
 VkDeviceSize GpuScene::getIndirectOffset(uint32_t bucketID) const
 {
     const auto& frame = currentFrame();
-    return frame.indirectOffset + VkDeviceSize(frame.buckets.at(bucketID).gpu.firstCommand) * sizeof(VkDrawIndirectCommand);
+    return frame.indirectOffset + VkDeviceSize(frame.buckets.at(bucketID).gpu.firstCommand) * sizeof(GpuSceneIndirectDrawCommand);
 }
 
 VkDeviceSize GpuScene::getCountOffset(uint32_t bucketID) const
@@ -410,10 +413,13 @@ VkDeviceSize GpuScene::getCountOffset(uint32_t bucketID) const
 void GpuScene::cmdDrawBucket(VkCommandBuffer cmd, uint32_t bucketID) const
 {
     const auto& frame  = currentFrame();
-    const auto& bucket = frame.buckets.at(bucketID).gpu;
-    if (bucket.capacity == 0) return;
-    vkCmdDrawIndirectCount(cmd, frame.buffer->buffer, getIndirectOffset(bucketID), frame.buffer->buffer, getCountOffset(bucketID), bucket.capacity,
-                           sizeof(VkDrawIndirectCommand));
+    const auto& bucket = frame.buckets.at(bucketID);
+    if (bucket.gpu.capacity == 0) return;
+    const auto& model       = *_models.at(bucket.modelID);
+    const auto* assetBuffer = model.getAssetBuffer();
+    vkCmdBindIndexBuffer(cmd, assetBuffer->buffer, model.getBufferInfo().indexAddress - assetBuffer->address, VK_INDEX_TYPE_UINT32);
+    vkCmdDrawIndexedIndirectCount(cmd, frame.buffer->buffer, getIndirectOffset(bucketID), frame.buffer->buffer, getCountOffset(bucketID),
+                                  bucket.gpu.capacity, sizeof(GpuSceneIndirectDrawCommand));
 }
 
 void GpuScene::cmdResetDrawCounts(VkCommandBuffer cmd) const

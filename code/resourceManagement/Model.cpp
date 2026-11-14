@@ -93,9 +93,10 @@ void Model::onLoadAsset()
         return;
     }
 
-    _assetBuffer = RefPtr<Buffer>(new Buffer(
-        "Model asset buffer", VK_BUFFER_USAGE_2_TRANSFER_DST_BIT | VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT,
-        bufferSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
+    _assetBuffer = RefPtr<Buffer>(new Buffer("Model asset buffer",
+                                             VK_BUFFER_USAGE_2_TRANSFER_DST_BIT | VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT |
+                                                 VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_2_INDEX_BUFFER_BIT,
+                                             bufferSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
 
     const uint64_t baseAddress = _assetBuffer->address;
     auto regionAddress         = [baseAddress](const BufferRegion& region) -> uint64_t { return region.size == 0 ? 0 : baseAddress + region.offset; };
@@ -146,7 +147,6 @@ void Model::onLoadAsset()
 
         ModelMeshInfo& meshInfo      = meshInfos[meshIndex];
         meshInfo.vertexStreamAddress = regionAddress(vertexStreamRegion) + meshIndex * sizeof(ModelVertexStreamInfo);
-        meshInfo.indexAddress        = _modelDesc.indexAddress + sourceMesh.firstIndex * sizeof(geometry.indices[0]);
         meshInfo.indexCount          = sourceMesh.indexCount;
         meshInfo.materialIndex       = sourceMesh.materialIndex;
     }

@@ -39,13 +39,6 @@ ModelVertexStreamInfo loadGpuSceneVertexStreams(ModelMeshInfo mesh)
     return ((ModelVertexStreamInfo*) mesh.vertexStreamAddress)[0];
 }
 
-// Non-indexed VertexIndex starts at zero (firstVertex == 0). indexAddress is
-// mesh-local; adding drawable.firstIndex again would apply the offset twice.
-uint loadGpuSceneVertexIndex(ModelMeshInfo mesh, uint vertexID)
-{
-    return ((uint*) mesh.indexAddress)[vertexID];
-}
-
 // instanceIndex is Vulkan's InstanceIndex, which already includes firstInstance.
 GpuSceneInstanceData loadGpuSceneInstance(GpuSceneData scene, uint instanceIndex)
 {

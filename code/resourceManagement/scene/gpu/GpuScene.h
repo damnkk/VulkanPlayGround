@@ -22,6 +22,7 @@ public:
     struct DrawBucket
     {
         MaterialInstance*  materialInstanceRef = nullptr;
+        uint32_t           modelID             = InvalidID;
         GpuSceneDrawBucket gpu{};
     };
 
