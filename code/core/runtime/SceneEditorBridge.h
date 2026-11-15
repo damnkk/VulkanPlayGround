@@ -1,6 +1,8 @@
 #ifndef PLAY_CODE_CORE_RUNTIME_SCENEEDITORBRIDGE_H
 #define PLAY_CODE_CORE_RUNTIME_SCENEEDITORBRIDGE_H
 
+#include "editor/EditorProtocol.h"
+
 namespace Play
 {
 class AssetManager;
@@ -15,10 +17,12 @@ class RuntimeEditor;
 namespace Play::runtime
 {
 
-// Called on the engine thread; Qt only receives copied scene data.
+// Called by the scene owner; Qt only receives copied scene data.
 void publishSceneSnapshot(SceneManager& sceneManager, AssetManager& assetManager, editor::RuntimeEditor& editor);
-void processSceneCommands(SceneManager& sceneManager, AssetManager& assetManager, editor::RuntimeEditor& editor);
-void processAssetImports(AssetManager& assetManager, SceneManager& sceneManager, editor::RuntimeEditor& editor);
+void processSceneCommands(SceneManager& sceneManager, AssetManager& assetManager, editor::RuntimeEditor& editor,
+                          const std::vector<editor::EditorCommand>& commands);
+void processAssetImports(AssetManager& assetManager, SceneManager& sceneManager, editor::RuntimeEditor& editor,
+                         const std::vector<editor::EditorAssetImportRequest>& requests);
 
 // Consumes a UI save request and persists the open project. Kept out of the
 // command path because saving locks the scene itself; the runtime loop calls

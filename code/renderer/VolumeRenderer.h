@@ -15,7 +15,6 @@ public:
     ~VolumeRenderer() override;
 
     void OnPreRender() override;
-    void OnResize(int width, int height) override;
 
     RTTR_ENABLE(Renderer)
 

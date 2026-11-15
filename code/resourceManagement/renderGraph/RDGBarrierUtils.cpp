@@ -2,17 +2,6 @@
 
 namespace Play
 {
-bool isImageBarrierValid(const VkImageMemoryBarrier2& barrier)
-{
-    return barrier.srcAccessMask | barrier.dstAccessMask | barrier.oldLayout | barrier.newLayout | barrier.dstStageMask | barrier.srcStageMask;
-}
-
-bool isBufferBarrierValid(const VkBufferMemoryBarrier2& barrier)
-{
-    return barrier.srcAccessMask | barrier.dstAccessMask | barrier.dstStageMask | barrier.srcStageMask | barrier.dstQueueFamilyIndex |
-           barrier.srcQueueFamilyIndex;
-}
-
 VkFlags pipelineStageToShaderStage(VkPipelineStageFlags2 pipelineStage)
 {
     switch (pipelineStage)
@@ -42,13 +31,11 @@ VkFlags pipelineStageToShaderStage(VkPipelineStageFlags2 pipelineStage)
 VkFlags inferShaderStageFromPipelineStage(VkFlags64 pipelineStage)
 {
     VkFlags shaderStage = 0;
-    for (uint32_t i = 0; i < 64; ++i)
+    while (pipelineStage)
     {
-        VkFlags64 stageBit = VkFlags64(1) << i;
-        if (pipelineStage & stageBit)
-        {
-            shaderStage |= pipelineStageToShaderStage(static_cast<VkPipelineStageFlags2>(stageBit));
-        }
+        const VkFlags64 stageBit = pipelineStage & (~pipelineStage + 1);
+        shaderStage |= pipelineStageToShaderStage(static_cast<VkPipelineStageFlagBits2>(stageBit));
+        pipelineStage &= pipelineStage - 1;
     }
     return shaderStage;
 }

@@ -29,8 +29,8 @@ struct RenderPassAttachment
     VkClearValue clearValue{};
 
     // Layout Management
-    VkImageLayout initialLayout{VK_IMAGE_LAYOUT_UNDEFINED}; // State before Begin (Used for Barrier src in Dynamic mode)
-    VkImageLayout finalLayout{VK_IMAGE_LAYOUT_UNDEFINED};   // State after End (Used for Barrier dst in Dynamic mode)
+    VkImageLayout initialLayout{VK_IMAGE_LAYOUT_UNDEFINED}; // Layout during rendering, prepared by RDG.
+    VkImageLayout finalLayout{VK_IMAGE_LAYOUT_UNDEFINED};   // Optional layout requested after rendering.
 };
 
 // Overall RenderPass configuration
@@ -123,7 +123,7 @@ private:
 };
 
 // Dynamic Rendering implementation (VK_KHR_dynamic_rendering)
-// Internally holds VkRenderingInfo and handles Layout Barrier
+// Holds VkRenderingInfo; RDG records the resource barriers around it.
 class DynamicRenderPass : public RenderPass
 {
 public:
@@ -148,12 +148,7 @@ public:
     }
 
 private:
-    // Internal helper: handle Layout Transition
-    // isBegin = true: initialLayout -> layout
-    // isBegin = false: layout -> finalLayout
-    void transitionLayouts(VkCommandBuffer cmd, bool isBegin);
-
-    // Cache VkRenderingInfo related structures to avoid per-frame construction
+    // Attachment arrays referenced by VkRenderingInfo.
     std::vector<VkRenderingAttachmentInfo> m_vkColorAttachments;
     std::vector<VkFormat>                  m_vkColorAttachmentFormats;
     VkRenderingAttachmentInfo              m_vkDepthAttachment{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};

@@ -54,9 +54,9 @@ public:
     ~VolumeRenderPass() override;
 
     void init() override;
+    void onResize() override;
     void build(RDG::RDGBuilder* rdgBuilder) override;
     void updateUniform();
-    void resetFrameCount();
 
     RTTR_ENABLE(BasePass)
 
@@ -76,7 +76,7 @@ private:
     void loadVolumeTexture();
     void createTransferFunctionTextures();
     void createEnvTexture();
-    void createUniformBuffer();
+    void resetFrameCount();
     void uploadTexture(Texture& texture, const void* data, VkDeviceSize dataSize, VkImageCreateInfo imageInfo, VkImageViewCreateInfo viewInfo,
                        VkImageLayout finalLayout);
     void acquireLinearSampler(Texture& texture);
@@ -90,9 +90,10 @@ private:
     ComputePipelineStateInitializer _accumulatePipeline;
     ComputePipelineStateInitializer _postProcessPipeline;
 
-    RefPtr<Texture> _textures[static_cast<uint32_t>(TextureSlot::eCount)];
-    RefPtr<Buffer>  _uniformBuffer;
-    VkExtent3D      _volumeExtent = {1, 1, 1};
+    RefPtr<Texture>             _textures[static_cast<uint32_t>(TextureSlot::eCount)];
+    std::vector<RefPtr<Buffer>> _uniformBuffers;
+    RefPtr<Texture>             _accumulationTexture;
+    VkExtent3D                  _volumeExtent = {1, 1, 1};
 
     VolumeRenderParameters         _parameters;
     mutable VolumeRenderParameters _lastParameters;

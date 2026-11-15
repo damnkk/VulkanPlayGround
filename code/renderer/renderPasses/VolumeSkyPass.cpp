@@ -7,14 +7,14 @@
 
 namespace
 {
-constexpr uint32_t         kTransmittanceLutWidth     = 256;
-constexpr uint32_t         kTransmittanceLutHeight    = 64;
-constexpr uint32_t         kTransmittanceGroupSize    = 8;
-constexpr uint32_t         kMultiScatteringLutWidth   = 32;
-constexpr uint32_t         kMultiScatteringLutHeight  = 32;
-constexpr uint32_t         kSkyViewLutWidth           = 192;
-constexpr uint32_t         kSkyViewLutHeight          = 108;
-constexpr uint32_t         kSkyViewGroupSize          = 8;
+constexpr uint32_t kTransmittanceLutWidth    = 256;
+constexpr uint32_t kTransmittanceLutHeight   = 64;
+constexpr uint32_t kTransmittanceGroupSize   = 8;
+constexpr uint32_t kMultiScatteringLutWidth  = 32;
+constexpr uint32_t kMultiScatteringLutHeight = 32;
+constexpr uint32_t kSkyViewLutWidth          = 192;
+constexpr uint32_t kSkyViewLutHeight         = 108;
+constexpr uint32_t kSkyViewGroupSize         = 8;
 } // namespace
 
 namespace Play
@@ -50,9 +50,9 @@ void VolumeSkyPass::init()
     _skyBoxPipeline.psoState.depthStencilState.depthWriteEnable = VK_FALSE;
     _skyBoxPipeline.psoState.depthStencilState.depthTestEnable  = VK_FALSE;
 
-    _transmittanceLut              = RefPtr<Texture>(new Texture(kTransmittanceLutWidth, kTransmittanceLutHeight, VK_FORMAT_R16G16B16A16_SFLOAT,
-                                                                 VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_LAYOUT_GENERAL));
-    _transmittanceLut->DebugName() = "TransmittanceLut";
+    _transmittanceLut                = RefPtr<Texture>(new Texture(kTransmittanceLutWidth, kTransmittanceLutHeight, VK_FORMAT_R16G16B16A16_SFLOAT,
+                                                                   VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_LAYOUT_GENERAL));
+    _transmittanceLut->DebugName()   = "TransmittanceLut";
     _multiScatteringLut              = RefPtr<Texture>(new Texture(kMultiScatteringLutWidth, kMultiScatteringLutHeight, VK_FORMAT_R16G16B16A16_SFLOAT,
                                                                    VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_LAYOUT_GENERAL));
     _multiScatteringLut->DebugName() = "MultiScatteringLut";
@@ -70,13 +70,13 @@ void VolumeSkyPass::build(RDG::RDGBuilder* rdgBuilder)
     auto           multiScatteringLutRef = rdgBuilder->createTexture("MultiScatteringLut").Import(_multiScatteringLut.get()).finish();
     auto           skyViewLutRef         = rdgBuilder->createTexture("SkyViewLut").Import(_skyViewLut.get()).finish();
     auto           SkyBoxRT              = rdgBuilder->createTexture("SkyBoxRT")
-                        .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
-                        .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
-                        .Format(VK_FORMAT_R16G16B16A16_SFLOAT)
-                        .UsageFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
-                        .MipmapLevel(1)
-                        .finish();
-    auto atmosBuffer = rdgBuilder->createBuffer("atmosBuffer").Import(_skyAtmosControler.getGPUBuffer()).finish();
+                                               .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
+                                               .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
+                                               .Format(VK_FORMAT_R16G16B16A16_SFLOAT)
+                                               .UsageFlags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
+                                               .MipmapLevel(1)
+                                               .finish();
+    auto           atmosBuffer           = rdgBuilder->createBuffer("atmosBuffer").Import(_skyAtmosControler.getGPUBuffer()).finish();
 
     auto transmisstanceLutPass =
         rdgBuilder->createComputePass("TransmittanceLutPass")
@@ -87,7 +87,7 @@ void VolumeSkyPass::build(RDG::RDGBuilder* rdgBuilder)
                 {
                     PerFrameConstant perFrameConstant{};
                     perFrameConstant.cameraBufferDeviceAddress = ownedRender->getCurrentCameraBuffer()->address;
-                    const auto pipeline = context.createPipelineStateBuilder().build(_transmittanceLutPipeline);
+                    const auto pipeline                        = context.createPipelineStateBuilder().build(_transmittanceLutPipeline);
                     context.bindPipeline(pipeline);
                     context.bindPushConstant(perFrameConstant);
                     vkCmdDispatch(context._currCmdBuffer, (kTransmittanceLutWidth + kTransmittanceGroupSize - 1) / kTransmittanceGroupSize,
@@ -95,55 +95,52 @@ void VolumeSkyPass::build(RDG::RDGBuilder* rdgBuilder)
                 })
             .finish();
 
-    auto multiScatteringLutPass =
-        rdgBuilder->createComputePass("MultiScatteringLutPass")
-            .storageWrite(0, multiScatteringLutRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-            .read(1, transmittanceLutRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-            .read(2, atmosBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-            .execute(
-                [this, ownedRender](RDG::PassNode* passNode, RDG::RenderContext& context)
-                {
-                    PerFrameConstant perFrameConstant{};
-                    perFrameConstant.cameraBufferDeviceAddress = ownedRender->getCurrentCameraBuffer()->address;
-                    const auto pipeline = context.createPipelineStateBuilder().build(_multiScatteringLutPipeline);
-                    context.bindPipeline(pipeline);
-                    context.bindPushConstant(perFrameConstant);
-                    vkCmdDispatch(context._currCmdBuffer, kMultiScatteringLutWidth, kMultiScatteringLutHeight, 1);
-                })
-            .finish();
+    auto multiScatteringLutPass = rdgBuilder->createComputePass("MultiScatteringLutPass")
+                                      .storageWrite(0, multiScatteringLutRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+                                      .read(1, transmittanceLutRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+                                      .read(2, atmosBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+                                      .execute(
+                                          [this, ownedRender](RDG::PassNode* passNode, RDG::RenderContext& context)
+                                          {
+                                              PerFrameConstant perFrameConstant{};
+                                              perFrameConstant.cameraBufferDeviceAddress = ownedRender->getCurrentCameraBuffer()->address;
+                                              const auto pipeline = context.createPipelineStateBuilder().build(_multiScatteringLutPipeline);
+                                              context.bindPipeline(pipeline);
+                                              context.bindPushConstant(perFrameConstant);
+                                              vkCmdDispatch(context._currCmdBuffer, kMultiScatteringLutWidth, kMultiScatteringLutHeight, 1);
+                                          })
+                                      .finish();
 
-    auto skyViewLutPass =
-        rdgBuilder->createComputePass("SkyViewLutPass")
-            .storageWrite(0, skyViewLutRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-            .read(1, transmittanceLutRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-            .read(2, multiScatteringLutRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-            .read(3, atmosBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-            .execute(
-                [this, ownedRender](RDG::PassNode* passNode, RDG::RenderContext& context)
-                {
-                    PerFrameConstant perFrameConstant{};
-                    perFrameConstant.cameraBufferDeviceAddress = ownedRender->getCurrentCameraBuffer()->address;
-                    const auto pipeline = context.createPipelineStateBuilder().build(_skyViewLutPipeline);
-                    context.bindPipeline(pipeline);
-                    context.bindPushConstant(perFrameConstant);
-                    vkCmdDispatch(context._currCmdBuffer, (kSkyViewLutWidth + kSkyViewGroupSize - 1) / kSkyViewGroupSize,
-                                  (kSkyViewLutHeight + kSkyViewGroupSize - 1) / kSkyViewGroupSize, 1);
-                })
-            .finish();
+    auto skyViewLutPass = rdgBuilder->createComputePass("SkyViewLutPass")
+                              .storageWrite(0, skyViewLutRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+                              .read(1, transmittanceLutRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+                              .read(2, multiScatteringLutRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+                              .read(3, atmosBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+                              .execute(
+                                  [this, ownedRender](RDG::PassNode* passNode, RDG::RenderContext& context)
+                                  {
+                                      PerFrameConstant perFrameConstant{};
+                                      perFrameConstant.cameraBufferDeviceAddress = ownedRender->getCurrentCameraBuffer()->address;
+                                      const auto pipeline                        = context.createPipelineStateBuilder().build(_skyViewLutPipeline);
+                                      context.bindPipeline(pipeline);
+                                      context.bindPushConstant(perFrameConstant);
+                                      vkCmdDispatch(context._currCmdBuffer, (kSkyViewLutWidth + kSkyViewGroupSize - 1) / kSkyViewGroupSize,
+                                                    (kSkyViewLutHeight + kSkyViewGroupSize - 1) / kSkyViewGroupSize, 1);
+                                  })
+                              .finish();
 
     auto skyBoxPass =
         rdgBuilder->createRenderPass("skyBoxPass")
-            .color(0, SkyBoxRT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+            .color(0, SkyBoxRT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
             .read(0, skyViewLutRef, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
             .read(1, atmosBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
             .execute(
                 [this, ownedRender](RDG::PassNode* passNode, RDG::RenderContext& context)
                 {
-                    VkCommandBuffer  cmd              = context._currCmdBuffer;
+                    VkCommandBuffer  cmd = context._currCmdBuffer;
                     PerFrameConstant perFrameConstant{};
                     perFrameConstant.cameraBufferDeviceAddress = ownedRender->getCurrentCameraBuffer()->address;
-                    const auto pipeline = context.createPipelineStateBuilder().build(this->_skyBoxPipeline);
+                    const auto pipeline                        = context.createPipelineStateBuilder().build(this->_skyBoxPipeline);
                     context.bindPipeline(pipeline);
                     context.bindPushConstant(perFrameConstant);
                     VkViewport viewport = {0, 0, (float) vkDriver->getViewportSize().width, (float) vkDriver->getViewportSize().height, 0.0f, 1.0f};

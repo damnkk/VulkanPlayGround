@@ -145,8 +145,8 @@ bool sameVec3(const glm::vec3& lhs, const glm::vec3& rhs)
 
 bool sameParameters(const Play::VolumeRenderParameters& lhs, const Play::VolumeRenderParameters& rhs)
 {
-    return lhs.Density == rhs.Density && lhs.Exposure == rhs.Exposure && lhs.StepCount == rhs.StepCount && sameVec3(lhs.BBoxMin, rhs.BBoxMin)
-           && sameVec3(lhs.BBoxMax, rhs.BBoxMax);
+    return lhs.Density == rhs.Density && lhs.Exposure == rhs.Exposure && lhs.StepCount == rhs.StepCount && sameVec3(lhs.BBoxMin, rhs.BBoxMin) &&
+           sameVec3(lhs.BBoxMax, rhs.BBoxMax);
 }
 
 VkImageCreateInfo makeImageCreateInfo(VkImageType type, VkFormat format, VkExtent3D extent, VkImageUsageFlags usage)
@@ -199,18 +199,17 @@ void VolumeRenderPass::init()
     loadVolumeTexture();
     createTransferFunctionTextures();
     createEnvTexture();
-    createUniformBuffer();
 
-    const uint32_t gradientId = ShaderManager::Instance().loadShaderFromFile("volumeGradient", "volumeRender/gradiant.comp", ShaderStage::eCompute,
-                                                                              ShaderType::eGLSL, "main");
-    const uint32_t genRayId   = ShaderManager::Instance().loadShaderFromFile("volumeRenderGenRay", "volumeRender/volumeGenRay.comp", ShaderStage::eCompute,
-                                                                            ShaderType::eGLSL, "main");
-    const uint32_t radianceId = ShaderManager::Instance().loadShaderFromFile("volumeRadiance", "volumeRender/volumeRadiance.comp", ShaderStage::eCompute,
-                                                                              ShaderType::eGLSL, "main");
-    const uint32_t accumulateId = ShaderManager::Instance().loadShaderFromFile("volumeAccumulate", "volumeRender/volumeAccumulate.comp",
+    const uint32_t gradientId    = ShaderManager::Instance().loadShaderFromFile("volumeGradient", "volumeRender/gradiant.comp", ShaderStage::eCompute,
+                                                                                ShaderType::eGLSL, "main");
+    const uint32_t genRayId      = ShaderManager::Instance().loadShaderFromFile("volumeRenderGenRay", "volumeRender/volumeGenRay.comp",
+                                                                                ShaderStage::eCompute, ShaderType::eGLSL, "main");
+    const uint32_t radianceId    = ShaderManager::Instance().loadShaderFromFile("volumeRadiance", "volumeRender/volumeRadiance.comp",
+                                                                                ShaderStage::eCompute, ShaderType::eGLSL, "main");
+    const uint32_t accumulateId  = ShaderManager::Instance().loadShaderFromFile("volumeAccumulate", "volumeRender/volumeAccumulate.comp",
                                                                                 ShaderStage::eCompute, ShaderType::eGLSL, "main");
     const uint32_t postProcessId = ShaderManager::Instance().loadShaderFromFile("volumePostProcess", "volumeRender/volumePostProcess.comp",
-                                                                                 ShaderStage::eCompute, ShaderType::eGLSL, "main");
+                                                                                ShaderStage::eCompute, ShaderType::eGLSL, "main");
 
     _gradientPipeline.setShader(gradientId);
     _generateRaysPipeline.setShader(genRayId);
@@ -223,160 +222,151 @@ void VolumeRenderPass::init()
 
 void VolumeRenderPass::build(RDG::RDGBuilder* rdgBuilder)
 {
-    auto volumeTextureRef      = rdgBuilder->createTexture("VolumeTexture").Import(_textures[eVolumeTexture].get()).finish();
-    auto gradientTextureRef    = rdgBuilder->createTexture("VolumeGradientTexture").Import(_textures[eGradientTexture].get()).finish();
-    auto diffuseLookupRef      = rdgBuilder->createTexture("VolumeDiffuseLookupTexture").Import(_textures[eDiffuseLookUpTexture].get()).finish();
-    auto specularLookupRef     = rdgBuilder->createTexture("VolumeSpecularLookupTexture").Import(_textures[eSpecularLookUpTexture].get()).finish();
-    auto roughnessLookupRef    = rdgBuilder->createTexture("VolumeRoughnessLookupTexture").Import(_textures[eRoughnessLookUpTexture].get()).finish();
-    auto opacityLookupRef      = rdgBuilder->createTexture("VolumeOpacityLookupTexture").Import(_textures[eOpacityLookUpTexture].get()).finish();
-    auto envTextureRef         = rdgBuilder->createTexture("VolumeEnvTexture").Import(_textures[eEnvTexture].get()).finish();
-    auto uniformBufferRef      = rdgBuilder->createBuffer("VolumeUniformBuffer").Import(_uniformBuffer.get()).finish();
-    auto diffuseRTRef          = rdgBuilder->createTexture("VolumeDiffuseRT")
-                            .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
-                            .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
-                            .Format(VK_FORMAT_R16G16B16A16_SFLOAT)
-                            .UsageFlags(VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
-                            .MipmapLevel(1)
-                            .finish();
-    auto specularRTRef         = rdgBuilder->createTexture("VolumeSpecularRT")
-                             .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
-                             .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
-                             .Format(VK_FORMAT_R16G16B16A16_SFLOAT)
-                             .UsageFlags(VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
-                             .MipmapLevel(1)
-                             .finish();
-    auto normalRTRef           = rdgBuilder->createTexture("VolumeNormalRT")
-                           .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
-                           .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
-                           .Format(VK_FORMAT_R16G16B16A16_SFLOAT)
-                           .UsageFlags(VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
-                           .MipmapLevel(1)
-                           .finish();
-    auto depthRTRef            = rdgBuilder->createTexture("VolumeDepthRT")
-                          .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
-                          .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
-                          .Format(VK_FORMAT_R32_SFLOAT)
-                          .UsageFlags(VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
-                          .MipmapLevel(1)
-                          .finish();
-    auto radianceRTRef         = rdgBuilder->createTexture("VolumeRadianceRT")
-                             .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
-                             .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
-                             .Format(VK_FORMAT_R16G16B16A16_SFLOAT)
-                             .UsageFlags(VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
-                             .MipmapLevel(1)
-                             .finish();
-    auto accumulateRTRef       = rdgBuilder->createTexture("VolumeAccumulateRT")
-                               .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
-                               .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
-                               .Format(VK_FORMAT_R32G32B32A32_SFLOAT)
-                               .UsageFlags(VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
-                               .MipmapLevel(1)
-                               .finish();
-    auto outputTextureRef      = rdgBuilder->createTexture("outputTexture")
-                                .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
-                                .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
-                                .Format(VK_FORMAT_R8G8B8A8_UNORM)
-                                .UsageFlags(VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
-                                .MipmapLevel(1)
-                                .finish();
+    auto volumeTextureRef   = rdgBuilder->createTexture("VolumeTexture").Import(_textures[eVolumeTexture].get()).finish();
+    auto gradientTextureRef = rdgBuilder->createTexture("VolumeGradientTexture").Import(_textures[eGradientTexture].get()).finish();
+    auto diffuseLookupRef   = rdgBuilder->createTexture("VolumeDiffuseLookupTexture").Import(_textures[eDiffuseLookUpTexture].get()).finish();
+    auto specularLookupRef  = rdgBuilder->createTexture("VolumeSpecularLookupTexture").Import(_textures[eSpecularLookUpTexture].get()).finish();
+    auto roughnessLookupRef = rdgBuilder->createTexture("VolumeRoughnessLookupTexture").Import(_textures[eRoughnessLookUpTexture].get()).finish();
+    auto opacityLookupRef   = rdgBuilder->createTexture("VolumeOpacityLookupTexture").Import(_textures[eOpacityLookUpTexture].get()).finish();
+    auto envTextureRef      = rdgBuilder->createTexture("VolumeEnvTexture").Import(_textures[eEnvTexture].get()).finish();
+    auto uniformBufferRef   = rdgBuilder->createBuffer("VolumeUniformBuffer").Import(_uniformBuffers[vkDriver->getFrameCycleIndex()].get()).finish();
+    auto diffuseRTRef       = rdgBuilder->createTexture("VolumeDiffuseRT")
+                                  .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
+                                  .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
+                                  .Format(VK_FORMAT_R16G16B16A16_SFLOAT)
+                                  .UsageFlags(VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
+                                  .MipmapLevel(1)
+                                  .finish();
+    auto specularRTRef      = rdgBuilder->createTexture("VolumeSpecularRT")
+                                  .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
+                                  .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
+                                  .Format(VK_FORMAT_R16G16B16A16_SFLOAT)
+                                  .UsageFlags(VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
+                                  .MipmapLevel(1)
+                                  .finish();
+    auto normalRTRef        = rdgBuilder->createTexture("VolumeNormalRT")
+                                  .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
+                                  .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
+                                  .Format(VK_FORMAT_R16G16B16A16_SFLOAT)
+                                  .UsageFlags(VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
+                                  .MipmapLevel(1)
+                                  .finish();
+    auto depthRTRef         = rdgBuilder->createTexture("VolumeDepthRT")
+                                  .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
+                                  .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
+                                  .Format(VK_FORMAT_R32_SFLOAT)
+                                  .UsageFlags(VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
+                                  .MipmapLevel(1)
+                                  .finish();
+    auto radianceRTRef      = rdgBuilder->createTexture("VolumeRadianceRT")
+                                  .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
+                                  .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
+                                  .Format(VK_FORMAT_R16G16B16A16_SFLOAT)
+                                  .UsageFlags(VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
+                                  .MipmapLevel(1)
+                                  .finish();
+    auto accumulateRTRef    = rdgBuilder->createTexture("VolumeAccumulateRT").Import(_accumulationTexture.get()).finish();
+    auto outputTextureRef   = rdgBuilder->createTexture("outputTexture")
+                                  .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
+                                  .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
+                                  .Format(VK_FORMAT_R8G8B8A8_UNORM)
+                                  .UsageFlags(VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
+                                  .MipmapLevel(1)
+                                  .finish();
 
-    [[maybe_unused]] auto gradientPass = rdgBuilder->createComputePass("VolumeGradientPass")
-                            .sampledRead(0, volumeTextureRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-                            .storageWrite(1, gradientTextureRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-                            .execute(
-                                [this](RDG::PassNode* passNode, RDG::RenderContext& context)
-                                {
-                                    if (_gradientGenerated)
-                                    {
-                                        return;
-                                    }
-                                    const auto pipeline = context.createPipelineStateBuilder().build(_gradientPipeline);
-                                    context.bindPipeline(pipeline);
-                                    vkCmdDispatch(context._currCmdBuffer, divRoundUp(_volumeExtent.width, kVolumeGroupSize),
-                                                  divRoundUp(_volumeExtent.height, kVolumeGroupSize), divRoundUp(_volumeExtent.depth, kVolumeGroupSize));
-                                    _gradientGenerated = true;
-                                })
-                            .finish();
+    if (!_gradientGenerated)
+    {
+        rdgBuilder->createComputePass("VolumeGradientPass")
+            .sampledRead(0, volumeTextureRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .storageWrite(1, gradientTextureRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .execute(
+                [this](RDG::PassNode* passNode, RDG::RenderContext& context)
+                {
+                    const auto pipeline = context.createPipelineStateBuilder().build(_gradientPipeline);
+                    context.bindPipeline(pipeline);
+                    vkCmdDispatch(context._currCmdBuffer, divRoundUp(_volumeExtent.width, kVolumeGroupSize),
+                                  divRoundUp(_volumeExtent.height, kVolumeGroupSize), divRoundUp(_volumeExtent.depth, kVolumeGroupSize));
+                    _gradientGenerated = true;
+                });
+    }
 
-    [[maybe_unused]] auto genRayPass = rdgBuilder->createComputePass("VolumeGenRayPass")
-        .sampledRead(0, volumeTextureRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .sampledRead(1, gradientTextureRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .sampledRead(2, diffuseLookupRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .sampledRead(3, specularLookupRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .sampledRead(4, roughnessLookupRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .sampledRead(5, opacityLookupRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .read(6, uniformBufferRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .storageWrite(7, diffuseRTRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .storageWrite(8, specularRTRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .storageWrite(9, normalRTRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .storageWrite(10, depthRTRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .execute(
-            [this](RDG::PassNode* passNode, RDG::RenderContext& context)
-            {
-                const auto pipeline = context.createPipelineStateBuilder().build(_generateRaysPipeline);
-                context.bindPipeline(pipeline);
-                vkCmdDispatch(context._currCmdBuffer, divRoundUp(vkDriver->getViewportSize().width, kVolumeGroupSize),
-                              divRoundUp(vkDriver->getViewportSize().height, kVolumeGroupSize), 1);
-            })
-        .finish();
+    [[maybe_unused]] auto genRayPass =
+        rdgBuilder->createComputePass("VolumeGenRayPass")
+            .sampledRead(0, volumeTextureRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .sampledRead(1, gradientTextureRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .sampledRead(2, diffuseLookupRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .sampledRead(3, specularLookupRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .sampledRead(4, roughnessLookupRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .sampledRead(5, opacityLookupRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .read(6, uniformBufferRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .storageWrite(7, diffuseRTRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .storageWrite(8, specularRTRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .storageWrite(9, normalRTRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .storageWrite(10, depthRTRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .execute(
+                [this](RDG::PassNode* passNode, RDG::RenderContext& context)
+                {
+                    const auto pipeline = context.createPipelineStateBuilder().build(_generateRaysPipeline);
+                    context.bindPipeline(pipeline);
+                    vkCmdDispatch(context._currCmdBuffer, divRoundUp(vkDriver->getViewportSize().width, kVolumeGroupSize),
+                                  divRoundUp(vkDriver->getViewportSize().height, kVolumeGroupSize), 1);
+                })
+            .finish();
 
-    [[maybe_unused]] auto radiancePass = rdgBuilder->createComputePass("VolumeRadiancePass")
-        .sampledRead(0, volumeTextureRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .sampledRead(1, opacityLookupRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .sampledRead(2, diffuseRTRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .sampledRead(3, specularRTRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .sampledRead(4, normalRTRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .sampledRead(5, depthRTRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .sampledRead(6, envTextureRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .read(7, uniformBufferRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .storageWrite(8, radianceRTRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .execute(
-            [this](RDG::PassNode* passNode, RDG::RenderContext& context)
-            {
-                const auto pipeline = context.createPipelineStateBuilder().build(_radiancePipeline);
-                context.bindPipeline(pipeline);
-                vkCmdDispatch(context._currCmdBuffer, divRoundUp(vkDriver->getViewportSize().width, kVolumeGroupSize),
-                              divRoundUp(vkDriver->getViewportSize().height, kVolumeGroupSize), 1);
-            })
-        .finish();
+    [[maybe_unused]] auto radiancePass =
+        rdgBuilder->createComputePass("VolumeRadiancePass")
+            .sampledRead(0, volumeTextureRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .sampledRead(1, opacityLookupRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .sampledRead(2, diffuseRTRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .sampledRead(3, specularRTRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .sampledRead(4, normalRTRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .sampledRead(5, depthRTRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .sampledRead(6, envTextureRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .read(7, uniformBufferRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .storageWrite(8, radianceRTRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .execute(
+                [this](RDG::PassNode* passNode, RDG::RenderContext& context)
+                {
+                    const auto pipeline = context.createPipelineStateBuilder().build(_radiancePipeline);
+                    context.bindPipeline(pipeline);
+                    vkCmdDispatch(context._currCmdBuffer, divRoundUp(vkDriver->getViewportSize().width, kVolumeGroupSize),
+                                  divRoundUp(vkDriver->getViewportSize().height, kVolumeGroupSize), 1);
+                })
+            .finish();
 
-    [[maybe_unused]] auto accumulatePass = rdgBuilder->createComputePass("VolumeAccumulatePass")
-        .sampledRead(0, radianceRTRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .read(1, uniformBufferRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .storageReadWrite(2, accumulateRTRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .execute(
-            [this](RDG::PassNode* passNode, RDG::RenderContext& context)
-            {
-                const auto pipeline = context.createPipelineStateBuilder().build(_accumulatePipeline);
-                context.bindPipeline(pipeline);
-                vkCmdDispatch(context._currCmdBuffer, divRoundUp(vkDriver->getViewportSize().width, kVolumeGroupSize),
-                              divRoundUp(vkDriver->getViewportSize().height, kVolumeGroupSize), 1);
-            })
-        .finish();
+    [[maybe_unused]] auto accumulatePass =
+        rdgBuilder->createComputePass("VolumeAccumulatePass")
+            .sampledRead(0, radianceRTRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .read(1, uniformBufferRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .storageReadWrite(2, accumulateRTRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .execute(
+                [this](RDG::PassNode* passNode, RDG::RenderContext& context)
+                {
+                    const auto pipeline = context.createPipelineStateBuilder().build(_accumulatePipeline);
+                    context.bindPipeline(pipeline);
+                    vkCmdDispatch(context._currCmdBuffer, divRoundUp(vkDriver->getViewportSize().width, kVolumeGroupSize),
+                                  divRoundUp(vkDriver->getViewportSize().height, kVolumeGroupSize), 1);
+                })
+            .finish();
 
-    [[maybe_unused]] auto postProcessPass = rdgBuilder->createComputePass("VolumePostProcessPass")
-        .sampledRead(0, accumulateRTRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .read(1, uniformBufferRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .storageWrite(2, outputTextureRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-        .execute(
-            [this](RDG::PassNode* passNode, RDG::RenderContext& context)
-            {
-                const auto pipeline = context.createPipelineStateBuilder().build(_postProcessPipeline);
-                context.bindPipeline(pipeline);
-                vkCmdDispatch(context._currCmdBuffer, divRoundUp(vkDriver->getViewportSize().width, kVolumeGroupSize),
-                              divRoundUp(vkDriver->getViewportSize().height, kVolumeGroupSize), 1);
-            })
-        .finish();
+    [[maybe_unused]] auto postProcessPass =
+        rdgBuilder->createComputePass("VolumePostProcessPass")
+            .sampledRead(0, accumulateRTRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .read(1, uniformBufferRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .storageWrite(2, outputTextureRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .execute(
+                [this](RDG::PassNode* passNode, RDG::RenderContext& context)
+                {
+                    const auto pipeline = context.createPipelineStateBuilder().build(_postProcessPipeline);
+                    context.bindPipeline(pipeline);
+                    vkCmdDispatch(context._currCmdBuffer, divRoundUp(vkDriver->getViewportSize().width, kVolumeGroupSize),
+                                  divRoundUp(vkDriver->getViewportSize().height, kVolumeGroupSize), 1);
+                })
+            .finish();
 }
 
 void VolumeRenderPass::updateUniform()
 {
-    if (!_uniformBuffer || !_ownedRenderer)
-    {
-        return;
-    }
-
     const CameraData& cameraData = _ownedRenderer->getCurrentCameraData();
     if (!sameMat4(cameraData.viewMatrix, _lastViewMatrix) || !sameMat4(cameraData.projMatrix, _lastProjectMatrix) || parametersChanged())
     {
@@ -387,27 +377,28 @@ void VolumeRenderPass::updateUniform()
     }
 
     VolumeUniformData data{};
-    data.ProjectMatrix    = cameraData.projMatrix;
-    data.ViewMatrix       = cameraData.viewMatrix;
-    data.WorldMatrix      = glm::mat4(1.0f);
-    data.NormalMatrix     = glm::mat4(1.0f);
-    data.InvProjectMatrix = cameraData.invProjMatrix;
-    data.InvViewMatrix    = cameraData.invViewMatrix;
-    data.InvWorldMatrix   = glm::inverse(data.WorldMatrix);
-    data.InvNormalMatrix  = glm::inverse(data.NormalMatrix);
-    data.frameCount       = _frameCount++;
-    data.BBoxMin          = _parameters.BBoxMin;
-    data.BBoxMax          = _parameters.BBoxMax;
+    data.ProjectMatrix       = cameraData.projMatrix;
+    data.ViewMatrix          = cameraData.viewMatrix;
+    data.WorldMatrix         = glm::mat4(1.0f);
+    data.NormalMatrix        = glm::mat4(1.0f);
+    data.InvProjectMatrix    = cameraData.invProjMatrix;
+    data.InvViewMatrix       = cameraData.invViewMatrix;
+    data.InvWorldMatrix      = glm::inverse(data.WorldMatrix);
+    data.InvNormalMatrix     = glm::inverse(data.NormalMatrix);
+    data.frameCount          = _frameCount++;
+    data.BBoxMin             = _parameters.BBoxMin;
+    data.BBoxMax             = _parameters.BBoxMax;
     const uint32_t stepCount = _parameters.StepCount > 0 ? _parameters.StepCount : 1;
-    data.StepSize           = glm::distance(data.BBoxMin, data.BBoxMax) / static_cast<float>(stepCount);
-    data.FrameOffset      = glm::vec2(1.0f);
-    data.RTDimensions     = glm::vec2(vkDriver->getViewportSize().width, vkDriver->getViewportSize().height);
-    data.Density          = _parameters.Density;
-    data.Exposure         = _parameters.Exposure;
-    data.CameraPos        = cameraData.cameraPosition;
+    data.StepSize            = glm::distance(data.BBoxMin, data.BBoxMax) / static_cast<float>(stepCount);
+    data.FrameOffset         = glm::vec2(1.0f);
+    data.RTDimensions        = glm::vec2(vkDriver->getViewportSize().width, vkDriver->getViewportSize().height);
+    data.Density             = _parameters.Density;
+    data.Exposure            = _parameters.Exposure;
+    data.CameraPos           = cameraData.cameraPosition;
 
-    memcpy(_uniformBuffer->mapping, &data, sizeof(VolumeUniformData));
-    PlayResourceManager::Instance().flushBuffer(*_uniformBuffer, 0, VK_WHOLE_SIZE);
+    auto& buffer = *_uniformBuffers[vkDriver->getFrameCycleIndex()];
+    memcpy(buffer.mapping, &data, sizeof(VolumeUniformData));
+    PlayResourceManager::Instance().flushBuffer(buffer, 0, VK_WHOLE_SIZE);
 }
 
 void VolumeRenderPass::resetFrameCount()
@@ -417,7 +408,7 @@ void VolumeRenderPass::resetFrameCount()
 
 void VolumeRenderPass::loadVolumeTexture()
 {
-    const std::filesystem::path volumePath = getBaseFilePath() / "content/volumeData/Textures/manix.dat";
+    const std::filesystem::path volumePath   = getBaseFilePath() / "content/volumeData/Textures/manix.dat";
     const std::string           fileContents = nvutils::loadFile(volumePath);
     if (fileContents.empty())
     {
@@ -456,17 +447,16 @@ void VolumeRenderPass::loadVolumeTexture()
     }
 
     _textures[eVolumeTexture] = RefPtr<Texture>(new Texture());
-    VkImageCreateInfo volumeImageInfo = makeImageCreateInfo(VK_IMAGE_TYPE_3D, VK_FORMAT_R16_UNORM, _volumeExtent,
-                                                             VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+    VkImageCreateInfo volumeImageInfo =
+        makeImageCreateInfo(VK_IMAGE_TYPE_3D, VK_FORMAT_R16_UNORM, _volumeExtent, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
     VkImageViewCreateInfo volumeViewInfo = makeImageViewCreateInfo(VK_IMAGE_VIEW_TYPE_3D, VK_FORMAT_R16_UNORM);
     uploadTexture(*_textures[eVolumeTexture], intensityData.data(), intensityData.size() * sizeof(uint16_t), volumeImageInfo, volumeViewInfo,
                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     _textures[eVolumeTexture]->DebugName() = "VolumeTexture";
 
-    _textures[eGradientTexture] = RefPtr<Texture>(new Texture(_volumeExtent.width, _volumeExtent.height, _volumeExtent.depth,
-                                                              VK_FORMAT_R16G16B16A16_SFLOAT,
-                                                              VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-                                                              VK_IMAGE_LAYOUT_GENERAL));
+    _textures[eGradientTexture] =
+        RefPtr<Texture>(new Texture(_volumeExtent.width, _volumeExtent.height, _volumeExtent.depth, VK_FORMAT_R16G16B16A16_SFLOAT,
+                                    VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_LAYOUT_GENERAL));
     _textures[eGradientTexture]->DebugName() = "VolumeGradientTexture";
     acquireLinearSampler(*_textures[eGradientTexture]);
 }
@@ -481,9 +471,9 @@ void VolumeRenderPass::createTransferFunctionTextures()
         return;
     }
 
-    const nlohmann::json root = nlohmann::json::parse(fileContents);
-    ColorTransferFunction1D diffuseTransferFunc;
-    ColorTransferFunction1D specularTransferFunc;
+    const nlohmann::json     root = nlohmann::json::parse(fileContents);
+    ColorTransferFunction1D  diffuseTransferFunc;
+    ColorTransferFunction1D  specularTransferFunc;
     ScalarTransferFunction1D roughnessTransferFunc;
     ScalarTransferFunction1D opacityTransferFunc;
 
@@ -504,11 +494,11 @@ void VolumeRenderPass::createTransferFunctionTextures()
     const auto roughnessData = roughnessTransferFunc.getLookUpData(kLookupTextureSize);
     const auto opacityData   = opacityTransferFunc.getLookUpData(kLookupTextureSize);
 
-    VkExtent3D lookupExtent = {kLookupTextureSize, 1, 1};
+    VkExtent3D        lookupExtent        = {kLookupTextureSize, 1, 1};
     VkImageCreateInfo rgbaLookupImageInfo = makeImageCreateInfo(VK_IMAGE_TYPE_1D, VK_FORMAT_R8G8B8A8_UNORM, lookupExtent, VK_IMAGE_USAGE_SAMPLED_BIT);
-    VkImageViewCreateInfo rgbaLookupViewInfo = makeImageViewCreateInfo(VK_IMAGE_VIEW_TYPE_1D, VK_FORMAT_R8G8B8A8_UNORM);
-    VkImageCreateInfo scalarLookupImageInfo = makeImageCreateInfo(VK_IMAGE_TYPE_1D, VK_FORMAT_R8_UNORM, lookupExtent, VK_IMAGE_USAGE_SAMPLED_BIT);
-    VkImageViewCreateInfo scalarLookupViewInfo = makeImageViewCreateInfo(VK_IMAGE_VIEW_TYPE_1D, VK_FORMAT_R8_UNORM);
+    VkImageViewCreateInfo rgbaLookupViewInfo    = makeImageViewCreateInfo(VK_IMAGE_VIEW_TYPE_1D, VK_FORMAT_R8G8B8A8_UNORM);
+    VkImageCreateInfo     scalarLookupImageInfo = makeImageCreateInfo(VK_IMAGE_TYPE_1D, VK_FORMAT_R8_UNORM, lookupExtent, VK_IMAGE_USAGE_SAMPLED_BIT);
+    VkImageViewCreateInfo scalarLookupViewInfo  = makeImageViewCreateInfo(VK_IMAGE_VIEW_TYPE_1D, VK_FORMAT_R8_UNORM);
 
     _textures[eDiffuseLookUpTexture] = RefPtr<Texture>(new Texture());
     uploadTexture(*_textures[eDiffuseLookUpTexture], diffuseData.data(), diffuseData.size() * sizeof(glm::u8vec4), rgbaLookupImageInfo,
@@ -534,18 +524,30 @@ void VolumeRenderPass::createTransferFunctionTextures()
 void VolumeRenderPass::createEnvTexture()
 {
     const std::filesystem::path envPath = getBaseFilePath() / "resource/skybox/test.hdr";
-    _textures[eEnvTexture]             = RefPtr<Texture>(new Texture(envPath, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, true));
+    _textures[eEnvTexture]              = RefPtr<Texture>(new Texture(envPath, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, true));
     _textures[eEnvTexture]->DebugName() = "VolumeEnvTexture";
 }
 
-void VolumeRenderPass::createUniformBuffer()
+void VolumeRenderPass::onResize()
 {
-    _uniformBuffer = RefPtr<Buffer>(new Buffer("VolumeUniformBuffer", VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT, sizeof(VolumeUniformData),
-                                               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
+    resetFrameCount();
+    const auto extent = vkDriver->getViewportSize();
+    _accumulationTexture =
+        new Texture(extent.width, extent.height, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+    _accumulationTexture->DebugName() = "VolumeAccumulateRT";
+    const auto slotCount              = vkDriver->getFrameCycleSize();
+    if (_uniformBuffers.size() == slotCount) return;
+    _uniformBuffers.clear();
+    for (uint32_t i = 0; i < slotCount; ++i)
+    {
+        _uniformBuffers.emplace_back(new Buffer("VolumeUniformBuffer " + std::to_string(i), VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT,
+                                                sizeof(VolumeUniformData),
+                                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
+    }
 }
 
-void VolumeRenderPass::uploadTexture(Texture& texture, const void* data, VkDeviceSize dataSize, VkImageCreateInfo imageInfo, VkImageViewCreateInfo viewInfo,
-                                     VkImageLayout finalLayout)
+void VolumeRenderPass::uploadTexture(Texture& texture, const void* data, VkDeviceSize dataSize, VkImageCreateInfo imageInfo,
+                                     VkImageViewCreateInfo viewInfo, VkImageLayout finalLayout)
 {
     PlayResourceManager::Instance().createImage(texture, imageInfo, viewInfo);
     auto cmd = PlayResourceManager::Instance().getTempCommandBuffer();

@@ -123,11 +123,16 @@ public:
         return _initialized;
     }
 
-    void run();
+    bool run();
 
     VkDevice getDevice() const
     {
         return _context.getDevice();
+    }
+
+    const RuntimeConfig& getConfig() const
+    {
+        return _config;
     }
 
     VkPhysicalDevice getPhysicalDevice() const
@@ -192,7 +197,7 @@ public:
 
     const SdlInputState& getInputState() const
     {
-        return _window.getInputState();
+        return _frameRequest.input;
     }
 
     Play::RenderSession::RenderMode getRenderMode() const
@@ -252,6 +257,7 @@ public:
     VkCommandBuffer                    createTransferTempCmdBuffer();
     void                               submitAndWaitTransferTempCmdBuffer(VkCommandBuffer cmd);
     VkResult                           submitGraphics(const VkSubmitInfo2& submitInfo, VkFence fence = VK_NULL_HANDLE);
+    void                               submitFrameCommands(VkCommandBuffer cmd);
     void                               addWaitSemaphore(const VkSemaphoreSubmitInfo& signalInfo);
     std::vector<VkSemaphoreSubmitInfo> consumePendingFrameWaitSemaphores();
 
@@ -270,6 +276,17 @@ public:
     Play::PipelineCacheManager* _pipelineCacheManager   = nullptr;
 
 private:
+    struct FrameRequest
+    {
+        SdlInputState                                 input;
+        VkExtent2D                                    pixelSize{};
+        std::vector<editor::EditorCommand>            commands;
+        std::vector<editor::EditorAssetImportRequest> imports;
+        bool                                          render = false;
+        bool                                          resize = false;
+        bool                                          save   = false;
+    };
+
     struct FrameStats
     {
         uint64_t lastTitleUpdateTicks        = 0;
@@ -290,19 +307,20 @@ private:
     void flushPendingDeferredDestroyTasks();
 
     void            waitForCurrentFrame() const;
-    bool            rebuildSwapchain();
+    bool            rebuildSwapchain(VkExtent2D pixelSize);
     bool            prepareFrame();
     Play::Texture*  refreshCurrentSwapchainTexture();
     void            clearSwapchainTextures();
     VkCommandBuffer beginCommandRecording();
     void            recordBootstrapClear(VkCommandBuffer cmd) const;
-    void            endFrame(VkCommandBuffer cmd);
-    void            signalPresentSemaphore();
     void            updateFrameStatsTitle();
     void            prepareGlobalDescriptorSet();
     void            updateGlobalDescriptorSet();
     void            prepareFrameDescriptorSet();
     void            presentFrame();
+
+    static int renderThreadMain(void* data);
+    void       executeFrame();
 
     struct DeferredDestroyQueue
     {
@@ -339,6 +357,10 @@ private:
     Play::FrameBufferCache*                 _frameBufferCache = nullptr;
 
     std::unique_ptr<Play::AssetManager> _assetManager = nullptr;
+    FrameRequest                        _frameRequest;
+    SDL_Semaphore*                      _frameReady       = nullptr;
+    SDL_Semaphore*                      _frameDone        = nullptr;
+    bool                                _stopRenderThread = false;
     FrameStats                          _frameStats{};
     uint32_t                            _frameIndex         = 0;
     uint64_t                            _frameCounter       = 0;

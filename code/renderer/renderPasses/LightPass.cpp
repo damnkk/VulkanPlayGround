@@ -46,8 +46,7 @@ void LightPass::build(RDG::RDGBuilder* rdgBuilder)
             .read(4, inputCustom1, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
             .read(5, velocityRT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
             .read(6, depthRT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
-            .color(0, outputLight, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+            .color(0, outputLight, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
             .execute(
                 [this](RDG::PassNode* node, RDG::RenderContext& context)
                 {

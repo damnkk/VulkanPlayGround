@@ -18,7 +18,7 @@ class Buffer;
 class BasePass;
 namespace RDG
 {
-class RDGBuilder;
+class ResourcePool;
 }
 
 struct PerFrameRootData
@@ -61,12 +61,9 @@ protected:
     glm::mat4 _prevViewProjMatrix{1.0f};
     bool      _hasPrevViewProj = false;
 
-    std::unique_ptr<RDG::RDGBuilder>       _rdgBuilder;
+    std::unique_ptr<RDG::ResourcePool>     _graphResources;
     std::vector<std::unique_ptr<BasePass>> _passes;
     RenderSession*                         _view = nullptr;
-
-private:
-    void updatePresentTexture();
 };
 
 } // namespace Play

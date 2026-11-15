@@ -41,9 +41,9 @@ int EngineLoop::run(const RuntimeConfig& config, const nvvk::ContextInitInfo& co
         {
             result = 1;
         }
-        else
+        else if (!runtime.run())
         {
-            runtime.run();
+            result = 1;
         }
 
         guiHost.stop();

@@ -5,8 +5,6 @@
 
 namespace Play
 {
-bool isImageBarrierValid(const VkImageMemoryBarrier2& barrier);
-bool isBufferBarrierValid(const VkBufferMemoryBarrier2& barrier);
 
 VkFlags pipelineStageToShaderStage(VkPipelineStageFlags2 pipelineStage);
 VkFlags inferShaderStageFromPipelineStage(VkFlags64 pipelineStage);

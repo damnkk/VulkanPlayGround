@@ -3,10 +3,10 @@
 #include "core/PlayCamera.h"
 #include "core/runtime/VulkanRuntime.h"
 #include "core/runtime/RenderSession.h"
+#include "core/Profiling.h"
 #include "resourceManagement/scene/SceneManager.h"
 #include "resourceManagement/renderGraph/RDG.h"
 #include "renderPasses/RenderPass.h"
-#include "renderPasses/PresentPass.h"
 #include <algorithm>
 namespace Play
 {
@@ -35,6 +35,7 @@ const CameraData& Renderer::getCurrentCameraData() const
 }
 
 Renderer::Renderer()
+    : _graphResources(std::make_unique<RDG::ResourcePool>(!vkDriver->getConfig().rdgNoTextureReuse, vkDriver->getConfig().rdgPoolStats))
 {
     addCamera();
 
@@ -91,14 +92,25 @@ void Renderer::updateCameraBuffer()
 
 void Renderer::OnPreRender()
 {
-    updatePresentTexture();
     updateCameraBuffer();
     vkDriver->getSceneManager()->update();
 }
 
 void Renderer::RenderFrame()
 {
-    _rdgBuilder->execute();
+    RDG::RDGBuilder graph(*_graphResources);
+    {
+        PLAY_PROFILE_SCOPE("RDG Build");
+        graph.createComputePass("GpuSceneUpload")
+            .execute([](RDG::PassNode*, RDG::RenderContext& context)
+                     { vkDriver->getSceneManager()->getGpuScene()->cmdUpload(context._currCmdBuffer); });
+        for (auto& pass : _passes)
+        {
+            pass->build(&graph);
+        }
+    }
+    graph.compile();
+    graph.execute();
 }
 
 void Renderer::OnPostRender() {}
@@ -114,13 +126,6 @@ void Renderer::OnResize(int width, int height)
         camera->onResize({(uint32_t) width, (uint32_t) height});
     }
 
-    _rdgBuilder.reset();
-    _rdgBuilder = std::make_unique<RDG::RDGBuilder>();
-
-    _rdgBuilder->createComputePass("GpuSceneUpload")
-        .execute([](RDG::PassNode*, RDG::RenderContext& context) { vkDriver->getSceneManager()->getGpuScene()->cmdUpload(context._currCmdBuffer); })
-        .finish();
-
     if (_passes.empty())
     {
         setupPasses();
@@ -130,33 +135,11 @@ void Renderer::OnResize(int width, int height)
         }
     }
 
+    _graphResources->clear();
     for (auto& pass : _passes)
     {
-        pass->build(_rdgBuilder.get());
+        pass->onResize();
     }
-    _rdgBuilder->compile();
-}
-
-void Renderer::updatePresentTexture()
-{
-    if (!_rdgBuilder || !vkDriver)
-    {
-        return;
-    }
-
-    RDG::RDGTextureRef presentTexture = _rdgBuilder->getTexture(PresentPass::PRESENT_TEXTURE_NAME);
-    if (!presentTexture)
-    {
-        return;
-    }
-
-    Texture* swapchainTexture = vkDriver->getCurrentSwapchainTexture();
-    if (!swapchainTexture)
-    {
-        return;
-    }
-
-    presentTexture->setRHI(swapchainTexture, false);
 }
 
 } // namespace Play

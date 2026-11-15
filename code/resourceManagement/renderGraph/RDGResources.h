@@ -9,7 +9,6 @@
 #include "nvvk/shaders.hpp"
 #include "resourceManagement/vulkan/pipeline/ShaderManager.hpp"
 #include <optional>
-#include "BaseDag.h"
 namespace Play::RDG
 {
 
@@ -23,13 +22,6 @@ class PassNode;
 
 class RDGPass;
 class RenderDependencyGraph;
-struct ProducerInfo
-{
-    PassNode*      lastProducer         = nullptr; // sync for write after read
-    PassNode*      lastReadOnlyAccesser = nullptr; // sync for read after write
-    VkAccessFlags2 accessMask           = 0;
-};
-
 struct RDGResourceAccessInfo
 {
 };
@@ -52,8 +44,8 @@ public:
     bool     isResolveAttachment = false;
     uint32_t attachSlotIdx       = ~0U;
 
-    VkAttachmentLoadOp  loadOp;
-    VkAttachmentStoreOp storeOp;
+    VkAttachmentLoadOp  loadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    VkAttachmentStoreOp storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 
     VkImageLayout attachFinalLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     bool          operator==(TextureAccessInfo& candidate)
@@ -82,8 +74,6 @@ public:
     }
 };
 
-using TextureSubresourceAccessInfo = std::vector<TextureAccessInfo>;
-
 class RDGTexture
 {
 public:
@@ -94,10 +84,10 @@ public:
         return _rhi.get();
     }
 
-    void setRHI(Texture* rhi, bool ownsRHI = true)
+    void import(Texture* rhi)
     {
-        _rhi     = RefPtr<Texture>(rhi);
-        _ownsRHI = ownsRHI;
+        _external = true;
+        _rhi      = rhi;
         if (rhi)
         {
             _info._aspectFlags = rhi->AspectFlags();
@@ -108,11 +98,10 @@ public:
             _info._sampleCount = rhi->SampleCount();
             _info._mipmapLevel = rhi->MipLevel();
             _info._layerCount  = rhi->LayerCount();
-            _info._debugName   = rhi->DebugName();
         }
     }
 
-    inline std::string name() const
+    const std::string& name() const
     {
         return _name;
     }
@@ -127,25 +116,16 @@ public:
         VkSampleCountFlagBits _sampleCount = VK_SAMPLE_COUNT_1_BIT;
         uint32_t              _mipmapLevel = 1;
         uint32_t              _layerCount  = 1;
-        std::string           _debugName;
     } _info;
-
-    TextureAccessInfo* getFinalAccessInfo()
-    {
-        return _externalState;
-    }
 
 private:
     friend class RDGBuilder;
     friend class RDGTextureBuilder;
-    uint32_t           _refCount = 0;
-    RefPtr<Texture>    _rhi;
-    bool               _ownsRHI = true;
-    ProducerInfo       _producerInfo;
-    TextureAccessInfo* _externalState = nullptr;
-    // latest access info for each sub resource
-    TextureSubresourceAccessInfo _subResourceAccessInfos;
-    std::string                  _name;
+    RefPtr<Texture> _rhi;
+    std::string     _name;
+    bool            _external     = false;
+    uint32_t        _firstUsePass = ~0U;
+    uint32_t        _lastUsePass  = ~0U;
 };
 using RDGTextureRef = RDGTexture*;
 
@@ -159,13 +139,12 @@ public:
         return _rhi.get();
     }
 
-    void setRHI(Buffer* rhi, bool ownsRHI = true)
+    void import(Buffer* rhi)
     {
-        _rhi     = RefPtr<Buffer>(rhi);
-        _ownsRHI = ownsRHI;
+        _rhi = rhi;
     }
 
-    inline std::string name() const
+    const std::string& name() const
     {
         return _name;
     }
@@ -180,18 +159,13 @@ public:
             eDeviceLocal,
             eHostVisible
         } _location = MemoryLocation::eDeviceLocal;
-        std::string _debugName;
     } _info;
 
 private:
     friend class RDGBuilder;
     friend class RDGBufferBuilder;
-    uint32_t         _refCount = 0;
-    RefPtr<Buffer>   _rhi;
-    bool             _ownsRHI = true;
-    ProducerInfo     _producerInfo;
-    BufferAccessInfo _latestAccessInfo;
-    std::string      _name;
+    RefPtr<Buffer> _rhi;
+    std::string    _name;
 };
 using RDGBufferRef = RDGBuffer*;
 class BindlessTextureNode

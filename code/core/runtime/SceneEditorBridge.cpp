@@ -246,9 +246,9 @@ void saveCurrentProject(SceneManager& sceneManager)
     }
 }
 
-void processSceneCommands(SceneManager& sceneManager, AssetManager& assetManager, editor::RuntimeEditor& editor)
+void processSceneCommands(SceneManager& sceneManager, AssetManager& assetManager, editor::RuntimeEditor& editor,
+                          const std::vector<editor::EditorCommand>& commands)
 {
-    const auto commands = editor.takeCommands();
     if (commands.empty())
     {
         return;
@@ -270,9 +270,9 @@ void processSceneCommands(SceneManager& sceneManager, AssetManager& assetManager
     }
 }
 
-void processAssetImports(AssetManager& assetManager, SceneManager& sceneManager, editor::RuntimeEditor& editor)
+void processAssetImports(AssetManager& assetManager, SceneManager& sceneManager, editor::RuntimeEditor& editor,
+                         const std::vector<editor::EditorAssetImportRequest>& requests)
 {
-    const auto requests = editor.takeAssetImportRequests();
     if (requests.empty()) return;
 
     bool changed = false;

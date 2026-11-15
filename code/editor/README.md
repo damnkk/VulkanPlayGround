@@ -2,7 +2,7 @@
 
 The editor and the engine communicate through `EditorProtocol.h`. The editor never owns a scene, entity, component, asset, or reflected instance from the engine.
 
-`core/runtime/SceneEditorBridge.*` is the engine-facing adapter. `VulkanRuntime::run()` publishes the initial scene and consumes commands on the engine thread, even while the viewport is not renderable. The bridge publishes another snapshot after a scene command changes state or an asset import succeeds.
+`core/runtime/SceneEditorBridge.*` is the engine-facing adapter. `VulkanRuntime::run()` publishes the initial scene and collects commands on the main thread. The render thread applies them before processing the frame, even while the viewport is not renderable. The bridge publishes another snapshot after a scene command changes state or an asset import succeeds.
 
 Connected commands: `CreateNode` (child), `RemoveNode` (whole subtree), `RenameNode`, `SetTransform`, `AddComponent`, `RemoveComponent`, `SetProperty`, `BindAsset`, `ClearAsset`, and `InvokeAction`. The Inspector edits local position, Euler rotation in degrees, and scale. Every new entity has a non-removable `TransformComponent`. The component picker uses the bridge's component registry and excludes types already attached to the entity. Static Mesh is currently available in the component picker; Transform is built in and Camera has no component implementation yet. Static Mesh exposes Model selection and Cast Shadow; its renderer submission is still unfinished. Entity IDs are encoded as `id + 1` because zero is the editor's invalid node ID. Component IDs use `ComponentType` under the current one-component-per-type policy. `Scene::getEntities()` contains all entities, including children; parent/child links describe their hierarchy.
 
@@ -11,12 +11,12 @@ Each Scene owns one root Entity. Add Child creates immediately under the selecte
 The adapter has two jobs:
 
 1. Build an `EditorSnapshot` from the current engine state and call `RuntimeEditor::publishSnapshot()` when that state changes.
-2. Call `RuntimeEditor::takeCommands()` on the engine thread and apply each command using the engine's normal scene and resource APIs.
+2. Apply the command batch received from the main thread using the engine's normal scene and resource APIs.
 
 ```cpp
 editor.publishSnapshot(buildEditorSnapshot(scene, assets));
 
-for (EditorCommand& command : editor.takeCommands())
+for (const EditorCommand& command : frameCommands)
 {
     applyEditorCommand(command, scene, assets);
 }
@@ -55,7 +55,7 @@ Manual verification after building: select Static Mesh, assign a Model, choose N
 
 ## Saving
 
-Saving is a one-shot request, not a scene command: `SceneManager::saveProject()` locks the scene itself, so it must not run inside the `editScene()` lambda that applies commands (that would deadlock). `File > Save` and its Qt shortcut first end the active widget edit, then call `RuntimeEditor::requestSave()` on the Qt thread; Ctrl+S pressed while the embedded viewport has focus is edge-detected by `SdlWindow` (`keySPressed`) and routed the same way. `VulkanRuntime::run()` consumes the request once per frame through `RuntimeEditor::takeSaveRequest()` and calls `SceneEditorBridge::saveCurrentProject()`, which currently delegates to `SceneManager::saveProject()` and logs failures. The save request stays pending if new scene commands or imports arrived after the engine drained its batches; it is consumed only after those batches have been applied.
+Saving is a one-shot request, not a scene command: `SceneManager::saveProject()` locks the scene itself, so it must not run inside the `editScene()` lambda that applies commands (that would deadlock). `File > Save` and its Qt shortcut first end the active widget edit, then call `RuntimeEditor::requestSave()` on the Qt thread; Ctrl+S pressed while the embedded viewport has focus is edge-detected by `SdlWindow` (`keySPressed`) and routed the same way. `VulkanRuntime::run()` consumes the request once per frame through `RuntimeEditor::takeSaveRequest()` and passes it to the render thread, which calls `SceneEditorBridge::saveCurrentProject()` after applying the frame's commands and imports. The save request stays pending if new scene commands or imports arrived after the engine drained its batches; the render thread applies the collected batches before saving.
 
 Manual checks: in the editor, trigger a save from `File > Save`, with Ctrl+S while a Qt panel has focus, and with Ctrl+S while the viewport has focus; each press must save exactly once and the viewport must keep rendering.
 

@@ -17,13 +17,19 @@ int main(int argc, char** argv)
 {
     nvutils::Logger::getInstance().breakOnError(false);
     {
-        bool validation = false;
-        bool verbose    = false;
+        bool validation              = false;
+        bool verbose                 = false;
+        bool singleThreadedRendering = false;
+        bool rdgNoTextureReuse       = false;
+        bool rdgPoolStats            = false;
 
         nvutils::ParameterRegistry parameterRegistry;
         nvutils::ParameterParser   parameterParser;
         parameterRegistry.add({"validation"}, &validation);
         parameterRegistry.add({"verbose"}, &verbose);
+        parameterRegistry.add({"single-threaded-rendering"}, &singleThreadedRendering);
+        parameterRegistry.add({"rdg-no-texture-reuse"}, &rdgNoTextureReuse);
+        parameterRegistry.add({"rdg-pool-stats"}, &rdgPoolStats);
         std::string renderMode = "defer";
         // std::string renderMode = "volume";
         // std::string renderMode = "gaussian";
@@ -32,13 +38,16 @@ int main(int argc, char** argv)
         parameterParser.parse(argc, argv);
 
         Play::runtime::RuntimeConfig runtimeConfig{
-            .windowTitle = "VulkanPlayGround SDL Runtime",
-            .width       = 1280,
-            .height      = 720,
-            .vSync       = false,
-            .validation  = validation,
-            .verbose     = verbose,
-            .renderMode  = renderMode,
+            .windowTitle             = "VulkanPlayGround SDL Runtime",
+            .width                   = 1280,
+            .height                  = 720,
+            .vSync                   = false,
+            .validation              = validation,
+            .verbose                 = verbose,
+            .renderMode              = renderMode,
+            .singleThreadedRendering = singleThreadedRendering,
+            .rdgNoTextureReuse       = rdgNoTextureReuse,
+            .rdgPoolStats            = rdgPoolStats,
         };
 
         auto afterMathExtList = Play::NsightDebugger::initInjection();

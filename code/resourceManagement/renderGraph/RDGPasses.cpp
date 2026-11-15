@@ -9,7 +9,8 @@ namespace Play::RDG
 PassNode::~PassNode()             = default;
 const uint32_t ATTACHMENT_DEPTH   = 0xFFFFFFFF;
 const uint32_t ATTACHMENT_STENCIL = 0xFFFFFFFF;
-RenderPassNode::RenderPassNode(uint32_t id, std::string name) : PassNode(id, std::move(name), NodeType::eRenderPass) {}
+RenderPassNode::RenderPassNode(std::string name) : PassNode(std::move(name)) {}
+RenderPassNode::~RenderPassNode() = default;
 void RenderPassNode::initRenderPass()
 {
     if (_renderPass && !_renderPass->isDirty()) return;
@@ -27,31 +28,8 @@ void RenderPassNode::initRenderPass()
     for (auto& state : _textureStates)
     {
         RDGTexture*              texture    = state.texture;
-        const TextureAccessInfo& accessInfo = state.textureStates[0];
+        const TextureAccessInfo& accessInfo = state.use;
         if (!accessInfo.isAttachment) continue;
-        const VkImageMemoryBarrier2& barrierInfo = state.barrierInfo;
-        // if curr attachment's barrier is invalid, that means this is a Frame-to-Frame Dependency
-        // RDG::Compile()can't infer barrier in this situation with only one invocation
-        bool               isFrameToFrameDependency = !isImageBarrierValid(barrierInfo);
-        TextureAccessInfo* finalAccessInfo          = texture->getFinalAccessInfo();
-        // so we made the right barrier info at here
-        if (isFrameToFrameDependency)
-        {
-            assert(finalAccessInfo);
-            VkImageMemoryBarrier2& imageBarrier = state.barrierInfo;
-            imageBarrier.sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-            imageBarrier.srcAccessMask          = finalAccessInfo->accessMask;
-            imageBarrier.dstAccessMask          = accessInfo.accessMask;
-            imageBarrier.srcStageMask           = finalAccessInfo->stageMask;
-            imageBarrier.dstStageMask           = accessInfo.stageMask;
-            imageBarrier.oldLayout              = finalAccessInfo->attachFinalLayout;
-            imageBarrier.newLayout              = accessInfo.layout;
-            imageBarrier.srcQueueFamilyIndex    = finalAccessInfo->queueFamilyIndex;
-            imageBarrier.dstQueueFamilyIndex    = accessInfo.queueFamilyIndex;
-            imageBarrier.subresourceRange       = {texture->_info._aspectFlags, 0, texture->_info._mipmapLevel, 0, texture->_info._layerCount};
-            imageBarrier.image                  = texture->getRHI()->image;
-        }
-
         if (accessInfo.attachSlotIdx == ATTACHMENT_DEPTH)
         {
             RenderPassAttachment depthStencilAttachment;
@@ -108,57 +86,49 @@ void RenderPassNode::initRenderPass()
 RenderPassBuilder& RenderPassBuilder::color(uint32_t slotIdx, RDGTextureRef texHandle, VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp,
                                             VkImageLayout initLayout, VkImageLayout finalLayout)
 {
-    TextureSubresourceAccessInfo subResource;
-    TextureAccessInfo&           accessInfo = subResource.emplace_back();
-    accessInfo.isAttachment                 = true;
-    accessInfo.accessMask                   = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-    accessInfo.loadOp                       = loadOp;
-    accessInfo.storeOp                      = storeOp;
-    accessInfo.attachSlotIdx                = slotIdx;
-    accessInfo.layout                       = initLayout;
-    accessInfo.attachFinalLayout            = finalLayout;
-    accessInfo.queueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
-    accessInfo.stageMask                    = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    return addTextureState(texHandle, std::move(subResource));
+    TextureAccessInfo accessInfo;
+    accessInfo.isAttachment      = true;
+    accessInfo.accessMask        = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    accessInfo.loadOp            = loadOp;
+    accessInfo.storeOp           = storeOp;
+    accessInfo.attachSlotIdx     = slotIdx;
+    accessInfo.layout            = initLayout;
+    accessInfo.attachFinalLayout = finalLayout;
+    accessInfo.queueFamilyIndex  = VK_QUEUE_FAMILY_IGNORED;
+    accessInfo.stageMask         = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    return addTextureState(texHandle, accessInfo);
 }
 
 RenderPassBuilder& RenderPassBuilder::depth(RDGTextureRef texHandle, VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp, VkImageLayout initLayout,
                                             VkImageLayout finalLayout)
 {
-    TextureSubresourceAccessInfo subResources;
-    TextureAccessInfo&           accessInfo = subResources.emplace_back();
-    accessInfo.isAttachment                 = true;
-    accessInfo.accessMask                   = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    accessInfo.loadOp                       = loadOp;
-    accessInfo.storeOp                      = storeOp;
-    accessInfo.attachSlotIdx                = ATTACHMENT_DEPTH;
-    accessInfo.layout                       = initLayout;
-    accessInfo.attachFinalLayout            = finalLayout;
-    accessInfo.queueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
-    accessInfo.stageMask                    = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-    return addTextureState(texHandle, std::move(subResources));
+    TextureAccessInfo accessInfo;
+    accessInfo.isAttachment      = true;
+    accessInfo.accessMask        = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    accessInfo.loadOp            = loadOp;
+    accessInfo.storeOp           = storeOp;
+    accessInfo.attachSlotIdx     = ATTACHMENT_DEPTH;
+    accessInfo.layout            = initLayout;
+    accessInfo.attachFinalLayout = finalLayout;
+    accessInfo.queueFamilyIndex  = VK_QUEUE_FAMILY_IGNORED;
+    accessInfo.stageMask         = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+    return addTextureState(texHandle, accessInfo);
 }
 
 RenderPassBuilder& RenderPassBuilder::stencil(RDGTextureRef texHandle, VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp,
                                               VkImageLayout initLayout, VkImageLayout finalLayout)
 {
-    TextureSubresourceAccessInfo subResources;
-    TextureAccessInfo&           accessInfo = subResources.emplace_back();
-    accessInfo.isAttachment                 = true;
-    accessInfo.accessMask                   = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    accessInfo.loadOp                       = loadOp;
-    accessInfo.storeOp                      = storeOp;
-    accessInfo.attachSlotIdx                = ATTACHMENT_STENCIL;
-    accessInfo.layout                       = initLayout;
-    accessInfo.attachFinalLayout            = finalLayout;
-    accessInfo.queueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
-    accessInfo.stageMask                    = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-    return addTextureState(texHandle, std::move(subResources));
+    TextureAccessInfo accessInfo;
+    accessInfo.isAttachment      = true;
+    accessInfo.accessMask        = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    accessInfo.loadOp            = loadOp;
+    accessInfo.storeOp           = storeOp;
+    accessInfo.attachSlotIdx     = ATTACHMENT_STENCIL;
+    accessInfo.layout            = initLayout;
+    accessInfo.attachFinalLayout = finalLayout;
+    accessInfo.queueFamilyIndex  = VK_QUEUE_FAMILY_IGNORED;
+    accessInfo.stageMask         = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+    return addTextureState(texHandle, accessInfo);
 }
 
-ComputePassBuilder& ComputePassBuilder::async(bool isAsync)
-{
-    _node->setAsyncState(isAsync);
-    return *this;
-}
 } // namespace Play::RDG

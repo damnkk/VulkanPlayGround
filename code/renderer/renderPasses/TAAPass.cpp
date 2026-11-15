@@ -29,7 +29,7 @@ void TAAPass::init()
     _inverseTonemapPipeline.setShader(inverseTonemapShaderID);
 }
 
-void TAAPass::ensureHistoryTexture()
+void TAAPass::onResize()
 {
     const VkExtent2D extent = vkDriver->getViewportSize();
     if (_historyTexture && _historyTexture->Extent().width == extent.width && _historyTexture->Extent().height == extent.height)
@@ -37,11 +37,8 @@ void TAAPass::ensureHistoryTexture()
         return;
     }
 
-    // Imported textures must be in the layout the graph leaves them in at the
-    // end of a frame, so the frame-to-frame barrier has a valid old layout.
-    // History is written last, in GENERAL.
-    _historyTexture              = RefPtr<Texture>(new Texture(extent.width, extent.height, VK_FORMAT_R16G16B16A16_SFLOAT,
-                                                               VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_LAYOUT_GENERAL));
+    _historyTexture = RefPtr<Texture>(
+        new Texture(extent.width, extent.height, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT));
     _historyTexture->DebugName() = "TAAHistory";
 
     _historyValid = false;
@@ -49,7 +46,11 @@ void TAAPass::ensureHistoryTexture()
 
 void TAAPass::build(RDG::RDGBuilder* rdgBuilder)
 {
-    ensureHistoryTexture();
+    if (!_ownedRender->getViewControl().settings().taa.enabled)
+    {
+        _historyValid = false;
+        return;
+    }
 
     const VkExtent2D extent  = vkDriver->getViewportSize();
     const uint32_t   groupsX = (extent.width + kTAAGroupSize - 1) / kTAAGroupSize;
@@ -77,11 +78,6 @@ void TAAPass::build(RDG::RDGBuilder* rdgBuilder)
             [this, groupsX, groupsY](RDG::PassNode*, RDG::RenderContext& context)
             {
                 const auto& control = _ownedRender->getViewControl();
-                if (!control.settings().taa.enabled)
-                {
-                    _historyValid = false;
-                    return;
-                }
                 if (control.historyReset()) _historyValid = false;
                 TAAPushConstant pushConstant{};
                 pushConstant.currentWeight             = _historyValid ? control.settings().taa.currentWeight : 1.0f;
@@ -104,7 +100,6 @@ void TAAPass::build(RDG::RDGBuilder* rdgBuilder)
         .execute(
             [this, groupsX, groupsY](RDG::PassNode*, RDG::RenderContext& context)
             {
-                if (!_ownedRender->getViewControl().settings().taa.enabled) return;
                 const auto pipeline = context.createPipelineStateBuilder().build(_inverseTonemapPipeline);
                 context.bindPipeline(pipeline);
                 vkCmdDispatch(context._currCmdBuffer, groupsX, groupsY, 1);

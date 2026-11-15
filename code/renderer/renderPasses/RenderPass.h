@@ -13,9 +13,10 @@ class RDGBuilder;
 class BasePass
 {
 public:
-    BasePass()                                      = default;
-    virtual ~BasePass()                             = default;
-    virtual void init()                             = 0;
+    BasePass()          = default;
+    virtual ~BasePass() = default;
+    virtual void init() = 0;
+    virtual void onResize() {}
     virtual void build(RDG::RDGBuilder* rdgBuilder) = 0;
     std::string  _name;
 

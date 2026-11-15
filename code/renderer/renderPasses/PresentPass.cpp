@@ -19,7 +19,7 @@ void PresentPass::init()
 
 void PresentPass::build(RDG::RDGBuilder* rdgBuilder)
 {
-    auto presentTexRef = rdgBuilder->createTexture(PRESENT_TEXTURE_NAME).finish();
+    auto presentTexRef = rdgBuilder->createTexture(PRESENT_TEXTURE_NAME).Import(vkDriver->getCurrentSwapchainTexture()).finish();
     auto inputTexture  = rdgBuilder->getTexture("outputTexture");
     rdgBuilder->createRenderPass("present")
         .color(0, presentTexRef, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -28,8 +28,8 @@ void PresentPass::build(RDG::RDGBuilder* rdgBuilder)
         .execute(
             [this](RDG::PassNode* passNode, RDG::RenderContext& context)
             {
-                VkCommandBuffer cmd = context._currCmdBuffer;
-                const auto pipeline = context.createPipelineStateBuilder().build(this->_presentPipeline);
+                VkCommandBuffer cmd      = context._currCmdBuffer;
+                const auto      pipeline = context.createPipelineStateBuilder().build(this->_presentPipeline);
                 context.bindPipeline(pipeline);
                 VkViewport viewport = {0, 0, (float) vkDriver->getViewportSize().width, (float) vkDriver->getViewportSize().height, 0.0f, 1.0f};
                 VkRect2D   scissor  = {{0, 0}, {vkDriver->getViewportSize().width, vkDriver->getViewportSize().height}};

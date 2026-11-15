@@ -20,14 +20,13 @@ public:
     ~TAAPass() override;
 
     void init() override;
+    void onResize() override;
     void build(RDG::RDGBuilder* rdgBuilder) override;
 
     static constexpr const char* INPUT_TEXTURE_NAME  = "LightPassOutput";
     static constexpr const char* OUTPUT_TEXTURE_NAME = INPUT_TEXTURE_NAME;
 
 private:
-    void ensureHistoryTexture();
-
     DeferRenderer*                  _ownedRender = nullptr;
     ComputePipelineStateInitializer _resolvePipeline;
     ComputePipelineStateInitializer _inverseTonemapPipeline;

@@ -6,7 +6,6 @@
 
 #include "resourceManagement/vulkan/descriptors/DescriptorManager.h"
 #include "RDGResources.h"
-#include "BaseDag.h"
 
 namespace Play
 {
@@ -30,32 +29,21 @@ class RTPassBuilder;
 
 struct RDGTextureState
 {
-    RDGTextureState(RDGTextureRef textureRef, TextureSubresourceAccessInfo states, VkImageMemoryBarrier2 barrier)
-        : texture(textureRef), textureStates(states), barrierInfo(barrier)
-    {
-    }
-    RDGTextureRef                texture;
-    TextureSubresourceAccessInfo textureStates;
-    VkImageMemoryBarrier2        barrierInfo{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
+    RDGTextureRef     texture;
+    TextureAccessInfo use;
 };
 
 struct RDGBufferState
 {
-    RDGBufferState(RDGBufferRef bufferRef, BufferAccessInfo state, VkBufferMemoryBarrier2 barrier)
-        : buffer(bufferRef), bufferState(state), barrierInfo(barrier)
-    {
-    }
-    RDGBufferRef           buffer;
-    BufferAccessInfo       bufferState;
-    ProducerInfo           _producerInfo;
-    VkBufferMemoryBarrier2 barrierInfo{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2};
+    RDGBufferRef     buffer;
+    BufferAccessInfo bufferState;
 };
 
-class PassNode : public Node
+class PassNode
 {
 public:
-    PassNode(size_t id, std::string name, NodeType type) : Node(id, type), _name(std::move(name)) {}
-    ~PassNode() override;
+    explicit PassNode(std::string name) : _name(std::move(name)) {}
+    virtual ~PassNode();
 
     void setFunc(std::function<void(PassNode* passNode, RenderContext& context)> func)
     {
@@ -93,30 +81,11 @@ public:
         return _bufferStates;
     }
 
-    // Helper functions to find texture/buffer state in vector
-    RDGTextureState* findTextureState(RDGTextureRef texture)
-    {
-        for (auto& state : _textureStates)
-        {
-            if (state.texture == texture) return &state;
-        }
-        return nullptr;
-    }
-    RDGBufferState* findBufferState(RDGBufferRef buffer)
-    {
-        for (auto& state : _bufferStates)
-        {
-            if (state.buffer == buffer) return &state;
-        }
-        return nullptr;
-    }
-
 protected:
     friend class RDGBuilder;
     std::function<void(PassNode* passNode, RenderContext& context)> _func;
     std::string                                                     _name;
     DescriptorSetBindings                                           _descBindings;
-    Type                                                            _type;
     std::vector<RDGTextureState>                                    _textureStates;
     std::vector<RDGBufferState>                                     _bufferStates;
 };
@@ -124,7 +93,8 @@ protected:
 class RenderPassNode : public PassNode
 {
 public:
-    RenderPassNode(uint32_t id, std::string name);
+    explicit RenderPassNode(std::string name);
+    ~RenderPassNode() override;
     Type type() const override
     {
         return Type::Render;
@@ -157,24 +127,12 @@ using RenderPassNodeRef = RenderPassNode*;
 class ComputePassNode : public PassNode
 {
 public:
-    ComputePassNode(uint32_t id, std::string name) : PassNode(id, std::move(name), NodeType::eComputePass) {}
-    void setAsyncState(bool isAsync)
-    {
-        _isAsync = isAsync;
-    }
-    [[nodiscard]]
-    bool getAsyncState() const
-    {
-        return _isAsync;
-    }
+    using PassNode::PassNode;
     Type type() const override
     {
         return Type::Compute;
     }
 
-private:
-    bool _isAsync = false;
-    friend class ComputePassBuilder;
     friend class RDGBuilder;
 };
 using ComputePassNodeRef = ComputePassNode*;
@@ -182,7 +140,7 @@ using ComputePassNodeRef = ComputePassNode*;
 class RTPassNode : public PassNode
 {
 public:
-    RTPassNode(uint32_t id, std::string name) : PassNode(id, std::move(name), NodeType::eRTPass) {}
+    using PassNode::PassNode;
     Type type() const override
     {
         return Type::RayTracing;
@@ -267,17 +225,16 @@ public:
 
     Derived& storageRead(uint32_t binding, RDGTextureRef texture, VkPipelineStageFlagBits2 stage, uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED)
     {
-        TextureSubresourceAccessInfo subResource;
-        TextureAccessInfo&           accessInfo = subResource.emplace_back();
-        accessInfo.set                          = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
-        accessInfo.binding                      = binding;
-        accessInfo.descriptorType               = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        accessInfo.isAttachment                 = false;
-        accessInfo.accessMask                   = VK_ACCESS_2_SHADER_READ_BIT;
-        accessInfo.layout                       = VK_IMAGE_LAYOUT_GENERAL;
-        accessInfo.stageMask                    = stage;
-        accessInfo.queueFamilyIndex             = queueFamilyIndex;
-        return addTextureState(texture, std::move(subResource));
+        TextureAccessInfo accessInfo;
+        accessInfo.set              = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
+        accessInfo.binding          = binding;
+        accessInfo.descriptorType   = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        accessInfo.isAttachment     = false;
+        accessInfo.accessMask       = VK_ACCESS_2_SHADER_READ_BIT;
+        accessInfo.layout           = VK_IMAGE_LAYOUT_GENERAL;
+        accessInfo.stageMask        = stage;
+        accessInfo.queueFamilyIndex = queueFamilyIndex;
+        return addTextureState(texture, accessInfo);
     }
 
     Derived& storageRead(uint32_t binding, RDGBufferRef buffer, VkPipelineStageFlagBits2 stage, uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -298,33 +255,31 @@ public:
     Derived& storageWrite(uint32_t binding, RDGTextureRef texture, VkPipelineStageFlagBits2 stage,
                           uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED)
     {
-        TextureSubresourceAccessInfo subResource;
-        TextureAccessInfo&           accessInfo = subResource.emplace_back();
-        accessInfo.set                          = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
-        accessInfo.binding                      = binding;
-        accessInfo.descriptorType               = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        accessInfo.isAttachment                 = false;
-        accessInfo.accessMask                   = VK_ACCESS_2_SHADER_WRITE_BIT;
-        accessInfo.layout                       = VK_IMAGE_LAYOUT_GENERAL;
-        accessInfo.stageMask                    = stage;
-        accessInfo.queueFamilyIndex             = queueFamilyIndex;
-        return addTextureState(texture, std::move(subResource));
+        TextureAccessInfo accessInfo;
+        accessInfo.set              = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
+        accessInfo.binding          = binding;
+        accessInfo.descriptorType   = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        accessInfo.isAttachment     = false;
+        accessInfo.accessMask       = VK_ACCESS_2_SHADER_WRITE_BIT;
+        accessInfo.layout           = VK_IMAGE_LAYOUT_GENERAL;
+        accessInfo.stageMask        = stage;
+        accessInfo.queueFamilyIndex = queueFamilyIndex;
+        return addTextureState(texture, accessInfo);
     }
 
     Derived& storageReadWrite(uint32_t binding, RDGTextureRef texture, VkPipelineStageFlagBits2 stage,
                               uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED)
     {
-        TextureSubresourceAccessInfo subResource;
-        TextureAccessInfo&           accessInfo = subResource.emplace_back();
-        accessInfo.set                          = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
-        accessInfo.binding                      = binding;
-        accessInfo.descriptorType               = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        accessInfo.isAttachment                 = false;
-        accessInfo.accessMask                   = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
-        accessInfo.layout                       = VK_IMAGE_LAYOUT_GENERAL;
-        accessInfo.stageMask                    = stage;
-        accessInfo.queueFamilyIndex             = queueFamilyIndex;
-        return addTextureState(texture, std::move(subResource));
+        TextureAccessInfo accessInfo;
+        accessInfo.set              = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
+        accessInfo.binding          = binding;
+        accessInfo.descriptorType   = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        accessInfo.isAttachment     = false;
+        accessInfo.accessMask       = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
+        accessInfo.layout           = VK_IMAGE_LAYOUT_GENERAL;
+        accessInfo.stageMask        = stage;
+        accessInfo.queueFamilyIndex = queueFamilyIndex;
+        return addTextureState(texture, accessInfo);
     }
 
     Derived& storageWrite(uint32_t binding, RDGBufferRef buffer, VkPipelineStageFlagBits2 stage, uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -357,28 +312,27 @@ protected:
     Derived& readTexture(uint32_t binding, RDGTextureRef texture, VkPipelineStageFlagBits2 stage, VkDescriptorType descriptorType,
                          uint32_t queueFamilyIndex)
     {
-        TextureSubresourceAccessInfo subResource;
-        TextureAccessInfo&           accessInfo = subResource.emplace_back();
-        accessInfo.set                          = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
-        accessInfo.binding                      = binding;
-        accessInfo.descriptorType               = descriptorType;
-        accessInfo.isAttachment                 = false;
-        accessInfo.layout                       = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        accessInfo.accessMask                   = Traits::textureReadAccessMask();
-        accessInfo.stageMask                    = stage;
-        accessInfo.queueFamilyIndex             = queueFamilyIndex;
-        return addTextureState(texture, std::move(subResource));
+        TextureAccessInfo accessInfo;
+        accessInfo.set              = uint32_t(DescriptorEnum::ePerPassDescriptorSet);
+        accessInfo.binding          = binding;
+        accessInfo.descriptorType   = descriptorType;
+        accessInfo.isAttachment     = false;
+        accessInfo.layout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        accessInfo.accessMask       = Traits::textureReadAccessMask();
+        accessInfo.stageMask        = stage;
+        accessInfo.queueFamilyIndex = queueFamilyIndex;
+        return addTextureState(texture, accessInfo);
     }
 
-    Derived& addTextureState(RDGTextureRef texture, TextureSubresourceAccessInfo subResource)
+    Derived& addTextureState(RDGTextureRef texture, const TextureAccessInfo& accessInfo)
     {
-        _node->getTextureStates().emplace_back(texture, std::move(subResource), VkImageMemoryBarrier2{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2});
+        _node->getTextureStates().push_back({texture, accessInfo});
         return self();
     }
 
     Derived& addBufferState(RDGBufferRef buffer, const BufferAccessInfo& accessInfo)
     {
-        _node->getBufferStates().emplace_back(buffer, accessInfo, VkBufferMemoryBarrier2{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2});
+        _node->getBufferStates().push_back({buffer, accessInfo});
         return self();
     }
 
@@ -408,15 +362,15 @@ public:
     RenderPassBuilder& color(uint32_t slotIdx, RDGTextureRef texHandle, VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                              VkAttachmentStoreOp storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
                              VkImageLayout       initLayout  = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                             VkImageLayout       finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                             VkImageLayout       finalLayout = VK_IMAGE_LAYOUT_UNDEFINED);
     RenderPassBuilder& depth(RDGTextureRef texHandle, VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                              VkAttachmentStoreOp storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
                              VkImageLayout       initLayout  = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                             VkImageLayout       finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+                             VkImageLayout       finalLayout = VK_IMAGE_LAYOUT_UNDEFINED);
     RenderPassBuilder& stencil(RDGTextureRef texHandle, VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                                VkAttachmentStoreOp storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
                                VkImageLayout       initLayout  = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                               VkImageLayout       finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+                               VkImageLayout       finalLayout = VK_IMAGE_LAYOUT_UNDEFINED);
 };
 
 class ComputePassBuilder : public PassBuilderBase<ComputePassBuilder, ComputePassNodeRef, ComputePassBuilderTraits>
@@ -432,8 +386,6 @@ public:
     using Base::storageReadWrite;
     using Base::storageWrite;
     ~ComputePassBuilder() = default;
-
-    ComputePassBuilder& async(bool isAsync = false);
 };
 
 class RTPassBuilder : public PassBuilderBase<RTPassBuilder, RTPassNodeRef, RTPassBuilderTraits>

@@ -1,12 +1,3 @@
-/*
-For increase multi-pass rendering development efficiency,and performance,I designed a simple render
-dependency graph. for the first development stage, the graph can not be modified at runtime and only
-support single threaded execution(or not). Usage of the graph shoule as simple as possible,only
-shader needed and resource specified in the pass.And dependency between passes should be specified
-by the resource usage.The design must considering RT resuse in the future,so, a texture handle wrap
-is needed. we use resource handle as resource itself,to confirm the dependency, and specify the real
-GPU resource when RDG compile.
- */
 #ifndef RDG_H
 #define RDG_H
 #include "string"
@@ -20,6 +11,11 @@ GPU resource when RDG compile.
 #include "RDGPasses.hpp"
 #include "resourceManagement/vulkan/pipeline/PipelineCacheManager.h"
 #include "resourceManagement/vulkan/pipeline/PipelineStateBuilder.h"
+namespace nvvk
+{
+class BarrierContainer;
+}
+
 namespace Play
 {
 class RenderPass;
@@ -70,17 +66,54 @@ class BlackBoard
 public:
     BlackBoard() = default;
     ~BlackBoard();
-    void          registTexture(RDGTextureRef texture);
-    void          registBuffer(RDGBufferRef buffer);
-    void          registPass(PassNode* pass);
-    RDGTextureRef getTexture(std::string name);
-    RDGBufferRef  getBuffer(std::string name);
-    PassNode*     getPass(std::string name);
+    void          registerTexture(RDGTextureRef texture);
+    void          registerBuffer(RDGBufferRef buffer);
+    RDGTextureRef getTexture(const std::string& name);
+    RDGBufferRef  getBuffer(const std::string& name);
 
 private:
     std::unordered_map<std::string, RDGTextureRef> _textureMap;
     std::unordered_map<std::string, RDGBufferRef>  _bufferMap;
-    std::unordered_map<std::string, PassNode*>     _passMap;
+};
+
+// Physical textures survive graphs; logical names do not identify pool entries.
+class ResourcePool
+{
+public:
+    ResourcePool(bool reuseTextures = true, bool logStats = false) : _reuseTextures(reuseTextures), _logStats(logStats) {}
+    void clear();
+
+private:
+    friend class RDGBuilder;
+    void     beginGraph();
+    void     releaseTexture(Texture* texture);
+    void     endGraph();
+    Texture* getTexture(const RDGTexture& node);
+    Buffer*  getBuffer(const RDGBuffer& node);
+
+    struct TextureEntry
+    {
+        RDGTexture::TextureDesc desc;
+        RefPtr<Texture>         texture;
+        VkDeviceSize            bytes = 0;
+        bool                    inUse = false;
+    };
+    struct TextureStats
+    {
+        uint32_t     logicalCount    = 0;
+        uint32_t     createdCount    = 0;
+        uint32_t     physicalCount   = 0;
+        VkDeviceSize logicalBytes    = 0;
+        VkDeviceSize reservedBytes   = 0;
+        VkDeviceSize activeBytes     = 0;
+        VkDeviceSize peakActiveBytes = 0;
+    };
+    std::vector<TextureEntry>                       _textures;
+    std::unordered_map<std::string, RefPtr<Buffer>> _buffers;
+    bool                                            _reuseTextures;
+    bool                                            _logStats;
+    TextureStats                                    _stats;
+    TextureStats                                    _lastLoggedStats;
 };
 
 struct RenderContext;
@@ -118,13 +151,6 @@ struct PendingRTState : public PendingState
 
 struct RenderContext
 {
-    RenderContext()
-    {
-        _pendingComputeState = std::make_shared<PendingComputeState>(this);
-        _pendingGfxState     = std::make_shared<PendingGfxState>(this);
-        _pendingRTState      = std::make_shared<PendingRTState>(this);
-    }
-    ~RenderContext() {}
     PipelineStateBuilder createPipelineStateBuilder() const;
     void                 bindPipeline(const GraphicsPipelineStateInitializer& initializer);
     void                 bindPipeline(const ComputePipelineStateInitializer& initializer);
@@ -148,14 +174,14 @@ struct RenderContext
         vkCmdPushConstants(_currCmdBuffer, _boundPipelineLayout->vkHandle, range.stageFlags, range.offset, range.size, &pushConstant);
     }
 
-    PlayFrameData*                       _frameData              = nullptr;
-    PassNode*                            _prevPassNode           = nullptr;
-    VkCommandBuffer                      _currCmdBuffer          = VK_NULL_HANDLE;
-    PipelineLayout*                      _boundPipelineLayout    = nullptr;
-    VkPipelineBindPoint                  _boundPipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    std::shared_ptr<PendingComputeState> _pendingComputeState    = nullptr;
-    std::shared_ptr<PendingGfxState>     _pendingGfxState        = nullptr;
-    std::shared_ptr<PendingRTState>      _pendingRTState         = nullptr;
+    PlayFrameData*      _frameData              = nullptr;
+    PassNode*           _prevPassNode           = nullptr;
+    VkCommandBuffer     _currCmdBuffer          = VK_NULL_HANDLE;
+    PipelineLayout*     _boundPipelineLayout    = nullptr;
+    VkPipelineBindPoint _boundPipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    PendingComputeState _pendingComputeState{this};
+    PendingGfxState     _pendingGfxState{this};
+    PendingRTState      _pendingRTState{this};
 
 private:
     void bindDescriptorSets(VkPipelineBindPoint bindPoint, const PipelineLayout& layout, const PendingState& pendingState,
@@ -165,7 +191,7 @@ private:
 class RDGBuilder
 {
 public:
-    RDGBuilder();
+    explicit RDGBuilder(ResourcePool& resources);
     ~RDGBuilder();
     RenderPassBuilder  createRenderPass(std::string name);
     ComputePassBuilder createComputePass(std::string name);
@@ -174,44 +200,34 @@ public:
     RDGTextureBuilder createTexture(std::string name);
     RDGBufferBuilder  createBuffer(std::string name);
 
-    void registTexture(RDGTextureRef texture);
-    void registBuffer(RDGBufferRef buffer);
+    void registerTexture(RDGTextureRef texture);
+    void registerBuffer(RDGBufferRef buffer);
 
-    RDGTextureRef getTexture(std::string name);
-    RDGBufferRef  getBuffer(std::string name);
+    RDGTextureRef getTexture(const std::string& name);
+    RDGBufferRef  getBuffer(const std::string& name);
     void          compile();
     void          execute();
-
-    Dag* getDag()
-    {
-        return _dag.get();
-    }
 
 protected:
     friend class RDGTextureBuilder;
     friend class RDGBufferBuilder;
-    // InputPassNodeRef createInputPass(std::string name);
-    void           beforePassExecute();
-    void           executePass(PassNode* pass);
-    void           afterPassExecute();
+    void           executePass(PassNode* pass, nvvk::BarrierContainer& barriers);
     RenderContext* prepareRenderContext(PassNode* pass);
     void           prepareDescriptorSets(RenderContext& context, PassNode* pass);
-    void           prepareResourceBarrier(RenderContext& context, PassNode* pass);
+    void           prepareResourceBarrier(RenderContext& context, PassNode* pass, nvvk::BarrierContainer& barriers);
     void           prepareRenderPass(PassNode* pass);
-    void           endRenderPass(PassNode* pass);
+    void           endRenderPass(PassNode* pass, nvvk::BarrierContainer& barriers);
     friend class RenderPassBuilder;
     friend class ComputePassBuilder;
     friend class RTPassBuilder;
     friend class PresentPassBuilder;
-    std::unique_ptr<Dag>   _dag = nullptr;
-    std::vector<PassNode*> _passes;
-    BlackBoard             _blackBoard;
-    // std::unordered_map<std::string, RDGTexture*> _textureMap;
-    // std::unordered_map<std::string, RDGBuffer*>  _bufferMap;
 
 private:
-    std::shared_ptr<RenderContext>                  _renderContext;
-    std::vector<std::pair<VkSubmitInfo2, uint32_t>> _submitInfos; // pairs of submit info and queue index
+    ResourcePool&                           _resources;
+    BlackBoard                              _blackBoard;
+    std::vector<std::unique_ptr<PassNode>>  _passes;
+    RenderContext                           _renderContext;
+    std::vector<std::vector<RDGTextureRef>> _textureReleases;
 };
 } // namespace Play::RDG
 

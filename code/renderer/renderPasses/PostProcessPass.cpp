@@ -23,25 +23,26 @@ void PostProcessPass::build(RDG::RDGBuilder* rdgBuilder)
 {
     auto inputTextureRef = rdgBuilder->getTexture(TAAPass::OUTPUT_TEXTURE_NAME);
     auto outputTexRef    = rdgBuilder->createTexture("outputTexture")
-                            .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
-                            .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
-                            .Format(VK_FORMAT_R16G16B16A16_SFLOAT)
-                            .UsageFlags(VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
-                            .MipmapLevel(1)
-                            .finish();
+                               .Extent({vkDriver->getViewportSize().width, vkDriver->getViewportSize().height, 1})
+                               .AspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
+                               .Format(VK_FORMAT_R16G16B16A16_SFLOAT)
+                               .UsageFlags(VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
+                               .MipmapLevel(1)
+                               .finish();
 
-    auto pass = rdgBuilder->createComputePass("postProcessPass")
-                    .read(0, inputTextureRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-                    .storageWrite(1, outputTexRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-                    .execute(
-                        [inputTextureRef, outputTexRef, this](RDG::PassNode* passNode, RDG::RenderContext& context)
-                        {
-                            PlayResourceManager::Instance().acquireSampler(inputTextureRef->getRHI()->descriptor.sampler);
-                            this->_tonemapper.runCompute(context._currCmdBuffer, vkDriver->getViewportSize(),
-                                                         _tonemapperControlComponent.getCPUHandle(),
-                                                         inputTextureRef->getRHI()->descriptor, outputTexRef->getRHI()->descriptor);
-                        })
-                    .finish();
+    auto pass =
+        rdgBuilder->createComputePass("postProcessPass")
+            .read(0, inputTextureRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .storageWrite(1, outputTexRef, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+            .execute(
+                [inputTextureRef, outputTexRef, this](RDG::PassNode* passNode, RDG::RenderContext& context)
+                {
+                    auto& sampler = inputTextureRef->getRHI()->descriptor.sampler;
+                    if (sampler == VK_NULL_HANDLE) PlayResourceManager::Instance().acquireSampler(sampler);
+                    this->_tonemapper.runCompute(context._currCmdBuffer, vkDriver->getViewportSize(), _tonemapperControlComponent.getCPUHandle(),
+                                                 inputTextureRef->getRHI()->descriptor, outputTexRef->getRHI()->descriptor);
+                })
+            .finish();
 }
 
 PostProcessPass::PostProcessPass(DeferRenderer* ownedRender) : _ownedRender(ownedRender) {}

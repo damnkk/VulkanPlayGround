@@ -226,65 +226,154 @@ bool VulkanRuntime::init(const RuntimeConfig& config, const nvvk::ContextInitInf
     return true;
 }
 
-void VulkanRuntime::run()
+bool VulkanRuntime::run()
 {
     if (!_initialized)
     {
-        return;
+        return false;
     }
 
-    LOGI("Running SDL3 bootstrap runtime\n");
-    publishSceneSnapshot(*_sceneManager, *_assetManager, _guiHost.getEditor());
+    auto& editor = _guiHost.getEditor();
+    publishSceneSnapshot(*_sceneManager, *_assetManager, editor);
     _guiHost.setRenderWindowHandle(_window.getNativeHandle());
 
-    while (!_window.shouldClose() && !_guiHost.getEditor().exitRequested())
+    SDL_Thread* renderThread = nullptr;
+    if (!_config.singleThreadedRendering)
     {
-        _window.pollEvents();
-        if (_window.shouldClose() || _guiHost.getEditor().exitRequested())
+        _frameReady = SDL_CreateSemaphore(0);
+        _frameDone  = SDL_CreateSemaphore(0);
+        if (_frameReady && _frameDone)
         {
-            break;
+            renderThread = SDL_CreateThread(&VulkanRuntime::renderThreadMain, "RenderThread", this);
         }
-        processSceneCommands(*_sceneManager, *_assetManager, _guiHost.getEditor());
-        processAssetImports(*_assetManager, *_sceneManager, _guiHost.getEditor());
-        if (_window.getInputState().keyOPressed)
+        if (!renderThread)
         {
-            _guiHost.requestShowWindow();
+            LOGE("Could not start the render thread: %s\n", SDL_GetError());
+            SDL_DestroySemaphore(_frameReady);
+            SDL_DestroySemaphore(_frameDone);
+            return false;
         }
-
-        // Ctrl+S has two exclusive producers depending on keyboard focus: the
-        // Qt window fires its File > Save shortcut while a Qt widget is focused,
-        // and SDL reports the key edge while the embedded viewport is. Both set
-        // the same one-shot request, consumed once per frame below.
-        if (_window.getInputState().keySPressed && _window.getInputState().ctrl)
-        {
-            _guiHost.getEditor().requestSave();
-        }
-        if (_guiHost.getEditor().takeSaveRequest())
-        {
-            saveCurrentProject(*_sceneManager);
-        }
-
-        if (!_window.isRenderable())
-        {
-            SDL_Delay(10);
-            continue;
-        }
-
-        if (!prepareFrame())
-        {
-            continue;
-        }
-
-        tick();
-        _renderSession->beginFrame();
-        _renderSession->renderFrame();
-        signalPresentSemaphore();
-        presentFrame();
     }
 
-    if (_context.getDevice())
+    LOGI("Running Vulkan runtime (%s)\n", renderThread ? "render thread" : "single thread");
+
+    bool       frameInProgress    = false;
+    uint64_t   lastPresentedFrame = _frameCounter;
+    const auto updateStats        = [&]
     {
-        vkDeviceWaitIdle(_context.getDevice());
+        if (_frameCounter == lastPresentedFrame) return;
+        lastPresentedFrame = _frameCounter;
+        updateFrameStatsTitle();
+    };
+    const auto finishPreviousFrame = [&]
+    {
+        if (!frameInProgress) return;
+        {
+            PLAY_PROFILE_SCOPE("Main Wait for Render Thread");
+            while (!SDL_WaitSemaphoreTimeout(_frameDone, 8))
+            {
+                // The window thread must service Win32 messages while WSI may
+                // be blocked. SDL events stay queued until the next input poll.
+                SDL_PumpEvents();
+            }
+        }
+        frameInProgress = false;
+        updateStats();
+    };
+
+    while (!_window.shouldClose() && !editor.exitRequested())
+    {
+        FrameRequest next;
+        {
+            PLAY_PROFILE_SCOPE("Main Prepare Frame");
+            _window.pollEvents();
+            if (_window.shouldClose() || editor.exitRequested()) break;
+
+            next.input     = _window.getInputState();
+            next.render    = _window.isRenderable();
+            next.pixelSize = _window.getPixelSize();
+            next.resize    = next.render && _window.consumeResizePending();
+
+            if (next.input.keyOPressed) _guiHost.requestShowWindow();
+            if (next.input.keySPressed && next.input.ctrl) editor.requestSave();
+
+            next.commands = editor.takeCommands();
+            next.imports  = editor.takeAssetImportRequests();
+            next.save     = editor.takeSaveRequest();
+        }
+
+        // The main thread can prepare N+1 while the render thread handles N.
+        // Wait before replacing the mailbox; there is no queue of older frames.
+        finishPreviousFrame();
+        if (editor.exitRequested())
+        {
+            // Finish the already collected editor work without rendering.
+            next.render = false;
+        }
+        if (next.render || !next.commands.empty() || !next.imports.empty() || next.save)
+        {
+            _frameRequest = std::move(next);
+            if (renderThread)
+            {
+                SDL_SignalSemaphore(_frameReady);
+                frameInProgress = true;
+            }
+            else
+            {
+                executeFrame();
+                updateStats();
+            }
+        }
+        else
+        {
+            SDL_Delay(10);
+        }
+    }
+
+    finishPreviousFrame();
+    if (renderThread)
+    {
+        _stopRenderThread = true;
+        SDL_SignalSemaphore(_frameReady);
+        SDL_WaitThread(renderThread, nullptr);
+        SDL_DestroySemaphore(_frameReady);
+        SDL_DestroySemaphore(_frameDone);
+    }
+
+    vkDeviceWaitIdle(getDevice());
+    return true;
+}
+
+int VulkanRuntime::renderThreadMain(void* data)
+{
+    auto& runtime = *static_cast<VulkanRuntime*>(data);
+    for (;;)
+    {
+        SDL_WaitSemaphore(runtime._frameReady);
+        if (runtime._stopRenderThread) return 0;
+        runtime.executeFrame();
+        SDL_SignalSemaphore(runtime._frameDone);
+    }
+}
+
+void VulkanRuntime::executeFrame()
+{
+    PLAY_PROFILE_SCOPE("Render Frame");
+    const auto& request = _frameRequest;
+    auto&       editor  = _guiHost.getEditor();
+    processSceneCommands(*_sceneManager, *_assetManager, editor, request.commands);
+    processAssetImports(*_assetManager, *_sceneManager, editor, request.imports);
+    if (request.save) saveCurrentProject(*_sceneManager);
+
+    if (!request.render) return;
+    if (!prepareFrame()) return;
+
+    tick();
+    _renderSession->beginFrame();
+    _renderSession->renderFrame();
+    {
+        PLAY_PROFILE_SCOPE("Present");
+        presentFrame();
     }
 }
 
@@ -528,7 +617,11 @@ bool VulkanRuntime::createFrameSubmission(uint32_t frameCount)
 {
     // Swapchain recreation has waited for the graphics queue, including scene uploads.
     // Retire staging references before destroying the old frame timeline semaphores.
-    if (!_frames.empty()) Play::PlayResourceManager::Instance().releaseStaging();
+    if (!_frames.empty())
+    {
+        Play::PlayResourceManager::Instance().releaseStaging();
+        destroyDeferredTasks();
+    }
     destroyFrameSubmission();
 
     _frames.resize(frameCount);
@@ -628,9 +721,10 @@ void VulkanRuntime::waitForCurrentFrame() const
     vkWaitSemaphores(_context.getDevice(), &waitInfo, UINT64_MAX);
 }
 
-bool VulkanRuntime::rebuildSwapchain()
+bool VulkanRuntime::rebuildSwapchain(VkExtent2D pixelSize)
 {
-    _windowSize = _window.getPixelSize();
+    PLAY_PROFILE_SCOPE("Rebuild Swapchain");
+    _windowSize = pixelSize;
     if (_windowSize.width == 0 || _windowSize.height == 0)
     {
         return false;
@@ -703,22 +797,29 @@ Play::Texture* VulkanRuntime::refreshCurrentSwapchainTexture()
 
 bool VulkanRuntime::prepareFrame()
 {
-    if (_window.consumeResizePending())
+    if (_frameRequest.resize)
     {
         _swapchain.requestRebuild();
     }
 
-    if (_swapchain.needRebuilding() && !rebuildSwapchain())
+    if (_swapchain.needRebuilding() && !rebuildSwapchain(_frameRequest.pixelSize))
     {
         return false;
     }
 
-    waitForCurrentFrame();
+    {
+        PLAY_PROFILE_SCOPE("Render Wait for GPU Slot");
+        waitForCurrentFrame();
+    }
     _frames[_frameIndex].reset();
     _pendingFrameWaitSemaphores.clear();
     tryCleanupDeferredTasks();
 
-    const VkResult result = _swapchain.acquireNextImage(_context.getDevice());
+    VkResult result;
+    {
+        PLAY_PROFILE_SCOPE("Acquire Swapchain Image");
+        result = _swapchain.acquireNextImage(_context.getDevice());
+    }
     if (result == VK_ERROR_OUT_OF_DATE_KHR)
     {
         return false;
@@ -779,8 +880,9 @@ void VulkanRuntime::recordBootstrapClear(VkCommandBuffer cmd) const
     nvvk::cmdImageMemoryBarrier(cmd, {_swapchain.getImage(), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR});
 }
 
-void VulkanRuntime::endFrame(VkCommandBuffer cmd)
+void VulkanRuntime::submitFrameCommands(VkCommandBuffer cmd)
 {
+    PLAY_PROFILE_SCOPE("Submit Frame Commands");
     NVVK_CHECK(vkEndCommandBuffer(cmd));
 
     FrameData& frame = _frames[_frameIndex];
@@ -799,7 +901,7 @@ void VulkanRuntime::endFrame(VkCommandBuffer cmd)
         {
             .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
             .semaphore = _swapchain.getPresentSemaphore(),
-            .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
         },
         {
             .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
@@ -817,29 +919,6 @@ void VulkanRuntime::endFrame(VkCommandBuffer cmd)
         .pCommandBufferInfos      = &cmdInfo,
         .signalSemaphoreInfoCount = 2,
         .pSignalSemaphoreInfos    = signalInfos,
-    };
-
-    NVVK_CHECK(submitGraphics(submitInfo));
-}
-
-void VulkanRuntime::signalPresentSemaphore()
-{
-    std::vector<VkSemaphoreSubmitInfo> waitInfos = consumePendingFrameWaitSemaphores();
-
-    const VkSemaphoreSubmitInfo signalInfo{
-        .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-        .semaphore = _swapchain.getPresentSemaphore(),
-        .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-    };
-
-    const VkSubmitInfo2 submitInfo{
-        .sType                    = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-        .waitSemaphoreInfoCount   = static_cast<uint32_t>(waitInfos.size()),
-        .pWaitSemaphoreInfos      = waitInfos.empty() ? nullptr : waitInfos.data(),
-        .commandBufferInfoCount   = 0,
-        .pCommandBufferInfos      = nullptr,
-        .signalSemaphoreInfoCount = 1,
-        .pSignalSemaphoreInfos    = &signalInfo,
     };
 
     NVVK_CHECK(submitGraphics(submitInfo));
@@ -1158,8 +1237,6 @@ void VulkanRuntime::presentFrame()
         std::lock_guard<std::mutex> lock(_graphicsQueueMutex);
         _swapchain.presentFrame(_context.getQueueInfo(0).queue);
     }
-    updateFrameStatsTitle();
-
     _frameIndex = (_frameIndex + 1) % static_cast<uint32_t>(_frames.size());
     ++_frameCounter;
 }

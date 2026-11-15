@@ -22,19 +22,10 @@ void VolumeRenderer::OnPreRender()
     }
 }
 
-void VolumeRenderer::OnResize(int width, int height)
-{
-    if (_volumePass)
-    {
-        _volumePass->resetFrameCount();
-    }
-    Renderer::OnResize(width, height);
-}
-
 void VolumeRenderer::setupPasses()
 {
     auto volumePass = std::make_unique<VolumeRenderPass>(this);
-    _volumePass = volumePass.get();
+    _volumePass     = volumePass.get();
     _passes.emplace_back(std::move(volumePass));
     _passes.emplace_back(std::make_unique<PresentPass>(this));
 }

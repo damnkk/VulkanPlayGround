@@ -66,34 +66,6 @@ void DynamicRenderPass::init(const RenderPassConfig& config)
 
 void DynamicRenderPass::begin(VkCommandBuffer cmd, const VkRect2D& renderArea)
 {
-    nvvk::BarrierContainer batchBarrier;
-    for (auto& state : m_ownerPass->getTextureStates())
-    {
-        auto& accessInfo = state.textureStates[0];
-        if (!accessInfo.isAttachment) continue;
-        Texture* texture = state.texture->getRHI();
-        if (!texture) continue;
-
-        state.barrierInfo.oldLayout = texture->Layout();
-        batchBarrier.appendOptionalLayoutTransition(*texture, state.barrierInfo);
-
-        if (accessInfo.attachSlotIdx != ~0U && accessInfo.attachSlotIdx < m_vkColorAttachments.size())
-        {
-            m_vkColorAttachments[accessInfo.attachSlotIdx].imageView   = texture->descriptor.imageView;
-            m_vkColorAttachments[accessInfo.attachSlotIdx].imageLayout = accessInfo.layout;
-        }
-        else if (texture->isDepth())
-        {
-            m_vkDepthAttachment.imageView   = texture->descriptor.imageView;
-            m_vkDepthAttachment.imageLayout = accessInfo.layout;
-        }
-        else
-        {
-            m_vkStencilAttachment.imageView   = texture->descriptor.imageView;
-            m_vkStencilAttachment.imageLayout = accessInfo.layout;
-        }
-    }
-    batchBarrier.cmdPipelineBarrier(cmd, 0);
     m_vkRenderingInfo.renderArea = renderArea;
     m_vkRenderingInfo.layerCount = 1;
 
@@ -105,5 +77,4 @@ void DynamicRenderPass::end(VkCommandBuffer cmd)
     vkCmdEndRendering(cmd);
 }
 
-void DynamicRenderPass::transitionLayouts(VkCommandBuffer cmd, bool isBegin) {}
 } // namespace Play
