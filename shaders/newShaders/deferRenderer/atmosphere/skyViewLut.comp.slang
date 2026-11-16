@@ -146,7 +146,7 @@ void main(uint3 dispatchThreadId: SV_DispatchThreadID)
     CameraData* cameraData     = (CameraData*) g_PerFrameConstant.cameraBufferDeviceAddress;
     float4      HViewPos       = mul(cameraData->invProjMatrix, float4(ClipSpace, 1.0));
     float3      WorldDir       = normalize(mul((float3x3) cameraData->invViewMatrix, HViewPos.xyz / HViewPos.w));
-    float3      WorldPos       = cameraData->cameraPosition + float3(0, u_atmosParameter.BottomRadius, 0);
+    float3      WorldPos       = GetAtmospherePositionKm(cameraData->cameraPosition, u_atmosParameter.BottomRadius);
 
     float  viewHeight      = length(WorldPos);
 

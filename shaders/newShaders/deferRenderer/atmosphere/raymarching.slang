@@ -39,6 +39,13 @@ struct AtmosphereParameters
     float2 sun_dir;
 };
 
+// Scene positions are in meters. Atmospheric radii and integration distances
+// are in kilometers, with the planet center below the scene origin on Y.
+float3 GetAtmospherePositionKm(float3 positionMeters, float planetRadiusKm)
+{
+    return positionMeters * 0.001f + float3(0.0f, planetRadiusKm, 0.0f);
+}
+
 float fromUnitToSubUvs(float u, float resolution) { return (u + 0.5f / resolution) * (resolution / (resolution + 1.0f)); }
 float fromSubUvsToUnit(float u, float resolution) { return (u - 0.5f / resolution) * (resolution / (resolution - 1.0f)); }
 

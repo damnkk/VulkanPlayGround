@@ -38,7 +38,7 @@ void main(FragmentInput fragIn, out FragmentOutput fragOut)
     clipSpace.xy -= 2.0 * cameraData->jitterUV;
     float4      HViewPos   = mul(float4(clipSpace, 1.0), cameraData->invProjMatrix);
     float3      WorldDir   = normalize(mul(HViewPos.xyz / HViewPos.w, (float3x3) cameraData->invViewMatrix));
-    float3      WorldPos   = cameraData->cameraPosition + float3(0, u_atmosParameter.BottomRadius, 0);
+    float3      WorldPos   = GetAtmospherePositionKm(cameraData->cameraPosition, u_atmosParameter.BottomRadius);
 
     float  viewHeight = length(WorldPos);
     float3 L          = 0;
